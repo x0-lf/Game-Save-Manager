@@ -7,7 +7,17 @@ namespace GameSave
         public static void Main(string[] args)
         {
             var discoveryService = new SteamDiscoveryService();
-            SteamDiscoveryResult result = discoveryService.Discover();
+
+            /* Testing that fallback disk scan is working, when done with the .Always switch to the:
+             * FallbackScanMode = SteamFallbackScanMode.WhenNormalDiscoveryFails
+             * 
+             */
+            SteamDiscoveryResult result = discoveryService.Discover(new SteamDiscoveryOptions
+            {
+                FallbackScanMode = SteamFallbackScanMode.Always,
+                FallbackTimeout = TimeSpan.FromSeconds(30),
+                FallbackMaxDepth = 5
+            });
 
             if (result.SteamRoot is null)
             {

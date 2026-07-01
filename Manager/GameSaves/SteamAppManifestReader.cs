@@ -9,7 +9,9 @@ namespace GameSave
 {
     public sealed class SteamAppManifestReader
     {
-        public IEnumerable<SteamGame> ReadInstalledGames(string libraryPath)
+        public IEnumerable<SteamGame> ReadInstalledGames(
+            string libraryPath,
+            SteamDiscoveryConfidence confidenceWhenFolderExists = SteamDiscoveryConfidence.High)
         {
             string steamAppsPath = Path.Combine(libraryPath, "steamapps");
 
@@ -35,14 +37,20 @@ namespace GameSave
 
             foreach (string manifestPath in manifestPaths)
             {
-                SteamGame? game = TryReadGameManifest(libraryPath, manifestPath);
+                SteamGame? game = TryReadGameManifest(
+                    libraryPath,
+                    manifestPath,
+                    confidenceWhenFolderExists);
 
                 if (game is not null)
                     yield return game;
             }
         }
 
-        private static SteamGame? TryReadGameManifest(string libraryPath, string manifestPath)
+        private static SteamGame? TryReadGameManifest(
+            string libraryPath,
+            string manifestPath,
+            SteamDiscoveryConfidence confidenceWhenFolderExists)
         {
             VProperty root;
 
@@ -91,7 +99,7 @@ namespace GameSave
                 manifestPath,
                 gamePath,
                 folderExists,
-                folderExists ? SteamDiscoveryConfidence.High : SteamDiscoveryConfidence.Medium);
+                folderExists ? confidenceWhenFolderExists : SteamDiscoveryConfidence.Medium);
         }
 
         private static string? GetString(VObject source, string key)
