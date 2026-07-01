@@ -1,0 +1,26 @@
+[
+  {
+    "steamAppId": "413150",
+    "gameName": "Stardew Valley",
+    "platform": "windows",
+    "pathTemplate": "%APPDATA%\\StardewValley\\Saves",
+    "pathKind": "Directory",
+    "sourceName": "ManualSeed",
+    "sourceUrl": null,
+    "sourceLicense": "Project-local",
+    "notes": "Initial manually curated sample mapping.",
+    "priority": 10
+  },
+  {
+    "steamAppId": "413150",
+    "gameName": "Stardew Valley",
+    "platform": "windows",
+    "pathTemplate": "{SteamRoot}\\userdata\\*\\{AppId}\\remote",
+    "pathKind": "Directory",
+    "sourceName": "SteamCloudCandidate",
+    "sourceUrl": null,
+    "sourceLicense": "Project-local",
+    "notes": "Candidate Steam Cloud cache path; verify before trusting.",
+    "priority": 90
+  }
+]
