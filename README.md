@@ -3,7 +3,7 @@ Which Steam games are installed? Which Steam users exist? Which known save-locat
 
 ### What each class does
 
-| Class                       | | Class | Purpose |
+| Class | Purpose |
 | --- | --- |
 | ``Program`` | Entry point of the console app. Creates the **[SteamDiscoveryService](ca://s?q=Explain_SteamDiscoveryService)**, runs discovery, prints results. |
 | ``SteamDiscoveryService`` | Main orchestrator. Controls discovery order: registry lookup, Steam root validation, library metadata parsing, manifest reading, and fallback disk scanning. |
