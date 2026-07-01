@@ -1,95 +1,57 @@
-﻿using Microsoft.Win32;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Security;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Collections.Generic;
 
 namespace GameSave
 {
-    public class SteamDiscoveryService
+    public sealed class SteamDiscoveryService
     {
-        public static bool TryLocate(out string steamPath)
+        private readonly RegistrySteamLocator _registrySteamLocator = new();
+        private readonly SteamLibraryFoldersReader _libraryFoldersReader = new();
+        private readonly SteamAppManifestReader _appManifestReader = new();
+
+        public SteamDiscoveryResult Discover()
         {
-            steamPath = string.Empty;
+            var result = new SteamDiscoveryResult();
 
-            if (!OperatingSystem.IsWindows())
-                return false;
-
-            try
+            if (!_registrySteamLocator.TryLocate(out string steamRoot))
             {
-                using RegistryKey baseKey = RegistryKey.OpenBaseKey(
-                    RegistryHive.LocalMachine,
-                    RegistryView.Registry32);
+                result.Warnings.Add("Steam InstallPath was not found in the Windows registry.");
+                return result;
+            }
 
-                using RegistryKey? key = baseKey.OpenSubKey(SteamConstants.SteamSubKey);
+            SteamRootValidationResult rootValidation = SteamRootValidator.Validate(steamRoot);
 
-                if (key?.GetValue(SteamConstants.InstallPathValue) is not string rawPath ||
-                    string.IsNullOrWhiteSpace(rawPath))
+            if (!rootValidation.IsLikelySteamRoot)
+            {
+                result.Warnings.Add($"Registry path was found, but it does not look like a valid Steam root: {steamRoot}");
+                return result;
+            }
+
+            result.SteamRoot = steamRoot;
+            result.SteamRootValidation = rootValidation;
+
+            var libraryPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                steamRoot
+            };
+
+            foreach (string libraryPath in _libraryFoldersReader.ReadLibraryPaths(steamRoot))
+                libraryPaths.Add(libraryPath);
+
+            foreach (string libraryPath in libraryPaths)
+            {
+                SteamLibraryInfo libraryInfo = SteamLibraryValidator.Validate(libraryPath);
+
+                if (!libraryInfo.IsValid)
                 {
-                    return false;
+                    result.Warnings.Add($"Invalid Steam library skipped: {libraryPath}");
+                    continue;
                 }
 
-                string expandedPath = Environment.ExpandEnvironmentVariables(rawPath);
+                result.Libraries.Add(libraryInfo);
+                result.Games.AddRange(_appManifestReader.ReadInstalledGames(libraryPath));
+            }
 
-                if (!Directory.Exists(expandedPath))
-                    return false;
-
-                steamPath = expandedPath;
-                return true;
-            }
-            catch (UnauthorizedAccessException)
-            {
-                return false;
-            }
-            catch (SecurityException)
-            {
-                return false;
-            }
-            catch (IOException)
-            {
-                return false;
-            }
+            return result;
         }
-        public static void ValidateLocation()
-        {
-            if (!TryLocate(out string steamPath))
-            {
-                Console.WriteLine("Steam was not found in the registry.");
-                return;
-            }
-
-            Console.WriteLine($"Steam found at: {steamPath}");
-
-            var fileTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-                {
-                    "steam.exe",
-                    "steam.dll"
-                };
-
-            var dirTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-                {
-                    "steamapps",
-                    "config"
-                };
-
-            foreach (string file in Directory.GetFiles(steamPath))
-            {
-                string name = Path.GetFileName(file);
-
-                if (fileTargets.Contains(name))
-                    Console.WriteLine($"Matched file: {name}");
-            }
-
-            foreach (string dir in Directory.GetDirectories(steamPath))
-            {
-                string dirName = Path.GetFileName(dir);
-
-                if (dirTargets.Contains(dirName))
-                    Console.WriteLine($"Matched directory: {dirName}");
-            }
-        }
-
     }
 }
