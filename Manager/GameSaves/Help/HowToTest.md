@@ -4,12 +4,6 @@ This guide explains how to test Steam discovery, SQLite database initialization,
 
 ## File location
 
-Create this help file at:
-
-```text
-/Help/HowToTest.md
-```
-
 Create the sample save-path database file in the project root, next to your `.csproj` file:
 
 ```text

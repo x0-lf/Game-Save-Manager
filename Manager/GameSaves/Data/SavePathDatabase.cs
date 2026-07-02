@@ -48,6 +48,13 @@ namespace GameSave.Data
             if (items is null || items.Count == 0)
                 return;
 
+            ImportMappings(items, enabled: true);
+        }
+
+        public void ImportMappings(
+            IEnumerable<SavePathImportItem> items,
+            bool enabled)
+        {
             using var connection = new SqliteConnection(_connectionString);
             connection.Open();
 
@@ -84,7 +91,7 @@ namespace GameSave.Data
                     $source_license,
                     $notes,
                     $priority,
-                    1,
+                    $enabled,
                     CURRENT_TIMESTAMP
                 )
                 ON CONFLICT (steam_app_id, platform, path_template)
@@ -96,7 +103,6 @@ namespace GameSave.Data
                     source_license = excluded.source_license,
                     notes = excluded.notes,
                     priority = excluded.priority,
-                    enabled = 1,
                     updated_utc = CURRENT_TIMESTAMP;
                 """;
 
@@ -110,6 +116,7 @@ namespace GameSave.Data
                 command.Parameters.AddWithValue("$source_license", ToDbValue(item.SourceLicense));
                 command.Parameters.AddWithValue("$notes", ToDbValue(item.Notes));
                 command.Parameters.AddWithValue("$priority", item.Priority);
+                command.Parameters.AddWithValue("$enabled", enabled ? 1 : 0);
 
                 command.ExecuteNonQuery();
             }

@@ -1,6 +1,10 @@
 ﻿using GameSave.Backup;
 using GameSave.Data;
 using GameSave.SavePaths;
+using GameSave.External;
+
+using System.Threading.Tasks;
+
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -10,7 +14,7 @@ namespace GameSave
 {
     public class Program
     {
-        public static void Main(string[] args)
+        public static async Task Main(string[] args)
         {
             string appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             string dbPath = Path.Combine(appData, "GameSave", "gamesave.db");
@@ -72,6 +76,17 @@ namespace GameSave
                     RunBackup(dbPath, args[1], dryRun: false);
                     break;
 
+                //case "pcgw-harvest":
+                //    await RunPcgwHarvest(args, dbPath);
+                //    break;
+                case "pcgw-harvest-appids":
+                    await RunPcgwHarvestAppIds(args, dbPath);
+                    break;
+
+                case "pcgw-harvest-installed":
+                    await RunPcgwHarvestInstalled(args, dbPath);
+                    break;
+
                 case "help":
                 case "--help":
                 case "-h":
@@ -104,6 +119,215 @@ namespace GameSave
             Console.WriteLine($"Imported mappings from: {jsonPath}");
             Console.WriteLine($"Database: {dbPath}");
         }
+
+        private static async Task RunPcgwHarvestAppIds(string[] args, string dbPath)
+        {
+            if (args.Length < 4)
+            {
+                Console.WriteLine("Usage:");
+                Console.WriteLine("  pcgw-harvest-appids <output-root> <user-agent> <appid|appid-file> [more-appids]");
+                Console.WriteLine();
+                Console.WriteLine("Example:");
+                Console.WriteLine("  dotnet run -- pcgw-harvest-appids External/Titles \"SaveGameManager/0.1 (https://github.com/mynickname; myemail@email.com) .NET/8\" 413150");
+                Console.WriteLine();
+                Console.WriteLine("Example with file:");
+                Console.WriteLine("  dotnet run -- pcgw-harvest-appids External/Titles \"SaveGameManager/0.1 (https://github.com/mynickname; myemail@email.com) .NET/8\" appids.txt");
+                return;
+            }
+
+            string outputRoot = args[1];
+            string userAgent = args[2];
+
+            List<string> appIds = ReadAppIdsFromArguments(args, startIndex: 3);
+
+            if (appIds.Count == 0)
+            {
+                Console.WriteLine("No valid numeric Steam AppIDs were provided.");
+                return;
+            }
+
+            var options = new PcgwHarvestOptions
+            {
+                DatabasePath = dbPath,
+                OutputRoot = outputRoot,
+                UserAgent = userAgent,
+                SteamAppIds = appIds,
+                RequestsPerMinute = 20,
+                PauseEveryRequests = 100,
+                PauseEveryRequestsDuration = TimeSpan.FromMinutes(1),
+                MaxTitlesToProcess = 0,
+                ImportExtractedMappingsDisabled = true
+            };
+
+            var harvester = new PcgwHarvester(options);
+
+            PcgwHarvestResult result = await harvester.HarvestAsync();
+
+            PrintPcgwHarvestResult(result);
+        }
+
+        private static async Task RunPcgwHarvestInstalled(string[] args, string dbPath)
+        {
+            if (args.Length < 3)
+            {
+                Console.WriteLine("Usage:");
+                Console.WriteLine("  pcgw-harvest-installed <output-root> <user-agent> [max-games]");
+                Console.WriteLine();
+                Console.WriteLine("Example:");
+                Console.WriteLine("  dotnet run -- pcgw-harvest-installed External/Titles \"SaveGameManager/0.1 (https://github.com/mynickname; myemail@email.com) .NET/8\" 10");
+                return;
+            }
+
+            string outputRoot = args[1];
+            string userAgent = args[2];
+
+            int maxGames = 0;
+
+            if (args.Length >= 4)
+                int.TryParse(args[3], out maxGames);
+
+            var discoveryService = new SteamDiscoveryService();
+
+            SteamDiscoveryResult discovery = discoveryService.Discover(new SteamDiscoveryOptions
+            {
+                FallbackScanMode = SteamFallbackScanMode.WhenNormalDiscoveryFails,
+                FallbackTimeout = TimeSpan.FromSeconds(30),
+                FallbackMaxDepth = 5
+            });
+
+            if (discovery.Games.Count == 0)
+            {
+                Console.WriteLine("No installed Steam games were discovered.");
+                PrintWarnings(discovery);
+                return;
+            }
+
+            List<string> appIds = discovery.Games
+                .Select(game => game.AppId)
+                .Where(appId => !string.IsNullOrWhiteSpace(appId))
+                .Where(appId => appId.All(char.IsDigit))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(appId => int.TryParse(appId, out int parsed) ? parsed : int.MaxValue)
+                .ToList();
+
+            if (maxGames > 0)
+                appIds = appIds.Take(maxGames).ToList();
+
+            Console.WriteLine($"Installed Steam AppIDs selected for PCGamingWiki harvest: {appIds.Count}");
+
+            var options = new PcgwHarvestOptions
+            {
+                DatabasePath = dbPath,
+                OutputRoot = outputRoot,
+                UserAgent = userAgent,
+                SteamAppIds = appIds,
+                RequestsPerMinute = 20,
+                PauseEveryRequests = 100,
+                PauseEveryRequestsDuration = TimeSpan.FromMinutes(1),
+                MaxTitlesToProcess = 0,
+                ImportExtractedMappingsDisabled = true
+            };
+
+            var harvester = new PcgwHarvester(options);
+
+            PcgwHarvestResult result = await harvester.HarvestAsync();
+
+            PrintPcgwHarvestResult(result);
+        }
+
+        private static List<string> ReadAppIdsFromArguments(string[] args, int startIndex)
+        {
+            var appIds = new List<string>();
+
+            foreach (string argument in args.Skip(startIndex))
+            {
+                if (File.Exists(argument))
+                {
+                    foreach (string line in File.ReadLines(argument))
+                    {
+                        AddAppIdsFromText(appIds, line);
+                    }
+                }
+                else
+                {
+                    AddAppIdsFromText(appIds, argument);
+                }
+            }
+
+            return appIds
+                .Where(value => value.All(char.IsDigit))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        private static void AddAppIdsFromText(List<string> appIds, string text)
+        {
+            foreach (string value in text.Split(
+                         new[] { ',', ';', ' ', '\t', '\r', '\n' },
+                         StringSplitOptions.RemoveEmptyEntries))
+            {
+                string trimmed = value.Trim();
+
+                if (trimmed.All(char.IsDigit))
+                    appIds.Add(trimmed);
+            }
+        }
+
+        private static void PrintPcgwHarvestResult(PcgwHarvestResult result)
+        {
+            Console.WriteLine();
+            Console.WriteLine("PCGamingWiki harvest finished:");
+            Console.WriteLine($" - AppIDs requested: {result.TitlesIndexed}");
+            Console.WriteLine($" - Titles processed: {result.TitlesProcessed}");
+            Console.WriteLine($" - Titles failed/missing: {result.TitlesFailed}");
+            Console.WriteLine($" - Mappings extracted: {result.MappingsExtracted}");
+        }
+
+        //private static async Task RunPcgwHarvest(string[] args, string dbPath)
+        //{
+        //    if (args.Length < 3)
+        //    {
+        //        Console.WriteLine("Usage:");
+        //        Console.WriteLine("  pcgw-harvest <output-root> <user-agent> [max-titles]");
+        //        Console.WriteLine();
+        //        Console.WriteLine("Example:");
+        //        Console.WriteLine("  dotnet run -- pcgw-harvest External/Titles \"SteamSaveManagerHarvester/0.1 (https://example.org/SteamSaveManager; you@example.org) .NET/8\" 100");
+        //        return;
+        //    }
+
+        //    string outputRoot = args[1];
+        //    string userAgent = args[2];
+
+        //    int maxTitles = 0;
+
+        //    if (args.Length >= 4)
+        //        int.TryParse(args[3], out maxTitles);
+
+        //    var options = new PcgwHarvestOptions
+        //    {
+        //        DatabasePath = dbPath,
+        //        OutputRoot = outputRoot,
+        //        UserAgent = userAgent,
+        //        RequestsPerMinute = 20,
+        //        PauseEveryRequests = 100,
+        //        PauseEveryRequestsDuration = TimeSpan.FromMinutes(1),
+        //        CargoPageSize = 500,
+        //        MaxTitlesToProcess = maxTitles,
+        //        RefreshTitleIndex = true,
+        //        ImportExtractedMappingsDisabled = true
+        //    };
+
+        //    var harvester = new PcgwHarvester(options);
+
+        //    PcgwHarvestResult result = await harvester.HarvestAsync();
+
+        //    Console.WriteLine();
+        //    Console.WriteLine("PCGamingWiki harvest finished:");
+        //    Console.WriteLine($" - Titles indexed: {result.TitlesIndexed}");
+        //    Console.WriteLine($" - Titles processed: {result.TitlesProcessed}");
+        //    Console.WriteLine($" - Titles failed: {result.TitlesFailed}");
+        //    Console.WriteLine($" - Mappings extracted: {result.MappingsExtracted}");
+        //}
 
         private static void RunDiscoveryTest(bool useDeepFallbackScan)
         {
@@ -362,11 +586,13 @@ namespace GameSave
             Console.WriteLine("  verify");
             Console.WriteLine("  backup-dry-run <destination>");
             Console.WriteLine("  backup <destination>");
+            //Console.WriteLine("  pcgw-harvest <output-root> <user-agent> [max-titles]");
+            Console.WriteLine("  pcgw-harvest-appids <output-root> <user-agent> <appid|appid-file> [more-appids]");
+            Console.WriteLine("  pcgw-harvest-installed <output-root> <user-agent> [max-games]");
             Console.WriteLine();
             Console.WriteLine("No arguments:");
             Console.WriteLine("  Runs your current detailed discovery test with fallback scan enabled.");
         }
-
         private static void WaitForExit()
         {
             Console.WriteLine();
