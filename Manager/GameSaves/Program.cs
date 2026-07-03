@@ -2,6 +2,7 @@
 using GameSave.Data;
 using GameSave.SavePaths;
 using GameSave.External;
+using GameSave.External.Steam;
 
 using System.Threading.Tasks;
 
@@ -76,15 +77,28 @@ namespace GameSave
                     RunBackup(dbPath, args[1], dryRun: false);
                     break;
 
-                //case "pcgw-harvest":
-                //    await RunPcgwHarvest(args, dbPath);
-                //    break;
                 case "pcgw-harvest-appids":
                     await RunPcgwHarvestAppIds(args, dbPath);
                     break;
 
                 case "pcgw-harvest-installed":
                     await RunPcgwHarvestInstalled(args, dbPath);
+                    break;
+
+                case "steam-catalog-fetch":
+                    await RunSteamCatalogFetch(args, dbPath);
+                    break;
+
+                case "steam-catalog-missing":
+                    await RunSteamCatalogMissing(args, dbPath);
+                    break;
+
+                case "steam-catalog-queue-missing":
+                    RunSteamCatalogQueueMissing(dbPath);
+                    break;
+
+                case "steam-catalog-export-next":
+                    await RunSteamCatalogExportNext(args, dbPath);
                     break;
 
                 case "help":
@@ -118,6 +132,170 @@ namespace GameSave
 
             Console.WriteLine($"Imported mappings from: {jsonPath}");
             Console.WriteLine($"Database: {dbPath}");
+        }
+
+        private static void RunSteamCatalogQueueMissing(string dbPath)
+        {
+            int added = SteamCatalogService.EnqueueMissingGamesForHarvest(dbPath);
+
+            Console.WriteLine();
+            Console.WriteLine("Steam catalog harvest queue updated:");
+            Console.WriteLine($" - New pending games queued: {added}");
+        }
+
+        private static async Task RunSteamCatalogExportNext(string[] args, string dbPath)
+        {
+            if (args.Length < 2)
+            {
+                Console.WriteLine("Usage:");
+                Console.WriteLine("  steam-catalog-export-next <output-appids.txt> [limit]");
+                Console.WriteLine();
+                Console.WriteLine("Example:");
+                Console.WriteLine("  dotnet run -- steam-catalog-export-next External/SteamCatalog/batch-001.txt 1000");
+                return;
+            }
+
+            string outputPath = args[1];
+
+            int limit = 1000;
+
+            if (args.Length >= 3)
+                int.TryParse(args[2], out limit);
+
+            SteamCatalogMissingExportResult result =
+                await SteamCatalogService.ExportNextQueuedGameAppIdsAsync(
+                    dbPath,
+                    outputPath,
+                    limit);
+
+            Console.WriteLine();
+            Console.WriteLine("Steam catalog queue export finished:");
+            Console.WriteLine($" - AppIDs exported: {result.MissingCount}");
+            Console.WriteLine($" - Output: {result.OutputPath}");
+            Console.WriteLine();
+            Console.WriteLine("Next command:");
+            Console.WriteLine($"  dotnet run -- pcgw-harvest-appids External/Titles \"SaveGameManager/0.1 (https://github.com/nickname; user@mail.com) .NET/8.0\" \"{result.OutputPath}\"");
+        }
+        private static async Task RunSteamCatalogFetch(string[] args, string dbPath)
+        {
+
+            if (args.Length < 3)
+            {
+                Console.WriteLine("Usage:");
+                Console.WriteLine("  steam-catalog-fetch <output-root> <games|dlc|all> [max-apps] [steam-web-api-key]");
+                Console.WriteLine();
+                Console.WriteLine("Steam API key can also be supplied through STEAM_WEB_API_KEY environment variable.");
+                Console.WriteLine();
+                Console.WriteLine("Examples:");
+                Console.WriteLine("  dotnet run -- steam-catalog-fetch External/SteamCatalog games 1000");
+                Console.WriteLine("  dotnet run -- steam-catalog-fetch External/SteamCatalog games 0 YOUR_STEAM_WEB_API_KEY");
+                return;
+            }
+
+            string outputRoot = args[1];
+            string kindText = args[2];
+
+            int maxApps = 0;
+
+            if (args.Length >= 4)
+                int.TryParse(args[3], out maxApps);
+
+            string? apiKey = args.Length >= 5
+                ? args[4]
+                : Environment.GetEnvironmentVariable("STEAM_WEB_API_KEY");
+
+            Console.WriteLine(
+                $"Steam API key source: {(args.Length >= 5 ? "command argument" : "STEAM_WEB_API_KEY environment variable")}");
+
+            Console.WriteLine(
+                $"Steam API key length: {(apiKey?.Length ?? 0)}");
+
+            if (string.IsNullOrWhiteSpace(apiKey))
+            {
+                Console.WriteLine("Missing Steam Web API key.");
+                Console.WriteLine("Pass it as the last argument or set STEAM_WEB_API_KEY.");
+                return;
+            }
+
+            var kinds = kindText.ToLowerInvariant() switch
+            {
+                "games" => new[] { SteamCatalogAppKind.Game },
+                "game" => new[] { SteamCatalogAppKind.Game },
+                "dlc" => new[] { SteamCatalogAppKind.Dlc },
+                "all" => new[] { SteamCatalogAppKind.Game, SteamCatalogAppKind.Dlc },
+                _ => Array.Empty<SteamCatalogAppKind>()
+            };
+
+            if (kinds.Length == 0)
+            {
+                Console.WriteLine("Kind must be one of: games, dlc, all");
+                return;
+            }
+
+            foreach (SteamCatalogAppKind kind in kinds)
+            {
+                var options = new SteamCatalogFetchOptions
+                {
+                    DatabasePath = dbPath,
+                    OutputRoot = outputRoot,
+                    SteamWebApiKey = apiKey,
+                    Kind = kind,
+                    MaxResultsPerPage = 50_000,
+                    MaxAppsToFetch = maxApps,
+                    UserAgent = "SaveGameManager/0.1 .NET/8.0"
+                };
+
+                var service = new SteamCatalogService(options);
+
+                SteamCatalogFetchResult result = await service.FetchAsync();
+
+                Console.WriteLine();
+                Console.WriteLine($"Steam catalog fetch finished for {result.Kind}:");
+                Console.WriteLine($" - Apps fetched: {result.AppsFetched}");
+                Console.WriteLine($" - JSON: {result.JsonOutputPath}");
+                Console.WriteLine($" - AppIDs: {result.AppIdsOutputPath}");
+            }
+        }
+
+        private static async Task RunSteamCatalogMissing(string[] args, string dbPath)
+        {
+            if (args.Length < 2)
+            {
+                Console.WriteLine("Usage:");
+                Console.WriteLine("  steam-catalog-missing <output-appids.txt> [limit] [exclude-pcgw-linked]");
+                Console.WriteLine();
+                Console.WriteLine("Examples:");
+                Console.WriteLine("  dotnet run -- steam-catalog-missing External/SteamCatalog/missing-appids.txt 1000 false");
+                Console.WriteLine("  dotnet run -- steam-catalog-missing External/SteamCatalog/missing-new-only.txt 1000 true");
+                return;
+            }
+
+            string outputPath = args[1];
+
+            int limit = 1000;
+
+            if (args.Length >= 3)
+                int.TryParse(args[2], out limit);
+
+            bool excludeAlreadyPcgwLinked = false;
+
+            if (args.Length >= 4)
+                bool.TryParse(args[3], out excludeAlreadyPcgwLinked);
+
+            SteamCatalogMissingExportResult result =
+                await SteamCatalogService.ExportMissingGameAppIdsAsync(
+                    dbPath,
+                    outputPath,
+                    limit,
+                    excludeAlreadyPcgwLinked);
+
+            Console.WriteLine();
+            Console.WriteLine("Missing Steam AppID export finished:");
+            Console.WriteLine($" - Missing AppIDs exported: {result.MissingCount}");
+            Console.WriteLine($" - Output: {result.OutputPath}");
+            Console.WriteLine();
+            Console.WriteLine("Next command example:");
+            Console.WriteLine($"  dotnet run -- pcgw-harvest-appids External/Titles \"SaveGameManager/0.1 (https://github.com/nickname; user@mail.com) .NET/8.0\" \"{result.OutputPath}\"");
         }
 
         private static async Task RunPcgwHarvestAppIds(string[] args, string dbPath)
@@ -586,9 +764,12 @@ namespace GameSave
             Console.WriteLine("  verify");
             Console.WriteLine("  backup-dry-run <destination>");
             Console.WriteLine("  backup <destination>");
-            //Console.WriteLine("  pcgw-harvest <output-root> <user-agent> [max-titles]");
             Console.WriteLine("  pcgw-harvest-appids <output-root> <user-agent> <appid|appid-file> [more-appids]");
             Console.WriteLine("  pcgw-harvest-installed <output-root> <user-agent> [max-games]");
+            Console.WriteLine("  steam-catalog-fetch <output-root> <games|dlc|all> [max-apps] [steam-web-api-key]");
+            Console.WriteLine("  steam-catalog-missing <output-appids.txt> [limit] [exclude-pcgw-linked]");
+            Console.WriteLine("  steam-catalog-queue-missing");
+            Console.WriteLine("  steam-catalog-export-next <output-appids.txt> [limit]");
             Console.WriteLine();
             Console.WriteLine("No arguments:");
             Console.WriteLine("  Runs your current detailed discovery test with fallback scan enabled.");

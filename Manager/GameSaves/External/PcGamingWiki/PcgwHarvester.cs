@@ -79,6 +79,7 @@ namespace GameSave.External
                         int extractedForTitle = await HarvestOneTitleAsync(
                             apiClient,
                             title,
+                            requestedSteamAppId: appId,
                             cancellationToken);
 
                         titlesProcessed++;
@@ -143,6 +144,7 @@ namespace GameSave.External
         private async Task<int> HarvestOneTitleAsync(
             PcgwApiClient apiClient,
             PcgwTitle title,
+            string requestedSteamAppId,
             CancellationToken cancellationToken)
         {
             string titleDirectory = GetTitleDirectory(title);
@@ -163,8 +165,15 @@ namespace GameSave.External
 
             string rawSha256 = ComputeSha256(wikitext);
 
+            var extractionTitle = new PcgwTitle(
+                title.PageId,
+                title.PageName,
+                title.DisplayTitle,
+                new List<string> { requestedSteamAppId },
+                title.SourceUrl);
+
             List<SavePathImportItem> extracted = _extractor.ExtractCandidates(
-                title,
+                extractionTitle,
                 wikitext);
 
             string extractedJson = JsonSerializer.Serialize(
@@ -181,7 +190,8 @@ namespace GameSave.External
                 title.PageId,
                 title.PageName,
                 title.DisplayTitle,
-                title.SteamAppIds,
+                RequestedSteamAppId = requestedSteamAppId,
+                AllPcgwSteamAppIds = title.SteamAppIds,
                 title.SourceUrl,
                 RawWikitextPath = rawPath,
                 ExtractedJsonPath = extractedJsonPath,
