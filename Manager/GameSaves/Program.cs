@@ -316,7 +316,7 @@ namespace GameSave
             string outputRoot = args[1];
             string userAgent = args[2];
 
-            List<string> appIds = ReadAppIdsFromArguments(args, startIndex: 3);
+            List<string> appIds = ReadAppIdsFromArguments(args.Skip(3).ToArray());
 
             if (appIds.Count == 0)
             {
@@ -331,7 +331,7 @@ namespace GameSave
                 UserAgent = userAgent,
                 SteamAppIds = appIds,
                 RequestsPerMinute = 20,
-                PauseEveryRequests = 100,
+                PauseEveryRequests = 20,
                 PauseEveryRequestsDuration = TimeSpan.FromMinutes(1),
                 MaxTitlesToProcess = 0,
                 ImportExtractedMappingsDisabled = true
@@ -341,7 +341,7 @@ namespace GameSave
 
             PcgwHarvestResult result = await harvester.HarvestAsync();
 
-            PrintPcgwHarvestResult(result);
+            PrintPcgwHarvestResult(result, appIds.Count);
         }
 
         private static async Task RunPcgwHarvestInstalled(string[] args, string dbPath)
@@ -400,7 +400,7 @@ namespace GameSave
                 UserAgent = userAgent,
                 SteamAppIds = appIds,
                 RequestsPerMinute = 20,
-                PauseEveryRequests = 100,
+                PauseEveryRequests = 20,
                 PauseEveryRequestsDuration = TimeSpan.FromMinutes(1),
                 MaxTitlesToProcess = 0,
                 ImportExtractedMappingsDisabled = true
@@ -410,52 +410,74 @@ namespace GameSave
 
             PcgwHarvestResult result = await harvester.HarvestAsync();
 
-            PrintPcgwHarvestResult(result);
+            PrintPcgwHarvestResult(result, appIds.Count);
         }
 
-        private static List<string> ReadAppIdsFromArguments(string[] args, int startIndex)
+        private static List<string> ReadAppIdsFromArguments(string[] values)
         {
             var appIds = new List<string>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            foreach (string argument in args.Skip(startIndex))
+            foreach (string value in values)
             {
-                if (File.Exists(argument))
+                if (string.IsNullOrWhiteSpace(value))
+                    continue;
+
+                if (File.Exists(value))
                 {
-                    foreach (string line in File.ReadLines(argument))
-                    {
-                        AddAppIdsFromText(appIds, line);
-                    }
+                    string fileText = File.ReadAllText(value);
+                    AddAppIdsFromText(fileText, appIds, seen);
+                    continue;
                 }
-                else
-                {
-                    AddAppIdsFromText(appIds, argument);
-                }
+
+                AddAppIdsFromText(value, appIds, seen);
             }
 
-            return appIds
-                .Where(value => value.All(char.IsDigit))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
+            return appIds;
         }
 
-        private static void AddAppIdsFromText(List<string> appIds, string text)
+        private static void AddAppIdsFromText(
+            string text,
+            List<string> appIds,
+            HashSet<string> seen)
         {
-            foreach (string value in text.Split(
-                         new[] { ',', ';', ' ', '\t', '\r', '\n' },
-                         StringSplitOptions.RemoveEmptyEntries))
-            {
-                string trimmed = value.Trim();
+            string[] parts = text.Split(
+                new[]
+                {
+            '\r',
+            '\n',
+            ',',
+            ';',
+            ' ',
+            '\t'
+                },
+                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-                if (trimmed.All(char.IsDigit))
-                    appIds.Add(trimmed);
+            foreach (string part in parts)
+            {
+                string cleaned = part.Trim();
+
+                if (string.IsNullOrWhiteSpace(cleaned))
+                    continue;
+
+                if (cleaned.StartsWith("#", StringComparison.Ordinal))
+                    continue;
+
+                if (!cleaned.All(char.IsDigit))
+                    continue;
+
+                if (seen.Add(cleaned))
+                    appIds.Add(cleaned);
             }
         }
 
-        private static void PrintPcgwHarvestResult(PcgwHarvestResult result)
+        private static void PrintPcgwHarvestResult(
+            PcgwHarvestResult result,
+            int appIdsRequested)
         {
             Console.WriteLine();
             Console.WriteLine("PCGamingWiki harvest finished:");
-            Console.WriteLine($" - AppIDs requested: {result.TitlesIndexed}");
+            Console.WriteLine($" - AppIDs requested: {appIdsRequested}");
             Console.WriteLine($" - Titles processed: {result.TitlesProcessed}");
             Console.WriteLine($" - Titles failed/missing: {result.TitlesFailed}");
             Console.WriteLine($" - Mappings extracted: {result.MappingsExtracted}");

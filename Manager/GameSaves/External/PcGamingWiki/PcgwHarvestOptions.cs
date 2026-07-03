@@ -14,7 +14,7 @@ namespace GameSave.External
 
         public int RequestsPerMinute { get; init; } = 20;
 
-        public int PauseEveryRequests { get; init; } = 100;
+        public int PauseEveryRequests { get; init; } = 20;
 
         public TimeSpan PauseEveryRequestsDuration { get; init; } = TimeSpan.FromMinutes(1);
 
