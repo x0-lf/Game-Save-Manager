@@ -14,6 +14,7 @@
 
   <ItemGroup>
     <Folder Include="External\Titles\" />
+    <Folder Include="External\Titles\146683-Elden_Ring\" />
   </ItemGroup>
 
 </Project>
