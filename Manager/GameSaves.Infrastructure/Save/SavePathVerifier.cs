@@ -3,7 +3,7 @@ using GameSaves.Core.Steam;
 
 namespace GameSaves.Infrastructure.Save
 {
-    public sealed class SavePathVerifier
+    public sealed class SavePathVerifier : ISavePathVerifier
     {
         private readonly SavePathExpander _expander = new();
 

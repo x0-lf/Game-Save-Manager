@@ -8,7 +8,7 @@ using System.Threading;
 
 namespace GameSaves.Infrastructure.Steam
 {
-    public sealed class SteamFallbackScanner
+    public sealed class SteamFallbackScanner : ISteamFallbackScanner
     {
         private static readonly string[] CommonRelativeCandidates =
         {

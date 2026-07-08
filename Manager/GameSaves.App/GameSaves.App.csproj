@@ -25,4 +25,9 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.9" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.9" />
   </ItemGroup>
+
+  <ItemGroup>
+	<ProjectReference Include="..\GameSaves.Core\GameSaves.Core.csproj" />
+	<ProjectReference Include="..\GameSaves.Infrastructure\GameSaves.Infrastructure.csproj" />
+  </ItemGroup>
 </Project>

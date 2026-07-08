@@ -1,16 +1,16 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
-using Avalonia.Data.Core;
-using Avalonia.Data.Core.Plugins;
 using Avalonia.Markup.Xaml;
 using GameSaves.App.ViewModels;
 using GameSaves.App.Views;
-using System.Linq;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace GameSaves.App
 {
     public partial class App : Application
     {
+        private ServiceProvider? _serviceProvider;
+
         public override void Initialize()
         {
             AvaloniaXamlLoader.Load(this);
@@ -18,11 +18,13 @@ namespace GameSaves.App
 
         public override void OnFrameworkInitializationCompleted()
         {
+            _serviceProvider = AppServices.Build();
+
             if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             {
                 desktop.MainWindow = new MainWindow
                 {
-                    DataContext = new MainWindowViewModel(),
+                    DataContext = _serviceProvider.GetRequiredService<MainWindowViewModel>()
                 };
             }
 

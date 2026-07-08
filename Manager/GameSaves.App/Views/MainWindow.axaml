@@ -1,20 +1,64 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:GameSaves.App.ViewModels"
-        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
         x:Class="GameSaves.App.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
-        Icon="/Assets/avalonia-logo.ico"
-        Title="GameSaves.App">
+        Title="Game Saves Manager"
+        Width="900"
+        Height="600">
 
-    <Design.DataContext>
-        <!-- This only sets the DataContext for the previewer in an IDE,
-             to set the actual DataContext for runtime, set the DataContext property in code (look at App.axaml.cs) -->
-        <vm:MainWindowViewModel/>
-    </Design.DataContext>
+	<StackPanel Margin="24" Spacing="12">
+		<TextBlock Text="Game Saves Manager"
+                   FontSize="28"
+                   FontWeight="Bold" />
 
-    <TextBlock Text="{Binding Greeting}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+		<Button Content="Refresh"
+                Command="{Binding RefreshCommand}"
+                Width="160" />
 
+		<TextBlock Text="{Binding StatusMessage}" />
+
+		<Separator />
+
+		<TextBlock Text="Foundation status"
+                   FontSize="20"
+                   FontWeight="SemiBold" />
+
+		<Grid ColumnDefinitions="240,*"
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+              RowSpacing="8"
+              ColumnSpacing="16">
+
+			<TextBlock Grid.Row="0" Grid.Column="0" Text="Database:" />
+			<TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding DatabasePath}" />
+
+			<TextBlock Grid.Row="1" Grid.Column="0" Text="Platform:" />
+			<TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Platform}" />
+
+			<TextBlock Grid.Row="2" Grid.Column="0" Text="Steam root:" />
+			<TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SteamRoot}" />
+
+			<TextBlock Grid.Row="3" Grid.Column="0" Text="Libraries:" />
+			<TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding LibraryCount}" />
+
+			<TextBlock Grid.Row="4" Grid.Column="0" Text="Installed games:" />
+			<TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding InstalledGameCount}" />
+
+			<TextBlock Grid.Row="5" Grid.Column="0" Text="Steam profiles:" />
+			<TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding SteamProfileCount}" />
+
+			<TextBlock Grid.Row="6" Grid.Column="0" Text="Approved mappings:" />
+			<TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding ApprovedMappingCount}" />
+
+			<TextBlock Grid.Row="7" Grid.Column="0" Text="Pending / NeedsFix:" />
+			<TextBlock Grid.Row="7" Grid.Column="1">
+				<TextBlock.Text>
+					<MultiBinding StringFormat="{}{0} pending, {1} needs fix">
+						<Binding Path="PendingMappingCount" />
+						<Binding Path="NeedsFixMappingCount" />
+					</MultiBinding>
+				</TextBlock.Text>
+			</TextBlock>
+		</Grid>
+	</StackPanel>
 </Window>

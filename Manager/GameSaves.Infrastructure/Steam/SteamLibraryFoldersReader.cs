@@ -1,5 +1,6 @@
 ﻿using Gameloop.Vdf;
 using Gameloop.Vdf.Linq;
+using GameSaves.Core.Steam;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -7,7 +8,7 @@ using System.Security;
 
 namespace GameSaves.Infrastructure.Steam
 {
-    public sealed class SteamLibraryFoldersReader
+    public sealed class SteamLibraryFoldersReader : ISteamLibraryFoldersReader
     {
         public IEnumerable<string> ReadLibraryPaths(string steamRoot)
         {

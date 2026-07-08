@@ -8,7 +8,7 @@ using System.Security;
 
 namespace GameSaves.Infrastructure.Steam
 {
-    public sealed class SteamAppManifestReader
+    public sealed class SteamAppManifestReader : ISteamAppManifestReader
     {
         public IEnumerable<SteamGame> ReadInstalledGames(
             string libraryPath,

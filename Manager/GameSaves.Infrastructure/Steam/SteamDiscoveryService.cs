@@ -1,18 +1,35 @@
 ﻿using GameSaves.Core.Steam;
 using GameSaves.Infrastructure.Registry;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
 
 namespace GameSaves.Infrastructure.Steam
 {
-    public sealed class SteamDiscoveryService
+    public sealed class SteamDiscoveryService : ISteamDiscoveryService
     {
-        private readonly RegistrySteamLocator _registrySteamLocator = new();
-        private readonly SteamLibraryFoldersReader _libraryFoldersReader = new();
-        private readonly SteamAppManifestReader _appManifestReader = new();
-        private readonly SteamFallbackScanner _fallbackScanner = new();
+        private readonly ISteamRootLocator _steamRootLocator;
+        private readonly ISteamLibraryFoldersReader _libraryFoldersReader;
+        private readonly ISteamAppManifestReader _appManifestReader;
+        private readonly ISteamFallbackScanner _fallbackScanner;
+
+        public SteamDiscoveryService()
+            : this(
+                new RegistrySteamLocator(),
+                new SteamLibraryFoldersReader(),
+                new SteamAppManifestReader(),
+                new SteamFallbackScanner())
+        {
+        }
+
+        public SteamDiscoveryService(
+            ISteamRootLocator steamRootLocator,
+            ISteamLibraryFoldersReader libraryFoldersReader,
+            ISteamAppManifestReader appManifestReader,
+            ISteamFallbackScanner fallbackScanner)
+        {
+            _steamRootLocator = steamRootLocator;
+            _libraryFoldersReader = libraryFoldersReader;
+            _appManifestReader = appManifestReader;
+            _fallbackScanner = fallbackScanner;
+        }
 
         public SteamDiscoveryResult Discover(
             SteamDiscoveryOptions? options = null,
@@ -48,7 +65,7 @@ namespace GameSaves.Infrastructure.Steam
             SteamDiscoveryResult result,
             HashSet<string> libraryPaths)
         {
-            if (!_registrySteamLocator.TryLocate(out string steamRoot))
+            if (!_steamRootLocator.TryLocate(out string steamRoot))
             {
                 result.Warnings.Add("Steam InstallPath was not found in the Windows registry.");
                 return;

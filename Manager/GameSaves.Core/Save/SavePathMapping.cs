@@ -19,5 +19,8 @@
         string? SourceLicense,
         string? Notes,
         int Priority,
-        bool Enabled);
+        bool Enabled,
+        string ReviewStatus = "Pending",    //Approved, Pending, NeedsFix, Rejected
+        string? ReviewNotes = null,
+        DateTimeOffset? ReviewedUtc = null);
 }

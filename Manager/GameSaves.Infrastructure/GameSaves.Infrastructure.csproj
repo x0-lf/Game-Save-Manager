@@ -9,10 +9,15 @@
   <ItemGroup>
     <PackageReference Include="Gameloop.Vdf" Version="0.6.2" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.9" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\GameSaves.Core\GameSaves.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Profiles\" />
   </ItemGroup>
 
 </Project>

@@ -132,9 +132,11 @@ Planned responsibilities:
 
 | Project                    | Responsibility                                                                                                                 |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `GameSaves`                | Current CLI, SteamWebAPI harvester / PCGamingWiki harvester tool / Uses Main Areas of repository.                              |
 | `GameSaves.Core`           | Domain models, interfaces, save-path rules, backup planning, restore planning, and platform-neutral logic.                     |
 | `GameSaves.Infrastructure` | Steam discovery, filesystem access, SQLite persistence, PCGamingWiki/Steam integrations, archive handling, and sync providers. |
 | `GameSaves.App`            | Avalonia UI, view models, user workflows, settings, backup/restore screens, and progress reporting.                            |
+| `GameSaves.Reviewer`       | Internal Mapping Reviewer allowing developers to verify whether scraped SaveGamePaths are accurate and valid                   |
 
 The current CLI prototype can later become a development/testing tool while the Avalonia application becomes the main user-facing app.
 
@@ -541,8 +543,4 @@ dotnet run --project Manager/GameSaves
 
 Game Save Manager is experimental software.
 
-<<<<<<< HEAD
 Use it carefully, especially when working with real save files. Always keep an independent backup before testing restore, transfer, synchronization, or automation features.
-=======
-Use it carefully, especially when working with real save files. Always keep an independent backup before testing restore, transfer, synchronization, or automation features.
->>>>>>> 50e5d04 (Update README and harvesting batch files)

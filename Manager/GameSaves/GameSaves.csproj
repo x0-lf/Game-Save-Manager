@@ -17,4 +17,9 @@
     <Folder Include="External\Titles\146683-Elden_Ring\" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\GameSaves.Core\GameSaves.Core.csproj" />
+    <ProjectReference Include="..\GameSaves.Infrastructure\GameSaves.Infrastructure.csproj" />
+  </ItemGroup>
+
 </Project>

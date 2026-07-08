@@ -6,7 +6,7 @@ using System.Security;
 
 namespace GameSaves.Infrastructure.Registry
 {
-    public sealed class RegistrySteamLocator
+    public sealed class RegistrySteamLocator : ISteamRootLocator
     {
         public bool TryLocate(out string steamPath)
         {
