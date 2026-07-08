@@ -541,4 +541,8 @@ dotnet run --project Manager/GameSaves
 
 Game Save Manager is experimental software.
 
+<<<<<<< HEAD
 Use it carefully, especially when working with real save files. Always keep an independent backup before testing restore, transfer, synchronization, or automation features.
+=======
+Use it carefully, especially when working with real save files. Always keep an independent backup before testing restore, transfer, synchronization, or automation features.
+>>>>>>> 50e5d04 (Update README and harvesting batch files)
