@@ -1,4 +1,4 @@
-﻿namespace GameSave.External.Http
+﻿namespace GameSaves.External.Http
 {
     public sealed class RateLimitOptions
     {

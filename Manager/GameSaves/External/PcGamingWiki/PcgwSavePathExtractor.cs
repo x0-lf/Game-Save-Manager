@@ -1,7 +1,7 @@
-﻿using GameSave.SavePaths;
+﻿using GameSaves.Core.Save;
 using System.Text.RegularExpressions;
 
-namespace GameSave.External
+namespace GameSaves.External
 {
     public sealed class PcgwSavePathExtractor
     {

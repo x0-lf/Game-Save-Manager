@@ -1,4 +1,4 @@
-﻿namespace GameSave.External
+﻿namespace GameSaves.External
 {
     public sealed record PcgwTitle(
         int PageId,

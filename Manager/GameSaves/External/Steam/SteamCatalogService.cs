@@ -1,6 +1,7 @@
 ﻿using System.Text.Json;
+using GameSaves.Core.Steam;
 
-namespace GameSave.External.Steam
+namespace GameSaves.External.Steam
 {
     public sealed class SteamCatalogService
     {

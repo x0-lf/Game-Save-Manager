@@ -1,7 +1,8 @@
-﻿using System.Net;
+﻿using GameSaves.Core.Steam;
+using System.Net;
 using System.Text.Json;
 
-namespace GameSave.External.Steam
+namespace GameSaves.External.Steam
 {
     public sealed class SteamStoreCatalogClient : IDisposable
     {

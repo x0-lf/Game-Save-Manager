@@ -1,4 +1,4 @@
-﻿namespace GameSave.External
+﻿namespace GameSaves.External
 {
     public static class ExternalHarvestSchema
     {

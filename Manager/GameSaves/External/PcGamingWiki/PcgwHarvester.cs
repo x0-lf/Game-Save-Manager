@@ -1,11 +1,11 @@
-﻿using GameSave.Data;
-using GameSave.External.Http;
-using GameSave.SavePaths;
+﻿using GameSaves.Core.Save;
+using GameSaves.External.Http;
+using GameSaves.Infrastructure.Save;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
-namespace GameSave.External
+namespace GameSaves.External
 {
     public sealed class PcgwHarvester
     {

@@ -1,7 +1,7 @@
 ﻿using Microsoft.Data.Sqlite;
 using System.Text.Json;
 
-namespace GameSave.External
+namespace GameSaves.External
 {
     public sealed class ExternalHarvestDatabase
     {

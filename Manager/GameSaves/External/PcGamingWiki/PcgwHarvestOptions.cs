@@ -1,6 +1,6 @@
-﻿using GameSave.External.Http;
+﻿using GameSaves.External.Http;
 
-namespace GameSave.External
+namespace GameSaves.External
 {
     public sealed class PcgwHarvestOptions
     {

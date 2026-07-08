@@ -1,7 +1,7 @@
 ﻿using System.Net;
 using System.Text.Json;
 
-namespace GameSave.External.Http
+namespace GameSaves.External.Http
 {
     public sealed class PoliteHttpClient : IDisposable
     {

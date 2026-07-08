@@ -1,6 +1,7 @@
-﻿using Microsoft.Data.Sqlite;
+﻿using GameSaves.Core.Steam;
+using Microsoft.Data.Sqlite;
 
-namespace GameSave.External.Steam
+namespace GameSaves.External.Steam
 {
     public sealed class SteamCatalogDatabase
     {

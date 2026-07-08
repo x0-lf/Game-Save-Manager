@@ -1,17 +1,22 @@
-﻿using GameSave.Backup;
-using GameSave.Data;
-using GameSave.SavePaths;
-using GameSave.External;
-using GameSave.External.Steam;
-
-using System.Threading.Tasks;
+﻿using System.Threading.Tasks;
 
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
-namespace GameSave
+using GameSaves.External;
+using GameSaves.External.Steam;
+
+using GameSaves.Core.Steam;
+using GameSaves.Core.Save;
+using GameSaves.Core.Backup;
+
+using GameSaves.Infrastructure.Save;
+using GameSaves.Infrastructure.Backup;
+using GameSaves.Infrastructure.Steam;
+
+namespace GameSaves
 {
     public class Program
     {
