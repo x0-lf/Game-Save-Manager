@@ -1,0 +1,309 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:GameSaves.App.ViewModels"
+             xmlns:models="using:GameSaves.App.Models"
+             x:Class="GameSaves.App.Views.TransferPreviewView"
+             x:DataType="vm:TransferPreviewViewModel"
+             Background="#111217">
+
+    <UserControl.Resources>
+        <SolidColorBrush x:Key="CardBackgroundBrush" Color="#1A1B22" />
+        <SolidColorBrush x:Key="CardBorderBrush" Color="#2A2C36" />
+        <SolidColorBrush x:Key="PrimaryTextBrush" Color="#F4F4F5" />
+        <SolidColorBrush x:Key="SecondaryTextBrush" Color="#A7AAB4" />
+        <SolidColorBrush x:Key="MutedTextBrush" Color="#777B86" />
+        <SolidColorBrush x:Key="AccentBrush" Color="#7C9CFF" />
+        <SolidColorBrush x:Key="SuccessBrush" Color="#6EE7A8" />
+        <SolidColorBrush x:Key="WarningBrush" Color="#FACC6B" />
+    </UserControl.Resources>
+
+    <Grid RowDefinitions="Auto,Auto,Auto,*"
+          RowSpacing="16"
+          Margin="0,18,0,0">
+
+        <!-- Header -->
+        <Border Grid.Row="0"
+                Background="{StaticResource CardBackgroundBrush}"
+                BorderBrush="{StaticResource CardBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="18"
+                Padding="20">
+
+            <Grid ColumnDefinitions="*,Auto,Auto"
+                  ColumnSpacing="12">
+
+                <StackPanel Grid.Column="0"
+                            Spacing="6">
+                    <TextBlock Text="Transfer Preview"
+                               Foreground="{StaticResource PrimaryTextBrush}"
+                               FontSize="24"
+                               FontWeight="Bold" />
+
+                    <TextBlock Text="{Binding StatusMessage}"
+                               Foreground="{StaticResource SecondaryTextBrush}"
+                               FontSize="14"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+
+                <Button Grid.Column="1"
+                        Content="Refresh Inputs"
+                        Command="{Binding RefreshInputsCommand}"
+                        Width="140"
+                        Height="40"
+                        VerticalAlignment="Center" />
+
+                <Button Grid.Column="2"
+                        Content="Preview Transfer"
+                        Command="{Binding PreviewTransferCommand}"
+                        Width="150"
+                        Height="40"
+                        VerticalAlignment="Center" />
+            </Grid>
+        </Border>
+
+        <!-- Selectors -->
+        <Grid Grid.Row="1"
+              ColumnDefinitions="*,*,*"
+              ColumnSpacing="16">
+
+            <Border Grid.Column="0"
+                    Background="{StaticResource CardBackgroundBrush}"
+                    BorderBrush="{StaticResource CardBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="18"
+                    Padding="18">
+
+                <StackPanel Spacing="10">
+                    <TextBlock Text="Source Profile"
+                               Foreground="{StaticResource SecondaryTextBrush}"
+                               FontWeight="Bold" />
+
+                    <ComboBox ItemsSource="{Binding Profiles}"
+                              SelectedItem="{Binding SelectedSourceProfile}"
+                              HorizontalAlignment="Stretch"
+                              MinHeight="38" />
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Column="1"
+                    Background="{StaticResource CardBackgroundBrush}"
+                    BorderBrush="{StaticResource CardBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="18"
+                    Padding="18">
+
+                <StackPanel Spacing="10">
+                    <TextBlock Text="Target Profile"
+                               Foreground="{StaticResource SecondaryTextBrush}"
+                               FontWeight="Bold" />
+
+                    <ComboBox ItemsSource="{Binding Profiles}"
+                              SelectedItem="{Binding SelectedTargetProfile}"
+                              HorizontalAlignment="Stretch"
+                              MinHeight="38" />
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Column="2"
+                    Background="{StaticResource CardBackgroundBrush}"
+                    BorderBrush="{StaticResource CardBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="18"
+                    Padding="18">
+
+                <StackPanel Spacing="10">
+                    <TextBlock Text="Installed Game"
+                               Foreground="{StaticResource SecondaryTextBrush}"
+                               FontWeight="Bold" />
+
+                    <ComboBox ItemsSource="{Binding Games}"
+                              SelectedItem="{Binding SelectedGame}"
+                              HorizontalAlignment="Stretch"
+                              MinHeight="38" />
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- Summary / warnings -->
+        <Grid Grid.Row="2"
+              ColumnDefinitions="260,*"
+              ColumnSpacing="16">
+
+            <Border Grid.Column="0"
+                    Background="{StaticResource CardBackgroundBrush}"
+                    BorderBrush="{StaticResource CardBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="18"
+                    Padding="18">
+
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Summary"
+                               Foreground="{StaticResource PrimaryTextBrush}"
+                               FontSize="18"
+                               FontWeight="SemiBold" />
+
+                    <TextBlock Text="{Binding TotalFiles, StringFormat='Files: {0}'}"
+                               Foreground="{StaticResource SecondaryTextBrush}" />
+
+                    <TextBlock Text="{Binding TotalSizeDisplay, StringFormat='Size: {0}'}"
+                               Foreground="{StaticResource SecondaryTextBrush}" />
+
+                    <TextBlock Text="{Binding CanExecuteTransferLater, StringFormat='Future transfer safe: {0}'}"
+                               Foreground="{StaticResource MutedTextBrush}" />
+
+                    <TextBlock Text="No files are copied in Milestone 1."
+                               Foreground="{StaticResource WarningBrush}"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <Border Grid.Column="1"
+                    Background="{StaticResource CardBackgroundBrush}"
+                    BorderBrush="{StaticResource CardBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="18"
+                    Padding="0">
+
+                <Grid RowDefinitions="Auto,*">
+
+                    <Border Grid.Row="0"
+                            Padding="14"
+                            BorderBrush="{StaticResource CardBorderBrush}"
+                            BorderThickness="0,0,0,1">
+
+                        <TextBlock Text="Warnings"
+                                   Foreground="{StaticResource PrimaryTextBrush}"
+                                   FontSize="18"
+                                   FontWeight="SemiBold" />
+                    </Border>
+
+                    <ScrollViewer Grid.Row="1"
+                                  MaxHeight="130">
+
+                        <ItemsControl ItemsSource="{Binding Warnings}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:TransferWarningRowViewModel">
+                                    <Border Padding="12"
+                                            BorderBrush="#252733"
+                                            BorderThickness="0,0,0,1">
+
+                                        <StackPanel Spacing="3">
+                                            <TextBlock Text="{Binding SeverityText}"
+                                                       Foreground="{StaticResource WarningBrush}"
+                                                       FontWeight="SemiBold" />
+
+                                            <TextBlock Text="{Binding Message}"
+                                                       Foreground="{StaticResource SecondaryTextBrush}"
+                                                       TextWrapping="Wrap" />
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- Preview items -->
+        <Border Grid.Row="3"
+                Background="{StaticResource CardBackgroundBrush}"
+                BorderBrush="{StaticResource CardBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="18"
+                Padding="0">
+
+            <Grid RowDefinitions="Auto,*">
+
+                <Border Grid.Row="0"
+                        Padding="12"
+                        BorderBrush="{StaticResource CardBorderBrush}"
+                        BorderThickness="0,0,0,1">
+
+                    <Grid ColumnDefinitions="2*,2*,90,90,90,110"
+                          ColumnSpacing="12">
+
+                        <TextBlock Grid.Column="0"
+                                   Text="Source path"
+                                   Foreground="{StaticResource SecondaryTextBrush}"
+                                   FontWeight="Bold" />
+
+                        <TextBlock Grid.Column="1"
+                                   Text="Target path"
+                                   Foreground="{StaticResource SecondaryTextBrush}"
+                                   FontWeight="Bold" />
+
+                        <TextBlock Grid.Column="2"
+                                   Text="Source"
+                                   Foreground="{StaticResource SecondaryTextBrush}"
+                                   FontWeight="Bold" />
+
+                        <TextBlock Grid.Column="3"
+                                   Text="Target"
+                                   Foreground="{StaticResource SecondaryTextBrush}"
+                                   FontWeight="Bold" />
+
+                        <TextBlock Grid.Column="4"
+                                   Text="Files"
+                                   Foreground="{StaticResource SecondaryTextBrush}"
+                                   FontWeight="Bold" />
+
+                        <TextBlock Grid.Column="5"
+                                   Text="Status"
+                                   Foreground="{StaticResource SecondaryTextBrush}"
+                                   FontWeight="Bold" />
+                    </Grid>
+                </Border>
+
+                <ScrollViewer Grid.Row="1">
+                    <ItemsControl ItemsSource="{Binding Items}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:TransferPreviewItemRowViewModel">
+                                <Border Padding="12"
+                                        BorderBrush="#252733"
+                                        BorderThickness="0,0,0,1">
+
+                                    <Grid ColumnDefinitions="2*,2*,90,90,90,110"
+                                          ColumnSpacing="12">
+
+                                        <TextBlock Grid.Column="0"
+                                                   Text="{Binding SourcePath}"
+                                                   Foreground="{StaticResource SecondaryTextBrush}"
+                                                   TextTrimming="CharacterEllipsis" />
+
+                                        <TextBlock Grid.Column="1"
+                                                   Text="{Binding TargetPath}"
+                                                   Foreground="{StaticResource SecondaryTextBrush}"
+                                                   TextTrimming="CharacterEllipsis" />
+
+                                        <TextBlock Grid.Column="2"
+                                                   Text="{Binding SourceExists}"
+                                                   Foreground="{StaticResource AccentBrush}" />
+
+                                        <TextBlock Grid.Column="3"
+                                                   Text="{Binding TargetExists}"
+                                                   Foreground="{StaticResource WarningBrush}" />
+
+                                        <StackPanel Grid.Column="4">
+                                            <TextBlock Text="{Binding FileCount}"
+                                                       Foreground="{StaticResource PrimaryTextBrush}" />
+
+                                            <TextBlock Text="{Binding TotalSizeDisplay}"
+                                                       Foreground="{StaticResource MutedTextBrush}"
+                                                       FontSize="11" />
+                                        </StackPanel>
+
+                                        <TextBlock Grid.Column="5"
+                                                   Text="{Binding StatusText}"
+                                                   Foreground="{StaticResource PrimaryTextBrush}"
+                                                   FontWeight="SemiBold" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

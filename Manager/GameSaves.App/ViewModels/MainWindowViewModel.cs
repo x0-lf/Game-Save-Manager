@@ -46,13 +46,20 @@ namespace GameSaves.App.ViewModels
 
         [ObservableProperty]
         private string statusMessage = "Ready.";
+        public InstalledGamesViewModel InstalledGames { get; }
+        public ProfilesViewModel Profiles { get; }
+
+        public TransferPreviewViewModel TransferPreview { get; }
 
         public MainWindowViewModel(
             ISteamDiscoveryService steamDiscoveryService,
             ISteamProfileDetector steamProfileDetector,
             ISavePathMappingRepository mappingRepository,
             ICurrentPlatformProvider platformProvider,
-            IAppDatabasePathProvider databasePathProvider)
+            IAppDatabasePathProvider databasePathProvider,
+            InstalledGamesViewModel installedGames,
+            ProfilesViewModel profiles,
+            TransferPreviewViewModel transferPreview)
         {
             _steamDiscoveryService = steamDiscoveryService;
             _steamProfileDetector = steamProfileDetector;
@@ -62,6 +69,10 @@ namespace GameSaves.App.ViewModels
 
             DatabasePath = _databasePathProvider.GetDatabasePath();
             Platform = _platformProvider.GetCurrentPlatformKey();
+
+            InstalledGames = installedGames;
+            Profiles = profiles;
+            TransferPreview = transferPreview;
         }
 
         [RelayCommand]

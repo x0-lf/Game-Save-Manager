@@ -1,10 +1,29 @@
 ﻿using GameSaves.Core.Steam;
 using System.Collections.Generic;
 
+using GameSaves.Core.Profiles;
+
 namespace GameSaves.Infrastructure.Save
 {
     public sealed class SavePathExpander
     {
+        public IEnumerable<string> ExpandCandidatePaths(
+            string pathTemplate,
+            SteamGame game,
+            string? steamRoot,
+            SteamProfile? profile)
+        {
+            string profileAwareTemplate = ApplyProfileTokens(
+                pathTemplate,
+                steamRoot,
+                profile);
+
+            return ExpandCandidatePaths(
+                profileAwareTemplate,
+                game,
+                steamRoot);
+        }
+
         /*
          * This supports mappings like:
          *  %APPDATA%\StardewValley\Saves
@@ -12,6 +31,7 @@ namespace GameSaves.Infrastructure.Save
          *  {GameInstallPath}\saves
          *  {Documents}\My Games\SomeGame
          */
+
         public IEnumerable<string> ExpandCandidatePaths(
             string pathTemplate,
             SteamGame game,
@@ -182,6 +202,72 @@ namespace GameSaves.Infrastructure.Save
             {
                 return false;
             }
+        }
+
+        private static string ApplyProfileTokens(
+            string pathTemplate,
+            string? steamRoot,
+            SteamProfile? profile)
+        {
+            if (profile is null)
+                return pathTemplate;
+
+            string value = pathTemplate;
+
+            value = value.Replace(
+                "{AccountId}",
+                profile.AccountId,
+                StringComparison.OrdinalIgnoreCase);
+
+            value = value.Replace(
+                "{SteamAccountId}",
+                profile.AccountId,
+                StringComparison.OrdinalIgnoreCase);
+
+            value = value.Replace(
+                "{SteamUserId}",
+                profile.AccountId,
+                StringComparison.OrdinalIgnoreCase);
+
+            value = value.Replace(
+                "{SteamProfileId}",
+                profile.AccountId,
+                StringComparison.OrdinalIgnoreCase);
+
+            if (!string.IsNullOrWhiteSpace(steamRoot))
+            {
+                string profileUserDataPath = Path.Combine(
+                    steamRoot,
+                    "userdata",
+                    profile.AccountId);
+
+                value = value.Replace(
+                    "{SteamUserData}",
+                    profileUserDataPath,
+                    StringComparison.OrdinalIgnoreCase);
+            }
+
+            value = value.Replace(
+                @"userdata\*\",
+                $@"userdata\{profile.AccountId}\",
+                StringComparison.OrdinalIgnoreCase);
+
+            value = value.Replace(
+                @"userdata/*/",
+                $"userdata/{profile.AccountId}/",
+                StringComparison.OrdinalIgnoreCase);
+
+            value = value.Replace(
+                @"userdata\*",
+                $@"userdata\{profile.AccountId}",
+                StringComparison.OrdinalIgnoreCase);
+
+            value = value.Replace(
+                @"userdata/*",
+                $"userdata/{profile.AccountId}",
+                StringComparison.OrdinalIgnoreCase);
+
+            return value;
         }
     }
 }

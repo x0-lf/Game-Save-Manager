@@ -14,6 +14,10 @@ namespace GameSaves.App
 
             services.AddSingleton<MainWindowViewModel>();
 
+            services.AddSingleton<InstalledGamesViewModel>();
+            services.AddSingleton<ProfilesViewModel>();
+            services.AddSingleton<TransferPreviewViewModel>();
+
             return services.BuildServiceProvider();
         }
     }

@@ -2,11 +2,13 @@
 using GameSaves.Core.Profiles;
 using GameSaves.Core.Save;
 using GameSaves.Core.Steam;
+using GameSaves.Core.Transfers;
 using GameSaves.Infrastructure.Platform;
 using GameSaves.Infrastructure.Profiles;
 using GameSaves.Infrastructure.Registry;
 using GameSaves.Infrastructure.Save;
 using GameSaves.Infrastructure.Steam;
+using GameSaves.Infrastructure.Transfers;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace GameSaves.Infrastructure.DependencyInjection
@@ -25,6 +27,10 @@ namespace GameSaves.Infrastructure.DependencyInjection
             services.AddSingleton<ISteamFallbackScanner, SteamFallbackScanner>();
             services.AddSingleton<ISteamDiscoveryService, SteamDiscoveryService>();
             services.AddSingleton<ISteamProfileDetector, SteamProfileDetector>();
+
+            services.AddSingleton<ISavePathVerifier, SavePathVerifier>();
+            services.AddSingleton<IInstalledGameSaveStatusService, InstalledGameSaveStatusService>();
+            services.AddSingleton<ITransferPreviewService, TransferPreviewService>();
 
             services.AddSingleton<ISavePathMappingRepository>(provider =>
             {

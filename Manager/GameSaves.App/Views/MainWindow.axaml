@@ -1,64 +1,273 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:GameSaves.App.ViewModels"
+        xmlns:views="using:GameSaves.App.Views"
         x:Class="GameSaves.App.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="Game Saves Manager"
-        Width="900"
-        Height="600">
+        Width="1200"
+        Height="760"
+        MinWidth="1000"
+        MinHeight="650"
+        Background="#111217">
 
-	<StackPanel Margin="24" Spacing="12">
-		<TextBlock Text="Game Saves Manager"
-                   FontSize="28"
-                   FontWeight="Bold" />
+	<Window.Resources>
+		<SolidColorBrush x:Key="PageBackgroundBrush" Color="#111217" />
+		<SolidColorBrush x:Key="CardBackgroundBrush" Color="#1A1B22" />
+		<SolidColorBrush x:Key="CardBorderBrush" Color="#2A2C36" />
+		<SolidColorBrush x:Key="PrimaryTextBrush" Color="#F4F4F5" />
+		<SolidColorBrush x:Key="SecondaryTextBrush" Color="#A7AAB4" />
+		<SolidColorBrush x:Key="MutedTextBrush" Color="#777B86" />
+		<SolidColorBrush x:Key="AccentBrush" Color="#7C9CFF" />
+		<SolidColorBrush x:Key="SuccessBrush" Color="#6EE7A8" />
+		<SolidColorBrush x:Key="WarningBrush" Color="#FACC6B" />
+		<SolidColorBrush x:Key="DangerBrush" Color="#F87171" />
+	</Window.Resources>
 
-		<Button Content="Refresh"
-                Command="{Binding RefreshCommand}"
-                Width="160" />
+	<Grid RowDefinitions="Auto,*"
+          Margin="22"
+          RowSpacing="18">
 
-		<TextBlock Text="{Binding StatusMessage}" />
+		<!-- Top header -->
+		<Border Grid.Row="0"
+                Background="{StaticResource CardBackgroundBrush}"
+                BorderBrush="{StaticResource CardBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="18"
+                Padding="22">
 
-		<Separator />
+			<Grid ColumnDefinitions="*,Auto"
+                  ColumnSpacing="18">
 
-		<TextBlock Text="Foundation status"
-                   FontSize="20"
-                   FontWeight="SemiBold" />
+				<StackPanel Grid.Column="0"
+                            Spacing="6">
+					<TextBlock Text="Game Saves Manager"
+                               Foreground="{StaticResource PrimaryTextBrush}"
+                               FontSize="30"
+                               FontWeight="Bold" />
 
-		<Grid ColumnDefinitions="240,*"
-              RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
-              RowSpacing="8"
-              ColumnSpacing="16">
+					<TextBlock Text="{Binding StatusMessage}"
+                               Foreground="{StaticResource SecondaryTextBrush}"
+                               FontSize="14" />
+				</StackPanel>
 
-			<TextBlock Grid.Row="0" Grid.Column="0" Text="Database:" />
-			<TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding DatabasePath}" />
+				<Button Grid.Column="1"
+                        Content="Refresh Dashboard"
+                        Command="{Binding RefreshCommand}"
+                        Width="170"
+                        Height="42"
+                        VerticalAlignment="Center" />
+			</Grid>
+		</Border>
 
-			<TextBlock Grid.Row="1" Grid.Column="0" Text="Platform:" />
-			<TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Platform}" />
+		<!-- Main content -->
+		<TabControl Grid.Row="1">
 
-			<TextBlock Grid.Row="2" Grid.Column="0" Text="Steam root:" />
-			<TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SteamRoot}" />
+			<!-- Dashboard tab -->
+			<TabItem Header="Dashboard">
+				<ScrollViewer>
+					<StackPanel Spacing="18"
+                                Margin="0,18,0,0">
 
-			<TextBlock Grid.Row="3" Grid.Column="0" Text="Libraries:" />
-			<TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding LibraryCount}" />
+						<Grid ColumnDefinitions="*,*,*,*"
+                              RowDefinitions="Auto,Auto"
+                              ColumnSpacing="14"
+                              RowSpacing="14">
 
-			<TextBlock Grid.Row="4" Grid.Column="0" Text="Installed games:" />
-			<TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding InstalledGameCount}" />
+							<!-- Steam root -->
+							<Border Grid.Row="0"
+                                    Grid.Column="0"
+                                    Background="{StaticResource CardBackgroundBrush}"
+                                    BorderBrush="{StaticResource CardBorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="16"
+                                    Padding="18">
 
-			<TextBlock Grid.Row="5" Grid.Column="0" Text="Steam profiles:" />
-			<TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding SteamProfileCount}" />
+								<StackPanel Spacing="8">
+									<TextBlock Text="Steam Root"
+                                               Foreground="{StaticResource SecondaryTextBrush}"
+                                               FontSize="13" />
 
-			<TextBlock Grid.Row="6" Grid.Column="0" Text="Approved mappings:" />
-			<TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding ApprovedMappingCount}" />
+									<TextBlock Text="{Binding SteamRoot}"
+                                               Foreground="{StaticResource PrimaryTextBrush}"
+                                               FontSize="15"
+                                               FontWeight="SemiBold"
+                                               TextWrapping="Wrap" />
+								</StackPanel>
+							</Border>
 
-			<TextBlock Grid.Row="7" Grid.Column="0" Text="Pending / NeedsFix:" />
-			<TextBlock Grid.Row="7" Grid.Column="1">
-				<TextBlock.Text>
-					<MultiBinding StringFormat="{}{0} pending, {1} needs fix">
-						<Binding Path="PendingMappingCount" />
-						<Binding Path="NeedsFixMappingCount" />
-					</MultiBinding>
-				</TextBlock.Text>
-			</TextBlock>
-		</Grid>
-	</StackPanel>
+							<!-- Libraries -->
+							<Border Grid.Row="0"
+                                    Grid.Column="1"
+                                    Background="{StaticResource CardBackgroundBrush}"
+                                    BorderBrush="{StaticResource CardBorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="16"
+                                    Padding="18">
+
+								<StackPanel Spacing="8">
+									<TextBlock Text="Libraries"
+                                               Foreground="{StaticResource SecondaryTextBrush}"
+                                               FontSize="13" />
+
+									<TextBlock Text="{Binding LibraryCount}"
+                                               Foreground="{StaticResource AccentBrush}"
+                                               FontSize="32"
+                                               FontWeight="Bold" />
+								</StackPanel>
+							</Border>
+
+							<!-- Installed games -->
+							<Border Grid.Row="0"
+                                    Grid.Column="2"
+                                    Background="{StaticResource CardBackgroundBrush}"
+                                    BorderBrush="{StaticResource CardBorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="16"
+                                    Padding="18">
+
+								<StackPanel Spacing="8">
+									<TextBlock Text="Installed Games"
+                                               Foreground="{StaticResource SecondaryTextBrush}"
+                                               FontSize="13" />
+
+									<TextBlock Text="{Binding InstalledGameCount}"
+                                               Foreground="{StaticResource SuccessBrush}"
+                                               FontSize="32"
+                                               FontWeight="Bold" />
+								</StackPanel>
+							</Border>
+
+							<!-- Profiles -->
+							<Border Grid.Row="0"
+                                    Grid.Column="3"
+                                    Background="{StaticResource CardBackgroundBrush}"
+                                    BorderBrush="{StaticResource CardBorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="16"
+                                    Padding="18">
+
+								<StackPanel Spacing="8">
+									<TextBlock Text="Steam Profiles"
+                                               Foreground="{StaticResource SecondaryTextBrush}"
+                                               FontSize="13" />
+
+									<TextBlock Text="{Binding SteamProfileCount}"
+                                               Foreground="{StaticResource AccentBrush}"
+                                               FontSize="32"
+                                               FontWeight="Bold" />
+								</StackPanel>
+							</Border>
+
+							<!-- Approved mappings -->
+							<Border Grid.Row="1"
+                                    Grid.Column="0"
+                                    Background="{StaticResource CardBackgroundBrush}"
+                                    BorderBrush="{StaticResource CardBorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="16"
+                                    Padding="18">
+
+								<StackPanel Spacing="8">
+									<TextBlock Text="Approved Mappings"
+                                               Foreground="{StaticResource SecondaryTextBrush}"
+                                               FontSize="13" />
+
+									<TextBlock Text="{Binding ApprovedMappingCount}"
+                                               Foreground="{StaticResource SuccessBrush}"
+                                               FontSize="32"
+                                               FontWeight="Bold" />
+								</StackPanel>
+							</Border>
+
+							<!-- Pending mappings -->
+							<Border Grid.Row="1"
+                                    Grid.Column="1"
+                                    Background="{StaticResource CardBackgroundBrush}"
+                                    BorderBrush="{StaticResource CardBorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="16"
+                                    Padding="18">
+
+								<StackPanel Spacing="8">
+									<TextBlock Text="Pending Mappings"
+                                               Foreground="{StaticResource SecondaryTextBrush}"
+                                               FontSize="13" />
+
+									<TextBlock Text="{Binding PendingMappingCount}"
+                                               Foreground="{StaticResource WarningBrush}"
+                                               FontSize="32"
+                                               FontWeight="Bold" />
+								</StackPanel>
+							</Border>
+
+							<!-- NeedsFix mappings -->
+							<Border Grid.Row="1"
+                                    Grid.Column="2"
+                                    Background="{StaticResource CardBackgroundBrush}"
+                                    BorderBrush="{StaticResource CardBorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="16"
+                                    Padding="18">
+
+								<StackPanel Spacing="8">
+									<TextBlock Text="NeedsFix Mappings"
+                                               Foreground="{StaticResource SecondaryTextBrush}"
+                                               FontSize="13" />
+
+									<TextBlock Text="{Binding NeedsFixMappingCount}"
+                                               Foreground="{StaticResource DangerBrush}"
+                                               FontSize="32"
+                                               FontWeight="Bold" />
+								</StackPanel>
+							</Border>
+
+							<!-- Platform/database -->
+							<Border Grid.Row="1"
+                                    Grid.Column="3"
+                                    Background="{StaticResource CardBackgroundBrush}"
+                                    BorderBrush="{StaticResource CardBorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="16"
+                                    Padding="18">
+
+								<StackPanel Spacing="8">
+									<TextBlock Text="Environment"
+                                               Foreground="{StaticResource SecondaryTextBrush}"
+                                               FontSize="13" />
+
+									<StackPanel Spacing="4">
+										<TextBlock Text="{Binding Platform}"
+                                                   Foreground="{StaticResource PrimaryTextBrush}"
+                                                   FontSize="18"
+                                                   FontWeight="SemiBold" />
+
+										<TextBlock Text="{Binding DatabasePath}"
+                                                   Foreground="{StaticResource MutedTextBrush}"
+                                                   FontSize="12"
+                                                   TextWrapping="Wrap" />
+									</StackPanel>
+								</StackPanel>
+							</Border>
+						</Grid>
+					</StackPanel>
+				</ScrollViewer>
+			</TabItem>
+
+			<!-- Installed games tab -->
+			<TabItem Header="Installed Games">
+				<views:InstalledGamesView DataContext="{Binding InstalledGames}" />
+			</TabItem>
+
+			<!-- Profiles tab placeholder -->
+			<TabItem Header="Profiles">
+				<views:ProfilesView DataContext="{Binding Profiles}" />
+			</TabItem>
+
+			<!-- Transfer preview placeholder -->
+			<TabItem Header="Transfer Preview">
+				<views:TransferPreviewView DataContext="{Binding TransferPreview}" />
+			</TabItem>
+		</TabControl>
+	</Grid>
 </Window>

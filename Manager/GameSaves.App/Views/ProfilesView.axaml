@@ -1,0 +1,237 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:GameSaves.App.ViewModels"
+             xmlns:models="using:GameSaves.App.Models"
+             x:Class="GameSaves.App.Views.ProfilesView"
+             x:DataType="vm:ProfilesViewModel"
+             Background="#111217">
+
+    <UserControl.Resources>
+        <SolidColorBrush x:Key="CardBackgroundBrush" Color="#1A1B22" />
+        <SolidColorBrush x:Key="CardBorderBrush" Color="#2A2C36" />
+        <SolidColorBrush x:Key="PrimaryTextBrush" Color="#F4F4F5" />
+        <SolidColorBrush x:Key="SecondaryTextBrush" Color="#A7AAB4" />
+        <SolidColorBrush x:Key="MutedTextBrush" Color="#777B86" />
+        <SolidColorBrush x:Key="AccentBrush" Color="#7C9CFF" />
+        <SolidColorBrush x:Key="SuccessBrush" Color="#6EE7A8" />
+        <SolidColorBrush x:Key="WarningBrush" Color="#FACC6B" />
+    </UserControl.Resources>
+
+    <Grid RowDefinitions="Auto,Auto,*"
+          RowSpacing="16"
+          Margin="0,18,0,0">
+
+        <!-- Header -->
+        <Border Grid.Row="0"
+                Background="{StaticResource CardBackgroundBrush}"
+                BorderBrush="{StaticResource CardBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="18"
+                Padding="20">
+
+            <Grid ColumnDefinitions="*,Auto"
+                  ColumnSpacing="16">
+
+                <StackPanel Grid.Column="0"
+                            Spacing="6">
+                    <TextBlock Text="Steam Profiles"
+                               Foreground="{StaticResource PrimaryTextBrush}"
+                               FontSize="24"
+                               FontWeight="Bold" />
+
+                    <TextBlock Text="{Binding StatusMessage}"
+                               Foreground="{StaticResource SecondaryTextBrush}"
+                               FontSize="14" />
+                </StackPanel>
+
+                <Button Grid.Column="1"
+                        Content="Refresh Profiles"
+                        Command="{Binding RefreshProfilesCommand}"
+                        Width="160"
+                        Height="40"
+                        VerticalAlignment="Center" />
+            </Grid>
+        </Border>
+
+        <!-- Source / Target selection -->
+        <Grid Grid.Row="1"
+              ColumnDefinitions="*,*"
+              ColumnSpacing="16">
+
+            <!-- Source -->
+            <Border Grid.Column="0"
+                    Background="{StaticResource CardBackgroundBrush}"
+                    BorderBrush="{StaticResource CardBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="18"
+                    Padding="20">
+
+                <StackPanel Spacing="12">
+                    <TextBlock Text="Source Profile"
+                               Foreground="{StaticResource PrimaryTextBrush}"
+                               FontSize="18"
+                               FontWeight="SemiBold" />
+
+                    <ComboBox ItemsSource="{Binding Profiles}"
+                              SelectedItem="{Binding SourceProfile}"
+                              HorizontalAlignment="Stretch"
+                              MinHeight="38">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="models:SteamProfileRowViewModel">
+                                <StackPanel Spacing="2">
+                                    <TextBlock Text="{Binding DisplayName}" />
+                                    <TextBlock Text="{Binding UserDataPath}"
+                                               FontSize="11"
+                                               Opacity="0.65" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+
+                    <TextBlock Text="{Binding SourcePath}"
+                               Foreground="{StaticResource MutedTextBrush}"
+                               FontSize="12"
+                               TextWrapping="Wrap" />
+
+                    <Button Content="Open Source Folder"
+                            Command="{Binding OpenSourceFolderCommand}"
+                            Width="170" />
+                </StackPanel>
+            </Border>
+
+            <!-- Target -->
+            <Border Grid.Column="1"
+                    Background="{StaticResource CardBackgroundBrush}"
+                    BorderBrush="{StaticResource CardBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="18"
+                    Padding="20">
+
+                <StackPanel Spacing="12">
+                    <TextBlock Text="Target Profile"
+                               Foreground="{StaticResource PrimaryTextBrush}"
+                               FontSize="18"
+                               FontWeight="SemiBold" />
+
+                    <ComboBox ItemsSource="{Binding Profiles}"
+                              SelectedItem="{Binding TargetProfile}"
+                              HorizontalAlignment="Stretch"
+                              MinHeight="38">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="models:SteamProfileRowViewModel">
+                                <StackPanel Spacing="2">
+                                    <TextBlock Text="{Binding DisplayName}" />
+                                    <TextBlock Text="{Binding UserDataPath}"
+                                               FontSize="11"
+                                               Opacity="0.65" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+
+                    <TextBlock Text="{Binding TargetPath}"
+                               Foreground="{StaticResource MutedTextBrush}"
+                               FontSize="12"
+                               TextWrapping="Wrap" />
+
+                    <Button Content="Open Target Folder"
+                            Command="{Binding OpenTargetFolderCommand}"
+                            Width="170" />
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- Profiles list -->
+        <Border Grid.Row="2"
+                Background="{StaticResource CardBackgroundBrush}"
+                BorderBrush="{StaticResource CardBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="18"
+                Padding="0">
+
+            <Grid RowDefinitions="Auto,Auto,*">
+
+                <Border Grid.Row="0"
+                        Padding="18"
+                        BorderBrush="{StaticResource CardBorderBrush}"
+                        BorderThickness="0,0,0,1">
+
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Detected Profiles"
+                                   Foreground="{StaticResource PrimaryTextBrush}"
+                                   FontSize="18"
+                                   FontWeight="SemiBold" />
+
+                        <TextBlock Text="{Binding SelectionWarning}"
+                                   Foreground="{StaticResource WarningBrush}"
+                                   FontSize="13" />
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Row="1"
+                        Padding="12"
+                        BorderBrush="{StaticResource CardBorderBrush}"
+                        BorderThickness="0,0,0,1">
+
+                    <Grid ColumnDefinitions="180,*,130,130"
+                          ColumnSpacing="12">
+                        <TextBlock Grid.Column="0"
+                                   Text="Account ID"
+                                   Foreground="{StaticResource SecondaryTextBrush}"
+                                   FontWeight="Bold" />
+
+                        <TextBlock Grid.Column="1"
+                                   Text="Userdata path"
+                                   Foreground="{StaticResource SecondaryTextBrush}"
+                                   FontWeight="Bold" />
+
+                        <TextBlock Grid.Column="2"
+                                   Text="App folders"
+                                   Foreground="{StaticResource SecondaryTextBrush}"
+                                   FontWeight="Bold" />
+
+                        <TextBlock Grid.Column="3"
+                                   Text="Current"
+                                   Foreground="{StaticResource SecondaryTextBrush}"
+                                   FontWeight="Bold" />
+                    </Grid>
+                </Border>
+
+                <ScrollViewer Grid.Row="2">
+                    <ItemsControl ItemsSource="{Binding Profiles}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:SteamProfileRowViewModel">
+                                <Border Padding="12"
+                                        BorderBrush="#252733"
+                                        BorderThickness="0,0,0,1">
+
+                                    <Grid ColumnDefinitions="180,*,130,130"
+                                          ColumnSpacing="12">
+
+                                        <TextBlock Grid.Column="0"
+                                                   Text="{Binding AccountId}"
+                                                   Foreground="{StaticResource PrimaryTextBrush}"
+                                                   FontWeight="SemiBold" />
+
+                                        <TextBlock Grid.Column="1"
+                                                   Text="{Binding UserDataPath}"
+                                                   Foreground="{StaticResource SecondaryTextBrush}"
+                                                   TextTrimming="CharacterEllipsis" />
+
+                                        <TextBlock Grid.Column="2"
+                                                   Text="{Binding AppFolderCount}"
+                                                   Foreground="{StaticResource AccentBrush}" />
+
+                                        <TextBlock Grid.Column="3"
+                                                   Text="{Binding CurrentUserText}"
+                                                   Foreground="{StaticResource MutedTextBrush}" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>
