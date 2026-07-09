@@ -14,6 +14,8 @@ namespace GameSaves.App.ViewModels
         private readonly ITransferPreviewService _transferPreviewService;
         private readonly ProfilesViewModel _profilesViewModel;
         private readonly InstalledGamesViewModel _installedGamesViewModel;
+        private readonly ISaveTransferService _saveTransferService;
+        private TransferPreviewPlan? _lastPlan;
 
         [ObservableProperty]
         private bool isLoading;
@@ -39,6 +41,24 @@ namespace GameSaves.App.ViewModels
         [ObservableProperty]
         private bool canExecuteTransferLater;
 
+        [ObservableProperty]
+        private bool confirmRealTransfer;
+
+        [ObservableProperty]
+        private bool overwriteExisting;
+
+        [ObservableProperty]
+        private string executionStatusMessage = "No transfer executed.";
+
+        [ObservableProperty]
+        private int filesCopied;
+
+        [ObservableProperty]
+        private int filesSkipped;
+
+        [ObservableProperty]
+        private string bytesCopiedDisplay = "0 B";
+
         public ObservableCollection<SteamProfileRowViewModel> Profiles =>
             _profilesViewModel.Profiles;
 
@@ -49,12 +69,16 @@ namespace GameSaves.App.ViewModels
 
         public ObservableCollection<TransferWarningRowViewModel> Warnings { get; } = new();
 
+        public ObservableCollection<SaveTransferItemResultRowViewModel> ExecutionResults { get; } = new();
+
         public TransferPreviewViewModel(
             ITransferPreviewService transferPreviewService,
+            ISaveTransferService saveTransferService,
             ProfilesViewModel profilesViewModel,
             InstalledGamesViewModel installedGamesViewModel)
         {
             _transferPreviewService = transferPreviewService;
+            _saveTransferService = saveTransferService;
             _profilesViewModel = profilesViewModel;
             _installedGamesViewModel = installedGamesViewModel;
         }
@@ -133,6 +157,14 @@ namespace GameSaves.App.ViewModels
                         SelectedSourceProfile.Profile,
                         SelectedTargetProfile.Profile);
 
+                _lastPlan = plan;
+                ExecutionResults.Clear();
+                ExecutionStatusMessage = "No transfer executed.";
+                FilesCopied = 0;
+                FilesSkipped = 0;
+                BytesCopiedDisplay = "0 B";
+                ConfirmRealTransfer = false;
+
                 foreach (TransferPreviewItem item in plan.Items)
                     Items.Add(new TransferPreviewItemRowViewModel(item));
 
@@ -157,6 +189,63 @@ namespace GameSaves.App.ViewModels
             }
         }
 
+        [RelayCommand]
+        private async Task ExecuteTransferAsync()
+        {
+            if (IsLoading)
+                return;
+
+            if (_lastPlan is null)
+            {
+                ExecutionStatusMessage = "Build a transfer preview first.";
+                return;
+            }
+
+            if (!ConfirmRealTransfer)
+            {
+                ExecutionStatusMessage = "Real transfer blocked. Confirm the checkbox first.";
+                return;
+            }
+
+            try
+            {
+                IsLoading = true;
+                ExecutionStatusMessage = "Executing safe local transfer...";
+
+                var options = new SaveTransferOptions
+                {
+                    DryRun = false,
+                    ConfirmExecution = ConfirmRealTransfer,
+                    OverwriteExisting = OverwriteExisting,
+                    PreserveTimestamps = true
+                };
+
+                SaveTransferResult result =
+                    await _saveTransferService.ExecuteAsync(
+                        _lastPlan,
+                        options);
+
+                ExecutionResults.Clear();
+
+                foreach (SaveTransferItemResult item in result.Items)
+                    ExecutionResults.Add(new SaveTransferItemResultRowViewModel(item));
+
+                FilesCopied = result.FilesCopied;
+                FilesSkipped = result.FilesSkipped;
+                BytesCopiedDisplay = FormatBytes(result.BytesCopied);
+
+                ExecutionStatusMessage =
+                    $"Transfer finished. Copied {FilesCopied} file(s), skipped {FilesSkipped} file(s).";
+            }
+            catch (Exception ex)
+            {
+                ExecutionStatusMessage = $"Transfer failed: {ex.Message}";
+            }
+            finally
+            {
+                IsLoading = false;
+            }
+        }
         private static string FormatBytes(long bytes)
         {
             if (bytes < 1024)

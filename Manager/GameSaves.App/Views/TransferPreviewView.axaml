@@ -151,9 +151,32 @@
                     <TextBlock Text="{Binding CanExecuteTransferLater, StringFormat='Future transfer safe: {0}'}"
                                Foreground="{StaticResource MutedTextBrush}" />
 
-                    <TextBlock Text="No files are copied in Milestone 1."
+                    <TextBlock Text="Execution is guarded. No overwrite unless enabled."
                                Foreground="{StaticResource WarningBrush}"
                                TextWrapping="Wrap" />
+
+                    <CheckBox Content="I understand this will copy files locally"
+                              IsChecked="{Binding ConfirmRealTransfer}" />
+
+                    <CheckBox Content="Overwrite existing files"
+                              IsChecked="{Binding OverwriteExisting}" />
+
+                    <Button Content="Execute Transfer"
+                            Command="{Binding ExecuteTransferCommand}"
+                            Height="38" />
+
+                    <TextBlock Text="{Binding ExecutionStatusMessage}"
+                               Foreground="{StaticResource SecondaryTextBrush}"
+                               TextWrapping="Wrap" />
+
+                    <TextBlock Text="{Binding FilesCopied, StringFormat='Copied: {0} files'}"
+                               Foreground="{StaticResource SuccessBrush}" />
+
+                    <TextBlock Text="{Binding FilesSkipped, StringFormat='Skipped: {0} files'}"
+                               Foreground="{StaticResource MutedTextBrush}" />
+
+                    <TextBlock Text="{Binding BytesCopiedDisplay, StringFormat='Bytes copied: {0}'}"
+                               Foreground="{StaticResource MutedTextBrush}" />
                 </StackPanel>
             </Border>
 
