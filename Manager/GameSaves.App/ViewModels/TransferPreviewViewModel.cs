@@ -51,6 +51,9 @@ namespace GameSaves.App.ViewModels
         private bool overwriteExisting;
 
         [ObservableProperty]
+        private bool backupBeforeOverwrite = true;
+
+        [ObservableProperty]
         private string executionStatusMessage = "No copy executed.";
 
         [ObservableProperty]
@@ -61,6 +64,12 @@ namespace GameSaves.App.ViewModels
 
         [ObservableProperty]
         private string bytesCopiedDisplay = "0 B";
+
+        [ObservableProperty]
+        private int filesBackedUp;
+
+        [ObservableProperty]
+        private string backupLocationMessage = "";
 
         public ObservableCollection<SteamProfileRowViewModel> Profiles =>
             _profilesViewModel.Profiles;
@@ -175,6 +184,8 @@ namespace GameSaves.App.ViewModels
                 FilesCopied = 0;
                 FilesSkipped = 0;
                 BytesCopiedDisplay = "0 B";
+                FilesBackedUp = 0;
+                BackupLocationMessage = "";
                 ConfirmRealTransfer = false;
 
                 foreach (TransferPreviewItem item in plan.Items)
@@ -238,7 +249,8 @@ namespace GameSaves.App.ViewModels
                     DryRun = false,
                     ConfirmExecution = ConfirmRealTransfer,
                     OverwriteExisting = OverwriteExisting,
-                    PreserveTimestamps = true
+                    PreserveTimestamps = true,
+                    BackupBeforeOverwrite = BackupBeforeOverwrite
                 };
 
                 SaveTransferResult result =
@@ -254,6 +266,10 @@ namespace GameSaves.App.ViewModels
                 FilesCopied = result.FilesCopied;
                 FilesSkipped = result.FilesSkipped;
                 BytesCopiedDisplay = FormatBytes(result.BytesCopied);
+                FilesBackedUp = result.FilesBackedUp;
+                BackupLocationMessage = result.BackupRootPath is null
+                    ? ""
+                    : $"Overwritten files were backed up to: {result.BackupRootPath}";
 
                 TransferPreviewWarning? blocker = result.Warnings
                     .Skip(_lastPlan.Warnings.Count)

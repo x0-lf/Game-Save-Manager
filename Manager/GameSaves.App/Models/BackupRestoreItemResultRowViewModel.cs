@@ -1,37 +1,33 @@
-﻿using GameSaves.Core.Transfers;
+using GameSaves.Core.Transfers;
 
 namespace GameSaves.App.Models
 {
-    public sealed class SaveTransferItemResultRowViewModel
+    public sealed class BackupRestoreItemResultRowViewModel
     {
-        public SaveTransferItemResultRowViewModel(
-            SaveTransferItemResult result)
+        public BackupRestoreItemResultRowViewModel(BackupRestoreItemResult result)
         {
             Result = result;
         }
 
-        public SaveTransferItemResult Result { get; }
+        public BackupRestoreItemResult Result { get; }
 
-        public string SourceFile => Result.SourceFile;
+        public string BackupFile => Result.BackupItem.BackupFile;
 
         public string TargetFile => Result.TargetFile;
 
-        public long Bytes => Result.Bytes;
+        public string SizeDisplay => FormatBytes(Result.Bytes);
 
-        public string SizeDisplay => FormatBytes(Bytes);
-
-        public bool Copied => Result.Copied;
+        public bool Restored => Result.Restored;
 
         public string Status => Result.Status.ToString();
 
         public string? Error => Result.Error;
 
-        public string? BackupFile => Result.BackupFile;
+        public bool HasPreRestoreBackup =>
+            !string.IsNullOrWhiteSpace(Result.PreRestoreBackupFile);
 
-        public bool HasBackup => !string.IsNullOrWhiteSpace(Result.BackupFile);
-
-        public string BackupDisplay => HasBackup
-            ? $"Previous version backed up to: {Result.BackupFile}"
+        public string PreRestoreBackupDisplay => HasPreRestoreBackup
+            ? $"Replaced version backed up to: {Result.PreRestoreBackupFile}"
             : string.Empty;
 
         private static string FormatBytes(long bytes)

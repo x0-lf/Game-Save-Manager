@@ -17,6 +17,7 @@ namespace GameSaves.App
             services.AddSingleton<InstalledGamesViewModel>();
             services.AddSingleton<ProfilesViewModel>();
             services.AddSingleton<TransferPreviewViewModel>();
+            services.AddSingleton<BackupHistoryViewModel>();
 
             return services.BuildServiceProvider();
         }

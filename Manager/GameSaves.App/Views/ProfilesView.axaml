@@ -15,45 +15,51 @@
         <SolidColorBrush x:Key="AccentBrush" Color="#7C9CFF" />
         <SolidColorBrush x:Key="SuccessBrush" Color="#6EE7A8" />
         <SolidColorBrush x:Key="WarningBrush" Color="#FACC6B" />
+        <SolidColorBrush x:Key="SplitterBrush" Color="#2A2C36" />
     </UserControl.Resources>
 
-    <Grid RowDefinitions="Auto,Auto,*"
-          RowSpacing="16"
-          Margin="0,18,0,0">
+    <Grid RowSpacing="0"
+          Margin="0,12,0,0">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="230" MinHeight="120" MaxHeight="420" />
+            <RowDefinition Height="8" />
+            <RowDefinition Height="*" MinHeight="160" />
+        </Grid.RowDefinitions>
 
         <!-- Header -->
         <Border Grid.Row="0"
                 Background="{StaticResource CardBackgroundBrush}"
                 BorderBrush="{StaticResource CardBorderBrush}"
                 BorderThickness="1"
-                CornerRadius="18"
-                Padding="20">
+                CornerRadius="14"
+                Padding="14,10"
+                Margin="0,0,0,10">
 
             <Grid ColumnDefinitions="*,Auto"
                   ColumnSpacing="16">
 
                 <StackPanel Grid.Column="0"
-                            Spacing="6">
+                            Spacing="2">
                     <TextBlock Text="Steam Profiles"
                                Foreground="{StaticResource PrimaryTextBrush}"
-                               FontSize="24"
+                               FontSize="18"
                                FontWeight="Bold" />
 
                     <TextBlock Text="{Binding StatusMessage}"
                                Foreground="{StaticResource SecondaryTextBrush}"
-                               FontSize="14" />
+                               FontSize="12" />
                 </StackPanel>
 
                 <Button Grid.Column="1"
                         Content="Refresh Profiles"
                         Command="{Binding RefreshProfilesCommand}"
-                        Width="160"
-                        Height="40"
+                        Height="34"
                         VerticalAlignment="Center" />
             </Grid>
         </Border>
 
-        <!-- Source / Target selection -->
+        <!-- Source / Target selection (resizable, scrolls when small) -->
         <Grid Grid.Row="1"
               ColumnDefinitions="*,*"
               ColumnSpacing="16">
@@ -63,13 +69,15 @@
                     Background="{StaticResource CardBackgroundBrush}"
                     BorderBrush="{StaticResource CardBorderBrush}"
                     BorderThickness="1"
-                    CornerRadius="18"
-                    Padding="20">
+                    CornerRadius="14"
+                    Padding="0">
 
-                <StackPanel Spacing="12">
+                <ScrollViewer>
+                <StackPanel Spacing="10"
+                            Margin="16,12">
                     <TextBlock Text="Source Profile"
                                Foreground="{StaticResource PrimaryTextBrush}"
-                               FontSize="18"
+                               FontSize="15"
                                FontWeight="SemiBold" />
 
                     <ComboBox ItemsSource="{Binding Profiles}"
@@ -97,6 +105,7 @@
                             Command="{Binding OpenSourceFolderCommand}"
                             Width="170" />
                 </StackPanel>
+                </ScrollViewer>
             </Border>
 
             <!-- Target -->
@@ -104,13 +113,15 @@
                     Background="{StaticResource CardBackgroundBrush}"
                     BorderBrush="{StaticResource CardBorderBrush}"
                     BorderThickness="1"
-                    CornerRadius="18"
-                    Padding="20">
+                    CornerRadius="14"
+                    Padding="0">
 
-                <StackPanel Spacing="12">
+                <ScrollViewer>
+                <StackPanel Spacing="10"
+                            Margin="16,12">
                     <TextBlock Text="Target Profile"
                                Foreground="{StaticResource PrimaryTextBrush}"
-                               FontSize="18"
+                               FontSize="15"
                                FontWeight="SemiBold" />
 
                     <ComboBox ItemsSource="{Binding Profiles}"
@@ -138,28 +149,35 @@
                             Command="{Binding OpenTargetFolderCommand}"
                             Width="170" />
                 </StackPanel>
+                </ScrollViewer>
             </Border>
         </Grid>
 
+        <GridSplitter Grid.Row="2"
+                      Height="8"
+                      Margin="0,1"
+                      Background="{StaticResource SplitterBrush}"
+                      ResizeDirection="Rows" />
+
         <!-- Profiles list -->
-        <Border Grid.Row="2"
+        <Border Grid.Row="3"
                 Background="{StaticResource CardBackgroundBrush}"
                 BorderBrush="{StaticResource CardBorderBrush}"
                 BorderThickness="1"
-                CornerRadius="18"
+                CornerRadius="14"
                 Padding="0">
 
             <Grid RowDefinitions="Auto,Auto,*">
 
                 <Border Grid.Row="0"
-                        Padding="18"
+                        Padding="12,8"
                         BorderBrush="{StaticResource CardBorderBrush}"
                         BorderThickness="0,0,0,1">
 
-                    <StackPanel Spacing="4">
-                        <TextBlock Text="Detected Profiles"
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="Detected Profiles (drag the divider above to resize)"
                                    Foreground="{StaticResource PrimaryTextBrush}"
-                                   FontSize="18"
+                                   FontSize="14"
                                    FontWeight="SemiBold" />
 
                         <TextBlock Text="{Binding SelectionWarning}"

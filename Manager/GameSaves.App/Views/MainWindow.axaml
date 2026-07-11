@@ -25,37 +25,36 @@
 	</Window.Resources>
 
 	<Grid RowDefinitions="Auto,*"
-          Margin="22"
-          RowSpacing="18">
+          Margin="16"
+          RowSpacing="12">
 
 		<!-- Top header -->
 		<Border Grid.Row="0"
                 Background="{StaticResource CardBackgroundBrush}"
                 BorderBrush="{StaticResource CardBorderBrush}"
                 BorderThickness="1"
-                CornerRadius="18"
-                Padding="22">
+                CornerRadius="14"
+                Padding="16,10">
 
 			<Grid ColumnDefinitions="*,Auto"
                   ColumnSpacing="18">
 
 				<StackPanel Grid.Column="0"
-                            Spacing="6">
+                            Spacing="2">
 					<TextBlock Text="Game Saves Manager"
                                Foreground="{StaticResource PrimaryTextBrush}"
-                               FontSize="30"
+                               FontSize="22"
                                FontWeight="Bold" />
 
 					<TextBlock Text="{Binding StatusMessage}"
                                Foreground="{StaticResource SecondaryTextBrush}"
-                               FontSize="14" />
+                               FontSize="12" />
 				</StackPanel>
 
 				<Button Grid.Column="1"
                         Content="Refresh Dashboard"
                         Command="{Binding RefreshCommand}"
-                        Width="170"
-                        Height="42"
+                        Height="36"
                         VerticalAlignment="Center" />
 			</Grid>
 		</Border>
@@ -267,6 +266,11 @@
 			<!-- Transfer preview placeholder -->
 			<TabItem Header="Transfer Preview">
 				<views:TransferPreviewView DataContext="{Binding TransferPreview}" />
+			</TabItem>
+
+			<!-- Backup history and restore -->
+			<TabItem Header="Backups">
+				<views:BackupHistoryView DataContext="{Binding BackupHistory}" />
 			</TabItem>
 		</TabControl>
 	</Grid>

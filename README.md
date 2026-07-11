@@ -1,188 +1,178 @@
 # Game Save Manager
 
-Game Save Manager is an experimental .NET tool for discovering installed Steam games, resolving known save-game locations, verifying which save paths exist on the current machine, and backing them up safely.
+Game Save Manager is a .NET 8 desktop tool for discovering installed Steam games and Steam profiles, resolving known save-game locations, and **safely copying saves between local Steam profiles** - with automatic backups, SHA-256 integrity checking, and a full restore workflow.
 
-The long-term goal is to become a cross-platform Steam save-game manager with a graphical interface, save transfer, restore, synchronization, and cloud-provider integration. The current repository is an early CLI-focused foundation that concentrates on Steam discovery, save-path mapping, verification, backup, and data harvesting.
+The project ships two front ends over a shared core:
+
+* **GameSaves.App** - the Avalonia desktop application (the main user-facing app).
+* **GameSaves** - the original CLI, now used as developer tooling for discovery, verification, catalog fetching, and PCGamingWiki harvesting.
+
+The long-term goal is a cross-platform Steam save manager with backup profiles, restore, synchronization, and cloud-provider integration.
 
 ---
 
 ## Current status
 
-This project is currently a prototype / foundation layer.
+### Implemented - desktop app (Avalonia)
 
-Implemented now:
+* Dashboard with Steam root, library count, installed games, Steam profiles, and mapping counts.
+* Installed-games list with per-game save-mapping status (approved / pending / needs-fix), file counts, and sizes.
+* Steam profile detection from `userdata`, with source/target profile selection.
+* **Transfer Preview** - copy saves between local Steam profiles:
+  * First-class **Steam userdata game folder** transfer (`<SteamRoot>\userdata\<AccountId>\<AppId>`), independent of the mapping database.
+  * Approved save-path mappings shown as a second group, expanded per profile.
+  * Dry-run preview with file counts, total size, conflict status, and a plain-English "what will happen" line per item.
+  * Execution requires an explicit confirmation checkbox; overwrite is off by default.
+  * **Backup before overwrite (Safe Mode)** - every target file about to be replaced is backed up first; if the backup fails, that file is not overwritten.
+  * Per-file execution results: copied / skipped / failed, with reasons and backup locations.
+* **Backups tab** - backup history and restore:
+  * Lists every backup run from its `manifest.json` (game, profiles, timestamp, files, size).
+  * Restore with dry-run preview, confirmation gate, and overwrite opt-in.
+  * SHA-256 integrity check: tampered or missing backup files are never restored.
+  * Pre-restore backup: files replaced by a restore are themselves backed up, so a restore is always undoable.
+* Resizable panes (drag the dividers) so the app works on 1080p displays.
 
-* Detect Steam installation from the Windows registry.
-* Validate the discovered Steam root.
-* Parse Steam `libraryfolders.vdf`.
-* Read installed Steam games from `appmanifest_*.acf` files.
-* Use a fallback disk scan when normal Steam discovery fails.
-* Store save-path mappings in a local SQLite database.
-* Import save-path mappings from JSON.
-* Expand save-path templates using Steam/game/user-directory tokens.
-* Verify whether mapped save paths exist.
-* Count files and total size for verified save paths.
-* Save verification results to the database.
-* Run dry-run backups before copying files.
-* Back up verified save files/directories.
-* Compute SHA-256 hashes during backup.
-* Record backup runs and backup items in SQLite.
-* Fetch Steam catalog data.
-* Export missing Steam AppIDs for future PCGamingWiki harvesting.
-* Harvest save-path data for selected or installed Steam AppIDs.
+### Implemented - CLI / developer tooling
 
-Not implemented yet:
+* Steam root discovery from the Windows registry, with validation and fallback disk scan.
+* `libraryfolders.vdf` and `appmanifest_*.acf` parsing.
+* SQLite save-path mapping database with JSON import and review states (Approved / Pending / NeedsFix / Rejected).
+* Save-path template expansion (environment tokens, Steam tokens, wildcards) and verification with confidence scores.
+* Verified-path backups with SHA-256 hashing and backup run/item records.
+* Steam catalog fetching and PCGamingWiki harvesting workflows.
 
-* Avalonia desktop UI.
-* Restore workflow.
-* User-to-user save transfer.
-* Cloud sync providers such as Google Drive, OneDrive, Mega, Nextcloud, FTP, or SSH.
-* Full cross-platform save-path resolution.
-* Archive creation/extraction using ZIP/7z.
-* Background sync.
-* Conflict resolution.
-* Automatic scheduled backups.
-* Full curated save-location database coverage for all Steam titles.
+### Not implemented yet
 
----
-
-## Project goals
-
-Game Save Manager is being designed around a simple idea:
-
-> Find the user’s installed Steam games, match them against a verified save-location database, verify the real save files on disk, and make it easy to back up, move, restore, or synchronize those saves.
-
-The planned application should eventually answer questions like:
-
-* Which Steam games are installed?
-* Which Steam users exist on this machine?
-* Which save-location rules match each installed game?
-* Which of those save paths actually exist?
-* Which files changed since the last backup?
-* Where should these files be restored for another Windows user?
-* How can saves be transferred to another PC?
-* How can saves be synchronized through cloud or self-hosted storage?
+* Manual on-demand backups from the GUI (back up a chosen game to a chosen destination).
+* SQLite transfer-history tables (`transfer_runs` / `transfer_items`).
+* Archive support (ZIP/7z).
+* Cloud sync providers (local-folder sync provider first, then WebDAV/Nextcloud, SFTP, OneDrive/Google Drive).
+* Linux / macOS / Steam Deck discovery and platform-specific path expansion.
+* Scheduled backups, diff viewer, encryption.
 
 ---
 
-## Requirements
+## Safety model
 
-### Required
+The transfer and restore flows are built around a small set of hard rules:
 
-* .NET 8 SDK
-* Steam installed on the machine
-* Windows for the current registry-based Steam root discovery
-* Internet access for Steam catalog and PCGamingWiki harvesting commands
-
-### NuGet packages currently used
-
-* `Gameloop.Vdf`
-* `Microsoft.Data.Sqlite`
+1. **Copy, never move.** Nothing in the transfer or restore flow deletes source files. There is no delete anywhere in the pipeline.
+2. **Preview first.** Every copy and restore starts as a dry run; execution is a separate, explicitly confirmed step.
+3. **Overwrite is opt-in.** Existing target files are skipped by default.
+4. **Backup before overwrite.** With Safe Mode (default on), a file is only overwritten after it has been backed up with a SHA-256 manifest entry. A failed backup refuses the overwrite.
+5. **Path containment.** Steam userdata transfers are validated - at preview *and again at execution* - to stay inside the expected `userdata\<AccountId>\<AppId>` roots. Per-file path-traversal guards prevent any write outside the target root.
+6. **Auditable results.** Every file's outcome (copied / skipped / failed / backed up, and why) is shown in the UI and recorded in backup manifests.
 
 ---
 
 ## Repository layout
 
-Current layout:
-
 ```text
 Manager/
-└── GameSaves/
-    ├── Backup/
-    ├── Data/
-    ├── External/
-    ├── SavePaths/
-    ├── External/
-    │   ├── Steam/
-    │   └── Titles/
-    ├── Program.cs
-    └── GameSaves.csproj
+├── Manager.sln
+├── GameSaves.Core/            # Pure models, enums, interfaces (no SQLite/registry/VDF/Avalonia/filesystem)
+│   ├── Steam/                 # Discovery models and interfaces
+│   ├── Profiles/              # Steam profile model and detector interface
+│   ├── Save/                  # Mappings, verification, save-status models
+│   └── Transfers/             # Transfer preview/execution, overwrite backups, history, restore
+├── GameSaves.Infrastructure/  # Real implementations
+│   ├── Registry/              # Steam root from Windows registry
+│   ├── Steam/                 # VDF/manifest readers, discovery, fallback scanner
+│   ├── Profiles/              # userdata profile detection
+│   ├── Save/                  # SQLite repository, path expander, verifier
+│   ├── Transfers/             # Preview, transfer, overwrite backup, history, restore services
+│   └── DependencyInjection/   # Service registration
+├── GameSaves.App/             # Avalonia + CommunityToolkit.Mvvm desktop app
+│   ├── ViewModels/            # MainWindow, InstalledGames, Profiles, TransferPreview, BackupHistory
+│   ├── Views/                 # AXAML views (Dashboard, tabs)
+│   └── Models/                # Row view-models
+├── GameSaves/                 # CLI: discovery, verify, backup, catalog fetch, PCGW harvester
+└── GameSaves.Reviewer/        # Internal mapping-review tool for harvested save paths
 ```
 
-Main areas:
+Layering rules:
 
-| Area                        | Purpose                                                                                        |
-| --------------------------- | ---------------------------------------------------------------------------------------------- |
-| `Program.cs`                | CLI entry point and command dispatcher.                                                        |
-| `SteamDiscoveryService`     | Orchestrates Steam root, library, manifest, and fallback discovery.                            |
-| `RegistrySteamLocator`      | Reads Steam install path from the Windows registry.                                            |
-| `SteamLibraryFoldersReader` | Reads Steam library paths from `libraryfolders.vdf`.                                           |
-| `SteamAppManifestReader`    | Reads installed games from Steam app manifests.                                                |
-| `SteamFallbackScanner`      | Scans disks for Steam libraries when normal discovery fails.                                   |
-| `SavePathDatabase`          | Stores mappings, verification results, catalog data, and backup records in SQLite.             |
-| `SavePathExpander`          | Expands path templates such as `%APPDATA%`, `{SteamRoot}`, `{AppId}`, and `{GameInstallPath}`. |
-| `SavePathVerifier`          | Checks candidate save paths and assigns confidence scores.                                     |
-| `BackupManager`             | Copies verified save files into timestamped backup folders.                                    |
-| `SteamCatalogService`       | Fetches Steam catalog data and exports AppIDs for harvesting.                                  |
+| Project                    | Responsibility                                                                               |
+| -------------------------- | -------------------------------------------------------------------------------------------- |
+| `GameSaves.Core`           | Domain models, enums, and interfaces only. Platform-neutral, dependency-free.                |
+| `GameSaves.Infrastructure` | Registry, VDF, filesystem, SQLite, path expansion, transfer/backup/restore logic.            |
+| `GameSaves.App`            | Thin Avalonia UI over the services. No business logic in views.                              |
+| `GameSaves`                | Developer CLI and data-harvesting tooling. Kept working as a test harness.                   |
+| `GameSaves.Reviewer`       | Internal tool to review whether scraped save paths are accurate before they are trusted.     |
+
+Trusted data rule: only mappings with review status **Approved** are used by the transfer flow. Pending/NeedsFix mappings are visible but never trusted automatically.
 
 ---
 
-## Planned architecture
+## The desktop app
 
-The project is expected to move toward a cleaner multi-project structure:
+Run it:
+
+```bash
+dotnet run --project Manager/GameSaves.App
+```
+
+Tabs:
+
+| Tab                | What it does                                                                                       |
+| ------------------ | -------------------------------------------------------------------------------------------------- |
+| Dashboard          | Steam root, libraries, installed games, profiles, and mapping counts. Refresh re-scans everything.  |
+| Installed Games    | Every installed game with mapping status, save-path existence, file counts, and sizes.              |
+| Profiles           | Detected Steam profiles from `userdata`, with source/target selection and folder shortcuts.         |
+| Transfer Preview   | Copy saves between profiles: pick source, target, and game → Preview Copy (Dry Run) → confirm → Copy to Target Profile. |
+| Backups            | Every backup run with its files and hashes; restore with dry-run preview and confirmation.          |
+
+### How a profile-to-profile copy works
+
+1. Select a source profile, a target profile, and an installed game.
+2. **Preview Copy (Dry Run)** builds the plan:
+   * the Steam userdata game folder (`userdata\<source>\<AppId>` → `userdata\<target>\<AppId>`), if enabled;
+   * every approved save-path mapping, expanded for both profiles;
+   * warnings (same profile, missing source, existing target, non-profile-specific mappings, containment failures).
+3. Check "I understand this will copy files into the target profile".
+4. Optionally enable overwrite (existing files are skipped otherwise). Backup-before-overwrite is on by default.
+5. **Copy to Target Profile** - relative paths and timestamps preserved, per-file results listed.
+
+### Backups and restore
+
+Automatic backups live under the app data folder:
 
 ```text
-src/
-├── GameSaves.App/
-├── GameSaves.Core/
-└── GameSaves.Infrastructure/
+%LOCALAPPDATA%\GameSave\TransferBackups\
+└── 20260711_143512_transfer_227300_1199012097_to_1703495256\
+    ├── manifest.json          # game, profiles, timestamps, per-file SHA-256
+    └── files\C\...            # full original path mirrored, timestamps preserved
 ```
 
-Planned responsibilities:
+Restore (Backups tab) copies backed-up files to their original locations:
 
-| Project                    | Responsibility                                                                                                                 |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `GameSaves`                | Current CLI, SteamWebAPI harvester / PCGamingWiki harvester tool / Uses Main Areas of repository.                              |
-| `GameSaves.Core`           | Domain models, interfaces, save-path rules, backup planning, restore planning, and platform-neutral logic.                     |
-| `GameSaves.Infrastructure` | Steam discovery, filesystem access, SQLite persistence, PCGamingWiki/Steam integrations, archive handling, and sync providers. |
-| `GameSaves.App`            | Avalonia UI, view models, user workflows, settings, backup/restore screens, and progress reporting.                            |
-| `GameSaves.Reviewer`       | Internal Mapping Reviewer allowing developers to verify whether scraped SaveGamePaths are accurate and valid                   |
-
-The current CLI prototype can later become a development/testing tool while the Avalonia application becomes the main user-facing app.
+* Dry-run preview first, explicit confirmation to execute.
+* Files identical to their backup are skipped as "already matches".
+* Files that differ are only replaced with overwrite enabled - and the replaced version is backed up first as a new restore-kind run.
+* Every backup file is verified against its manifest SHA-256 before it is restored.
 
 ---
 
-## How Steam discovery works
+## Requirements
 
-The current discovery pipeline works in stages:
+* .NET 8 SDK
+* Steam installed on the machine
+* Windows (registry-based Steam discovery; other platforms are planned)
+* Internet access only for Steam catalog / PCGamingWiki harvesting commands
 
-1. Try to locate Steam using the Windows registry.
-2. Validate that the discovered path looks like a real Steam installation.
-3. Add the Steam root as a library candidate.
-4. Read additional Steam libraries from `libraryfolders.vdf`.
-5. Validate each Steam library.
-6. Read installed games from `appmanifest_*.acf`.
-7. If normal discovery fails, optionally run a fallback disk scan.
-8. Return discovered Steam root, libraries, games, warnings, and confidence levels.
-
-Discovery confidence:
-
-| Confidence | Meaning                                                            |
-| ---------- | ------------------------------------------------------------------ |
-| `High`     | Game was found from normal Steam metadata.                         |
-| `Low`      | Game/library was found through fallback scanning.                  |
-| `Orphaned` | Game data appears incomplete or disconnected from normal metadata. |
+Main packages: `Avalonia` 12, `CommunityToolkit.Mvvm`, `Microsoft.Extensions.DependencyInjection`, `Microsoft.Data.Sqlite`, `Gameloop.Vdf`.
 
 ---
 
 ## Local database
 
-The application stores its local database under the user’s local application data folder:
-
 ```text
 %LOCALAPPDATA%\GameSave\gamesave.db
 ```
 
-The database is used for:
+Stores save-path mappings (with review status), verification results, backup runs/items (CLI), Steam catalog records, and harvesting queues.
 
-* Save-path mappings.
-* Verification results.
-* Backup runs.
-* Backup items.
-* Steam catalog records.
-* Missing AppID queues for future harvesting.
-
-Initialize the database:
+Initialize:
 
 ```bash
 dotnet run --project Manager/GameSaves -- init-db
@@ -192,9 +182,7 @@ dotnet run --project Manager/GameSaves -- init-db
 
 ## Save-path mappings
 
-Save-path mappings can be imported from JSON.
-
-Example mapping file:
+Mappings are imported from JSON and reviewed before being trusted:
 
 ```json
 [
@@ -205,46 +193,25 @@ Example mapping file:
     "pathTemplate": "%APPDATA%\\StardewValley\\Saves",
     "pathKind": "Directory",
     "sourceName": "Manual",
-    "sourceUrl": null,
-    "sourceLicense": null,
     "notes": "Example mapping",
     "priority": 100
   }
 ]
 ```
 
-Import mappings:
-
 ```bash
 dotnet run --project Manager/GameSaves -- import savepaths.json
 ```
 
-Supported path-template examples:
-
-```text
-%APPDATA%\SomeGame\Saves
-%LOCALAPPDATA%\SomeGame\Saved
-%USERPROFILE%\Documents\My Games\SomeGame
-{Documents}\My Games\SomeGame
-{SteamRoot}\userdata\*\{AppId}\remote
-{GameInstallPath}\saves
-{LibraryRoot}\steamapps\common\{InstallDir}\saves
-```
-
-Supported tokens include:
+Supported template tokens:
 
 | Token               | Meaning                                      |
 | ------------------- | -------------------------------------------- |
-| `%USERPROFILE%`     | Current user profile directory.              |
-| `%APPDATA%`         | Current user roaming AppData directory.      |
-| `%LOCALAPPDATA%`    | Current user local AppData directory.        |
-| `%PROGRAMDATA%`     | Common ProgramData directory.                |
-| `%DOCUMENTS%`       | Current user Documents directory.            |
-| `{UserProfile}`     | Current user profile directory.              |
-| `{AppData}`         | Current user roaming AppData directory.      |
-| `{LocalAppData}`    | Current user local AppData directory.        |
-| `{ProgramData}`     | Common ProgramData directory.                |
-| `{Documents}`       | Current user Documents directory.            |
+| `%USERPROFILE%` / `{UserProfile}`   | User profile directory.      |
+| `%APPDATA%` / `{AppData}`           | Roaming AppData.             |
+| `%LOCALAPPDATA%` / `{LocalAppData}` | Local AppData.               |
+| `%PROGRAMDATA%` / `{ProgramData}`   | ProgramData.                 |
+| `%DOCUMENTS%` / `{Documents}`       | Documents directory.         |
 | `{SteamRoot}`       | Detected Steam root.                         |
 | `{SteamUserData}`   | Steam `userdata` directory.                  |
 | `{AppId}`           | Steam AppID.                                 |
@@ -253,276 +220,103 @@ Supported tokens include:
 | `{GameInstallPath}` | Installed game directory.                    |
 | `{InstallDir}`      | Steam install folder name from the manifest. |
 
-Wildcards such as `*` and `?` are supported in path expansion.
+Wildcards `*` and `?` are supported. Profile-aware expansion replaces userdata wildcards/tokens with the selected Steam profile's account ID.
 
 ---
 
-## CLI commands
-
-Show help:
+## CLI reference
 
 ```bash
 dotnet run --project Manager/GameSaves -- help
 ```
 
-Run normal discovery:
+| Command | Purpose |
+| ------- | ------- |
+| `discover` / `discover-deep` | Steam discovery (with optional deep fallback scan). |
+| `init-db` | Create the local SQLite database. |
+| `import <file.json>` | Import save-path mappings. |
+| `verify` | Verify mapped save paths for installed games. |
+| `backup-dry-run <dest>` / `backup <dest>` | Preview / run a backup of verified save paths. |
+| `steam-catalog-fetch <dir> games <n> [apikey]` | Fetch Steam catalog data. |
+| `steam-catalog-missing <file> <n> <bool>` | Export missing Steam AppIDs. |
+| `steam-catalog-queue-missing` / `steam-catalog-export-next <file> <n>` | Manage the harvesting queue. |
+| `pcgw-harvest-appids <dir> <user-agent> <appids...>` | Harvest PCGamingWiki data for specific AppIDs. |
+| `pcgw-harvest-installed <dir> <user-agent> <n>` | Harvest PCGamingWiki data for installed games. |
 
-```bash
-dotnet run --project Manager/GameSaves -- discover
-```
-
-Run discovery with deep fallback scan:
-
-```bash
-dotnet run --project Manager/GameSaves -- discover-deep
-```
-
-Initialize the database:
-
-```bash
-dotnet run --project Manager/GameSaves -- init-db
-```
-
-Import save-path mappings:
-
-```bash
-dotnet run --project Manager/GameSaves -- import savepaths.json
-```
-
-Verify mapped save paths for installed Steam games:
-
-```bash
-dotnet run --project Manager/GameSaves -- verify
-```
-
-Preview a backup without copying files:
-
-```bash
-dotnet run --project Manager/GameSaves -- backup-dry-run "D:\Backups\GameSaves"
-```
-
-Run a real backup:
-
-```bash
-dotnet run --project Manager/GameSaves -- backup "D:\Backups\GameSaves"
-```
-
-Fetch Steam catalog data:
-
-```bash
-dotnet run --project Manager/GameSaves -- steam-catalog-fetch External/SteamCatalog games 1000
-```
-
-Fetch all available Steam games using a Steam Web API key:
-
-```bash
-dotnet run --project Manager/GameSaves -- steam-catalog-fetch External/SteamCatalog games 0 YOUR_STEAM_WEB_API_KEY
-```
-
-Alternatively, set the API key as an environment variable:
-
-```bash
-set STEAM_WEB_API_KEY=your_key_here
-dotnet run --project Manager/GameSaves -- steam-catalog-fetch External/SteamCatalog games 0
-```
-
-Export missing Steam AppIDs:
-
-```bash
-dotnet run --project Manager/GameSaves -- steam-catalog-missing External/SteamCatalog/missing-appids.txt 1000 false
-```
-
-Queue missing games for harvesting:
-
-```bash
-dotnet run --project Manager/GameSaves -- steam-catalog-queue-missing
-```
-
-Export the next queued batch:
-
-```bash
-dotnet run --project Manager/GameSaves -- steam-catalog-export-next External/SteamCatalog/batch-001.txt 1000
-```
-
-Harvest PCGamingWiki data for specific AppIDs:
-
-```bash
-dotnet run --project Manager/GameSaves -- pcgw-harvest-appids External/Titles "GameSaveManager/0.1 (https://github.com/x0-lf/Game-Save-Manager; your-email@example.com) .NET/8.0" 413150
-```
-
-Harvest PCGamingWiki data for installed Steam games:
-
-```bash
-dotnet run --project Manager/GameSaves -- pcgw-harvest-installed External/Titles "GameSaveManager/0.1 (https://github.com/x0-lf/Game-Save-Manager; your-email@example.com) .NET/8.0" 10
-```
-
----
-
-## Backup behavior
-
-Backups are created from verified save paths.
-
-The backup process:
-
-1. Discovers installed Steam games.
-2. Loads save-path mappings for each Steam AppID.
-3. Expands candidate save paths.
-4. Verifies whether those paths exist.
-5. Saves verification results to SQLite.
-6. Copies verified files to the backup destination.
-7. Stores backup item records in the database.
-8. Optionally computes SHA-256 hashes.
-
-Backup output is timestamped and grouped by Steam AppID and game name.
-
-Example structure:
-
-```text
-D:\Backups\GameSaves\
-└── 413150_Stardew Valley\
-    └── 20260707_180000\
-        └── C__Users_User_AppData_Roaming_StardewValley_Saves\
-            └── save files...
-```
-
-Use dry-run mode before running a real backup:
-
-```bash
-dotnet run --project Manager/GameSaves -- backup-dry-run "D:\Backups\GameSaves"
-```
-
-Then run the actual backup:
-
-```bash
-dotnet run --project Manager/GameSaves -- backup "D:\Backups\GameSaves"
-```
-
----
-
-## Data harvesting workflow
-
-The project includes early tooling for building a larger Steam save-location dataset.
-
-A typical workflow:
-
-1. Fetch Steam catalog data.
-2. Store Steam app metadata in SQLite.
-3. Export missing game AppIDs.
-4. Harvest PCGamingWiki data for those AppIDs.
-5. Extract save-path mappings.
-6. Review and approve mappings before relying on them.
-
-Example:
-
-```bash
-dotnet run --project Manager/GameSaves -- steam-catalog-fetch External/SteamCatalog games 1000
-dotnet run --project Manager/GameSaves -- steam-catalog-missing External/SteamCatalog/missing-appids.txt 1000 false
-dotnet run --project Manager/GameSaves -- pcgw-harvest-appids External/Titles "GameSaveManager/0.1 (https://github.com/x0-lf/Game-Save-Manager; your-email@example.com) .NET/8.0" External/SteamCatalog/missing-appids.txt
-```
-
-Important: harvested data should be treated as candidate data until reviewed. Save locations can be wrong, incomplete, outdated, platform-specific, or mixed with configuration paths.
+Harvested data is candidate data: save locations can be wrong, incomplete, outdated, or platform-specific. Review mappings (GameSaves.Reviewer) before approving them.
 
 ---
 
 ## Roadmap
 
-### Milestone 1 — Clean foundation
+### Milestone 1 - Local GUI manager and safe local transfer ✅ done
 
-* Keep the current CLI working.
-* Split domain logic from infrastructure.
-* Prepare `GameSaves.Core`.
-* Prepare `GameSaves.Infrastructure`.
-* Prepare `GameSaves.App`.
-* Move Steam discovery behind interfaces.
-* Move SQLite persistence behind repository abstractions.
-* Keep the existing CLI as a test harness.
+* [x] 1A - Foundation: Core/Infrastructure/App split, CLI kept as tooling, approved-mappings trust model.
+* [x] 1B - GUI discovery: Steam root, libraries, installed games, profiles, dashboard, mapping status.
+* [x] 1C - Steam userdata game-folder transfer as a first-class concept:
+  * [x] `SteamUserDataGameFolder` transfer source and `CopyScope` semantics.
+  * [x] Preview independent of approved mappings; grouped UI.
+  * [x] Path containment checks at preview and execution.
+  * [x] Copy-only wording; no delete anywhere; overwrite off by default; explicit confirmation.
+* [x] Resizable, 1080p-friendly UI.
 
-### Milestone 2 — Avalonia application shell
+### Phase 2 - Backup system 🔨 in progress
 
-* Create Avalonia MVVM app.
-* Use CommunityToolkit.Mvvm.
-* Add navigation shell.
-* Add discovery screen.
-* Add installed-games list.
-* Add basic settings screen.
-* Show Steam root, libraries, games, and warnings.
+* [x] Backup-before-overwrite hook with Safe Mode (failed backup refuses the overwrite).
+* [x] SHA-256 hashing and per-run `manifest.json`.
+* [x] Backup history read from manifests.
+* [x] Restore with dry-run preview, confirmation gate, overwrite opt-in, integrity check, and pre-restore backup.
+* [ ] **Next: manual on-demand backups** - back up a selected game's saves for a chosen profile to a chosen destination, without waiting for an overwrite.
+* [ ] Backup, Copy, Move From Profile To Profile, with possibility to move it from Steam profile to profile, or from mapping that are in the database
+    at C:\Users\<username>\AppData\Local\GameSave\gamesave.db
+* [ ] Backup destination selection and named backup profiles.
+* [ ] SQLite history tables (`transfer_runs`, `transfer_items`) for transfers and restores.
+* [ ] Retention/cleanup for old backup runs.
+* [ ] Archive support (ZIP first, 7z later).
 
-### Milestone 3 — Save verification UI
+### Phase 3 - Cloud sync abstraction
 
-* Display mapped save paths per game.
-* Show path confidence.
-* Show file counts and total size.
-* Show missing mappings.
-* Allow manual path override.
-* Allow user confirmation of correct save paths.
+* [ ] `ISyncProvider` abstraction and sync preview.
+* [ ] `LocalFolderSyncProvider` first (no cloud dependency).
+* [ ] Conflict detection and version-history metadata.
+* [ ] WebDAV/Nextcloud → SFTP/SSH → OneDrive/Google Drive (Mega only if feasible).
 
-### Milestone 4 — Backup and restore
+### Phase 4 - Cross-platform
 
-* Add backup profiles.
-* Add dry-run preview UI.
-* Add restore preview UI.
-* Add backup history.
-* Add hash verification.
-* Add archive support.
+* [ ] Windows path-resolver cleanup.
+* [ ] Linux and macOS Steam discovery.
+* [ ] Proton/Wine prefix support; Steam Deck support.
+* [ ] Platform-specific save-path expansion and per-platform mapping validation.
 
-### Milestone 5 — Transfer and sync
+### Phase 5 - Advanced features
 
-* Add user-to-user save transfer.
-* Add local folder sync.
-* Add cloud-provider abstractions.
-* Add Nextcloud/WebDAV support.
-* Add OneDrive/Google Drive/Mega support if feasible.
-* Add FTP/SFTP/SSH support.
-* Add conflict detection.
-
-### Milestone 6 — Cross-platform support
-
-* Add Linux Steam discovery.
-* Add macOS Steam discovery.
-* Add platform-specific save-path expansion.
-* Add per-platform mapping validation.
-* Add Proton/Wine prefix support.
-* Add Steam Deck support.
+* [ ] Encryption, scheduled backups, diff viewer, cloud conflict UI, modding export/import.
 
 ---
 
 ## Design principles
 
-* Do not guess blindly when save files are involved.
-* Prefer verified mappings over scraped mappings.
-* Always support dry-run mode before destructive or large file operations.
-* Preserve original file timestamps and attributes where possible.
-* Keep backup, restore, transfer, and sync workflows auditable.
-* Store enough metadata to explain what happened.
-* Treat every save path as platform-specific unless proven otherwise.
-* Keep infrastructure separate from core logic.
-* Make the GUI a thin layer over tested application services.
-
----
-
-## Safety notes
-
-This project deals with user save data. Save files can represent hundreds or thousands of hours of progress.
-
-Before using real backup or restore features:
-
-* Run discovery first.
-* Import only mappings you trust.
-* Use `verify`.
-* Use `backup-dry-run`.
-* Check the printed paths carefully.
-* Back up to a separate destination.
-* Do not delete original saves until restore is fully implemented and tested.
+* Do not guess when save files are involved; prefer verified mappings over scraped ones.
+* Every large or destructive-adjacent operation has a dry run, and execution is explicitly confirmed.
+* Copy, never move: source saves are never deleted or modified by transfer or restore.
+* Overwrites are opt-in and protected by automatic backups with SHA-256 manifests.
+* Preserve timestamps; keep every workflow auditable end to end.
+* Core stays free of SQLite, registry, VDF, Avalonia, and filesystem details; the GUI stays a thin layer over tested services.
 
 ---
 
 ## Development
 
-Restore packages and build:
+Build everything:
 
 ```bash
-dotnet restore Manager/GameSaves/GameSaves.csproj
-dotnet build Manager/GameSaves/GameSaves.csproj
+dotnet build Manager/Manager.sln
+```
+
+Run the desktop app:
+
+```bash
+dotnet run --project Manager/GameSaves.App
 ```
 
 Run the CLI:
@@ -531,16 +325,8 @@ Run the CLI:
 dotnet run --project Manager/GameSaves -- help
 ```
 
-Run the default discovery test:
-
-```bash
-dotnet run --project Manager/GameSaves
-```
-
 ---
 
 ## Disclaimer
 
-Game Save Manager is experimental software.
-
-Use it carefully, especially when working with real save files. Always keep an independent backup before testing restore, transfer, synchronization, or automation features.
+Game Save Manager is experimental software. Save files can represent hundreds or thousands of hours of progress - keep an independent backup before testing transfer, restore, or synchronization features.

@@ -31,7 +31,10 @@ namespace GameSaves.Infrastructure.DependencyInjection
             services.AddSingleton<ISavePathVerifier, SavePathVerifier>();
             services.AddSingleton<IInstalledGameSaveStatusService, InstalledGameSaveStatusService>();
             services.AddSingleton<ITransferPreviewService, TransferPreviewService>();
-            services.AddSingleton<ISaveTransferService,SaveTransferService>();
+            services.AddSingleton<ITransferOverwriteBackupService, TransferOverwriteBackupService>();
+            services.AddSingleton<ISaveTransferService, SaveTransferService>();
+            services.AddSingleton<IBackupHistoryService, BackupHistoryService>();
+            services.AddSingleton<IBackupRestoreService, BackupRestoreService>();
 
             services.AddSingleton<ISavePathMappingRepository>(provider =>
             {

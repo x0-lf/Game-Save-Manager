@@ -7,5 +7,6 @@
         long Bytes,
         bool Copied,
         SaveTransferItemStatus Status,
-        string? Error);
+        string? Error,
+        string? BackupFile = null);
 }

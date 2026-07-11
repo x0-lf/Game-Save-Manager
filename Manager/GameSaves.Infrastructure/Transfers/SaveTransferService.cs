@@ -10,6 +10,13 @@ namespace GameSaves.Infrastructure.Transfers
     /// </summary>
     public sealed class SaveTransferService : ISaveTransferService
     {
+        private readonly ITransferOverwriteBackupService _overwriteBackupService;
+
+        public SaveTransferService(ITransferOverwriteBackupService overwriteBackupService)
+        {
+            _overwriteBackupService = overwriteBackupService;
+        }
+
         public Task<SaveTransferResult> ExecuteAsync(
             TransferPreviewPlan plan,
             SaveTransferOptions options,
@@ -20,7 +27,7 @@ namespace GameSaves.Infrastructure.Transfers
                 cancellationToken);
         }
 
-        private static SaveTransferResult Execute(
+        private SaveTransferResult Execute(
             TransferPreviewPlan plan,
             SaveTransferOptions options,
             CancellationToken cancellationToken)
@@ -36,24 +43,59 @@ namespace GameSaves.Infrastructure.Transfers
                 return BuildResult(plan, options, results, warnings);
             }
 
-            foreach (TransferPreviewItem previewItem in plan.Items)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
+            // Created lazily on the first overwrite so runs that overwrite
+            // nothing leave no backup folder behind.
+            ITransferOverwriteBackupSession? backupSession = null;
 
-                foreach (FileTransferPair pair in EnumerateFilePairs(previewItem))
+            ITransferOverwriteBackupSession GetBackupSession() =>
+                backupSession ??= _overwriteBackupService.BeginSession(
+                    new OverwriteBackupContext(
+                        Kind: OverwriteBackupContext.TransferKind,
+                        Game: plan.Game.Name,
+                        SteamAppId: plan.Game.AppId,
+                        SourceAccountId: plan.SourceProfile.AccountId,
+                        TargetAccountId: plan.TargetProfile.AccountId));
+
+            try
+            {
+                foreach (TransferPreviewItem previewItem in plan.Items)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
 
-                    SaveTransferItemResult result = TransferOneFile(
-                        previewItem,
-                        pair,
-                        options);
+                    foreach (FileTransferPair pair in EnumerateFilePairs(previewItem))
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
 
-                    results.Add(result);
+                        SaveTransferItemResult result = TransferOneFile(
+                            previewItem,
+                            pair,
+                            options,
+                            GetBackupSession);
+
+                        results.Add(result);
+                    }
                 }
             }
+            finally
+            {
+                backupSession?.Complete();
+            }
 
-            return BuildResult(plan, options, results, warnings);
+            if (backupSession is not null && backupSession.FilesBackedUp > 0)
+            {
+                warnings.Add(new TransferPreviewWarning(
+                    "OverwriteBackups",
+                    $"Backed up {backupSession.FilesBackedUp} target file(s) before overwriting to: {backupSession.BackupRootPath}",
+                    TransferWarningSeverity.Info));
+            }
+
+            return BuildResult(
+                plan,
+                options,
+                results,
+                warnings,
+                backupSession?.FilesBackedUp ?? 0,
+                backupSession?.FilesBackedUp > 0 ? backupSession.BackupRootPath : null);
         }
 
         // ---------------------------------------------------------------
@@ -261,7 +303,8 @@ namespace GameSaves.Infrastructure.Transfers
         private static SaveTransferItemResult TransferOneFile(
             TransferPreviewItem previewItem,
             FileTransferPair pair,
-            SaveTransferOptions options)
+            SaveTransferOptions options,
+            Func<ITransferOverwriteBackupSession> getBackupSession)
         {
             try
             {
@@ -331,6 +374,31 @@ namespace GameSaves.Infrastructure.Transfers
                         null);
                 }
 
+                string? backupFile = null;
+
+                if (targetExists && options.OverwriteExisting && options.BackupBeforeOverwrite)
+                {
+                    try
+                    {
+                        TransferOverwriteBackupItem backupItem =
+                            getBackupSession().BackUpFile(pair.TargetFile);
+
+                        backupFile = backupItem.BackupFile;
+                    }
+                    catch (Exception backupEx)
+                    {
+                        // Safe Mode: never overwrite a file that could not be backed up.
+                        return new SaveTransferItemResult(
+                            previewItem,
+                            pair.SourceFile,
+                            pair.TargetFile,
+                            sourceInfo.Length,
+                            Copied: false,
+                            SaveTransferItemStatus.SkippedBackupFailed,
+                            $"Pre-overwrite backup failed, overwrite refused: {backupEx.Message}");
+                    }
+                }
+
                 string? targetDirectory = Path.GetDirectoryName(pair.TargetFile);
 
                 if (!string.IsNullOrWhiteSpace(targetDirectory))
@@ -363,7 +431,8 @@ namespace GameSaves.Infrastructure.Transfers
                     sourceInfo.Length,
                     Copied: true,
                     SaveTransferItemStatus.Copied,
-                    null);
+                    null,
+                    BackupFile: backupFile);
             }
             catch (Exception ex)
             {
@@ -382,7 +451,9 @@ namespace GameSaves.Infrastructure.Transfers
             TransferPreviewPlan plan,
             SaveTransferOptions options,
             IReadOnlyList<SaveTransferItemResult> results,
-            IReadOnlyList<TransferPreviewWarning> warnings)
+            IReadOnlyList<TransferPreviewWarning> warnings,
+            int filesBackedUp = 0,
+            string? backupRootPath = null)
         {
             int filesCopied = results.Count(item => item.Copied);
 
@@ -402,7 +473,9 @@ namespace GameSaves.Infrastructure.Transfers
                 FilesSkipped: filesSkipped,
                 BytesCopied: bytesCopied,
                 Items: results,
-                Warnings: warnings);
+                Warnings: warnings,
+                FilesBackedUp: filesBackedUp,
+                BackupRootPath: backupRootPath);
         }
 
         private sealed record FileTransferPair(
