@@ -36,6 +36,43 @@ namespace GameSaves.App.ViewModels
         private bool includeSteamUserDataGameFolder = true;
 
         [ObservableProperty]
+        private bool includeApprovedMappings = true;
+
+        public string SteamUserDataSourceText =>
+            IncludeSteamUserDataGameFolder ? "Included" : "Excluded";
+
+        public string ApprovedMappingsSourceText =>
+            IncludeApprovedMappings ? "Included" : "Excluded";
+
+        public bool HasAnyTransferSource =>
+            IncludeSteamUserDataGameFolder || IncludeApprovedMappings;
+
+        partial void OnIncludeSteamUserDataGameFolderChanged(bool value)
+        {
+            OnPropertyChanged(nameof(SteamUserDataSourceText));
+            OnPropertyChanged(nameof(HasAnyTransferSource));
+            InvalidatePreviewAfterSourceChange();
+        }
+
+        partial void OnIncludeApprovedMappingsChanged(bool value)
+        {
+            OnPropertyChanged(nameof(ApprovedMappingsSourceText));
+            OnPropertyChanged(nameof(HasAnyTransferSource));
+            InvalidatePreviewAfterSourceChange();
+        }
+
+        // A plan built with different sources must not stay executable.
+        private void InvalidatePreviewAfterSourceChange()
+        {
+            _lastPlan = null;
+            ClearPreview();
+
+            StatusMessage = HasAnyTransferSource
+                ? "Transfer source changed. Build a new copy preview."
+                : "Select at least one transfer source (Steam userdata game folder and/or approved save-path mappings).";
+        }
+
+        [ObservableProperty]
         private int totalFiles;
 
         [ObservableProperty]
@@ -52,6 +89,42 @@ namespace GameSaves.App.ViewModels
 
         [ObservableProperty]
         private bool backupBeforeOverwrite = true;
+
+        [ObservableProperty]
+        private bool skipBlockedItems;
+
+        [ObservableProperty]
+        private int blockedItemCount;
+
+        public bool HasBlockedItemsInPreview => BlockedItemCount > 0;
+
+        // The plan itself is unchanged by this toggle; only the execution gate
+        // differs, so recompute executability instead of invalidating the preview.
+        partial void OnSkipBlockedItemsChanged(bool value)
+        {
+            if (_lastPlan is null)
+                return;
+
+            CanExecuteCopy = ComputeCanExecuteCopy(_lastPlan);
+
+            if (BlockedItemCount > 0)
+            {
+                StatusMessage = value
+                    ? $"Blocked items will be skipped. {BlockedItemCount} blocked item(s) will not be copied; the remaining safe items will be."
+                    : $"Copy is blocked: {BlockedItemCount} item(s) have errors. Enable \"Skip blocked items and copy the rest\" or exclude the transfer source causing the error.";
+            }
+        }
+
+        partial void OnBlockedItemCountChanged(int value)
+        {
+            OnPropertyChanged(nameof(HasBlockedItemsInPreview));
+        }
+
+        private bool ComputeCanExecuteCopy(TransferPreviewPlan plan)
+        {
+            return plan.CanExecute ||
+                   (SkipBlockedItems && plan.CanExecuteSkippingBlockedItems);
+        }
 
         [ObservableProperty]
         private string executionStatusMessage = "No copy executed.";
@@ -160,6 +233,12 @@ namespace GameSaves.App.ViewModels
                 return;
             }
 
+            if (!HasAnyTransferSource)
+            {
+                StatusMessage = "Preview blocked: no transfer source is selected. Enable the Steam userdata game folder, approved save-path mappings, or both.";
+                return;
+            }
+
             try
             {
                 IsLoading = true;
@@ -168,7 +247,7 @@ namespace GameSaves.App.ViewModels
                 var previewOptions = new TransferPreviewOptions
                 {
                     IncludeSteamUserDataGameFolder = IncludeSteamUserDataGameFolder,
-                    IncludeApprovedMappings = true
+                    IncludeApprovedMappings = IncludeApprovedMappings
                 };
 
                 TransferPreviewPlan plan =
@@ -205,11 +284,23 @@ namespace GameSaves.App.ViewModels
 
                 TotalFiles = plan.TotalFiles;
                 TotalSizeDisplay = FormatBytes(plan.TotalBytes);
-                CanExecuteCopy = plan.CanExecute;
+                BlockedItemCount = plan.BlockedItems.Count;
+                CanExecuteCopy = ComputeCanExecuteCopy(plan);
 
-                StatusMessage = plan.HasItems
-                    ? $"Copy preview ready for {plan.Game.Name}. No files were copied."
-                    : "Preview created no items. Check mappings and selected profiles.";
+                if (!plan.HasItems)
+                {
+                    StatusMessage = "Preview created no items. Check mappings and selected profiles.";
+                }
+                else if (BlockedItemCount > 0 && plan.CanExecuteSkippingBlockedItems)
+                {
+                    StatusMessage = SkipBlockedItems
+                        ? $"Copy preview ready for {plan.Game.Name}. {BlockedItemCount} blocked item(s) will be skipped; the remaining safe items will be copied."
+                        : $"Copy preview ready for {plan.Game.Name}, but {BlockedItemCount} item(s) are blocked by errors. Enable \"Skip blocked items and copy the rest\" to copy the safe items, or exclude the transfer source causing the error.";
+                }
+                else
+                {
+                    StatusMessage = $"Copy preview ready for {plan.Game.Name}. No files were copied.";
+                }
             }
             catch (Exception ex)
             {
@@ -250,7 +341,8 @@ namespace GameSaves.App.ViewModels
                     ConfirmExecution = ConfirmRealTransfer,
                     OverwriteExisting = OverwriteExisting,
                     PreserveTimestamps = true,
-                    BackupBeforeOverwrite = BackupBeforeOverwrite
+                    BackupBeforeOverwrite = BackupBeforeOverwrite,
+                    SkipBlockedItems = SkipBlockedItems
                 };
 
                 SaveTransferResult result =
@@ -297,6 +389,7 @@ namespace GameSaves.App.ViewModels
             Warnings.Clear();
             TotalFiles = 0;
             TotalSizeDisplay = "0 B";
+            BlockedItemCount = 0;
             CanExecuteCopy = false;
         }
 

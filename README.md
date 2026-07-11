@@ -21,6 +21,8 @@ The long-term goal is a cross-platform Steam save manager with backup profiles, 
 * **Transfer Preview** - copy saves between local Steam profiles:
   * First-class **Steam userdata game folder** transfer (`<SteamRoot>\userdata\<AccountId>\<AppId>`), independent of the mapping database.
   * Approved save-path mappings shown as a second group, expanded per profile.
+  * Explicit **transfer source selection**: Steam userdata folder only, approved mappings only, or both. Preview is blocked with a clear message when neither is selected; equivalent paths are deduplicated so files are never copied twice.
+  * **Blocked-item handling**: items with errors (for example a non-profile-specific mapping resolving to the same path for both profiles) block the copy by default; an explicit "Skip blocked items and copy the rest" opt-in copies the remaining safe items while each blocked item is reported as skipped.
   * Dry-run preview with file counts, total size, conflict status, and a plain-English "what will happen" line per item.
   * Execution requires an explicit confirmation checkbox; overwrite is off by default.
   * **Backup before overwrite (Safe Mode)** - every target file about to be replaced is backed up first; if the backup fails, that file is not overwritten.

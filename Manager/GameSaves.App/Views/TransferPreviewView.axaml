@@ -213,10 +213,27 @@
                               HorizontalAlignment="Stretch"
                               MinHeight="32" />
 
+                    <TextBlock Text="Transfer source"
+                               Foreground="{StaticResource SecondaryTextBrush}"
+                               FontSize="12"
+                               FontWeight="Bold"
+                               Margin="0,4,0,0" />
+
                     <CheckBox Content="Include Steam userdata game folder"
                               IsChecked="{Binding IncludeSteamUserDataGameFolder}"
                               FontSize="12"
                               ToolTip.Tip="Copies the full &lt;SteamRoot&gt;\userdata\&lt;profile&gt;\&lt;AppId&gt; folder from the source profile to the target profile. This is useful for Steam Cloud/userdata saves." />
+
+                    <CheckBox Content="Include approved save-path mappings"
+                              IsChecked="{Binding IncludeApprovedMappings}"
+                              FontSize="12"
+                              ToolTip.Tip="Copies save locations from the approved mapping database (gamesave.db), expanded for the selected profiles. Only mappings reviewed as Approved are used." />
+
+                    <TextBlock Text="Select at least one transfer source."
+                               IsVisible="{Binding !HasAnyTransferSource}"
+                               Foreground="{StaticResource WarningBrush}"
+                               FontSize="11"
+                               TextWrapping="Wrap" />
                 </StackPanel>
             </Grid>
         </Border>
@@ -256,6 +273,25 @@
                         <TextBlock Text="{Binding CanExecuteCopy, StringFormat='Safe to copy: {0}'}"
                                    FontSize="12"
                                    Foreground="{StaticResource MutedTextBrush}" />
+
+                        <TextBlock Text="{Binding SteamUserDataSourceText, StringFormat='Steam userdata: {0}'}"
+                                   FontSize="12"
+                                   Foreground="{StaticResource SecondaryTextBrush}" />
+
+                        <TextBlock Text="{Binding ApprovedMappingsSourceText, StringFormat='Approved mappings: {0}'}"
+                                   FontSize="12"
+                                   Foreground="{StaticResource SecondaryTextBrush}" />
+
+                        <TextBlock Text="{Binding BlockedItemCount, StringFormat='Blocked items: {0}'}"
+                                   IsVisible="{Binding HasBlockedItemsInPreview}"
+                                   FontSize="12"
+                                   Foreground="{StaticResource WarningBrush}" />
+
+                        <CheckBox Content="Skip blocked items and copy the rest"
+                                  IsChecked="{Binding SkipBlockedItems}"
+                                  IsVisible="{Binding HasBlockedItemsInPreview}"
+                                  FontSize="12"
+                                  ToolTip.Tip="Items with errors (for example a save location that resolves to the same path for both profiles) are never copied. Enable this to copy the remaining safe items anyway; each blocked item is reported as skipped in the execution results." />
 
                         <TextBlock Text="Copy only. Source files are never deleted or modified. Existing target files are skipped unless overwrite is enabled."
                                    Foreground="{StaticResource WarningBrush}"
@@ -400,10 +436,19 @@
                                         BorderThickness="0,0,0,1">
 
                                     <StackPanel Spacing="2">
-                                        <TextBlock Text="Steam userdata game folder"
-                                                   Foreground="{StaticResource PrimaryTextBrush}"
-                                                   FontSize="14"
-                                                   FontWeight="SemiBold" />
+                                        <StackPanel Orientation="Horizontal"
+                                                    Spacing="8">
+                                            <TextBlock Text="Steam userdata game folder"
+                                                       Foreground="{StaticResource PrimaryTextBrush}"
+                                                       FontSize="14"
+                                                       FontWeight="SemiBold" />
+
+                                            <TextBlock Text="Excluded from this preview"
+                                                       IsVisible="{Binding !IncludeSteamUserDataGameFolder}"
+                                                       Foreground="{StaticResource WarningBrush}"
+                                                       FontSize="11"
+                                                       VerticalAlignment="Center" />
+                                        </StackPanel>
 
                                         <TextBlock Text="The whole game-specific folder under the source profile's Steam userdata, copied into the target profile."
                                                    Foreground="{StaticResource MutedTextBrush}"
@@ -442,10 +487,19 @@
                                         BorderThickness="0,0,0,1">
 
                                     <StackPanel Spacing="2">
-                                        <TextBlock Text="Approved save mappings"
-                                                   Foreground="{StaticResource PrimaryTextBrush}"
-                                                   FontSize="14"
-                                                   FontWeight="SemiBold" />
+                                        <StackPanel Orientation="Horizontal"
+                                                    Spacing="8">
+                                            <TextBlock Text="Approved save mappings"
+                                                       Foreground="{StaticResource PrimaryTextBrush}"
+                                                       FontSize="14"
+                                                       FontWeight="SemiBold" />
+
+                                            <TextBlock Text="Excluded from this preview"
+                                                       IsVisible="{Binding !IncludeApprovedMappings}"
+                                                       Foreground="{StaticResource WarningBrush}"
+                                                       FontSize="11"
+                                                       VerticalAlignment="Center" />
+                                        </StackPanel>
 
                                         <TextBlock Text="Save locations from the approved mapping database, expanded for the selected profiles."
                                                    Foreground="{StaticResource MutedTextBrush}"

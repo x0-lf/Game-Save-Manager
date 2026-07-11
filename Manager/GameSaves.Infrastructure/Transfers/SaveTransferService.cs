@@ -43,6 +43,38 @@ namespace GameSaves.Infrastructure.Transfers
                 return BuildResult(plan, options, results, warnings);
             }
 
+            // Evaluate per-item blocks (same source and target path, containment
+            // failures). By default any blocked item refuses the whole copy; the
+            // user can explicitly opt in to skipping blocked items instead.
+            var blockedItems = new Dictionary<TransferPreviewItem, string>();
+            bool anyContainmentViolation = false;
+
+            foreach (TransferPreviewItem item in plan.Items)
+            {
+                string? reason = GetExecutionBlockReason(plan, item, out bool containment);
+
+                if (reason is null)
+                    continue;
+
+                blockedItems[item] = reason;
+                anyContainmentViolation |= containment;
+            }
+
+            if (blockedItems.Count > 0 && !options.SkipBlockedItems)
+            {
+                warnings.Add(anyContainmentViolation
+                    ? new TransferPreviewWarning(
+                        "PathContainmentViolation",
+                        $"Copy was blocked: a path failed containment checks. {blockedItems.Values.First()}",
+                        TransferWarningSeverity.Error)
+                    : new TransferPreviewWarning(
+                        "BlockedItemsPresent",
+                        $"Copy was blocked because {blockedItems.Count} item(s) are blocked by errors. Enable \"Skip blocked items and copy the rest\" to copy the remaining safe items, or exclude the transfer source that causes the error.",
+                        TransferWarningSeverity.Error));
+
+                return BuildResult(plan, options, results, warnings);
+            }
+
             // Created lazily on the first overwrite so runs that overwrite
             // nothing leave no backup folder behind.
             ITransferOverwriteBackupSession? backupSession = null;
@@ -61,6 +93,20 @@ namespace GameSaves.Infrastructure.Transfers
                 foreach (TransferPreviewItem previewItem in plan.Items)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
+
+                    if (blockedItems.TryGetValue(previewItem, out string? blockReason))
+                    {
+                        results.Add(new SaveTransferItemResult(
+                            previewItem,
+                            previewItem.SourcePath,
+                            previewItem.TargetPath,
+                            0,
+                            Copied: false,
+                            SaveTransferItemStatus.SkippedBlocked,
+                            $"Blocked item skipped: {blockReason}"));
+
+                        continue;
+                    }
 
                     foreach (FileTransferPair pair in EnumerateFilePairs(previewItem))
                     {
@@ -148,13 +194,21 @@ namespace GameSaves.Infrastructure.Transfers
                     TransferWarningSeverity.Error);
             }
 
-            // Re-validate userdata containment at execution time. The plan may
-            // be stale, and preview-time checks must never be the only defense.
-            foreach (TransferPreviewItem item in plan.Items)
-            {
-                if (item.SourceType != TransferSourceType.SteamUserDataGameFolder)
-                    continue;
+            return null;
+        }
 
+        // Determines whether an item must not be copied. Userdata containment is
+        // re-validated at execution time: the plan may be stale, and preview-time
+        // checks must never be the only defense.
+        private static string? GetExecutionBlockReason(
+            TransferPreviewPlan plan,
+            TransferPreviewItem item,
+            out bool isContainmentViolation)
+        {
+            isContainmentViolation = false;
+
+            if (item.SourceType == TransferSourceType.SteamUserDataGameFolder)
+            {
                 bool sourceContained = TransferPathGuard.IsValidUserDataGameFolderRoot(
                     item.SourceRoot,
                     plan.SourceProfile.UserDataPath,
@@ -167,19 +221,27 @@ namespace GameSaves.Infrastructure.Transfers
 
                 if (!sourceContained || !targetContained)
                 {
-                    return new TransferPreviewWarning(
-                        "PathContainmentViolation",
-                        $"Copy was blocked: a userdata game-folder path failed containment checks. Source: {item.SourceRoot} Target: {item.TargetRoot}",
-                        TransferWarningSeverity.Error);
+                    isContainmentViolation = true;
+                    return $"Userdata game-folder path failed containment checks. Source: {item.SourceRoot} Target: {item.TargetRoot}";
                 }
 
                 if (TransferPathGuard.PathsEqual(item.SourceRoot, item.TargetRoot))
+                    return $"Userdata source and target resolve to the same folder: {item.SourceRoot}";
+            }
+
+            if (item.IsBlocked)
+            {
+                isContainmentViolation =
+                    item.ConflictStatus == TransferConflictStatus.OutsideExpectedRoot;
+
+                return item.ConflictStatus switch
                 {
-                    return new TransferPreviewWarning(
-                        "SamePath",
-                        $"Copy was blocked: userdata source and target resolve to the same folder: {item.SourceRoot}",
-                        TransferWarningSeverity.Error);
-                }
+                    TransferConflictStatus.SameSourceAndTarget =>
+                        $"Source and target resolve to the same path: {item.SourcePath}",
+                    TransferConflictStatus.OutsideExpectedRoot =>
+                        $"Path failed containment checks. Source: {item.SourceRoot} Target: {item.TargetRoot}",
+                    _ => "The item is blocked by an error."
+                };
             }
 
             return null;

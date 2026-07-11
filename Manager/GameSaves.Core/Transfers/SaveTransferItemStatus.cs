@@ -15,6 +15,11 @@
 
         // Safe Mode: the pre-overwrite backup of the target file failed,
         // so the overwrite was refused. Nothing was copied
-        SkippedBackupFailed = 8
+        SkippedBackupFailed = 8,
+
+        // The whole preview item was blocked (same source and target path,
+        // containment failure) and the user chose to skip blocked items.
+        // Nothing was copied for this item
+        SkippedBlocked = 9
     }
 }

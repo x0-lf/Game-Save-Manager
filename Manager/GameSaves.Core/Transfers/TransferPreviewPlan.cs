@@ -30,5 +30,17 @@ namespace GameSaves.Core.Transfers
 
         public bool HasAnyCopyableSource =>
             Items.Any(item => item.SourceExists);
+
+        public IReadOnlyList<TransferPreviewItem> BlockedItems =>
+            Items.Where(item => item.IsBlocked).ToList();
+
+        public bool HasBlockedItems =>
+            Items.Any(item => item.IsBlocked);
+
+        // True when the unblocked items alone could be copied safely. Execution
+        // still requires the user to explicitly opt in to skipping blocked items.
+        public bool CanExecuteSkippingBlockedItems =>
+            !HasErrors &&
+            Items.Any(item => item.IsCopyable);
     }
 }

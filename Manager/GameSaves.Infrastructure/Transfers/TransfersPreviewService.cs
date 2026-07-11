@@ -51,6 +51,24 @@ namespace GameSaves.Infrastructure.Transfers
             var warnings = new List<TransferPreviewWarning>();
             var items = new List<TransferPreviewItem>();
 
+            if (!options.HasAnySource)
+            {
+                warnings.Add(new TransferPreviewWarning(
+                    "NoTransferSourceSelected",
+                    "No transfer source is selected. Enable the Steam userdata game folder, approved save-path mappings, or both.",
+                    TransferWarningSeverity.Error));
+
+                return new TransferPreviewPlan(
+                    Game: game,
+                    SourceProfile: sourceProfile,
+                    TargetProfile: targetProfile,
+                    Items: items,
+                    Warnings: warnings,
+                    CanExecute: false,
+                    TotalFiles: 0,
+                    TotalBytes: 0);
+            }
+
             if (sourceProfile.AccountId.Equals(
                     targetProfile.AccountId,
                     StringComparison.OrdinalIgnoreCase))
@@ -88,6 +106,9 @@ namespace GameSaves.Infrastructure.Transfers
                     cancellationToken);
             }
 
+            int blockedCount = items.Count(item => item.IsBlocked);
+            bool anyCopyable = items.Any(item => item.IsCopyable);
+
             if (items.Count == 0)
             {
                 warnings.Add(new TransferPreviewWarning(
@@ -102,22 +123,36 @@ namespace GameSaves.Infrastructure.Transfers
                     "No source path exists for this game with the selected source profile. There is nothing to copy.",
                     TransferWarningSeverity.Error));
             }
+            else if (!anyCopyable)
+            {
+                warnings.Add(new TransferPreviewWarning(
+                    "NoCopyableItems",
+                    "Every preview item is blocked by an error. Nothing can be copied safely, even when blocked items are skipped.",
+                    TransferWarningSeverity.Error));
+            }
+            else if (blockedCount > 0)
+            {
+                warnings.Add(new TransferPreviewWarning(
+                    "BlockedItemsPresent",
+                    $"{blockedCount} item(s) are blocked by errors and will never be copied. Enable \"Skip blocked items and copy the rest\" to copy the remaining safe items, or exclude the transfer source that causes the error.",
+                    TransferWarningSeverity.Warning));
+            }
 
             int totalFiles = items
-                .Where(item => item.SourceExists)
+                .Where(item => item.IsCopyable)
                 .Sum(item => item.FileCount);
 
             long totalBytes = items
-                .Where(item => item.SourceExists)
+                .Where(item => item.IsCopyable)
                 .Sum(item => item.TotalBytes);
 
+            // Strict by default: any blocked item makes the plan non-executable.
+            // CanExecuteSkippingBlockedItems on the plan reflects the opt-in path.
             bool canExecute =
                 items.Count > 0 &&
                 warnings.All(warning => warning.Severity != TransferWarningSeverity.Error) &&
-                items.Any(item => item.SourceExists) &&
-                items.All(item =>
-                    item.ConflictStatus != TransferConflictStatus.SameSourceAndTarget &&
-                    item.ConflictStatus != TransferConflictStatus.OutsideExpectedRoot);
+                anyCopyable &&
+                blockedCount == 0;
 
             return new TransferPreviewPlan(
                 Game: game,
@@ -185,8 +220,8 @@ namespace GameSaves.Infrastructure.Transfers
 
                 warnings.Add(new TransferPreviewWarning(
                     "UserDataContainment",
-                    $"Userdata game-folder paths failed containment checks. Source: {sourceRoot} Target: {targetRoot}",
-                    TransferWarningSeverity.Error));
+                    $"Userdata game-folder paths failed containment checks. This item is blocked and will not be copied. Source: {sourceRoot} Target: {targetRoot}",
+                    TransferWarningSeverity.Warning));
             }
             else if (TransferPathGuard.PathsEqual(sourceRoot, targetRoot))
             {
@@ -196,8 +231,8 @@ namespace GameSaves.Infrastructure.Transfers
 
                 warnings.Add(new TransferPreviewWarning(
                     "UserDataSamePath",
-                    $"Userdata source and target resolve to the same folder: {sourceRoot}",
-                    TransferWarningSeverity.Error));
+                    $"Userdata source and target resolve to the same folder. This item is blocked and will not be copied: {sourceRoot}",
+                    TransferWarningSeverity.Warning));
             }
             else if (!sourceExists)
             {
@@ -508,8 +543,8 @@ namespace GameSaves.Infrastructure.Transfers
                 case TransferConflictStatus.SameSourceAndTarget:
                     warnings.Add(new TransferPreviewWarning(
                         "SamePath",
-                        $"Source and target resolve to the same path: {item.SourcePath}",
-                        TransferWarningSeverity.Error));
+                        $"Source and target resolve to the same path (the mapping is not profile-specific). This item is blocked and will not be copied: {item.SourcePath}",
+                        TransferWarningSeverity.Warning));
                     break;
 
                 case TransferConflictStatus.MappingNotProfileSpecific:

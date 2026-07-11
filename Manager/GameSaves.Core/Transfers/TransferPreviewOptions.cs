@@ -18,5 +18,12 @@ namespace GameSaves.Core.Transfers
         /// Include items expanded from approved save-path mappings.
         /// </summary>
         public bool IncludeApprovedMappings { get; init; } = true;
+
+        /// <summary>
+        /// At least one transfer source must be selected for a preview to be
+        /// buildable. A preview with no source produces an error and cannot execute.
+        /// </summary>
+        public bool HasAnySource =>
+            IncludeSteamUserDataGameFolder || IncludeApprovedMappings;
     }
 }
