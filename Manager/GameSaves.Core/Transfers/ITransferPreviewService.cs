@@ -1,4 +1,4 @@
-﻿using GameSaves.Core.Profiles;
+using GameSaves.Core.Profiles;
 using GameSaves.Core.Steam;
 
 namespace GameSaves.Core.Transfers
@@ -9,6 +9,7 @@ namespace GameSaves.Core.Transfers
             SteamGame game,
             SteamProfile sourceProfile,
             SteamProfile targetProfile,
+            TransferPreviewOptions? options = null,
             CancellationToken cancellationToken = default);
     }
 }

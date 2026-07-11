@@ -15,6 +15,60 @@
         <SolidColorBrush x:Key="AccentBrush" Color="#7C9CFF" />
         <SolidColorBrush x:Key="SuccessBrush" Color="#6EE7A8" />
         <SolidColorBrush x:Key="WarningBrush" Color="#FACC6B" />
+
+        <!-- Shared row template for both preview groups -->
+        <DataTemplate x:Key="PreviewItemRowTemplate"
+                      x:DataType="models:TransferPreviewItemRowViewModel">
+            <Border Padding="12"
+                    BorderBrush="#252733"
+                    BorderThickness="0,0,0,1">
+
+                <StackPanel Spacing="4">
+                    <Grid ColumnDefinitions="2*,2*,70,70,90,130"
+                          ColumnSpacing="12">
+
+                        <TextBlock Grid.Column="0"
+                                   Text="{Binding SourcePath}"
+                                   Foreground="{StaticResource SecondaryTextBrush}"
+                                   ToolTip.Tip="{Binding SourcePath}"
+                                   TextTrimming="CharacterEllipsis" />
+
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding TargetPath}"
+                                   Foreground="{StaticResource SecondaryTextBrush}"
+                                   ToolTip.Tip="{Binding TargetPath}"
+                                   TextTrimming="CharacterEllipsis" />
+
+                        <TextBlock Grid.Column="2"
+                                   Text="{Binding SourceExistsText}"
+                                   Foreground="{StaticResource AccentBrush}" />
+
+                        <TextBlock Grid.Column="3"
+                                   Text="{Binding TargetExistsText}"
+                                   Foreground="{StaticResource WarningBrush}" />
+
+                        <StackPanel Grid.Column="4">
+                            <TextBlock Text="{Binding FileCount}"
+                                       Foreground="{StaticResource PrimaryTextBrush}" />
+
+                            <TextBlock Text="{Binding TotalSizeDisplay}"
+                                       Foreground="{StaticResource MutedTextBrush}"
+                                       FontSize="11" />
+                        </StackPanel>
+
+                        <TextBlock Grid.Column="5"
+                                   Text="{Binding StatusText}"
+                                   Foreground="{StaticResource PrimaryTextBrush}"
+                                   FontWeight="SemiBold" />
+                    </Grid>
+
+                    <TextBlock Text="{Binding ActionText}"
+                               Foreground="{StaticResource MutedTextBrush}"
+                               FontSize="12"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+        </DataTemplate>
     </UserControl.Resources>
 
     <Grid RowDefinitions="Auto,Auto,Auto,*"
@@ -34,7 +88,7 @@
 
                 <StackPanel Grid.Column="0"
                             Spacing="6">
-                    <TextBlock Text="Transfer Preview"
+                    <TextBlock Text="Copy Saves Between Profiles"
                                Foreground="{StaticResource PrimaryTextBrush}"
                                FontSize="24"
                                FontWeight="Bold" />
@@ -53,9 +107,9 @@
                         VerticalAlignment="Center" />
 
                 <Button Grid.Column="2"
-                        Content="Preview Transfer"
+                        Content="Preview Copy (Dry Run)"
                         Command="{Binding PreviewTransferCommand}"
-                        Width="150"
+                        Width="180"
                         Height="40"
                         VerticalAlignment="Center" />
             </Grid>
@@ -120,13 +174,17 @@
                               SelectedItem="{Binding SelectedGame}"
                               HorizontalAlignment="Stretch"
                               MinHeight="38" />
+
+                    <CheckBox Content="Include Steam userdata game folder"
+                              IsChecked="{Binding IncludeSteamUserDataGameFolder}"
+                              ToolTip.Tip="Copies the full &lt;SteamRoot&gt;\userdata\&lt;profile&gt;\&lt;AppId&gt; folder from the source profile to the target profile. This is useful for Steam Cloud/userdata saves." />
                 </StackPanel>
             </Border>
         </Grid>
 
         <!-- Summary / warnings -->
         <Grid Grid.Row="2"
-              ColumnDefinitions="260,*"
+              ColumnDefinitions="280,*"
               ColumnSpacing="16">
 
             <Border Grid.Column="0"
@@ -142,37 +200,38 @@
                                FontSize="18"
                                FontWeight="SemiBold" />
 
-                    <TextBlock Text="{Binding TotalFiles, StringFormat='Files: {0}'}"
+                    <TextBlock Text="{Binding TotalFiles, StringFormat='Files to consider: {0}'}"
                                Foreground="{StaticResource SecondaryTextBrush}" />
 
-                    <TextBlock Text="{Binding TotalSizeDisplay, StringFormat='Size: {0}'}"
+                    <TextBlock Text="{Binding TotalSizeDisplay, StringFormat='Total size: {0}'}"
                                Foreground="{StaticResource SecondaryTextBrush}" />
 
-                    <TextBlock Text="{Binding CanExecuteTransferLater, StringFormat='Future transfer safe: {0}'}"
+                    <TextBlock Text="{Binding CanExecuteCopy, StringFormat='Safe to copy: {0}'}"
                                Foreground="{StaticResource MutedTextBrush}" />
 
-                    <TextBlock Text="Execution is guarded. No overwrite unless enabled."
+                    <TextBlock Text="Copy only. Source files are never deleted or modified. Existing target files are skipped unless overwrite is enabled."
                                Foreground="{StaticResource WarningBrush}"
                                TextWrapping="Wrap" />
 
-                    <CheckBox Content="I understand this will copy files locally"
+                    <CheckBox Content="I understand this will copy files into the target profile"
                               IsChecked="{Binding ConfirmRealTransfer}" />
 
-                    <CheckBox Content="Overwrite existing files"
+                    <CheckBox Content="Overwrite existing target files"
                               IsChecked="{Binding OverwriteExisting}" />
 
-                    <Button Content="Execute Transfer"
+                    <Button Content="Copy to Target Profile"
                             Command="{Binding ExecuteTransferCommand}"
+                            IsEnabled="{Binding CanExecuteCopy}"
                             Height="38" />
 
                     <TextBlock Text="{Binding ExecutionStatusMessage}"
                                Foreground="{StaticResource SecondaryTextBrush}"
                                TextWrapping="Wrap" />
 
-                    <TextBlock Text="{Binding FilesCopied, StringFormat='Copied: {0} files'}"
+                    <TextBlock Text="{Binding FilesCopied, StringFormat='Copied: {0} file(s)'}"
                                Foreground="{StaticResource SuccessBrush}" />
 
-                    <TextBlock Text="{Binding FilesSkipped, StringFormat='Skipped: {0} files'}"
+                    <TextBlock Text="{Binding FilesSkipped, StringFormat='Skipped: {0} file(s)'}"
                                Foreground="{StaticResource MutedTextBrush}" />
 
                     <TextBlock Text="{Binding BytesCopiedDisplay, StringFormat='Bytes copied: {0}'}"
@@ -201,7 +260,7 @@
                     </Border>
 
                     <ScrollViewer Grid.Row="1"
-                                  MaxHeight="130">
+                                  MaxHeight="160">
 
                         <ItemsControl ItemsSource="{Binding Warnings}">
                             <ItemsControl.ItemTemplate>
@@ -228,105 +287,262 @@
             </Border>
         </Grid>
 
-        <!-- Preview items -->
-        <Border Grid.Row="3"
-                Background="{StaticResource CardBackgroundBrush}"
-                BorderBrush="{StaticResource CardBorderBrush}"
-                BorderThickness="1"
-                CornerRadius="18"
-                Padding="0">
+        <!-- Grouped preview items and execution results -->
+        <ScrollViewer Grid.Row="3">
+            <StackPanel Spacing="16">
 
-            <Grid RowDefinitions="Auto,*">
-
-                <Border Grid.Row="0"
-                        Padding="12"
+                <!-- Group: Steam userdata game folder -->
+                <Border Background="{StaticResource CardBackgroundBrush}"
                         BorderBrush="{StaticResource CardBorderBrush}"
-                        BorderThickness="0,0,0,1">
+                        BorderThickness="1"
+                        CornerRadius="18"
+                        Padding="0">
 
-                    <Grid ColumnDefinitions="2*,2*,90,90,90,110"
-                          ColumnSpacing="12">
+                    <Grid RowDefinitions="Auto,Auto,Auto">
 
-                        <TextBlock Grid.Column="0"
-                                   Text="Source path"
-                                   Foreground="{StaticResource SecondaryTextBrush}"
-                                   FontWeight="Bold" />
+                        <Border Grid.Row="0"
+                                Padding="14"
+                                BorderBrush="{StaticResource CardBorderBrush}"
+                                BorderThickness="0,0,0,1">
 
-                        <TextBlock Grid.Column="1"
-                                   Text="Target path"
-                                   Foreground="{StaticResource SecondaryTextBrush}"
-                                   FontWeight="Bold" />
+                            <StackPanel Spacing="3">
+                                <TextBlock Text="Steam userdata game folder"
+                                           Foreground="{StaticResource PrimaryTextBrush}"
+                                           FontSize="18"
+                                           FontWeight="SemiBold" />
 
-                        <TextBlock Grid.Column="2"
-                                   Text="Source"
-                                   Foreground="{StaticResource SecondaryTextBrush}"
-                                   FontWeight="Bold" />
+                                <TextBlock Text="The whole game-specific folder under the source profile's Steam userdata, copied into the target profile."
+                                           Foreground="{StaticResource MutedTextBrush}"
+                                           FontSize="12"
+                                           TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
 
-                        <TextBlock Grid.Column="3"
-                                   Text="Target"
-                                   Foreground="{StaticResource SecondaryTextBrush}"
-                                   FontWeight="Bold" />
+                        <Border Grid.Row="1"
+                                Padding="12"
+                                BorderBrush="{StaticResource CardBorderBrush}"
+                                BorderThickness="0,0,0,1">
 
-                        <TextBlock Grid.Column="4"
-                                   Text="Files"
-                                   Foreground="{StaticResource SecondaryTextBrush}"
-                                   FontWeight="Bold" />
+                            <Grid ColumnDefinitions="2*,2*,70,70,90,130"
+                                  ColumnSpacing="12">
 
-                        <TextBlock Grid.Column="5"
-                                   Text="Status"
-                                   Foreground="{StaticResource SecondaryTextBrush}"
-                                   FontWeight="Bold" />
+                                <TextBlock Grid.Column="0"
+                                           Text="Source path"
+                                           Foreground="{StaticResource SecondaryTextBrush}"
+                                           FontWeight="Bold" />
+
+                                <TextBlock Grid.Column="1"
+                                           Text="Target path"
+                                           Foreground="{StaticResource SecondaryTextBrush}"
+                                           FontWeight="Bold" />
+
+                                <TextBlock Grid.Column="2"
+                                           Text="Source"
+                                           Foreground="{StaticResource SecondaryTextBrush}"
+                                           FontWeight="Bold" />
+
+                                <TextBlock Grid.Column="3"
+                                           Text="Target"
+                                           Foreground="{StaticResource SecondaryTextBrush}"
+                                           FontWeight="Bold" />
+
+                                <TextBlock Grid.Column="4"
+                                           Text="Files"
+                                           Foreground="{StaticResource SecondaryTextBrush}"
+                                           FontWeight="Bold" />
+
+                                <TextBlock Grid.Column="5"
+                                           Text="Status"
+                                           Foreground="{StaticResource SecondaryTextBrush}"
+                                           FontWeight="Bold" />
+                            </Grid>
+                        </Border>
+
+                        <ItemsControl Grid.Row="2"
+                                      ItemsSource="{Binding UserDataItems}"
+                                      ItemTemplate="{StaticResource PreviewItemRowTemplate}" />
                     </Grid>
                 </Border>
 
-                <ScrollViewer Grid.Row="1">
-                    <ItemsControl ItemsSource="{Binding Items}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="models:TransferPreviewItemRowViewModel">
-                                <Border Padding="12"
-                                        BorderBrush="#252733"
-                                        BorderThickness="0,0,0,1">
+                <!-- Group: Approved save mappings -->
+                <Border Background="{StaticResource CardBackgroundBrush}"
+                        BorderBrush="{StaticResource CardBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="18"
+                        Padding="0">
 
-                                    <Grid ColumnDefinitions="2*,2*,90,90,90,110"
-                                          ColumnSpacing="12">
+                    <Grid RowDefinitions="Auto,Auto,Auto">
 
-                                        <TextBlock Grid.Column="0"
-                                                   Text="{Binding SourcePath}"
-                                                   Foreground="{StaticResource SecondaryTextBrush}"
-                                                   TextTrimming="CharacterEllipsis" />
+                        <Border Grid.Row="0"
+                                Padding="14"
+                                BorderBrush="{StaticResource CardBorderBrush}"
+                                BorderThickness="0,0,0,1">
 
-                                        <TextBlock Grid.Column="1"
-                                                   Text="{Binding TargetPath}"
-                                                   Foreground="{StaticResource SecondaryTextBrush}"
-                                                   TextTrimming="CharacterEllipsis" />
+                            <StackPanel Spacing="3">
+                                <TextBlock Text="Approved save mappings"
+                                           Foreground="{StaticResource PrimaryTextBrush}"
+                                           FontSize="18"
+                                           FontWeight="SemiBold" />
 
-                                        <TextBlock Grid.Column="2"
-                                                   Text="{Binding SourceExists}"
-                                                   Foreground="{StaticResource AccentBrush}" />
+                                <TextBlock Text="Save locations from the approved mapping database, expanded for the selected profiles."
+                                           Foreground="{StaticResource MutedTextBrush}"
+                                           FontSize="12"
+                                           TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
 
-                                        <TextBlock Grid.Column="3"
-                                                   Text="{Binding TargetExists}"
-                                                   Foreground="{StaticResource WarningBrush}" />
+                        <Border Grid.Row="1"
+                                Padding="12"
+                                BorderBrush="{StaticResource CardBorderBrush}"
+                                BorderThickness="0,0,0,1">
 
-                                        <StackPanel Grid.Column="4">
-                                            <TextBlock Text="{Binding FileCount}"
-                                                       Foreground="{StaticResource PrimaryTextBrush}" />
+                            <Grid ColumnDefinitions="2*,2*,70,70,90,130"
+                                  ColumnSpacing="12">
 
-                                            <TextBlock Text="{Binding TotalSizeDisplay}"
-                                                       Foreground="{StaticResource MutedTextBrush}"
-                                                       FontSize="11" />
-                                        </StackPanel>
+                                <TextBlock Grid.Column="0"
+                                           Text="Source path"
+                                           Foreground="{StaticResource SecondaryTextBrush}"
+                                           FontWeight="Bold" />
 
-                                        <TextBlock Grid.Column="5"
-                                                   Text="{Binding StatusText}"
-                                                   Foreground="{StaticResource PrimaryTextBrush}"
-                                                   FontWeight="SemiBold" />
-                                    </Grid>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </ScrollViewer>
-            </Grid>
-        </Border>
+                                <TextBlock Grid.Column="1"
+                                           Text="Target path"
+                                           Foreground="{StaticResource SecondaryTextBrush}"
+                                           FontWeight="Bold" />
+
+                                <TextBlock Grid.Column="2"
+                                           Text="Source"
+                                           Foreground="{StaticResource SecondaryTextBrush}"
+                                           FontWeight="Bold" />
+
+                                <TextBlock Grid.Column="3"
+                                           Text="Target"
+                                           Foreground="{StaticResource SecondaryTextBrush}"
+                                           FontWeight="Bold" />
+
+                                <TextBlock Grid.Column="4"
+                                           Text="Files"
+                                           Foreground="{StaticResource SecondaryTextBrush}"
+                                           FontWeight="Bold" />
+
+                                <TextBlock Grid.Column="5"
+                                           Text="Status"
+                                           Foreground="{StaticResource SecondaryTextBrush}"
+                                           FontWeight="Bold" />
+                            </Grid>
+                        </Border>
+
+                        <ItemsControl Grid.Row="2"
+                                      ItemsSource="{Binding MappingItems}"
+                                      ItemTemplate="{StaticResource PreviewItemRowTemplate}" />
+                    </Grid>
+                </Border>
+
+                <!-- Group: Execution results -->
+                <Border Background="{StaticResource CardBackgroundBrush}"
+                        BorderBrush="{StaticResource CardBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="18"
+                        Padding="0">
+
+                    <Grid RowDefinitions="Auto,Auto,Auto">
+
+                        <Border Grid.Row="0"
+                                Padding="14"
+                                BorderBrush="{StaticResource CardBorderBrush}"
+                                BorderThickness="0,0,0,1">
+
+                            <StackPanel Spacing="3">
+                                <TextBlock Text="Execution results"
+                                           Foreground="{StaticResource PrimaryTextBrush}"
+                                           FontSize="18"
+                                           FontWeight="SemiBold" />
+
+                                <TextBlock Text="Exactly what was copied, skipped, or failed during the last copy."
+                                           Foreground="{StaticResource MutedTextBrush}"
+                                           FontSize="12"
+                                           TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Grid.Row="1"
+                                Padding="12"
+                                BorderBrush="{StaticResource CardBorderBrush}"
+                                BorderThickness="0,0,0,1">
+
+                            <Grid ColumnDefinitions="2*,2*,90,140,*"
+                                  ColumnSpacing="12">
+
+                                <TextBlock Grid.Column="0"
+                                           Text="Source file"
+                                           Foreground="{StaticResource SecondaryTextBrush}"
+                                           FontWeight="Bold" />
+
+                                <TextBlock Grid.Column="1"
+                                           Text="Target file"
+                                           Foreground="{StaticResource SecondaryTextBrush}"
+                                           FontWeight="Bold" />
+
+                                <TextBlock Grid.Column="2"
+                                           Text="Size"
+                                           Foreground="{StaticResource SecondaryTextBrush}"
+                                           FontWeight="Bold" />
+
+                                <TextBlock Grid.Column="3"
+                                           Text="Status"
+                                           Foreground="{StaticResource SecondaryTextBrush}"
+                                           FontWeight="Bold" />
+
+                                <TextBlock Grid.Column="4"
+                                           Text="Details"
+                                           Foreground="{StaticResource SecondaryTextBrush}"
+                                           FontWeight="Bold" />
+                            </Grid>
+                        </Border>
+
+                        <ItemsControl Grid.Row="2"
+                                      ItemsSource="{Binding ExecutionResults}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:SaveTransferItemResultRowViewModel">
+                                    <Border Padding="12"
+                                            BorderBrush="#252733"
+                                            BorderThickness="0,0,0,1">
+
+                                        <Grid ColumnDefinitions="2*,2*,90,140,*"
+                                              ColumnSpacing="12">
+
+                                            <TextBlock Grid.Column="0"
+                                                       Text="{Binding SourceFile}"
+                                                       Foreground="{StaticResource SecondaryTextBrush}"
+                                                       ToolTip.Tip="{Binding SourceFile}"
+                                                       TextTrimming="CharacterEllipsis" />
+
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding TargetFile}"
+                                                       Foreground="{StaticResource SecondaryTextBrush}"
+                                                       ToolTip.Tip="{Binding TargetFile}"
+                                                       TextTrimming="CharacterEllipsis" />
+
+                                            <TextBlock Grid.Column="2"
+                                                       Text="{Binding SizeDisplay}"
+                                                       Foreground="{StaticResource MutedTextBrush}" />
+
+                                            <TextBlock Grid.Column="3"
+                                                       Text="{Binding Status}"
+                                                       Foreground="{StaticResource PrimaryTextBrush}"
+                                                       FontWeight="SemiBold" />
+
+                                            <TextBlock Grid.Column="4"
+                                                       Text="{Binding Error}"
+                                                       Foreground="{StaticResource WarningBrush}"
+                                                       TextWrapping="Wrap" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </Grid>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
     </Grid>
 </UserControl>

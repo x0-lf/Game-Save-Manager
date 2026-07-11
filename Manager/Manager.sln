@@ -3,8 +3,6 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.14.37216.2
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GameSave", "GameSaves\GameSave.csproj", "{80450AEC-45C4-4FEE-9438-343594E8A342}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GameSaves.Reviewer", "GameSaves.Reviewer\GameSaves.Reviewer.csproj", "{135E7512-6A34-578D-906E-182F2A28E434}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GameSaves.Core", "GameSaves.Core\GameSaves.Core.csproj", "{CAEF6AE2-E053-4CCA-A436-B105EB98B956}"
@@ -21,10 +19,6 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{80450AEC-45C4-4FEE-9438-343594E8A342}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{80450AEC-45C4-4FEE-9438-343594E8A342}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{80450AEC-45C4-4FEE-9438-343594E8A342}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{80450AEC-45C4-4FEE-9438-343594E8A342}.Release|Any CPU.Build.0 = Release|Any CPU
 		{135E7512-6A34-578D-906E-182F2A28E434}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{135E7512-6A34-578D-906E-182F2A28E434}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{135E7512-6A34-578D-906E-182F2A28E434}.Release|Any CPU.ActiveCfg = Release|Any CPU

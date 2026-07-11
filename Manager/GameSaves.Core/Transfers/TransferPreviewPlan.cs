@@ -17,5 +17,18 @@ namespace GameSaves.Core.Transfers
 
         public bool HasErrors =>
             Warnings.Any(warning => warning.Severity == TransferWarningSeverity.Error);
+
+        public IReadOnlyList<TransferPreviewItem> SteamUserDataItems =>
+            Items
+                .Where(item => item.SourceType == TransferSourceType.SteamUserDataGameFolder)
+                .ToList();
+
+        public IReadOnlyList<TransferPreviewItem> ApprovedMappingItems =>
+            Items
+                .Where(item => item.SourceType == TransferSourceType.ApprovedMapping)
+                .ToList();
+
+        public bool HasAnyCopyableSource =>
+            Items.Any(item => item.SourceExists);
     }
 }

@@ -1,4 +1,4 @@
-﻿using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using GameSaves.App.Models;
 using GameSaves.Core.Transfers;
@@ -33,13 +33,16 @@ namespace GameSaves.App.ViewModels
         private InstalledGameRowViewModel? selectedGame;
 
         [ObservableProperty]
+        private bool includeSteamUserDataGameFolder = true;
+
+        [ObservableProperty]
         private int totalFiles;
 
         [ObservableProperty]
         private string totalSizeDisplay = "0 B";
 
         [ObservableProperty]
-        private bool canExecuteTransferLater;
+        private bool canExecuteCopy;
 
         [ObservableProperty]
         private bool confirmRealTransfer;
@@ -48,7 +51,7 @@ namespace GameSaves.App.ViewModels
         private bool overwriteExisting;
 
         [ObservableProperty]
-        private string executionStatusMessage = "No transfer executed.";
+        private string executionStatusMessage = "No copy executed.";
 
         [ObservableProperty]
         private int filesCopied;
@@ -66,6 +69,12 @@ namespace GameSaves.App.ViewModels
             _installedGamesViewModel.Games;
 
         public ObservableCollection<TransferPreviewItemRowViewModel> Items { get; } = new();
+
+        // Steam userdata game-folder items (usually zero or one).
+        public ObservableCollection<TransferPreviewItemRowViewModel> UserDataItems { get; } = new();
+
+        // Items expanded from approved save-path mappings.
+        public ObservableCollection<TransferPreviewItemRowViewModel> MappingItems { get; } = new();
 
         public ObservableCollection<TransferWarningRowViewModel> Warnings { get; } = new();
 
@@ -122,11 +131,7 @@ namespace GameSaves.App.ViewModels
             if (IsLoading)
                 return;
 
-            Items.Clear();
-            Warnings.Clear();
-            TotalFiles = 0;
-            TotalSizeDisplay = "0 B";
-            CanExecuteTransferLater = false;
+            ClearPreview();
 
             if (SelectedSourceProfile is null)
             {
@@ -149,39 +154,55 @@ namespace GameSaves.App.ViewModels
             try
             {
                 IsLoading = true;
-                StatusMessage = "Building dry-run transfer preview...";
+                StatusMessage = "Building copy preview (dry run, nothing is copied)...";
+
+                var previewOptions = new TransferPreviewOptions
+                {
+                    IncludeSteamUserDataGameFolder = IncludeSteamUserDataGameFolder,
+                    IncludeApprovedMappings = true
+                };
 
                 TransferPreviewPlan plan =
                     await _transferPreviewService.CreatePreviewAsync(
                         SelectedGame.Game,
                         SelectedSourceProfile.Profile,
-                        SelectedTargetProfile.Profile);
+                        SelectedTargetProfile.Profile,
+                        previewOptions);
 
                 _lastPlan = plan;
                 ExecutionResults.Clear();
-                ExecutionStatusMessage = "No transfer executed.";
+                ExecutionStatusMessage = "No copy executed.";
                 FilesCopied = 0;
                 FilesSkipped = 0;
                 BytesCopiedDisplay = "0 B";
                 ConfirmRealTransfer = false;
 
                 foreach (TransferPreviewItem item in plan.Items)
-                    Items.Add(new TransferPreviewItemRowViewModel(item));
+                {
+                    var row = new TransferPreviewItemRowViewModel(item);
+
+                    Items.Add(row);
+
+                    if (item.SourceType == TransferSourceType.SteamUserDataGameFolder)
+                        UserDataItems.Add(row);
+                    else
+                        MappingItems.Add(row);
+                }
 
                 foreach (TransferPreviewWarning warning in plan.Warnings)
                     Warnings.Add(new TransferWarningRowViewModel(warning));
 
                 TotalFiles = plan.TotalFiles;
                 TotalSizeDisplay = FormatBytes(plan.TotalBytes);
-                CanExecuteTransferLater = plan.CanExecute;
+                CanExecuteCopy = plan.CanExecute;
 
                 StatusMessage = plan.HasItems
-                    ? $"Preview ready for {plan.Game.Name}. No files were copied."
+                    ? $"Copy preview ready for {plan.Game.Name}. No files were copied."
                     : "Preview created no items. Check mappings and selected profiles.";
             }
             catch (Exception ex)
             {
-                StatusMessage = $"Failed to build transfer preview: {ex.Message}";
+                StatusMessage = $"Failed to build copy preview: {ex.Message}";
             }
             finally
             {
@@ -197,20 +218,20 @@ namespace GameSaves.App.ViewModels
 
             if (_lastPlan is null)
             {
-                ExecutionStatusMessage = "Build a transfer preview first.";
+                ExecutionStatusMessage = "Build a copy preview first.";
                 return;
             }
 
             if (!ConfirmRealTransfer)
             {
-                ExecutionStatusMessage = "Real transfer blocked. Confirm the checkbox first.";
+                ExecutionStatusMessage = "Copy blocked. Confirm the checkbox first.";
                 return;
             }
 
             try
             {
                 IsLoading = true;
-                ExecutionStatusMessage = "Executing safe local transfer...";
+                ExecutionStatusMessage = "Copying files to the target profile...";
 
                 var options = new SaveTransferOptions
                 {
@@ -234,18 +255,35 @@ namespace GameSaves.App.ViewModels
                 FilesSkipped = result.FilesSkipped;
                 BytesCopiedDisplay = FormatBytes(result.BytesCopied);
 
-                ExecutionStatusMessage =
-                    $"Transfer finished. Copied {FilesCopied} file(s), skipped {FilesSkipped} file(s).";
+                TransferPreviewWarning? blocker = result.Warnings
+                    .Skip(_lastPlan.Warnings.Count)
+                    .FirstOrDefault(warning => warning.Severity == TransferWarningSeverity.Error);
+
+                ExecutionStatusMessage = blocker is not null
+                    ? $"Copy blocked: {blocker.Message}"
+                    : $"Copy finished. Copied {FilesCopied} file(s), skipped {FilesSkipped} file(s). Source files were not changed.";
             }
             catch (Exception ex)
             {
-                ExecutionStatusMessage = $"Transfer failed: {ex.Message}";
+                ExecutionStatusMessage = $"Copy failed: {ex.Message}";
             }
             finally
             {
                 IsLoading = false;
             }
         }
+
+        private void ClearPreview()
+        {
+            Items.Clear();
+            UserDataItems.Clear();
+            MappingItems.Clear();
+            Warnings.Clear();
+            TotalFiles = 0;
+            TotalSizeDisplay = "0 B";
+            CanExecuteCopy = false;
+        }
+
         private static string FormatBytes(long bytes)
         {
             if (bytes < 1024)

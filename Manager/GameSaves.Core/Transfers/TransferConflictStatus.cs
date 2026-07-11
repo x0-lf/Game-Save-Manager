@@ -7,6 +7,7 @@
         TargetExists = 2,
         SameSourceAndTarget = 3,
         MappingNotProfileSpecific = 4,
-        Error = 5
+        Error = 5,
+        OutsideExpectedRoot = 6
     }
 }
