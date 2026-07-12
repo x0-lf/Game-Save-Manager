@@ -19,6 +19,7 @@ namespace GameSaves.App.Models
             TransferRunKind.Restore => "Restore",
             TransferRunKind.ManualBackup => "Manual backup",
             TransferRunKind.Cleanup => "Cleanup",
+            TransferRunKind.Sync => "Sync",
             _ => "Transfer copy"
         };
 

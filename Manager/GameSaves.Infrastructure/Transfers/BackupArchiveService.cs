@@ -167,7 +167,7 @@ namespace GameSaves.Infrastructure.Transfers
                 // machine/location the backup was created on. Rewrite them to
                 // the extracted location so the run is restorable here, and
                 // verify every rewritten path against the extracted files.
-                if (!TryRewriteManifestPaths(manifest, targetRoot, out TransferBackupManifest rewritten))
+                if (!BackupManifestPathRewriter.TryRewrite(manifest, targetRoot, out TransferBackupManifest rewritten))
                 {
                     return new BackupArchiveImportResult(
                         false, targetRoot, 0,
@@ -192,70 +192,5 @@ namespace GameSaves.Infrastructure.Transfers
             }
         }
 
-        // The original run root is not stored in the manifest, but every
-        // backup-file path is <oldRoot>\files\<mirror>. Try each prefix that
-        // ends right before a "files" segment; the correct one makes every
-        // item's relative path point at an existing extracted file.
-        private static bool TryRewriteManifestPaths(
-            TransferBackupManifest manifest,
-            string targetRoot,
-            out TransferBackupManifest rewritten)
-        {
-            rewritten = manifest;
-
-            string firstPath = manifest.Items[0].BackupFile;
-            string[] segments = firstPath.Split(Path.DirectorySeparatorChar);
-
-            for (int i = segments.Length - 2; i >= 0; i--)
-            {
-                if (!segments[i].Equals("files", StringComparison.OrdinalIgnoreCase))
-                    continue;
-
-                int prefixLength = segments.Take(i)
-                    .Sum(segment => segment.Length + 1);
-
-                if (!TryRewriteWithPrefix(manifest, prefixLength, targetRoot, out rewritten))
-                    continue;
-
-                return true;
-            }
-
-            return false;
-        }
-
-        private static bool TryRewriteWithPrefix(
-            TransferBackupManifest manifest,
-            int prefixLength,
-            string targetRoot,
-            out TransferBackupManifest rewritten)
-        {
-            rewritten = manifest;
-
-            var newItems = new List<TransferOverwriteBackupItem>(manifest.Items.Count);
-
-            foreach (TransferOverwriteBackupItem item in manifest.Items)
-            {
-                if (item.BackupFile.Length <= prefixLength)
-                    return false;
-
-                string relative = item.BackupFile[prefixLength..];
-
-                if (!relative.StartsWith("files" + Path.DirectorySeparatorChar,
-                        StringComparison.OrdinalIgnoreCase))
-                {
-                    return false;
-                }
-
-                string newBackupFile = Path.Combine(targetRoot, relative);
-
-                if (!File.Exists(newBackupFile))
-                    return false;
-
-                newItems.Add(item with { BackupFile = newBackupFile });
-            }
-
-            rewritten = manifest with { Items = newItems };
-            return true;
-        }
     }
 }

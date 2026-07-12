@@ -41,6 +41,13 @@ The long-term goal is a cross-platform Steam save manager with backup profiles, 
   * **ZIP archive export / import**: export any backup run as a single self-contained ZIP (files + manifest) for cold storage or another machine, and import such a ZIP back into the backup base - the manifest's backup-file paths are rewritten to the extracted location and verified, so the imported run is fully restorable. Nothing is ever overwritten.
   * SHA-256 integrity check: tampered or missing backup files are never restored.
   * Pre-restore backup: files replaced by a restore are themselves backed up, so a restore is always undoable.
+* **Sync tab** - backup-run sync with a local or mounted folder (NAS share, USB drive, cloud-synced folder):
+  * `ISyncProvider` abstraction with `LocalFolderSyncProvider` as the first provider (WebDAV/SFTP/cloud come later).
+  * Copy-only, both ways: a run missing on one side is copied there; nothing is ever deleted or overwritten.
+  * Sync preview with per-run actions (upload / download / in sync / conflict), counts, and sizes; execution requires explicit confirmation.
+  * **Conflict detection**: same run name with different content (compared via manifest identity and per-file SHA-256) is reported and never copied automatically.
+  * **Version-history metadata**: every executed sync is appended to a `sync-log.json` stored alongside the remote data (device, timestamp, uploaded/downloaded runs), shared by all devices syncing with that folder.
+  * Downloaded runs get their manifest paths rewritten and verified, so they are immediately restorable.
 * **History tab** - durable run history in SQLite (`transfer_runs` / `transfer_items`):
   * Every executed transfer copy, restore, and manual backup is recorded automatically - counts, bytes, flags (dry run, overwrite, backups), blocking reason if refused, and per-file outcomes.
   * Recording failures never fail the run itself; history is a pure audit trail.
@@ -58,7 +65,7 @@ The long-term goal is a cross-platform Steam save manager with backup profiles, 
 ### Not implemented yet
 
 * Compressed-by-default backups and 7z support (ZIP export/import of runs is done).
-* Cloud sync providers (local-folder sync provider first, then WebDAV/Nextcloud, SFTP, OneDrive/Google Drive).
+* Remote sync providers: WebDAV/Nextcloud, SFTP/SSH, OneDrive/Google Drive (the local-folder provider and the `ISyncProvider` abstraction are done).
 * Linux / macOS / Steam Deck discovery and platform-specific path expansion.
 * Scheduled backups, diff viewer, encryption.
 
@@ -274,7 +281,7 @@ Harvested data is candidate data: save locations can be wrong, incomplete, outda
   * [x] Copy-only wording; no delete anywhere; overwrite off by default; explicit confirmation.
 * [x] Resizable, 1080p-friendly UI.
 
-### Phase 2 - Backup system 🔨 in progress
+### Phase 2 - Backup system ✅ done
 
 * [x] Backup-before-overwrite hook with Safe Mode (failed backup refuses the overwrite).
 * [x] SHA-256 hashing and per-run `manifest.json`.
@@ -288,12 +295,12 @@ Harvested data is candidate data: save locations can be wrong, incomplete, outda
 * [x] Retention/cleanup for old backup runs (preview-first, confirmation-gated, strictly scoped to the backup base, recorded in run history).
 * [x] ZIP archive support: export a run as one self-contained ZIP, import it back restorable (7z later).
 
-### Phase 3 - Cloud sync abstraction
+### Phase 3 - Cloud sync abstraction 🔨 in progress
 
-* [ ] `ISyncProvider` abstraction and sync preview.
-* [ ] `LocalFolderSyncProvider` first (no cloud dependency).
-* [ ] Conflict detection and version-history metadata.
-* [ ] WebDAV/Nextcloud → SFTP/SSH → OneDrive/Google Drive (Mega only if feasible).
+* [x] `ISyncProvider` abstraction and sync preview (Sync tab, dry-run first, confirmation-gated).
+* [x] `LocalFolderSyncProvider` first (no cloud dependency; NAS/USB/cloud-synced folders).
+* [x] Conflict detection (manifest + SHA-256 comparison, conflicts reported, never auto-resolved) and version-history metadata (`sync-log.json` on the remote).
+* [ ] WebDAV/Nextcloud → SFTP/SSH → OneDrive/Google Drive (Mega only if feasible) - deliberately on hold until the provider approach is reviewed.
 
 ### Phase 4 - Cross-platform
 

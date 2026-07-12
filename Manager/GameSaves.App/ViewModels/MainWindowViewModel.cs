@@ -57,6 +57,8 @@ namespace GameSaves.App.ViewModels
 
         public TransferHistoryViewModel TransferHistory { get; }
 
+        public SyncViewModel Sync { get; }
+
         public MainWindowViewModel(
             ISteamDiscoveryService steamDiscoveryService,
             ISteamProfileDetector steamProfileDetector,
@@ -68,7 +70,8 @@ namespace GameSaves.App.ViewModels
             TransferPreviewViewModel transferPreview,
             BackupHistoryViewModel backupHistory,
             ManualBackupViewModel manualBackup,
-            TransferHistoryViewModel transferHistory)
+            TransferHistoryViewModel transferHistory,
+            SyncViewModel sync)
         {
             _steamDiscoveryService = steamDiscoveryService;
             _steamProfileDetector = steamProfileDetector;
@@ -85,6 +88,7 @@ namespace GameSaves.App.ViewModels
             BackupHistory = backupHistory;
             ManualBackup = manualBackup;
             TransferHistory = transferHistory;
+            Sync = sync;
         }
 
         [RelayCommand]

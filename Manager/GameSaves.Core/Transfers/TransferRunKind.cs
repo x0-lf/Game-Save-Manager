@@ -5,6 +5,7 @@ namespace GameSaves.Core.Transfers
         TransferCopy = 0,
         Restore = 1,
         ManualBackup = 2,
-        Cleanup = 3
+        Cleanup = 3,
+        Sync = 4
     }
 }

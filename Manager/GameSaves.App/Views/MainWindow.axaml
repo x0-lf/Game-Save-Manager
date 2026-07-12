@@ -278,6 +278,11 @@
 				<views:BackupHistoryView DataContext="{Binding BackupHistory}" />
 			</TabItem>
 
+			<!-- Backup-run sync with a local/mounted folder -->
+			<TabItem Header="Sync">
+				<views:SyncView DataContext="{Binding Sync}" />
+			</TabItem>
+
 			<!-- Executed-run history from SQLite -->
 			<TabItem Header="History">
 				<views:TransferHistoryView DataContext="{Binding TransferHistory}" />

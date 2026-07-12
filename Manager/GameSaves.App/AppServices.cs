@@ -23,6 +23,7 @@ namespace GameSaves.App
             services.AddSingleton<BackupHistoryViewModel>();
             services.AddSingleton<ManualBackupViewModel>();
             services.AddSingleton<TransferHistoryViewModel>();
+            services.AddSingleton<SyncViewModel>();
 
             return services.BuildServiceProvider();
         }
