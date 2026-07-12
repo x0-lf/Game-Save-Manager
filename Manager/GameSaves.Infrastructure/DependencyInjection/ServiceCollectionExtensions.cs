@@ -35,6 +35,7 @@ namespace GameSaves.Infrastructure.DependencyInjection
             services.AddSingleton<ISaveTransferService, SaveTransferService>();
             services.AddSingleton<IBackupHistoryService, BackupHistoryService>();
             services.AddSingleton<IBackupRestoreService, BackupRestoreService>();
+            services.AddSingleton<IManualBackupService, ManualBackupService>();
 
             services.AddSingleton<ISavePathMappingRepository>(provider =>
             {

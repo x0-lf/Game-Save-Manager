@@ -7,7 +7,14 @@ namespace GameSaves.Core.Transfers
     /// </summary>
     public interface ITransferOverwriteBackupService
     {
-        ITransferOverwriteBackupSession BeginSession(OverwriteBackupContext context);
+        /// <summary>
+        /// Starts a backup run. <paramref name="baseDirectory"/> overrides where
+        /// the run folder is created; null uses the application backup base,
+        /// which is the location the backup history reads from.
+        /// </summary>
+        ITransferOverwriteBackupSession BeginSession(
+            OverwriteBackupContext context,
+            string? baseDirectory = null);
     }
 
     public interface ITransferOverwriteBackupSession : IDisposable

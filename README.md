@@ -27,6 +27,11 @@ The long-term goal is a cross-platform Steam save manager with backup profiles, 
   * Execution requires an explicit confirmation checkbox; overwrite is off by default.
   * **Backup before overwrite (Safe Mode)** - every target file about to be replaced is backed up first; if the backup fails, that file is not overwritten.
   * Per-file execution results: copied / skipped / failed, with reasons and backup locations.
+* **Manual Backup tab** - on-demand backups:
+  * Choose a profile, an installed game, a backup source (Steam userdata folder, approved mappings, or both), and a destination folder.
+  * Dry-run preview showing exactly which save locations and how many files will be backed up.
+  * Every run is a fresh timestamped folder with mirrored original paths and a SHA-256 `manifest.json` - nothing is ever overwritten or deleted.
+  * Backups written to the default location appear in the Backups tab and are restorable from there.
 * **Backups tab** - backup history and restore:
   * Lists every backup run from its `manifest.json` (game, profiles, timestamp, files, size).
   * Restore with dry-run preview, confirmation gate, and overwrite opt-in.
@@ -45,8 +50,8 @@ The long-term goal is a cross-platform Steam save manager with backup profiles, 
 
 ### Not implemented yet
 
-* Manual on-demand backups from the GUI (back up a chosen game to a chosen destination).
 * SQLite transfer-history tables (`transfer_runs` / `transfer_items`).
+* Named backup profiles and retention/cleanup for old backup runs.
 * Archive support (ZIP/7z).
 * Cloud sync providers (local-folder sync provider first, then WebDAV/Nextcloud, SFTP, OneDrive/Google Drive).
 * Linux / macOS / Steam Deck discovery and platform-specific path expansion.
@@ -122,6 +127,7 @@ Tabs:
 | Installed Games    | Every installed game with mapping status, save-path existence, file counts, and sizes.              |
 | Profiles           | Detected Steam profiles from `userdata`, with source/target selection and folder shortcuts.         |
 | Transfer Preview   | Copy saves between profiles: pick source, target, and game → Preview Copy (Dry Run) → confirm → Copy to Target Profile. |
+| Manual Backup      | Back up one game's saves for one profile on demand: choose sources and destination → preview → confirm → Back Up Now.   |
 | Backups            | Every backup run with its files and hashes; restore with dry-run preview and confirmation.          |
 
 ### How a profile-to-profile copy works
@@ -268,10 +274,10 @@ Harvested data is candidate data: save locations can be wrong, incomplete, outda
 * [x] SHA-256 hashing and per-run `manifest.json`.
 * [x] Backup history read from manifests.
 * [x] Restore with dry-run preview, confirmation gate, overwrite opt-in, integrity check, and pre-restore backup.
-* [ ] **Next: manual on-demand backups** - back up a selected game's saves for a chosen profile to a chosen destination, without waiting for an overwrite.
-* [ ] Backup, Copy, Move From Profile To Profile, with possibility to move it from Steam profile to profile, or from mapping that are in the database
-    at C:\Users\<username>\AppData\Local\GameSave\gamesave.db
-* [ ] Backup destination selection and named backup profiles.
+* [x] Manual on-demand backups - back up a selected game's saves for a chosen profile to a chosen destination (Manual Backup tab), without waiting for an overwrite.
+* [x] Backup and copy from profile to profile, sourced from the Steam userdata game folder and/or approved mappings in the database
+    at C:\Users\<username>\AppData\Local\GameSave\gamesave.db (copy-only by design - move/delete is intentionally not supported).
+* [ ] Named backup profiles (saved destination + source presets).
 * [ ] SQLite history tables (`transfer_runs`, `transfer_items`) for transfers and restores.
 * [ ] Retention/cleanup for old backup runs.
 * [ ] Archive support (ZIP first, 7z later).

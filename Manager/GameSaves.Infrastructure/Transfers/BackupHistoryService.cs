@@ -13,6 +13,11 @@ namespace GameSaves.Infrastructure.Transfers
             _databasePathProvider = databasePathProvider;
         }
 
+        public string GetBackupBasePath()
+        {
+            return TransferBackupLocations.GetBackupBasePath(_databasePathProvider);
+        }
+
         public Task<IReadOnlyList<TransferBackupRunInfo>> GetRunsAsync(
             CancellationToken cancellationToken = default)
         {

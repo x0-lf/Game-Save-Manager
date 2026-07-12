@@ -10,5 +10,10 @@ namespace GameSaves.Core.Transfers
             Manifest.Kind.Equals(
                 OverwriteBackupContext.RestoreKind,
                 StringComparison.OrdinalIgnoreCase);
+
+        public bool IsManualRun =>
+            Manifest.Kind.Equals(
+                OverwriteBackupContext.ManualKind,
+                StringComparison.OrdinalIgnoreCase);
     }
 }

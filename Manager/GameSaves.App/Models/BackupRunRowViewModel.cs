@@ -12,8 +12,9 @@ namespace GameSaves.App.Models
 
         public TransferBackupRunInfo Run { get; }
 
-        public string KindText => Run.IsRestoreRun
-            ? "Pre-restore backup"
+        public string KindText =>
+            Run.IsManualRun ? "Manual backup"
+            : Run.IsRestoreRun ? "Pre-restore backup"
             : "Pre-overwrite backup";
 
         public string GameName => Run.Manifest.Game;

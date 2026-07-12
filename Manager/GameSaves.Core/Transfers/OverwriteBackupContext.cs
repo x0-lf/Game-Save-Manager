@@ -13,5 +13,6 @@ namespace GameSaves.Core.Transfers
     {
         public const string TransferKind = "TransferOverwriteBackup";
         public const string RestoreKind = "RestoreOverwriteBackup";
+        public const string ManualKind = "ManualBackup";
     }
 }

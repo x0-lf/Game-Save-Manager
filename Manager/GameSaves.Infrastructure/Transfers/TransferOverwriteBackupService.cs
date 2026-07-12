@@ -21,11 +21,16 @@ namespace GameSaves.Infrastructure.Transfers
             _databasePathProvider = databasePathProvider;
         }
 
-        public ITransferOverwriteBackupSession BeginSession(OverwriteBackupContext context)
+        public ITransferOverwriteBackupSession BeginSession(
+            OverwriteBackupContext context,
+            string? baseDirectory = null)
         {
-            string kindSlug = context.Kind == OverwriteBackupContext.RestoreKind
-                ? "restore"
-                : "transfer";
+            string kindSlug = context.Kind switch
+            {
+                OverwriteBackupContext.RestoreKind => "restore",
+                OverwriteBackupContext.ManualKind => "manual",
+                _ => "transfer"
+            };
 
             string runFolderName =
                 $"{DateTime.UtcNow:yyyyMMdd_HHmmss}_{kindSlug}" +
@@ -34,7 +39,9 @@ namespace GameSaves.Infrastructure.Transfers
                 $"_to_{TransferBackupLocations.MakeSafeName(context.TargetAccountId)}";
 
             string backupRoot = Path.Combine(
-                TransferBackupLocations.GetBackupBasePath(_databasePathProvider),
+                string.IsNullOrWhiteSpace(baseDirectory)
+                    ? TransferBackupLocations.GetBackupBasePath(_databasePathProvider)
+                    : baseDirectory,
                 runFolderName);
 
             return new Session(backupRoot, context);
