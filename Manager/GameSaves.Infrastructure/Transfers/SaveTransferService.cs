@@ -11,10 +11,14 @@ namespace GameSaves.Infrastructure.Transfers
     public sealed class SaveTransferService : ISaveTransferService
     {
         private readonly ITransferOverwriteBackupService _overwriteBackupService;
+        private readonly ITransferHistoryRepository _historyRepository;
 
-        public SaveTransferService(ITransferOverwriteBackupService overwriteBackupService)
+        public SaveTransferService(
+            ITransferOverwriteBackupService overwriteBackupService,
+            ITransferHistoryRepository historyRepository)
         {
             _overwriteBackupService = overwriteBackupService;
+            _historyRepository = historyRepository;
         }
 
         public Task<SaveTransferResult> ExecuteAsync(
@@ -28,6 +32,70 @@ namespace GameSaves.Infrastructure.Transfers
         }
 
         private SaveTransferResult Execute(
+            TransferPreviewPlan plan,
+            SaveTransferOptions options,
+            CancellationToken cancellationToken)
+        {
+            DateTimeOffset startedUtc = DateTimeOffset.UtcNow;
+
+            SaveTransferResult result = ExecuteCore(plan, options, cancellationToken);
+
+            TryRecordHistory(plan, options, result, startedUtc);
+
+            return result;
+        }
+
+        private void TryRecordHistory(
+            TransferPreviewPlan plan,
+            SaveTransferOptions options,
+            SaveTransferResult result,
+            DateTimeOffset startedUtc)
+        {
+            try
+            {
+                string? blockedReason = result.Warnings
+                    .Skip(plan.Warnings.Count)
+                    .FirstOrDefault(w => w.Severity == TransferWarningSeverity.Error)?
+                    .Message;
+
+                _historyRepository.RecordRun(new TransferRunRecord(
+                    Kind: TransferRunKind.TransferCopy,
+                    GameName: plan.Game.Name,
+                    SteamAppId: plan.Game.AppId,
+                    SourceAccountId: plan.SourceProfile.AccountId,
+                    TargetAccountId: plan.TargetProfile.AccountId,
+                    DryRun: options.DryRun,
+                    OverwriteEnabled: options.OverwriteExisting,
+                    BackupEnabled: options.BackupBeforeOverwrite,
+                    FilesConsidered: result.FilesConsidered,
+                    FilesCopied: result.FilesCopied,
+                    FilesSkipped: result.FilesSkipped,
+                    FilesFailed: result.Items.Count(i => i.Status == SaveTransferItemStatus.Failed),
+                    BytesCopied: result.BytesCopied,
+                    FilesBackedUp: result.FilesBackedUp,
+                    BackupRootPath: result.BackupRootPath,
+                    BlockedReason: blockedReason,
+                    StartedUtc: startedUtc,
+                    CompletedUtc: DateTimeOffset.UtcNow,
+                    Items: result.Items
+                        .Select(i => new TransferRunItemRecord(
+                            i.SourceFile,
+                            i.TargetFile,
+                            i.Bytes,
+                            i.Copied,
+                            i.Status.ToString(),
+                            i.Error,
+                            i.BackupFile))
+                        .ToList()));
+            }
+            catch
+            {
+                // History is an audit trail; a recording failure must never
+                // fail the copy itself.
+            }
+        }
+
+        private SaveTransferResult ExecuteCore(
             TransferPreviewPlan plan,
             SaveTransferOptions options,
             CancellationToken cancellationToken)

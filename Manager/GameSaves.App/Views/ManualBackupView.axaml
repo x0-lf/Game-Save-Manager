@@ -69,7 +69,7 @@
                 CornerRadius="14"
                 Padding="14,10">
 
-            <Grid ColumnDefinitions="*,*,*"
+            <Grid ColumnDefinitions="*,*,*,*"
                   ColumnSpacing="14">
 
                 <StackPanel Grid.Column="0"
@@ -98,21 +98,34 @@
 
                 <StackPanel Grid.Column="1"
                             Spacing="4">
-                    <TextBlock Text="Destination folder"
+                    <TextBlock Text="Backup destination"
                                Foreground="{StaticResource SecondaryTextBrush}"
                                FontSize="12"
                                FontWeight="Bold" />
 
-                    <TextBox Text="{Binding DestinationPath}"
-                             Watermark="Folder where the backup run is created"
-                             MinHeight="32" />
+                    <Grid ColumnDefinitions="*,Auto"
+                          ColumnSpacing="6">
+
+                        <TextBox Grid.Column="0"
+                                 Text="{Binding DestinationPath}"
+                                 Watermark="Select where this backup should be stored."
+                                 ToolTip.Tip="{Binding DestinationPath}"
+                                 MinHeight="32" />
+
+                        <Button Grid.Column="1"
+                                Content="Choose Folder..."
+                                Command="{Binding ChooseDestinationFolderCommand}"
+                                ToolTip.Tip="Select where this backup should be stored."
+                                Height="32"
+                                VerticalAlignment="Top" />
+                    </Grid>
 
                     <Button Content="Use default (shown in Backups tab)"
                             Command="{Binding UseDefaultDestinationCommand}"
                             FontSize="12"
                             Height="30" />
 
-                    <TextBlock Text="Each backup creates a new timestamped folder here. Backups in the default location appear in the Backups tab and can be restored from there."
+                    <TextBlock Text="Each backup creates a new timestamped folder here. You can pick a folder or edit the path directly. Backups in the default location appear in the Backups tab and can be restored from there."
                                Foreground="{StaticResource MutedTextBrush}"
                                FontSize="11"
                                TextWrapping="Wrap" />
@@ -138,6 +151,51 @@
                     <TextBlock Text="Select at least one backup source."
                                IsVisible="{Binding !HasAnyBackupSource}"
                                Foreground="{StaticResource WarningBrush}"
+                               FontSize="11"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+
+                <StackPanel Grid.Column="3"
+                            Spacing="4">
+                    <TextBlock Text="Backup preset"
+                               Foreground="{StaticResource SecondaryTextBrush}"
+                               FontSize="12"
+                               FontWeight="Bold" />
+
+                    <ComboBox ItemsSource="{Binding Presets}"
+                              SelectedItem="{Binding SelectedPreset}"
+                              PlaceholderText="Apply a saved preset..."
+                              HorizontalAlignment="Stretch"
+                              MinHeight="32"
+                              ToolTip.Tip="Applying a preset fills the destination and backup sources. Presets never start a backup by themselves." />
+
+                    <TextBox Text="{Binding PresetName}"
+                             Watermark="Preset name"
+                             MinHeight="30" />
+
+                    <StackPanel Orientation="Horizontal"
+                                Spacing="6">
+                        <Button Content="Save Preset"
+                                Command="{Binding SavePresetCommand}"
+                                FontSize="12"
+                                Height="30"
+                                ToolTip.Tip="Saves the current destination and backup sources under this name. Saving an existing name updates that preset." />
+
+                        <Button Content="Delete Preset"
+                                Command="{Binding DeletePresetCommand}"
+                                FontSize="12"
+                                Height="30"
+                                ToolTip.Tip="Deletes the selected preset. Backups already created are not affected." />
+
+                        <Button Content="No Preset"
+                                Command="{Binding ClearPresetSelectionCommand}"
+                                FontSize="12"
+                                Height="30"
+                                ToolTip.Tip="Clears the preset selection. The current settings are kept and the backup runs without a preset." />
+                    </StackPanel>
+
+                    <TextBlock Text="{Binding PresetStatusDisplay}"
+                               Foreground="{StaticResource MutedTextBrush}"
                                FontSize="11"
                                TextWrapping="Wrap" />
                 </StackPanel>

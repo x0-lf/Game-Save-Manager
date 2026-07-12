@@ -148,15 +148,68 @@
                                        FontSize="15"
                                        FontWeight="SemiBold" />
 
-                            <TextBlock Text="Restore copies backed-up files to their original locations. Nothing is deleted. Files whose current version differs are only replaced when overwrite is enabled, and every replaced file is backed up first."
+                            <TextBlock Text="Restore copies backup files to the target you choose below. Nothing is deleted. Files whose current version differs are only replaced when overwrite is enabled, and every replaced file is backed up first."
                                        Foreground="{StaticResource WarningBrush}"
+                                       FontSize="11"
+                                       TextWrapping="Wrap" />
+
+                            <TextBlock Text="Restore target"
+                                       Foreground="{StaticResource SecondaryTextBrush}"
+                                       FontSize="12"
+                                       FontWeight="Bold"
+                                       Margin="0,4,0,0" />
+
+                            <RadioButton Content="Restore to Original Location"
+                                         GroupName="RestoreTarget"
+                                         IsChecked="{Binding RestoreToOriginal}"
+                                         FontSize="12"
+                                         ToolTip.Tip="Copies each backup file back to the exact path recorded in the backup manifest." />
+
+                            <RadioButton Content="Restore to Selected Profile"
+                                         GroupName="RestoreTarget"
+                                         IsChecked="{Binding RestoreToSelectedProfile}"
+                                         FontSize="12"
+                                         ToolTip.Tip="Redirects files from the backup's Steam userdata game folder into the selected profile's userdata folder for the same game. Files outside a userdata game folder are skipped." />
+
+                            <StackPanel Spacing="4"
+                                        IsVisible="{Binding RestoreToSelectedProfile}">
+                                <TextBlock Text="Target profile"
+                                           Foreground="{StaticResource SecondaryTextBrush}"
+                                           FontSize="12" />
+
+                                <ComboBox ItemsSource="{Binding Profiles}"
+                                          SelectedItem="{Binding SelectedTargetProfile}"
+                                          HorizontalAlignment="Stretch"
+                                          MinHeight="32" />
+                            </StackPanel>
+
+                            <RadioButton Content="Restore to Approved Mapping Location"
+                                         GroupName="RestoreTarget"
+                                         IsChecked="{Binding RestoreToMappingLocation}"
+                                         FontSize="12"
+                                         ToolTip.Tip="Copies the backup into a save location resolved from the approved mapping database (gamesave.db) for this game. Only approved, enabled mappings that resolve to exactly one path can be used." />
+
+                            <StackPanel Spacing="4"
+                                        IsVisible="{Binding RestoreToMappingLocation}">
+                                <TextBlock Text="Mapping"
+                                           Foreground="{StaticResource SecondaryTextBrush}"
+                                           FontSize="12" />
+
+                                <ComboBox ItemsSource="{Binding MappingOptions}"
+                                          SelectedItem="{Binding SelectedMappingOption}"
+                                          HorizontalAlignment="Stretch"
+                                          MinHeight="32" />
+                            </StackPanel>
+
+                            <TextBlock Text="{Binding ResolvedTargetDisplay}"
+                                       Foreground="{StaticResource AccentBrush}"
                                        FontSize="11"
                                        TextWrapping="Wrap" />
 
                             <CheckBox Content="Overwrite current files that differ from the backup"
                                       IsChecked="{Binding OverwriteCurrentFiles}" />
 
-                            <CheckBox Content="I understand this will copy backed-up files to their original locations"
+                            <CheckBox Content="I understand this will copy backup files to the selected target"
                                       IsChecked="{Binding ConfirmRestore}" />
 
                             <StackPanel Orientation="Horizontal"
@@ -165,7 +218,7 @@
                                         Command="{Binding PreviewRestoreCommand}"
                                         Height="36" />
 
-                                <Button Content="Restore Files"
+                                <Button Content="Restore to Target"
                                         Command="{Binding ExecuteRestoreCommand}"
                                         Height="36" />
                             </StackPanel>
@@ -376,6 +429,178 @@
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
                         </Grid>
+                    </Border>
+
+                    <!-- Archive (ZIP export / import) -->
+                    <Border Background="{StaticResource CardBackgroundBrush}"
+                            BorderBrush="{StaticResource CardBorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="14"
+                            Padding="14,10">
+
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="Archive (ZIP)"
+                                       Foreground="{StaticResource PrimaryTextBrush}"
+                                       FontSize="15"
+                                       FontWeight="SemiBold" />
+
+                            <TextBlock Text="Export packs the selected run (files + manifest) into one ZIP for cold storage or another machine. Import brings such a ZIP back into the backup base, where it appears in this list and can be restored. Nothing is ever overwritten."
+                                       Foreground="{StaticResource MutedTextBrush}"
+                                       FontSize="11"
+                                       TextWrapping="Wrap" />
+
+                            <StackPanel Orientation="Horizontal"
+                                        Spacing="10">
+                                <Button Content="Export Selected Run to ZIP..."
+                                        Command="{Binding ExportSelectedRunCommand}"
+                                        Height="32"
+                                        ToolTip.Tip="Creates &lt;run name&gt;.zip in a folder you choose. The run itself is not modified." />
+
+                                <Button Content="Import Backup ZIP..."
+                                        Command="{Binding ImportArchiveCommand}"
+                                        Height="32"
+                                        ToolTip.Tip="Extracts a previously exported backup ZIP into the backup base and makes it restorable again." />
+                            </StackPanel>
+
+                            <TextBlock Text="{Binding ArchiveStatusMessage}"
+                                       Foreground="{StaticResource SecondaryTextBrush}"
+                                       FontSize="12"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Cleanup (the only delete in the app) -->
+                    <Border Background="{StaticResource CardBackgroundBrush}"
+                            BorderBrush="{StaticResource CardBorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="14"
+                            Padding="14,10">
+
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="Cleanup (deletes backup runs)"
+                                       Foreground="{StaticResource PrimaryTextBrush}"
+                                       FontSize="15"
+                                       FontWeight="SemiBold" />
+
+                            <TextBlock Text="This is the only place the app deletes anything. Only backup run folders inside the application backup base are deleted - save files and backups in custom destinations are never touched. Always preview first."
+                                       Foreground="{StaticResource WarningBrush}"
+                                       FontSize="11"
+                                       TextWrapping="Wrap" />
+
+                            <TextBlock Text="Delete the selected run"
+                                       Foreground="{StaticResource SecondaryTextBrush}"
+                                       FontSize="12"
+                                       FontWeight="Bold"
+                                       Margin="0,4,0,0" />
+
+                            <CheckBox Content="I understand this permanently deletes the selected backup run"
+                                      IsChecked="{Binding ConfirmDeleteRun}"
+                                      FontSize="12" />
+
+                            <Button Content="Delete Selected Run"
+                                    Command="{Binding DeleteSelectedRunCommand}"
+                                    Height="32"
+                                    ToolTip.Tip="Permanently deletes the backup run selected in the list on the left. Save files are never touched." />
+
+                            <TextBlock Text="Retention policy"
+                                       Foreground="{StaticResource SecondaryTextBrush}"
+                                       FontSize="12"
+                                       FontWeight="Bold"
+                                       Margin="0,6,0,0" />
+
+                            <StackPanel Orientation="Horizontal"
+                                        Spacing="6">
+                                <TextBlock Text="Keep newest"
+                                           Foreground="{StaticResource SecondaryTextBrush}"
+                                           FontSize="12"
+                                           VerticalAlignment="Center" />
+
+                                <TextBox Text="{Binding KeepNewestRunsText}"
+                                         Width="60"
+                                         MinHeight="28" />
+
+                                <TextBlock Text="run(s), delete the rest. Only runs older than"
+                                           Foreground="{StaticResource SecondaryTextBrush}"
+                                           FontSize="12"
+                                           VerticalAlignment="Center" />
+
+                                <TextBox Text="{Binding OlderThanDaysText}"
+                                         Watermark="any age"
+                                         Width="70"
+                                         MinHeight="28" />
+
+                                <TextBlock Text="day(s)."
+                                           Foreground="{StaticResource SecondaryTextBrush}"
+                                           FontSize="12"
+                                           VerticalAlignment="Center" />
+                            </StackPanel>
+
+                            <CheckBox Content="I understand this permanently deletes the previewed backup runs"
+                                      IsChecked="{Binding ConfirmCleanup}"
+                                      FontSize="12" />
+
+                            <StackPanel Orientation="Horizontal"
+                                        Spacing="10">
+                                <Button Content="Preview Cleanup (Dry Run)"
+                                        Command="{Binding PreviewCleanupCommand}"
+                                        Height="32" />
+
+                                <Button Content="Delete Old Runs"
+                                        Command="{Binding ExecuteCleanupCommand}"
+                                        Height="32" />
+                            </StackPanel>
+
+                            <TextBlock Text="{Binding CleanupStatusMessage}"
+                                       Foreground="{StaticResource SecondaryTextBrush}"
+                                       FontSize="12"
+                                       TextWrapping="Wrap" />
+
+                            <ItemsControl ItemsSource="{Binding CleanupResults}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="models:BackupCleanupItemRowViewModel">
+                                        <Border Padding="10,6"
+                                                BorderBrush="#252733"
+                                                BorderThickness="0,0,0,1">
+
+                                            <StackPanel Spacing="2">
+                                                <Grid ColumnDefinitions="2*,90,120,*"
+                                                      ColumnSpacing="10">
+
+                                                    <TextBlock Grid.Column="0"
+                                                               Text="{Binding RunDisplay}"
+                                                               Foreground="{StaticResource SecondaryTextBrush}"
+                                                               FontSize="12"
+                                                               TextTrimming="CharacterEllipsis" />
+
+                                                    <TextBlock Grid.Column="1"
+                                                               Text="{Binding SizeDisplay}"
+                                                               Foreground="{StaticResource MutedTextBrush}"
+                                                               FontSize="12" />
+
+                                                    <TextBlock Grid.Column="2"
+                                                               Text="{Binding Status}"
+                                                               Foreground="{StaticResource PrimaryTextBrush}"
+                                                               FontSize="12"
+                                                               FontWeight="SemiBold" />
+
+                                                    <TextBlock Grid.Column="3"
+                                                               Text="{Binding Error}"
+                                                               Foreground="{StaticResource WarningBrush}"
+                                                               FontSize="12"
+                                                               TextWrapping="Wrap" />
+                                                </Grid>
+
+                                                <TextBlock Text="{Binding BackupRootPath}"
+                                                           Foreground="{StaticResource MutedTextBrush}"
+                                                           FontSize="10"
+                                                           ToolTip.Tip="{Binding BackupRootPath}"
+                                                           TextTrimming="CharacterEllipsis" />
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
                     </Border>
                 </StackPanel>
             </ScrollViewer>

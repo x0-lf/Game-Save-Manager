@@ -1,8 +1,22 @@
+using GameSaves.Core.Profiles;
+
 namespace GameSaves.Core.Transfers
 {
     public sealed class BackupRestoreOptions
     {
         public bool DryRun { get; init; } = true;
+
+        // Where to restore/copy the backup files. OriginalPath is the safe
+        // default; SelectedSteamProfileUserData requires TargetProfile.
+        public BackupRestoreTargetMode TargetMode { get; init; } =
+            BackupRestoreTargetMode.OriginalPath;
+
+        public SteamProfile? TargetProfile { get; init; }
+
+        // The approved mapping to restore into when TargetMode is
+        // ApprovedMappingLocation. The service re-resolves the mapping from
+        // the database at execution time; a resolved path is never passed in.
+        public long? TargetMappingId { get; init; }
 
         public bool ConfirmExecution { get; init; } = false;
 

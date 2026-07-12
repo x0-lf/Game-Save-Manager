@@ -1,4 +1,5 @@
-﻿using GameSaves.App.ViewModels;
+﻿using GameSaves.App.Services;
+using GameSaves.App.ViewModels;
 using GameSaves.Infrastructure.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -12,6 +13,8 @@ namespace GameSaves.App
 
             services.AddGameSavesInfrastructure();
 
+            services.AddSingleton<IFolderPickerService, FolderPickerService>();
+
             services.AddSingleton<MainWindowViewModel>();
 
             services.AddSingleton<InstalledGamesViewModel>();
@@ -19,6 +22,7 @@ namespace GameSaves.App
             services.AddSingleton<TransferPreviewViewModel>();
             services.AddSingleton<BackupHistoryViewModel>();
             services.AddSingleton<ManualBackupViewModel>();
+            services.AddSingleton<TransferHistoryViewModel>();
 
             return services.BuildServiceProvider();
         }

@@ -28,15 +28,22 @@ The long-term goal is a cross-platform Steam save manager with backup profiles, 
   * **Backup before overwrite (Safe Mode)** - every target file about to be replaced is backed up first; if the backup fails, that file is not overwritten.
   * Per-file execution results: copied / skipped / failed, with reasons and backup locations.
 * **Manual Backup tab** - on-demand backups:
-  * Choose a profile, an installed game, a backup source (Steam userdata folder, approved mappings, or both), and a destination folder.
+  * Choose a profile, an installed game, a backup source (Steam userdata folder, approved mappings, or both), and a destination folder via a native folder picker ("Choose Folder...") or by typing/editing the path directly.
   * Dry-run preview showing exactly which save locations and how many files will be backed up.
   * Every run is a fresh timestamped folder with mirrored original paths and a SHA-256 `manifest.json` - nothing is ever overwritten or deleted.
   * Backups written to the default location appear in the Backups tab and are restorable from there.
+  * **Named backup presets**: save the destination and source selection under a name (stored in SQLite) and reapply it with one click. Applying a preset never starts a backup by itself.
 * **Backups tab** - backup history and restore:
   * Lists every backup run from its `manifest.json` (game, profiles, timestamp, files, size).
   * Restore with dry-run preview, confirmation gate, and overwrite opt-in.
+  * **Restore target selection**: restore to the original locations (default), redirect the backup into a selected Steam profile's userdata folder for the same game, or restore into an approved mapping location resolved from the database - with the resolved target path shown before execution. Only approved, enabled mappings that resolve to exactly one path can be used.
+  * **Cleanup / retention** - the only delete in the app: remove a selected backup run, or apply a retention policy (keep newest N, optionally only runs older than D days). Preview-first with explicit confirmation; only manifest-bearing run folders inside the application backup base are ever deleted - save files and custom-destination backups are never touched. Every cleanup is recorded in the run history.
+  * **ZIP archive export / import**: export any backup run as a single self-contained ZIP (files + manifest) for cold storage or another machine, and import such a ZIP back into the backup base - the manifest's backup-file paths are rewritten to the extracted location and verified, so the imported run is fully restorable. Nothing is ever overwritten.
   * SHA-256 integrity check: tampered or missing backup files are never restored.
   * Pre-restore backup: files replaced by a restore are themselves backed up, so a restore is always undoable.
+* **History tab** - durable run history in SQLite (`transfer_runs` / `transfer_items`):
+  * Every executed transfer copy, restore, and manual backup is recorded automatically - counts, bytes, flags (dry run, overwrite, backups), blocking reason if refused, and per-file outcomes.
+  * Recording failures never fail the run itself; history is a pure audit trail.
 * Resizable panes (drag the dividers) so the app works on 1080p displays.
 
 ### Implemented - CLI / developer tooling
@@ -50,9 +57,7 @@ The long-term goal is a cross-platform Steam save manager with backup profiles, 
 
 ### Not implemented yet
 
-* SQLite transfer-history tables (`transfer_runs` / `transfer_items`).
-* Named backup profiles and retention/cleanup for old backup runs.
-* Archive support (ZIP/7z).
+* Compressed-by-default backups and 7z support (ZIP export/import of runs is done).
 * Cloud sync providers (local-folder sync provider first, then WebDAV/Nextcloud, SFTP, OneDrive/Google Drive).
 * Linux / macOS / Steam Deck discovery and platform-specific path expansion.
 * Scheduled backups, diff viewer, encryption.
@@ -129,6 +134,7 @@ Tabs:
 | Transfer Preview   | Copy saves between profiles: pick source, target, and game → Preview Copy (Dry Run) → confirm → Copy to Target Profile. |
 | Manual Backup      | Back up one game's saves for one profile on demand: choose sources and destination → preview → confirm → Back Up Now.   |
 | Backups            | Every backup run with its files and hashes; restore with dry-run preview and confirmation.          |
+| History            | Every executed transfer, restore, and manual backup from SQLite, with per-file outcomes.             |
 
 ### How a profile-to-profile copy works
 
@@ -277,10 +283,10 @@ Harvested data is candidate data: save locations can be wrong, incomplete, outda
 * [x] Manual on-demand backups - back up a selected game's saves for a chosen profile to a chosen destination (Manual Backup tab), without waiting for an overwrite.
 * [x] Backup and copy from profile to profile, sourced from the Steam userdata game folder and/or approved mappings in the database
     at C:\Users\<username>\AppData\Local\GameSave\gamesave.db (copy-only by design - move/delete is intentionally not supported).
-* [ ] Named backup profiles (saved destination + source presets).
-* [ ] SQLite history tables (`transfer_runs`, `transfer_items`) for transfers and restores.
-* [ ] Retention/cleanup for old backup runs.
-* [ ] Archive support (ZIP first, 7z later).
+* [x] Named backup presets (saved destination + source selection, stored in SQLite, applied from the Manual Backup tab).
+* [x] SQLite history tables (`transfer_runs`, `transfer_items`) recording transfers, restores, and manual backups, with a History tab.
+* [x] Retention/cleanup for old backup runs (preview-first, confirmation-gated, strictly scoped to the backup base, recorded in run history).
+* [x] ZIP archive support: export a run as one self-contained ZIP, import it back restorable (7z later).
 
 ### Phase 3 - Cloud sync abstraction
 

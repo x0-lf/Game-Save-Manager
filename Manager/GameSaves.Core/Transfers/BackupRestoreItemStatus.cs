@@ -23,6 +23,14 @@ namespace GameSaves.Core.Transfers
         // so the restore of this file was refused
         SkippedBackupFailed = 7,
 
-        Failed = 8
+        Failed = 8,
+
+        // The backup file is not inside a Steam userdata game folder, so it
+        // cannot be redirected to a different profile
+        SkippedNotProfileMappable = 9,
+
+        // The backup file's original path cannot be mapped into the resolved
+        // approved-mapping location
+        SkippedNotMappable = 10
     }
 }

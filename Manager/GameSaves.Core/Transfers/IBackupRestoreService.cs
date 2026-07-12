@@ -11,5 +11,14 @@ namespace GameSaves.Core.Transfers
             TransferBackupRunInfo run,
             BackupRestoreOptions options,
             CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Lists the approved save-path mappings for the backup's Steam AppID
+        /// as restore-target candidates, each with its resolved path. Only
+        /// approved/enabled mappings are considered.
+        /// </summary>
+        Task<IReadOnlyList<RestoreMappingTargetOption>> GetApprovedMappingTargetsAsync(
+            TransferBackupRunInfo run,
+            CancellationToken cancellationToken = default);
     }
 }

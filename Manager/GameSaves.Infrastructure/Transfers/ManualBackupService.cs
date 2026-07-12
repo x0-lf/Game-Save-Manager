@@ -19,18 +19,21 @@ namespace GameSaves.Infrastructure.Transfers
         private readonly ISavePathMappingRepository _mappingRepository;
         private readonly ICurrentPlatformProvider _platformProvider;
         private readonly ITransferOverwriteBackupService _backupEngine;
+        private readonly ITransferHistoryRepository _historyRepository;
         private readonly SavePathExpander _expander = new();
 
         public ManualBackupService(
             ISteamDiscoveryService steamDiscoveryService,
             ISavePathMappingRepository mappingRepository,
             ICurrentPlatformProvider platformProvider,
-            ITransferOverwriteBackupService backupEngine)
+            ITransferOverwriteBackupService backupEngine,
+            ITransferHistoryRepository historyRepository)
         {
             _steamDiscoveryService = steamDiscoveryService;
             _mappingRepository = mappingRepository;
             _platformProvider = platformProvider;
             _backupEngine = backupEngine;
+            _historyRepository = historyRepository;
         }
 
         public Task<ManualBackupPlan> CreatePreviewAsync(
@@ -383,6 +386,70 @@ namespace GameSaves.Infrastructure.Transfers
         // ---------------------------------------------------------------
 
         private ManualBackupResult Execute(
+            ManualBackupPlan plan,
+            ManualBackupExecuteOptions options,
+            CancellationToken cancellationToken)
+        {
+            DateTimeOffset startedUtc = DateTimeOffset.UtcNow;
+
+            ManualBackupResult result = ExecuteCore(plan, options, cancellationToken);
+
+            TryRecordHistory(plan, options, result, startedUtc);
+
+            return result;
+        }
+
+        private void TryRecordHistory(
+            ManualBackupPlan plan,
+            ManualBackupExecuteOptions options,
+            ManualBackupResult result,
+            DateTimeOffset startedUtc)
+        {
+            try
+            {
+                string? blockedReason = result.Warnings
+                    .Skip(plan.Warnings.Count)
+                    .FirstOrDefault(w => w.Severity == TransferWarningSeverity.Error)?
+                    .Message;
+
+                _historyRepository.RecordRun(new TransferRunRecord(
+                    Kind: TransferRunKind.ManualBackup,
+                    GameName: plan.Game.Name,
+                    SteamAppId: plan.Game.AppId,
+                    SourceAccountId: plan.Profile.AccountId,
+                    TargetAccountId: plan.Profile.AccountId,
+                    DryRun: options.DryRun,
+                    OverwriteEnabled: false,
+                    BackupEnabled: true,
+                    FilesConsidered: result.FilesConsidered,
+                    FilesCopied: result.FilesBackedUp,
+                    FilesSkipped: result.FilesSkipped,
+                    FilesFailed: result.Items.Count(i => i.Status == SaveTransferItemStatus.Failed),
+                    BytesCopied: result.BytesBackedUp,
+                    FilesBackedUp: result.FilesBackedUp,
+                    BackupRootPath: result.BackupRootPath,
+                    BlockedReason: blockedReason,
+                    StartedUtc: startedUtc,
+                    CompletedUtc: DateTimeOffset.UtcNow,
+                    Items: result.Items
+                        .Select(i => new TransferRunItemRecord(
+                            i.SourceFile,
+                            i.TargetFile,
+                            i.Bytes,
+                            i.Copied,
+                            i.Status.ToString(),
+                            i.Error,
+                            BackupFile: null))
+                        .ToList()));
+            }
+            catch
+            {
+                // History is an audit trail; a recording failure must never
+                // fail the backup itself.
+            }
+        }
+
+        private ManualBackupResult ExecuteCore(
             ManualBackupPlan plan,
             ManualBackupExecuteOptions options,
             CancellationToken cancellationToken)

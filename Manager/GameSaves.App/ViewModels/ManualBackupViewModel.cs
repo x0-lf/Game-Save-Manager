@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using GameSaves.App.Models;
+using GameSaves.App.Services;
 using GameSaves.Core.Transfers;
 using System;
 using System.Collections.ObjectModel;
@@ -13,9 +14,13 @@ namespace GameSaves.App.ViewModels
     {
         private readonly IManualBackupService _manualBackupService;
         private readonly IBackupHistoryService _backupHistoryService;
+        private readonly IFolderPickerService _folderPickerService;
+        private readonly IManualBackupPresetRepository _presetRepository;
         private readonly ProfilesViewModel _profilesViewModel;
         private readonly InstalledGamesViewModel _installedGamesViewModel;
         private ManualBackupPlan? _lastPlan;
+        private bool _presetsLoaded;
+        private bool _applyingPreset;
 
         [ObservableProperty]
         private bool isLoading;
@@ -79,34 +84,216 @@ namespace GameSaves.App.ViewModels
 
         public ObservableCollection<SaveTransferItemResultRowViewModel> ExecutionResults { get; } = new();
 
+        [ObservableProperty]
+        private BackupPresetRowViewModel? selectedPreset;
+
+        [ObservableProperty]
+        private string presetName = "";
+
+        public ObservableCollection<BackupPresetRowViewModel> Presets { get; } = new();
+
         public ManualBackupViewModel(
             IManualBackupService manualBackupService,
             IBackupHistoryService backupHistoryService,
+            IFolderPickerService folderPickerService,
+            IManualBackupPresetRepository presetRepository,
             ProfilesViewModel profilesViewModel,
             InstalledGamesViewModel installedGamesViewModel)
         {
             _manualBackupService = manualBackupService;
             _backupHistoryService = backupHistoryService;
+            _folderPickerService = folderPickerService;
+            _presetRepository = presetRepository;
             _profilesViewModel = profilesViewModel;
             _installedGamesViewModel = installedGamesViewModel;
 
             destinationPath = _backupHistoryService.GetBackupBasePath();
         }
 
+        public string PresetStatusDisplay => SelectedPreset is null
+            ? "No preset selected - the backup uses the settings exactly as shown."
+            : $"Preset \"{SelectedPreset.Name}\" is selected.";
+
+        partial void OnSelectedPresetChanged(BackupPresetRowViewModel? value)
+        {
+            OnPropertyChanged(nameof(PresetStatusDisplay));
+
+            if (value is null)
+                return;
+
+            // Applying a preset must not read as a manual edit, which would
+            // immediately deselect it again.
+            _applyingPreset = true;
+
+            try
+            {
+                PresetName = value.Name;
+                DestinationPath = value.Preset.DestinationRoot;
+                IncludeSteamUserDataGameFolder = value.Preset.IncludeSteamUserDataGameFolder;
+                IncludeApprovedMappings = value.Preset.IncludeApprovedMappings;
+            }
+            finally
+            {
+                _applyingPreset = false;
+            }
+
+            StatusMessage = $"Preset \"{value.Name}\" applied. Build a new backup preview.";
+
+            long presetId = value.Id;
+
+            _ = Task.Run(() =>
+            {
+                try
+                {
+                    _presetRepository.MarkUsed(presetId);
+                }
+                catch
+                {
+                    // Usage tracking is best-effort only.
+                }
+            });
+        }
+
+        [RelayCommand]
+        private void ClearPresetSelection()
+        {
+            if (SelectedPreset is null)
+            {
+                StatusMessage = "No preset is selected. The backup uses the current settings.";
+                return;
+            }
+
+            SelectedPreset = null;
+            StatusMessage = "Preset selection cleared. The current settings are kept and the backup runs without a preset.";
+        }
+
+        // A manual edit means the settings no longer match the selected preset;
+        // deselect it so the UI never claims a preset that will not be used.
+        private void DeselectPresetAfterManualEdit()
+        {
+            if (!_applyingPreset && SelectedPreset is not null)
+                SelectedPreset = null;
+        }
+
+        private async Task LoadPresetsAsync()
+        {
+            var presets = await Task.Run(() => _presetRepository.GetAll());
+
+            SelectedPreset = null;
+            Presets.Clear();
+
+            foreach (ManualBackupPreset preset in presets)
+                Presets.Add(new BackupPresetRowViewModel(preset));
+
+            _presetsLoaded = true;
+        }
+
+        [RelayCommand]
+        private async Task SavePresetAsync()
+        {
+            if (IsLoading)
+                return;
+
+            if (string.IsNullOrWhiteSpace(PresetName))
+            {
+                StatusMessage = "Enter a preset name before saving.";
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(DestinationPath))
+            {
+                StatusMessage = "A preset needs a backup destination.";
+                return;
+            }
+
+            try
+            {
+                var toSave = new ManualBackupPreset(
+                    Id: 0,
+                    Name: PresetName.Trim(),
+                    DestinationRoot: DestinationPath,
+                    IncludeSteamUserDataGameFolder: IncludeSteamUserDataGameFolder,
+                    IncludeApprovedMappings: IncludeApprovedMappings,
+                    CreatedUtc: DateTimeOffset.UtcNow,
+                    LastUsedUtc: null);
+
+                ManualBackupPreset saved =
+                    await Task.Run(() => _presetRepository.Save(toSave));
+
+                await LoadPresetsAsync();
+
+                StatusMessage = $"Preset \"{saved.Name}\" saved.";
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Failed to save the preset: {ex.Message}";
+            }
+        }
+
+        [RelayCommand]
+        private async Task DeletePresetAsync()
+        {
+            if (IsLoading)
+                return;
+
+            if (SelectedPreset is null)
+            {
+                StatusMessage = "Select a preset to delete.";
+                return;
+            }
+
+            try
+            {
+                string name = SelectedPreset.Name;
+                long id = SelectedPreset.Id;
+
+                await Task.Run(() => _presetRepository.Delete(id));
+                await LoadPresetsAsync();
+
+                StatusMessage = $"Preset \"{name}\" deleted. Saved backups are not affected.";
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Failed to delete the preset: {ex.Message}";
+            }
+        }
+
+        [RelayCommand]
+        private async Task ChooseDestinationFolderAsync()
+        {
+            try
+            {
+                string? picked = await _folderPickerService.PickFolderAsync(
+                    "Select where this backup should be stored.",
+                    DestinationPath);
+
+                // Cancel keeps the current destination unchanged.
+                if (!string.IsNullOrWhiteSpace(picked))
+                    DestinationPath = picked;
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Could not open the folder picker: {ex.Message}";
+            }
+        }
+
         partial void OnIncludeSteamUserDataGameFolderChanged(bool value)
         {
             OnPropertyChanged(nameof(HasAnyBackupSource));
+            DeselectPresetAfterManualEdit();
             InvalidatePlan();
         }
 
         partial void OnIncludeApprovedMappingsChanged(bool value)
         {
             OnPropertyChanged(nameof(HasAnyBackupSource));
+            DeselectPresetAfterManualEdit();
             InvalidatePlan();
         }
 
         partial void OnDestinationPathChanged(string value)
         {
+            DeselectPresetAfterManualEdit();
             InvalidatePlan();
         }
 
@@ -137,6 +324,9 @@ namespace GameSaves.App.ViewModels
 
                 if (Games.Count == 0)
                     await _installedGamesViewModel.RefreshCommand.ExecuteAsync(null);
+
+                if (!_presetsLoaded)
+                    await LoadPresetsAsync();
 
                 SelectedProfile ??= Profiles.FirstOrDefault();
                 SelectedGame ??= Games.FirstOrDefault();
@@ -188,7 +378,7 @@ namespace GameSaves.App.ViewModels
 
             if (string.IsNullOrWhiteSpace(DestinationPath))
             {
-                StatusMessage = "Enter a backup destination folder.";
+                StatusMessage = "Destination is required before previewing a backup. Use \"Choose Folder...\" or type a folder path.";
                 return;
             }
 

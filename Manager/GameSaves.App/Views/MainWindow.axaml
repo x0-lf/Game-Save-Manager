@@ -277,6 +277,11 @@
 			<TabItem Header="Backups">
 				<views:BackupHistoryView DataContext="{Binding BackupHistory}" />
 			</TabItem>
+
+			<!-- Executed-run history from SQLite -->
+			<TabItem Header="History">
+				<views:TransferHistoryView DataContext="{Binding TransferHistory}" />
+			</TabItem>
 		</TabControl>
 	</Grid>
 </Window>

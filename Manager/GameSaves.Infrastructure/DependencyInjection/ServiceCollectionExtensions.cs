@@ -36,6 +36,8 @@ namespace GameSaves.Infrastructure.DependencyInjection
             services.AddSingleton<IBackupHistoryService, BackupHistoryService>();
             services.AddSingleton<IBackupRestoreService, BackupRestoreService>();
             services.AddSingleton<IManualBackupService, ManualBackupService>();
+            services.AddSingleton<IBackupCleanupService, BackupCleanupService>();
+            services.AddSingleton<IBackupArchiveService, BackupArchiveService>();
 
             services.AddSingleton<ISavePathMappingRepository>(provider =>
             {
@@ -43,6 +45,24 @@ namespace GameSaves.Infrastructure.DependencyInjection
                     provider.GetRequiredService<IAppDatabasePathProvider>();
 
                 return new SqliteSavePathMappingRepository(
+                    pathProvider.GetDatabasePath());
+            });
+
+            services.AddSingleton<ITransferHistoryRepository>(provider =>
+            {
+                IAppDatabasePathProvider pathProvider =
+                    provider.GetRequiredService<IAppDatabasePathProvider>();
+
+                return new SqliteTransferHistoryRepository(
+                    pathProvider.GetDatabasePath());
+            });
+
+            services.AddSingleton<IManualBackupPresetRepository>(provider =>
+            {
+                IAppDatabasePathProvider pathProvider =
+                    provider.GetRequiredService<IAppDatabasePathProvider>();
+
+                return new SqliteManualBackupPresetRepository(
                     pathProvider.GetDatabasePath());
             });
 
