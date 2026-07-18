@@ -1,4 +1,4 @@
-﻿namespace GameSaves.Reviewer
+namespace GameSaves.Reviewer.Models
 {
     public sealed class MappingReviewItem
     {
@@ -33,5 +33,7 @@
         public string DisplayTitle => string.IsNullOrWhiteSpace(GameName)
             ? $"Steam App {SteamAppId}"
             : GameName;
+
+        public bool HasSourceUrl => !string.IsNullOrWhiteSpace(SourceUrl);
     }
 }

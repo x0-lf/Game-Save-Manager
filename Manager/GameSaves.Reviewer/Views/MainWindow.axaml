@@ -1,0 +1,296 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:GameSaves.Reviewer.ViewModels"
+        x:Class="GameSaves.Reviewer.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="Game Saves Manager - Mapping Reviewer"
+        Width="1500"
+        Height="900"
+        MinWidth="1100"
+        MinHeight="650"
+        WindowStartupLocation="CenterScreen"
+        Background="#111217">
+
+    <Window.Resources>
+        <SolidColorBrush x:Key="CardBackgroundBrush" Color="#1A1B22" />
+        <SolidColorBrush x:Key="CardBorderBrush" Color="#2A2C36" />
+        <SolidColorBrush x:Key="PrimaryTextBrush" Color="#F4F4F5" />
+        <SolidColorBrush x:Key="SecondaryTextBrush" Color="#A7AAB4" />
+        <SolidColorBrush x:Key="MutedTextBrush" Color="#777B86" />
+        <SolidColorBrush x:Key="AccentBrush" Color="#7C9CFF" />
+        <SolidColorBrush x:Key="SuccessBrush" Color="#6EE7A8" />
+        <SolidColorBrush x:Key="WarningBrush" Color="#FACC6B" />
+        <SolidColorBrush x:Key="DangerBrush" Color="#F87171" />
+    </Window.Resources>
+
+    <Grid RowDefinitions="Auto,Auto,*,Auto"
+          RowSpacing="10"
+          Margin="14">
+
+        <!-- Header -->
+        <Border Grid.Row="0"
+                Background="{StaticResource CardBackgroundBrush}"
+                BorderBrush="{StaticResource CardBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="14"
+                Padding="14,10">
+
+            <Grid ColumnDefinitions="*,Auto"
+                  ColumnSpacing="12">
+
+                <StackPanel Grid.Column="0"
+                            Spacing="2">
+                    <TextBlock Text="PCGamingWiki Mapping Reviewer"
+                               Foreground="{StaticResource PrimaryTextBrush}"
+                               FontSize="18"
+                               FontWeight="Bold" />
+
+                    <TextBlock Text="{Binding StatusMessage}"
+                               Foreground="{StaticResource SecondaryTextBrush}"
+                               FontSize="12"
+                               TextWrapping="Wrap" />
+
+                    <TextBlock Text="{Binding DatabasePath, StringFormat='Database: {0}'}"
+                               Foreground="{StaticResource MutedTextBrush}"
+                               FontSize="11"
+                               TextTrimming="CharacterEllipsis"
+                               ToolTip.Tip="{Binding DatabasePath}" />
+                </StackPanel>
+
+                <Button Grid.Column="1"
+                        Content="Reload (Ctrl+R)"
+                        Command="{Binding ReloadCommand}"
+                        Height="34"
+                        VerticalAlignment="Center" />
+            </Grid>
+        </Border>
+
+        <!-- Filters and counts -->
+        <Border Grid.Row="1"
+                Background="{StaticResource CardBackgroundBrush}"
+                BorderBrush="{StaticResource CardBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="14"
+                Padding="14,8">
+
+            <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto"
+                  ColumnSpacing="14">
+
+                <StackPanel Grid.Column="0"
+                            Orientation="Horizontal"
+                            Spacing="6">
+                    <TextBlock Text="Status"
+                               Foreground="{StaticResource SecondaryTextBrush}"
+                               FontSize="12"
+                               VerticalAlignment="Center" />
+
+                    <ComboBox ItemsSource="{Binding StatusFilters}"
+                              SelectedItem="{Binding StatusFilter}"
+                              Width="130"
+                              MinHeight="30" />
+                </StackPanel>
+
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal"
+                            Spacing="6">
+                    <TextBlock Text="Search"
+                               Foreground="{StaticResource SecondaryTextBrush}"
+                               FontSize="12"
+                               VerticalAlignment="Center" />
+
+                    <TextBox Text="{Binding SearchText}"
+                             Watermark="AppID, game, platform, path, URL"
+                             Width="300"
+                             MinHeight="30" />
+                </StackPanel>
+
+                <StackPanel Grid.Column="2"
+                            Orientation="Horizontal"
+                            Spacing="6">
+                    <TextBlock Text="Limit"
+                               Foreground="{StaticResource SecondaryTextBrush}"
+                               FontSize="12"
+                               VerticalAlignment="Center" />
+
+                    <TextBox Text="{Binding LimitText}"
+                             Width="70"
+                             MinHeight="30" />
+                </StackPanel>
+
+                <StackPanel Grid.Column="4"
+                            Orientation="Horizontal"
+                            Spacing="14"
+                            VerticalAlignment="Center">
+                    <TextBlock Text="{Binding PendingCount, StringFormat='Pending: {0}'}"
+                               Foreground="{StaticResource WarningBrush}"
+                               FontSize="12" />
+
+                    <TextBlock Text="{Binding ApprovedCount, StringFormat='Approved: {0}'}"
+                               Foreground="{StaticResource SuccessBrush}"
+                               FontSize="12" />
+
+                    <TextBlock Text="{Binding RejectedCount, StringFormat='Rejected: {0}'}"
+                               Foreground="{StaticResource DangerBrush}"
+                               FontSize="12" />
+
+                    <TextBlock Text="{Binding NeedsFixCount, StringFormat='NeedsFix: {0}'}"
+                               Foreground="{StaticResource AccentBrush}"
+                               FontSize="12" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Mapping grid -->
+        <Border Grid.Row="2"
+                Background="{StaticResource CardBackgroundBrush}"
+                BorderBrush="{StaticResource CardBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="14"
+                Padding="4">
+
+            <DataGrid x:Name="MappingsGrid"
+                      ItemsSource="{Binding Items}"
+                      SelectedItem="{Binding SelectedItem}"
+                      SelectionMode="Extended"
+                      IsReadOnly="True"
+                      CanUserReorderColumns="True"
+                      CanUserResizeColumns="True"
+                      CanUserSortColumns="True"
+                      GridLinesVisibility="Horizontal"
+                      Background="Transparent"
+                      SelectionChanged="OnGridSelectionChanged"
+                      DoubleTapped="OnGridDoubleTapped">
+
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Id" Binding="{Binding Id}" Width="70" />
+                    <DataGridTextColumn Header="AppID" Binding="{Binding SteamAppId}" Width="90" />
+                    <DataGridTextColumn Header="Game" Binding="{Binding DisplayTitle}" Width="230" />
+                    <DataGridTextColumn Header="Platform" Binding="{Binding Platform}" Width="90" />
+                    <DataGridTextColumn Header="Path template" Binding="{Binding PathTemplate}" Width="440" />
+                    <DataGridTextColumn Header="Kind" Binding="{Binding PathKind}" Width="80" />
+                    <DataGridTextColumn Header="Priority" Binding="{Binding Priority}" Width="75" />
+                    <DataGridTextColumn Header="Enabled" Binding="{Binding Enabled}" Width="75" />
+                    <DataGridTextColumn Header="Review" Binding="{Binding ReviewStatus}" Width="90" />
+                    <DataGridTextColumn Header="Source URL" Binding="{Binding SourceUrl}" Width="300" />
+                </DataGrid.Columns>
+            </DataGrid>
+        </Border>
+
+        <!-- Actions and details -->
+        <Border Grid.Row="3"
+                Background="{StaticResource CardBackgroundBrush}"
+                BorderBrush="{StaticResource CardBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="14"
+                Padding="14,10">
+
+            <Grid ColumnDefinitions="*,*"
+                  ColumnSpacing="18">
+
+                <!-- Review actions -->
+                <StackPanel Grid.Column="0"
+                            Spacing="6">
+                    <StackPanel Orientation="Horizontal"
+                                Spacing="8">
+                        <TextBlock Text="{Binding SelectionCount, StringFormat='Selected: {0}'}"
+                                   Foreground="{StaticResource SecondaryTextBrush}"
+                                   FontSize="12"
+                                   FontWeight="Bold"
+                                   VerticalAlignment="Center" />
+
+                        <TextBlock Text="Approve priority"
+                                   Foreground="{StaticResource SecondaryTextBrush}"
+                                   FontSize="12"
+                                   VerticalAlignment="Center"
+                                   Margin="10,0,0,0" />
+
+                        <TextBox Text="{Binding ApprovePriorityText}"
+                                 Width="60"
+                                 MinHeight="28" />
+                    </StackPanel>
+
+                    <StackPanel Orientation="Horizontal"
+                                Spacing="8">
+                        <Button Content="Approve (A)"
+                                Command="{Binding ApproveSelectedCommand}"
+                                Height="32"
+                                ToolTip.Tip="Approves and enables the selected mappings with the given priority. Approved mappings become trusted by the manager." />
+
+                        <Button Content="Reject (R)"
+                                Command="{Binding RejectSelectedCommand}"
+                                Height="32"
+                                ToolTip.Tip="Rejects and disables the selected mappings." />
+
+                        <Button Content="Needs Fix (F)"
+                                Command="{Binding MarkNeedsFixSelectedCommand}"
+                                Height="32"
+                                ToolTip.Tip="Marks the selected mappings as needing a manual fix; they stay disabled." />
+
+                        <Button Content="Reset to Pending"
+                                Command="{Binding ResetSelectedCommand}"
+                                Height="32"
+                                ToolTip.Tip="Clears the review decision and returns the selected mappings to the Pending queue." />
+
+                        <Button Content="Open Source (O)"
+                                Command="{Binding OpenSelectedSourceCommand}"
+                                Height="32"
+                                ToolTip.Tip="Opens the mapping's PCGamingWiki source page in the browser. Double-clicking a row does the same." />
+                    </StackPanel>
+
+                    <TextBlock Text="Review notes (stored with the decision)"
+                               Foreground="{StaticResource SecondaryTextBrush}"
+                               FontSize="12" />
+
+                    <TextBox Text="{Binding ReviewNotes}"
+                             Watermark="Optional notes explaining this decision"
+                             AcceptsReturn="True"
+                             TextWrapping="Wrap"
+                             Height="64" />
+
+                    <TextBlock Text="Shortcuts: A approve, R reject, F needs fix, O open source, Ctrl+R reload. Letter keys are ignored while typing in a text box."
+                               Foreground="{StaticResource MutedTextBrush}"
+                               FontSize="11"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+
+                <!-- Selected mapping details -->
+                <StackPanel Grid.Column="1"
+                            Spacing="4">
+                    <TextBlock Text="Selected mapping"
+                               Foreground="{StaticResource SecondaryTextBrush}"
+                               FontSize="12"
+                               FontWeight="Bold" />
+
+                    <TextBox Text="{Binding SelectedItem.PathTemplate, FallbackValue=''}"
+                             IsReadOnly="True"
+                             FontFamily="Consolas,monospace"
+                             FontSize="12"
+                             MinHeight="28"
+                             ToolTip.Tip="The raw path template. Read-only; select and copy freely." />
+
+                    <TextBlock Text="{Binding SelectedItem.Notes, StringFormat='Notes: {0}', FallbackValue='Notes: -'}"
+                               Foreground="{StaticResource MutedTextBrush}"
+                               FontSize="11"
+                               TextWrapping="Wrap"
+                               MaxHeight="42" />
+
+                    <TextBlock Text="{Binding SelectedItem.ReviewNotes, StringFormat='Review notes: {0}', FallbackValue='Review notes: -'}"
+                               Foreground="{StaticResource MutedTextBrush}"
+                               FontSize="11"
+                               TextWrapping="Wrap"
+                               MaxHeight="42" />
+
+                    <TextBlock Text="{Binding SelectedItem.SourceLicense, StringFormat='License: {0}', FallbackValue='License: -'}"
+                               Foreground="{StaticResource MutedTextBrush}"
+                               FontSize="11" />
+
+                    <TextBlock Text="{Binding SelectedItem.SourceUrl, FallbackValue=''}"
+                               Foreground="{StaticResource AccentBrush}"
+                               FontSize="11"
+                               TextTrimming="CharacterEllipsis"
+                               ToolTip.Tip="{Binding SelectedItem.SourceUrl}" />
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

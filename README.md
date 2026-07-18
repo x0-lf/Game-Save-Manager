@@ -117,7 +117,7 @@ Layering rules:
 | `GameSaves.Infrastructure` | Registry, VDF, filesystem, SQLite, path expansion, transfer/backup/restore logic.            |
 | `GameSaves.App`            | Thin Avalonia UI over the services. No business logic in views.                              |
 | `GameSaves`                | Developer CLI and data-harvesting tooling. Kept working as a test harness.                   |
-| `GameSaves.Reviewer`       | Internal tool to review whether scraped save paths are accurate before they are trusted.     |
+| `GameSaves.Reviewer`       | Internal Avalonia tool to review whether scraped save paths are accurate before they are trusted (approve/reject/needs-fix with notes, search/filter, keyboard shortcuts). Self-contained: it does not reference Core or Infrastructure. |
 
 Trusted data rule: only mappings with review status **Approved** are used by the transfer flow. Pending/NeedsFix mappings are visible but never trusted automatically.
 

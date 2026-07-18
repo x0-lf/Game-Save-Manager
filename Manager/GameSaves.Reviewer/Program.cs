@@ -1,27 +1,35 @@
+using Avalonia;
+
 namespace GameSaves.Reviewer
 {
     internal static class Program
     {
-        [STAThread]
-        private static void Main(string[] args)
-        {
-            ApplicationConfiguration.Initialize();
+        public static string DatabasePath { get; private set; } = string.Empty;
 
-            string databasePath = args.Length >= 1 && !string.IsNullOrWhiteSpace(args[0])
+        [STAThread]
+        public static void Main(string[] args)
+        {
+            DatabasePath = args.Length >= 1 && !string.IsNullOrWhiteSpace(args[0])
                 ? args[0]
                 : GetDefaultDatabasePath();
 
-            Application.Run(new MainForm(databasePath));
+            BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+        }
+
+        public static AppBuilder BuildAvaloniaApp()
+        {
+            return AppBuilder.Configure<App>()
+                .UsePlatformDetect()
+                .WithInterFont()
+                .LogToTrace();
         }
 
         private static string GetDefaultDatabasePath()
         {
-            string appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            string appData = Environment.GetFolderPath(
+                Environment.SpecialFolder.LocalApplicationData);
 
-            return Path.Combine(
-                appData,
-                "GameSave",
-                "gamesave.db");
+            return Path.Combine(appData, "GameSave", "gamesave.db");
         }
     }
 }
