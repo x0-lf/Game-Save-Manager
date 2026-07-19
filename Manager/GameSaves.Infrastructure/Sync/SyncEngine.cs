@@ -303,18 +303,44 @@ namespace GameSaves.Infrastructure.Sync
                 return RecordAndBuild(plan, options, results, warnings, startedUtc);
             }
 
+            bool IsSelected(SyncItem item) =>
+                options.OnlyRunNames is null ||
+                options.OnlyRunNames.Contains(item.RunName, StringComparer.OrdinalIgnoreCase);
+
+            var progressState = new ProgressState
+            {
+                RunsTotal = plan.Items.Count(i =>
+                    i.Action is SyncItemAction.UploadToRemote or SyncItemAction.DownloadToLocal &&
+                    IsSelected(i)),
+                BytesTotal = plan.Items
+                    .Where(i => i.Action is SyncItemAction.UploadToRemote or SyncItemAction.DownloadToLocal &&
+                                IsSelected(i))
+                    .Sum(i => i.TotalBytes)
+            };
+
             foreach (SyncItem item in plan.Items)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
                 switch (item.Action)
                 {
+                    case SyncItemAction.UploadToRemote when !IsSelected(item):
+                    case SyncItemAction.DownloadToLocal when !IsSelected(item):
+                        results.Add(new SyncItemResult(
+                            item,
+                            0,
+                            SyncItemStatus.SkippedDeselected,
+                            "Deselected in the sync plan; not copied."));
+                        break;
+
                     case SyncItemAction.UploadToRemote:
-                        results.Add(await UploadRunAsync(item, options.DryRun, cancellationToken));
+                        results.Add(await UploadRunAsync(item, options, progressState, cancellationToken));
+                        progressState.RunsDone++;
                         break;
 
                     case SyncItemAction.DownloadToLocal:
-                        results.Add(await DownloadRunAsync(item, options.DryRun, cancellationToken));
+                        results.Add(await DownloadRunAsync(item, options, progressState, cancellationToken));
+                        progressState.RunsDone++;
                         break;
 
                     case SyncItemAction.Conflict:
@@ -335,7 +361,8 @@ namespace GameSaves.Infrastructure.Sync
 
         private async Task<SyncItemResult> UploadRunAsync(
             SyncItem item,
-            bool dryRun,
+            SyncOptions options,
+            ProgressState progressState,
             CancellationToken cancellationToken)
         {
             try
@@ -357,7 +384,7 @@ namespace GameSaves.Infrastructure.Sync
                         "The target appeared since the preview. Nothing is ever overwritten.");
                 }
 
-                if (dryRun)
+                if (options.DryRun)
                 {
                     return new SyncItemResult(
                         item, item.TotalBytes, SyncItemStatus.DryRun,
@@ -386,10 +413,14 @@ namespace GameSaves.Infrastructure.Sync
                     string relative = Path.GetRelativePath(localRoot, localFile)
                         .Replace(Path.DirectorySeparatorChar, '/');
 
-                    bytes += await _remote.UploadFileAsync(
+                    long fileBytes = await _remote.UploadFileAsync(
                         localFile,
                         $"{item.RunName}/{relative}",
                         cancellationToken);
+
+                    bytes += fileBytes;
+                    progressState.BytesDone += fileBytes;
+                    ReportProgress(options, progressState, item.RunName, relative);
                 }
 
                 return new SyncItemResult(item, bytes, SyncItemStatus.Uploaded, null);
@@ -406,7 +437,8 @@ namespace GameSaves.Infrastructure.Sync
 
         private async Task<SyncItemResult> DownloadRunAsync(
             SyncItem item,
-            bool dryRun,
+            SyncOptions options,
+            ProgressState progressState,
             CancellationToken cancellationToken)
         {
             try
@@ -429,7 +461,7 @@ namespace GameSaves.Infrastructure.Sync
                         "The source run folder or its manifest no longer exists.");
                 }
 
-                if (dryRun)
+                if (options.DryRun)
                 {
                     return new SyncItemResult(
                         item, item.TotalBytes, SyncItemStatus.DryRun,
@@ -442,10 +474,14 @@ namespace GameSaves.Infrastructure.Sync
                 {
                     cancellationToken.ThrowIfCancellationRequested();
 
-                    bytes += await _remote.DownloadFileAsync(
+                    long fileBytes = await _remote.DownloadFileAsync(
                         $"{item.RunName}/{relative}",
                         Path.Combine(localTarget, relative.Replace('/', Path.DirectorySeparatorChar)),
                         cancellationToken);
+
+                    bytes += fileBytes;
+                    progressState.BytesDone += fileBytes;
+                    ReportProgress(options, progressState, item.RunName, relative);
                 }
 
                 // The downloaded manifest records backup-file paths from the
@@ -482,6 +518,31 @@ namespace GameSaves.Infrastructure.Sync
             {
                 return new SyncItemResult(item, 0, SyncItemStatus.Failed, ex.Message);
             }
+        }
+
+        private sealed class ProgressState
+        {
+            public int RunsDone;
+            public int RunsTotal;
+            public long BytesDone;
+            public long BytesTotal;
+        }
+
+        private static void ReportProgress(
+            SyncOptions options,
+            ProgressState state,
+            string runName,
+            string currentFile)
+        {
+            // Actual bytes can slightly exceed the planned total (manifests are
+            // not counted in run sizes), so clamp for a clean progress bar.
+            options.Progress?.Report(new SyncProgress(
+                RunName: runName,
+                CurrentFile: currentFile,
+                RunsDone: state.RunsDone,
+                RunsTotal: state.RunsTotal,
+                BytesDone: Math.Min(state.BytesDone, state.BytesTotal),
+                BytesTotal: state.BytesTotal));
         }
 
         private static bool IsRunManifest(string runRoot, string filePath)
@@ -666,7 +727,8 @@ namespace GameSaves.Infrastructure.Sync
 
             int skipped = results.Count(r =>
                 r.Status is SyncItemStatus.SkippedConflict
-                    or SyncItemStatus.SkippedAlreadyExists);
+                    or SyncItemStatus.SkippedAlreadyExists
+                    or SyncItemStatus.SkippedDeselected);
 
             long bytesCopied = results
                 .Where(r => r.Status is SyncItemStatus.Uploaded or SyncItemStatus.Downloaded)

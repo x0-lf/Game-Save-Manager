@@ -32,6 +32,9 @@ namespace GameSaves.Core.Sync
         // The target appeared since the preview; nothing is ever overwritten
         SkippedAlreadyExists = 5,
 
-        Failed = 6
+        Failed = 6,
+
+        // The user deselected this run in the plan; it was not copied
+        SkippedDeselected = 7
     }
 }

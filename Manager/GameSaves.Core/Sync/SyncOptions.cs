@@ -11,5 +11,15 @@ namespace GameSaves.Core.Sync
 
         /// <summary>Copy remote-only runs to the local backup base.</summary>
         public bool Download { get; init; } = true;
+
+        /// <summary>
+        /// When set, only plan items with these run names are copied; other
+        /// actionable items are reported as deselected. Null copies everything
+        /// the plan allows.
+        /// </summary>
+        public IReadOnlyCollection<string>? OnlyRunNames { get; init; }
+
+        /// <summary>Reported after every copied file during execution.</summary>
+        public IProgress<SyncProgress>? Progress { get; init; }
     }
 }

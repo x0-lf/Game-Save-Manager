@@ -1,16 +1,34 @@
+using CommunityToolkit.Mvvm.ComponentModel;
 using GameSaves.Core.Sync;
+using System;
 using System.Linq;
 
 namespace GameSaves.App.Models
 {
-    public sealed class SyncItemRowViewModel
+    public sealed partial class SyncItemRowViewModel : ObservableObject
     {
-        public SyncItemRowViewModel(SyncItem item)
+        private readonly Action? _selectionChanged;
+
+        // Actionable runs are included by default; unticking excludes just
+        // that run from execution without rebuilding the preview.
+        [ObservableProperty]
+        private bool includeInSync = true;
+
+        public SyncItemRowViewModel(SyncItem item, Action? selectionChanged = null)
         {
             Item = item;
+            _selectionChanged = selectionChanged;
+        }
+
+        partial void OnIncludeInSyncChanged(bool value)
+        {
+            _selectionChanged?.Invoke();
         }
 
         public SyncItem Item { get; }
+
+        public bool IsSelectable =>
+            Item.Action is SyncItemAction.UploadToRemote or SyncItemAction.DownloadToLocal;
 
         public string RunName => Item.RunName;
 

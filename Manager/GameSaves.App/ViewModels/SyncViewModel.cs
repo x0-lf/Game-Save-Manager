@@ -78,6 +78,36 @@ namespace GameSaves.App.ViewModels
         [ObservableProperty]
         private string executionStatusMessage = "No sync executed.";
 
+        [ObservableProperty]
+        private bool targetSectionExpanded = true;
+
+        [ObservableProperty]
+        private bool planSectionExpanded = true;
+
+        [ObservableProperty]
+        private bool warningsSectionExpanded = true;
+
+        [ObservableProperty]
+        private bool resultsSectionExpanded = true;
+
+        [ObservableProperty]
+        private bool historySectionExpanded = true;
+
+        [ObservableProperty]
+        private string selectedSummaryDisplay = "";
+
+        [ObservableProperty]
+        private bool isSyncRunning;
+
+        [ObservableProperty]
+        private double progressValue;
+
+        [ObservableProperty]
+        private double progressMax = 1;
+
+        [ObservableProperty]
+        private string progressText = "";
+
         public ObservableCollection<SyncItemRowViewModel> Items { get; } = new();
 
         public ObservableCollection<TransferWarningRowViewModel> Warnings { get; } = new();
@@ -233,7 +263,39 @@ namespace GameSaves.App.ViewModels
             Items.Clear();
             Warnings.Clear();
             SummaryDisplay = "";
+            SelectedSummaryDisplay = "";
             CanExecuteSync = false;
+        }
+
+        private void UpdateSelectedSummary()
+        {
+            var selectable = Items.Where(row => row.IsSelectable).ToList();
+
+            if (selectable.Count == 0)
+            {
+                SelectedSummaryDisplay = "";
+                return;
+            }
+
+            var selected = selectable.Where(row => row.IncludeInSync).ToList();
+
+            SelectedSummaryDisplay =
+                $"Selected for sync: {selected.Count} of {selectable.Count} run(s) " +
+                $"({FormatBytes(selected.Sum(row => row.Item.TotalBytes))})";
+        }
+
+        [RelayCommand]
+        private void SelectAllRuns()
+        {
+            foreach (SyncItemRowViewModel row in Items.Where(r => r.IsSelectable))
+                row.IncludeInSync = true;
+        }
+
+        [RelayCommand]
+        private void DeselectAllRuns()
+        {
+            foreach (SyncItemRowViewModel row in Items.Where(r => r.IsSelectable))
+                row.IncludeInSync = false;
         }
 
         [RelayCommand]
@@ -309,7 +371,7 @@ namespace GameSaves.App.ViewModels
                 ConfirmSync = false;
 
                 foreach (SyncItem item in plan.Items)
-                    Items.Add(new SyncItemRowViewModel(item));
+                    Items.Add(new SyncItemRowViewModel(item, UpdateSelectedSummary));
 
                 foreach (TransferPreviewWarning warning in plan.Warnings)
                     Warnings.Add(new TransferWarningRowViewModel(warning));
@@ -319,10 +381,19 @@ namespace GameSaves.App.ViewModels
                     $"Download: {plan.DownloadCount} run(s) ({FormatBytes(plan.BytesToDownload)})   " +
                     $"In sync: {plan.InSyncCount}   Conflicts: {plan.ConflictCount}";
 
+                UpdateSelectedSummary();
                 CanExecuteSync = plan.CanExecute;
 
+                if (plan.CanExecute)
+                {
+                    // Tuck the connection settings away so the plan gets the
+                    // screen; the expander header brings them back anytime.
+                    TargetSectionExpanded = false;
+                    PlanSectionExpanded = true;
+                }
+
                 StatusMessage = plan.CanExecute
-                    ? "Sync preview ready. Nothing was copied."
+                    ? "Sync preview ready. Untick runs you do not want to copy, then confirm and press Sync Now."
                     : plan.ConflictCount > 0 && plan.UploadCount + plan.DownloadCount == 0
                         ? "Only conflicts remain; nothing can be synced automatically."
                         : "Nothing to sync, or the preview has errors. Check the warnings.";
@@ -357,10 +428,37 @@ namespace GameSaves.App.ViewModels
                 return;
             }
 
+            var selectedRunNames = Items
+                .Where(row => row.IsSelectable && row.IncludeInSync)
+                .Select(row => row.RunName)
+                .ToList();
+
+            if (selectedRunNames.Count == 0 &&
+                _lastPlan.UploadCount + _lastPlan.DownloadCount > 0)
+            {
+                ExecutionStatusMessage = "No runs are selected. Tick at least one run in the sync plan.";
+                return;
+            }
+
             try
             {
                 IsLoading = true;
+                IsSyncRunning = true;
+                ResultsSectionExpanded = true;
+                ProgressValue = 0;
+                ProgressMax = 1;
+                ProgressText = "Starting...";
                 ExecutionStatusMessage = "Syncing backup runs...";
+
+                // Progress<T> marshals reports back to the UI thread.
+                var progress = new Progress<SyncProgress>(p =>
+                {
+                    ProgressMax = Math.Max(1, p.BytesTotal);
+                    ProgressValue = p.BytesDone;
+                    ProgressText =
+                        $"Run {Math.Min(p.RunsDone + 1, p.RunsTotal)}/{p.RunsTotal}: {p.RunName}  -  {p.CurrentFile}  " +
+                        $"({FormatBytes(p.BytesDone)} / {FormatBytes(p.BytesTotal)})";
+                });
 
                 SyncResult result = await _lastProvider.ExecuteAsync(
                     _lastPlan,
@@ -369,7 +467,9 @@ namespace GameSaves.App.ViewModels
                         DryRun = false,
                         ConfirmExecution = ConfirmSync,
                         Upload = UploadEnabled,
-                        Download = DownloadEnabled
+                        Download = DownloadEnabled,
+                        OnlyRunNames = selectedRunNames,
+                        Progress = progress
                     });
 
                 ExecutionResults.Clear();
@@ -384,15 +484,21 @@ namespace GameSaves.App.ViewModels
                     ? $"Sync blocked: {blocker.Message}"
                     : $"Sync finished. Uploaded {result.Uploaded} run(s), downloaded {result.Downloaded} run(s), skipped {result.Skipped}, copied {FormatBytes(result.BytesCopied)}. Nothing was deleted.";
 
+                ProgressText = blocker is null
+                    ? $"Done: {FormatBytes(result.BytesCopied)} copied."
+                    : "";
+
                 await RefreshSyncLogAsync(_lastProvider);
             }
             catch (Exception ex)
             {
                 ExecutionStatusMessage = $"Sync failed: {ex.Message}";
+                ProgressText = "";
             }
             finally
             {
                 IsLoading = false;
+                IsSyncRunning = false;
             }
         }
 

@@ -53,6 +53,15 @@ namespace GameSaves.Core.Sync
             Items.Any(item => item.Status == SyncItemStatus.Failed);
     }
 
+    /// <summary>Live progress of a running sync, reported after every file.</summary>
+    public sealed record SyncProgress(
+        string RunName,
+        string CurrentFile,
+        int RunsDone,
+        int RunsTotal,
+        long BytesDone,
+        long BytesTotal);
+
     /// <summary>
     /// Version-history metadata: one executed sync, appended to the sync log
     /// stored alongside the remote data.

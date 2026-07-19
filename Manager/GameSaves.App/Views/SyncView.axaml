@@ -15,14 +15,22 @@
         <SolidColorBrush x:Key="AccentBrush" Color="#7C9CFF" />
         <SolidColorBrush x:Key="SuccessBrush" Color="#6EE7A8" />
         <SolidColorBrush x:Key="WarningBrush" Color="#FACC6B" />
-        <SolidColorBrush x:Key="SplitterBrush" Color="#2A2C36" />
     </UserControl.Resources>
 
-    <Grid RowDefinitions="Auto,Auto,*"
+    <UserControl.Styles>
+        <Style Selector="Expander">
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="Background" Value="#1A1B22" />
+            <Setter Property="CornerRadius" Value="14" />
+            <Setter Property="Padding" Value="12,8" />
+        </Style>
+    </UserControl.Styles>
+
+    <Grid RowDefinitions="Auto,*"
           RowSpacing="10"
           Margin="0,12,0,0">
 
-        <!-- Header -->
+        <!-- Header: always-visible controls and live progress -->
         <Border Grid.Row="0"
                 Background="{StaticResource CardBackgroundBrush}"
                 BorderBrush="{StaticResource CardBorderBrush}"
@@ -30,389 +38,372 @@
                 CornerRadius="14"
                 Padding="14,10">
 
-            <Grid ColumnDefinitions="*,Auto"
-                  ColumnSpacing="10">
+            <StackPanel Spacing="6">
+                <Grid ColumnDefinitions="*,Auto,Auto"
+                      ColumnSpacing="10">
 
-                <StackPanel Grid.Column="0"
-                            Spacing="2"
-                            VerticalAlignment="Center">
-                    <TextBlock Text="Sync Backups"
-                               Foreground="{StaticResource PrimaryTextBrush}"
-                               FontSize="18"
-                               FontWeight="Bold" />
+                    <StackPanel Grid.Column="0"
+                                Spacing="2"
+                                VerticalAlignment="Center">
+                        <TextBlock Text="Sync Backups"
+                                   Foreground="{StaticResource PrimaryTextBrush}"
+                                   FontSize="18"
+                                   FontWeight="Bold" />
 
-                    <TextBlock Text="{Binding StatusMessage}"
-                               Foreground="{StaticResource SecondaryTextBrush}"
-                               FontSize="12"
-                               TextWrapping="Wrap" />
-                </StackPanel>
-
-                <Button Grid.Column="1"
-                        Content="Preview Sync (Dry Run)"
-                        Command="{Binding PreviewSyncCommand}"
-                        Height="34"
-                        VerticalAlignment="Center" />
-            </Grid>
-        </Border>
-
-        <!-- Settings -->
-        <Border Grid.Row="1"
-                Background="{StaticResource CardBackgroundBrush}"
-                BorderBrush="{StaticResource CardBorderBrush}"
-                BorderThickness="1"
-                CornerRadius="14"
-                Padding="14,10">
-
-            <Grid ColumnDefinitions="2*,*"
-                  ColumnSpacing="14">
-
-                <StackPanel Grid.Column="0"
-                            Spacing="4">
-                    <TextBlock Text="Sync target"
-                               Foreground="{StaticResource SecondaryTextBrush}"
-                               FontSize="12"
-                               FontWeight="Bold" />
-
-                    <StackPanel Orientation="Horizontal"
-                                Spacing="14">
-                        <RadioButton Content="Local or mounted folder"
-                                     GroupName="SyncProvider"
-                                     IsChecked="{Binding !UseSftp}"
-                                     FontSize="12" />
-
-                        <RadioButton Content="SFTP server (SSH)"
-                                     GroupName="SyncProvider"
-                                     IsChecked="{Binding UseSftp}"
-                                     FontSize="12" />
+                        <TextBlock Text="{Binding StatusMessage}"
+                                   Foreground="{StaticResource SecondaryTextBrush}"
+                                   FontSize="12"
+                                   TextWrapping="Wrap" />
                     </StackPanel>
 
-                    <!-- Local folder target -->
-                    <StackPanel Spacing="4"
-                                IsVisible="{Binding !UseSftp}">
-                        <Grid ColumnDefinitions="*,Auto"
-                              ColumnSpacing="6">
+                    <Button Grid.Column="1"
+                            Content="Preview Sync (Dry Run)"
+                            Command="{Binding PreviewSyncCommand}"
+                            Height="34"
+                            VerticalAlignment="Center" />
 
-                            <TextBox Grid.Column="0"
-                                     Text="{Binding RemoteRootPath}"
-                                     Watermark="Folder to sync backup runs with (NAS share, USB drive, cloud-synced folder)"
-                                     ToolTip.Tip="{Binding RemoteRootPath}"
-                                     MinHeight="32" />
+                    <Button Grid.Column="2"
+                            Content="Sync Now"
+                            Command="{Binding ExecuteSyncCommand}"
+                            IsEnabled="{Binding CanExecuteSync}"
+                            Height="34"
+                            VerticalAlignment="Center" />
+                </Grid>
 
-                            <Button Grid.Column="1"
-                                    Content="Choose Folder..."
-                                    Command="{Binding ChooseRemoteFolderCommand}"
-                                    Height="32"
-                                    VerticalAlignment="Top" />
-                        </Grid>
-                    </StackPanel>
-
-                    <!-- SFTP target -->
-                    <StackPanel Spacing="4"
-                                IsVisible="{Binding UseSftp}">
-
-                        <Grid ColumnDefinitions="2*,90,*"
-                              ColumnSpacing="6">
-
-                            <TextBox Grid.Column="0"
-                                     Text="{Binding SftpHost}"
-                                     Watermark="Host name or IP address"
-                                     MinHeight="30" />
-
-                            <TextBox Grid.Column="1"
-                                     Text="{Binding SftpPort}"
-                                     Watermark="22"
-                                     ToolTip.Tip="SSH port (default 22)"
-                                     MinHeight="30" />
-
-                            <TextBox Grid.Column="2"
-                                     Text="{Binding SftpUsername}"
-                                     Watermark="Username"
-                                     MinHeight="30" />
-                        </Grid>
-
-                        <StackPanel Orientation="Horizontal"
-                                    Spacing="14">
-                            <RadioButton Content="Password"
-                                         GroupName="SftpAuth"
-                                         IsChecked="{Binding SftpUsePassword}"
-                                         FontSize="12" />
-
-                            <RadioButton Content="Private key file"
-                                         GroupName="SftpAuth"
-                                         IsChecked="{Binding SftpUsePrivateKey}"
-                                         FontSize="12" />
-                        </StackPanel>
-
-                        <TextBox Text="{Binding SftpPassword}"
-                                 PasswordChar="●"
-                                 Watermark="Password (kept in memory only, never stored)"
-                                 IsVisible="{Binding SftpUsePassword}"
-                                 MinHeight="30" />
-
-                        <StackPanel Spacing="4"
-                                    IsVisible="{Binding SftpUsePrivateKey}">
-                            <Grid ColumnDefinitions="*,Auto"
-                                  ColumnSpacing="6">
-
-                                <TextBox Grid.Column="0"
-                                         Text="{Binding SftpKeyFilePath}"
-                                         Watermark="Path to the private key file (e.g. C:\Users\you\.ssh\id_ed25519)"
-                                         ToolTip.Tip="{Binding SftpKeyFilePath}"
-                                         MinHeight="30" />
-
-                                <Button Grid.Column="1"
-                                        Content="Browse..."
-                                        Command="{Binding ChooseKeyFileCommand}"
-                                        Height="30"
-                                        VerticalAlignment="Top" />
-                            </Grid>
-
-                            <TextBox Text="{Binding SftpKeyPassphrase}"
-                                     PasswordChar="●"
-                                     Watermark="Key passphrase, if any (kept in memory only, never stored)"
-                                     MinHeight="30" />
-                        </StackPanel>
-
-                        <TextBox Text="{Binding SftpRemotePath}"
-                                 Watermark="Remote folder path, e.g. /srv/gamesave-sync"
-                                 MinHeight="30" />
-
-                        <CheckBox Content="Trust this server's host key on first connect"
-                                  IsChecked="{Binding SftpTrustNewHostKey}"
-                                  FontSize="12"
-                                  ToolTip.Tip="On the first connection the server's key fingerprint is stored (like SSH known_hosts). If it ever changes later, the sync fails loudly. Leave unchecked to see the fingerprint first without trusting it." />
-
-                        <StackPanel Orientation="Horizontal"
-                                    Spacing="10">
-                            <Button Content="Forget Stored Host Key"
-                                    Command="{Binding ForgetSftpHostKeyCommand}"
-                                    FontSize="12"
-                                    Height="28"
-                                    ToolTip.Tip="Removes the stored fingerprint for this host and port, e.g. after a planned server reinstall." />
-
-                            <TextBlock Text="Passwords and passphrases are never saved to disk."
-                                       Foreground="{StaticResource WarningBrush}"
-                                       FontSize="11"
-                                       VerticalAlignment="Center" />
-                        </StackPanel>
-                    </StackPanel>
-
-                    <TextBlock Text="Sync copies whole backup runs both ways. A run missing on one side is copied there - nothing is ever deleted or overwritten. Runs that differ on both sides are reported as conflicts and never copied automatically."
-                               Foreground="{StaticResource MutedTextBrush}"
-                               FontSize="11"
-                               TextWrapping="Wrap" />
-                </StackPanel>
-
-                <StackPanel Grid.Column="1"
-                            Spacing="4">
-                    <TextBlock Text="Direction"
-                               Foreground="{StaticResource SecondaryTextBrush}"
-                               FontSize="12"
-                               FontWeight="Bold" />
-
-                    <CheckBox Content="Upload local runs to the sync folder"
+                <StackPanel Orientation="Horizontal"
+                            Spacing="16">
+                    <CheckBox Content="Upload local runs"
                               IsChecked="{Binding UploadEnabled}"
                               FontSize="12" />
 
-                    <CheckBox Content="Download remote runs to this PC"
+                    <CheckBox Content="Download remote runs"
                               IsChecked="{Binding DownloadEnabled}"
                               FontSize="12" />
 
                     <CheckBox Content="I understand this will copy backup runs"
                               IsChecked="{Binding ConfirmSync}"
-                              FontSize="12"
-                              Margin="0,4,0,0" />
-
-                    <Button Content="Sync Now"
-                            Command="{Binding ExecuteSyncCommand}"
-                            IsEnabled="{Binding CanExecuteSync}"
-                            HorizontalAlignment="Stretch"
-                            Height="32" />
+                              FontSize="12" />
                 </StackPanel>
-            </Grid>
+
+                <StackPanel Spacing="2"
+                            IsVisible="{Binding IsSyncRunning}">
+                    <ProgressBar Minimum="0"
+                                 Maximum="{Binding ProgressMax}"
+                                 Value="{Binding ProgressValue}"
+                                 Height="14" />
+
+                    <TextBlock Text="{Binding ProgressText}"
+                               Foreground="{StaticResource AccentBrush}"
+                               FontSize="11"
+                               TextTrimming="CharacterEllipsis"
+                               ToolTip.Tip="{Binding ProgressText}" />
+                </StackPanel>
+            </StackPanel>
         </Border>
 
-        <!-- Plan, results, log -->
-        <ScrollViewer Grid.Row="2">
+        <!-- Collapsible sections; the whole area scrolls as one -->
+        <ScrollViewer Grid.Row="1">
             <StackPanel Spacing="10">
 
-                <!-- Sync plan -->
-                <Border Background="{StaticResource CardBackgroundBrush}"
-                        BorderBrush="{StaticResource CardBorderBrush}"
-                        BorderThickness="1"
-                        CornerRadius="14"
-                        Padding="0">
+                <!-- Sync target and connection -->
+                <Expander Header="Sync target &amp; connection"
+                          IsExpanded="{Binding TargetSectionExpanded}">
 
-                    <Grid RowDefinitions="Auto,Auto,Auto">
+                    <StackPanel Spacing="6"
+                                Margin="0,6,0,0">
 
-                        <Border Grid.Row="0"
-                                Padding="12,8"
-                                BorderBrush="{StaticResource CardBorderBrush}"
-                                BorderThickness="0,0,0,1">
+                        <StackPanel Orientation="Horizontal"
+                                    Spacing="14">
+                            <RadioButton Content="Local or mounted folder"
+                                         GroupName="SyncProvider"
+                                         IsChecked="{Binding !UseSftp}"
+                                         FontSize="12" />
 
-                            <StackPanel Spacing="2">
-                                <TextBlock Text="Sync plan"
-                                           Foreground="{StaticResource PrimaryTextBrush}"
-                                           FontSize="14"
-                                           FontWeight="SemiBold" />
+                            <RadioButton Content="SFTP server (SSH)"
+                                         GroupName="SyncProvider"
+                                         IsChecked="{Binding UseSftp}"
+                                         FontSize="12" />
+                        </StackPanel>
 
-                                <TextBlock Text="{Binding SummaryDisplay}"
-                                           Foreground="{StaticResource AccentBrush}"
-                                           FontSize="12"
-                                           TextWrapping="Wrap" />
+                        <!-- Local folder target -->
+                        <StackPanel Spacing="4"
+                                    IsVisible="{Binding !UseSftp}">
+                            <Grid ColumnDefinitions="*,Auto"
+                                  ColumnSpacing="6">
+
+                                <TextBox Grid.Column="0"
+                                         Text="{Binding RemoteRootPath}"
+                                         Watermark="Folder to sync backup runs with (NAS share, USB drive, cloud-synced folder)"
+                                         ToolTip.Tip="{Binding RemoteRootPath}"
+                                         MinHeight="32" />
+
+                                <Button Grid.Column="1"
+                                        Content="Choose Folder..."
+                                        Command="{Binding ChooseRemoteFolderCommand}"
+                                        Height="32"
+                                        VerticalAlignment="Top" />
+                            </Grid>
+                        </StackPanel>
+
+                        <!-- SFTP target -->
+                        <StackPanel Spacing="4"
+                                    IsVisible="{Binding UseSftp}">
+
+                            <Grid ColumnDefinitions="2*,90,*"
+                                  ColumnSpacing="6">
+
+                                <TextBox Grid.Column="0"
+                                         Text="{Binding SftpHost}"
+                                         Watermark="Host name or IP address"
+                                         MinHeight="30" />
+
+                                <TextBox Grid.Column="1"
+                                         Text="{Binding SftpPort}"
+                                         Watermark="22"
+                                         ToolTip.Tip="SSH port (default 22)"
+                                         MinHeight="30" />
+
+                                <TextBox Grid.Column="2"
+                                         Text="{Binding SftpUsername}"
+                                         Watermark="Username"
+                                         MinHeight="30" />
+                            </Grid>
+
+                            <StackPanel Orientation="Horizontal"
+                                        Spacing="14">
+                                <RadioButton Content="Password"
+                                             GroupName="SftpAuth"
+                                             IsChecked="{Binding SftpUsePassword}"
+                                             FontSize="12" />
+
+                                <RadioButton Content="Private key file"
+                                             GroupName="SftpAuth"
+                                             IsChecked="{Binding SftpUsePrivateKey}"
+                                             FontSize="12" />
                             </StackPanel>
-                        </Border>
 
-                        <Border Grid.Row="1"
-                                Padding="10,6"
+                            <TextBox Text="{Binding SftpPassword}"
+                                     PasswordChar="●"
+                                     Watermark="Password (kept in memory only, never stored)"
+                                     IsVisible="{Binding SftpUsePassword}"
+                                     MinHeight="30" />
+
+                            <StackPanel Spacing="4"
+                                        IsVisible="{Binding SftpUsePrivateKey}">
+                                <Grid ColumnDefinitions="*,Auto"
+                                      ColumnSpacing="6">
+
+                                    <TextBox Grid.Column="0"
+                                             Text="{Binding SftpKeyFilePath}"
+                                             Watermark="Path to the private key file (e.g. C:\Users\you\.ssh\id_ed25519)"
+                                             ToolTip.Tip="{Binding SftpKeyFilePath}"
+                                             MinHeight="30" />
+
+                                    <Button Grid.Column="1"
+                                            Content="Browse..."
+                                            Command="{Binding ChooseKeyFileCommand}"
+                                            Height="30"
+                                            VerticalAlignment="Top" />
+                                </Grid>
+
+                                <TextBox Text="{Binding SftpKeyPassphrase}"
+                                         PasswordChar="●"
+                                         Watermark="Key passphrase, if any (kept in memory only, never stored)"
+                                         MinHeight="30" />
+                            </StackPanel>
+
+                            <TextBox Text="{Binding SftpRemotePath}"
+                                     Watermark="Remote folder path, e.g. /srv/gamesave-sync"
+                                     MinHeight="30" />
+
+                            <CheckBox Content="Trust this server's host key on first connect"
+                                      IsChecked="{Binding SftpTrustNewHostKey}"
+                                      FontSize="12"
+                                      ToolTip.Tip="On the first connection the server's key fingerprint is stored (like SSH known_hosts). If it ever changes later, the sync fails loudly. Leave unchecked to see the fingerprint first without trusting it." />
+
+                            <StackPanel Orientation="Horizontal"
+                                        Spacing="10">
+                                <Button Content="Forget Stored Host Key"
+                                        Command="{Binding ForgetSftpHostKeyCommand}"
+                                        FontSize="12"
+                                        Height="28"
+                                        ToolTip.Tip="Removes the stored fingerprint for this host and port, e.g. after a planned server reinstall." />
+
+                                <TextBlock Text="Passwords and passphrases are never saved to disk."
+                                           Foreground="{StaticResource WarningBrush}"
+                                           FontSize="11"
+                                           VerticalAlignment="Center" />
+                            </StackPanel>
+                        </StackPanel>
+
+                        <TextBlock Text="Sync copies whole backup runs both ways. A run missing on one side is copied there - nothing is ever deleted or overwritten. Runs that differ on both sides are reported as conflicts and never copied automatically."
+                                   Foreground="{StaticResource MutedTextBrush}"
+                                   FontSize="11"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                </Expander>
+
+                <!-- Sync plan -->
+                <Expander Header="Sync plan"
+                          IsExpanded="{Binding PlanSectionExpanded}">
+
+                    <StackPanel Spacing="4"
+                                Margin="0,6,0,0">
+
+                        <TextBlock Text="{Binding SummaryDisplay}"
+                                   Foreground="{StaticResource AccentBrush}"
+                                   FontSize="12"
+                                   TextWrapping="Wrap" />
+
+                        <Grid ColumnDefinitions="*,Auto,Auto"
+                              ColumnSpacing="8">
+
+                            <TextBlock Grid.Column="0"
+                                       Text="{Binding SelectedSummaryDisplay}"
+                                       Foreground="{StaticResource SecondaryTextBrush}"
+                                       FontSize="12"
+                                       VerticalAlignment="Center" />
+
+                            <Button Grid.Column="1"
+                                    Content="Select All"
+                                    Command="{Binding SelectAllRunsCommand}"
+                                    FontSize="12"
+                                    Height="26" />
+
+                            <Button Grid.Column="2"
+                                    Content="Select None"
+                                    Command="{Binding DeselectAllRunsCommand}"
+                                    FontSize="12"
+                                    Height="26" />
+                        </Grid>
+
+                        <Border Padding="0,6,0,6"
                                 BorderBrush="{StaticResource CardBorderBrush}"
                                 BorderThickness="0,0,0,1">
 
-                            <Grid ColumnDefinitions="2*,90,*,90,90,*"
+                            <Grid ColumnDefinitions="34,2*,90,*,90,90,*"
                                   ColumnSpacing="10">
 
-                                <TextBlock Grid.Column="0" Text="Run" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
-                                <TextBlock Grid.Column="1" Text="Action" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
-                                <TextBlock Grid.Column="2" Text="Game" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
-                                <TextBlock Grid.Column="3" Text="Files" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
-                                <TextBlock Grid.Column="4" Text="Size" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
-                                <TextBlock Grid.Column="5" Text="Status" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
+                                <TextBlock Grid.Column="0" Text="" />
+                                <TextBlock Grid.Column="1" Text="Run" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
+                                <TextBlock Grid.Column="2" Text="Action" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
+                                <TextBlock Grid.Column="3" Text="Game" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
+                                <TextBlock Grid.Column="4" Text="Files" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
+                                <TextBlock Grid.Column="5" Text="Size" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
+                                <TextBlock Grid.Column="6" Text="Status" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
                             </Grid>
                         </Border>
 
-                        <ItemsControl Grid.Row="2"
-                                      ItemsSource="{Binding Items}">
+                        <ItemsControl ItemsSource="{Binding Items}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="models:SyncItemRowViewModel">
-                                    <Border Padding="10,6"
+                                    <Border Padding="0,6"
                                             BorderBrush="#252733"
                                             BorderThickness="0,0,0,1">
 
-                                        <Grid ColumnDefinitions="2*,90,*,90,90,*"
+                                        <Grid ColumnDefinitions="34,2*,90,*,90,90,*"
                                               ColumnSpacing="10">
 
-                                            <TextBlock Grid.Column="0"
+                                            <CheckBox Grid.Column="0"
+                                                      IsChecked="{Binding IncludeInSync}"
+                                                      IsVisible="{Binding IsSelectable}"
+                                                      ToolTip.Tip="Untick to exclude this run from the sync." />
+
+                                            <TextBlock Grid.Column="1"
                                                        Text="{Binding RunName}"
                                                        Foreground="{StaticResource SecondaryTextBrush}"
                                                        ToolTip.Tip="{Binding RunName}"
                                                        FontSize="12"
+                                                       VerticalAlignment="Center"
                                                        TextTrimming="CharacterEllipsis" />
 
-                                            <TextBlock Grid.Column="1"
+                                            <TextBlock Grid.Column="2"
                                                        Text="{Binding ActionText}"
                                                        Foreground="{StaticResource AccentBrush}"
                                                        FontSize="12"
+                                                       VerticalAlignment="Center"
                                                        FontWeight="SemiBold" />
 
-                                            <TextBlock Grid.Column="2"
+                                            <TextBlock Grid.Column="3"
                                                        Text="{Binding GameName}"
                                                        Foreground="{StaticResource SecondaryTextBrush}"
                                                        FontSize="12"
+                                                       VerticalAlignment="Center"
                                                        TextTrimming="CharacterEllipsis" />
 
-                                            <TextBlock Grid.Column="3"
+                                            <TextBlock Grid.Column="4"
                                                        Text="{Binding FilesDisplay}"
                                                        Foreground="{StaticResource MutedTextBrush}"
-                                                       FontSize="12" />
-
-                                            <TextBlock Grid.Column="4"
-                                                       Text="{Binding SizeDisplay}"
-                                                       Foreground="{StaticResource MutedTextBrush}"
-                                                       FontSize="12" />
+                                                       FontSize="12"
+                                                       VerticalAlignment="Center" />
 
                                             <TextBlock Grid.Column="5"
+                                                       Text="{Binding SizeDisplay}"
+                                                       Foreground="{StaticResource MutedTextBrush}"
+                                                       FontSize="12"
+                                                       VerticalAlignment="Center" />
+
+                                            <TextBlock Grid.Column="6"
                                                        Text="{Binding StatusText}"
                                                        Foreground="{StaticResource PrimaryTextBrush}"
                                                        FontSize="12"
+                                                       VerticalAlignment="Center"
                                                        TextWrapping="Wrap" />
                                         </Grid>
                                     </Border>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
-                    </Grid>
-                </Border>
+                    </StackPanel>
+                </Expander>
 
                 <!-- Warnings -->
-                <Border Background="{StaticResource CardBackgroundBrush}"
-                        BorderBrush="{StaticResource CardBorderBrush}"
-                        BorderThickness="1"
-                        CornerRadius="14"
-                        Padding="0">
+                <Expander Header="Warnings"
+                          IsExpanded="{Binding WarningsSectionExpanded}">
 
-                    <Grid RowDefinitions="Auto,Auto">
+                    <ItemsControl ItemsSource="{Binding Warnings}"
+                                  Margin="0,6,0,0">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:TransferWarningRowViewModel">
+                                <Border Padding="0,6"
+                                        BorderBrush="#252733"
+                                        BorderThickness="0,0,0,1">
 
-                        <Border Grid.Row="0"
-                                Padding="12,8"
-                                BorderBrush="{StaticResource CardBorderBrush}"
-                                BorderThickness="0,0,0,1">
+                                    <StackPanel Orientation="Horizontal"
+                                                Spacing="8">
+                                        <TextBlock Text="{Binding SeverityText}"
+                                                   Foreground="{StaticResource WarningBrush}"
+                                                   FontSize="12"
+                                                   FontWeight="SemiBold"
+                                                   Width="60" />
 
-                            <TextBlock Text="Warnings"
-                                       Foreground="{StaticResource PrimaryTextBrush}"
-                                       FontSize="14"
-                                       FontWeight="SemiBold" />
-                        </Border>
-
-                        <ItemsControl Grid.Row="1"
-                                      ItemsSource="{Binding Warnings}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="models:TransferWarningRowViewModel">
-                                    <Border Padding="12,6"
-                                            BorderBrush="#252733"
-                                            BorderThickness="0,0,0,1">
-
-                                        <StackPanel Orientation="Horizontal"
-                                                    Spacing="8">
-                                            <TextBlock Text="{Binding SeverityText}"
-                                                       Foreground="{StaticResource WarningBrush}"
-                                                       FontSize="12"
-                                                       FontWeight="SemiBold"
-                                                       Width="60" />
-
-                                            <TextBlock Text="{Binding Message}"
-                                                       Foreground="{StaticResource SecondaryTextBrush}"
-                                                       FontSize="12"
-                                                       TextWrapping="Wrap" />
-                                        </StackPanel>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </Grid>
-                </Border>
+                                        <TextBlock Text="{Binding Message}"
+                                                   Foreground="{StaticResource SecondaryTextBrush}"
+                                                   FontSize="12"
+                                                   TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Expander>
 
                 <!-- Execution results -->
-                <Border Background="{StaticResource CardBackgroundBrush}"
-                        BorderBrush="{StaticResource CardBorderBrush}"
-                        BorderThickness="1"
-                        CornerRadius="14"
-                        Padding="0">
+                <Expander Header="Execution results"
+                          IsExpanded="{Binding ResultsSectionExpanded}">
 
-                    <Grid RowDefinitions="Auto,Auto">
+                    <StackPanel Spacing="4"
+                                Margin="0,6,0,0">
 
-                        <Border Grid.Row="0"
-                                Padding="12,8"
-                                BorderBrush="{StaticResource CardBorderBrush}"
-                                BorderThickness="0,0,0,1">
+                        <TextBlock Text="{Binding ExecutionStatusMessage}"
+                                   Foreground="{StaticResource SecondaryTextBrush}"
+                                   FontSize="12"
+                                   TextWrapping="Wrap" />
 
-                            <StackPanel Spacing="2">
-                                <TextBlock Text="Execution results"
-                                           Foreground="{StaticResource PrimaryTextBrush}"
-                                           FontSize="14"
-                                           FontWeight="SemiBold" />
-
-                                <TextBlock Text="{Binding ExecutionStatusMessage}"
-                                           Foreground="{StaticResource SecondaryTextBrush}"
-                                           FontSize="12"
-                                           TextWrapping="Wrap" />
-                            </StackPanel>
-                        </Border>
-
-                        <ItemsControl Grid.Row="1"
-                                      ItemsSource="{Binding ExecutionResults}">
+                        <ItemsControl ItemsSource="{Binding ExecutionResults}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="models:SyncItemResultRowViewModel">
-                                    <Border Padding="10,6"
+                                    <Border Padding="0,6"
                                             BorderBrush="#252733"
                                             BorderThickness="0,0,0,1">
 
@@ -446,41 +437,25 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
-                    </Grid>
-                </Border>
+                    </StackPanel>
+                </Expander>
 
-                <!-- Sync history (version metadata from the remote) -->
-                <Border Background="{StaticResource CardBackgroundBrush}"
-                        BorderBrush="{StaticResource CardBorderBrush}"
-                        BorderThickness="1"
-                        CornerRadius="14"
-                        Padding="0">
+                <!-- Sync history -->
+                <Expander Header="Sync history"
+                          IsExpanded="{Binding HistorySectionExpanded}">
 
-                    <Grid RowDefinitions="Auto,Auto">
+                    <StackPanel Spacing="4"
+                                Margin="0,6,0,0">
 
-                        <Border Grid.Row="0"
-                                Padding="12,8"
-                                BorderBrush="{StaticResource CardBorderBrush}"
-                                BorderThickness="0,0,0,1">
+                        <TextBlock Text="Every executed sync, from the log stored alongside the sync folder - shared by all devices syncing with it."
+                                   Foreground="{StaticResource MutedTextBrush}"
+                                   FontSize="11"
+                                   TextWrapping="Wrap" />
 
-                            <StackPanel Spacing="2">
-                                <TextBlock Text="Sync history"
-                                           Foreground="{StaticResource PrimaryTextBrush}"
-                                           FontSize="14"
-                                           FontWeight="SemiBold" />
-
-                                <TextBlock Text="Every executed sync, from the log stored alongside the sync folder - shared by all devices syncing with it."
-                                           Foreground="{StaticResource MutedTextBrush}"
-                                           FontSize="11"
-                                           TextWrapping="Wrap" />
-                            </StackPanel>
-                        </Border>
-
-                        <ItemsControl Grid.Row="1"
-                                      ItemsSource="{Binding SyncLog}">
+                        <ItemsControl ItemsSource="{Binding SyncLog}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="models:SyncLogEntryRowViewModel">
-                                    <Border Padding="10,6"
+                                    <Border Padding="0,6"
                                             BorderBrush="#252733"
                                             BorderThickness="0,0,0,1">
 
@@ -509,8 +484,8 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
-                    </Grid>
-                </Border>
+                    </StackPanel>
+                </Expander>
             </StackPanel>
         </ScrollViewer>
     </Grid>
