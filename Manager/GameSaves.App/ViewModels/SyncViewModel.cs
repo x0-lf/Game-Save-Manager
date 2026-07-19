@@ -108,6 +108,53 @@ namespace GameSaves.App.ViewModels
         [ObservableProperty]
         private string progressText = "";
 
+        [ObservableProperty]
+        private string connectionCheckMessage = "";
+
+        private bool _keepTargetSectionOpen;
+
+        /// <summary>
+        /// Same dry-run preview, but keeps the connection section open so the
+        /// verdict is readable right where the credentials were entered.
+        /// </summary>
+        [RelayCommand]
+        private async Task CheckSyncStatusAsync()
+        {
+            _keepTargetSectionOpen = true;
+
+            try
+            {
+                await PreviewSyncAsync();
+            }
+            finally
+            {
+                _keepTargetSectionOpen = false;
+            }
+        }
+
+        private void UpdateConnectionCheckMessage(SyncPlan plan)
+        {
+            TransferPreviewWarning? error = plan.Warnings
+                .FirstOrDefault(w => w.Severity == TransferWarningSeverity.Error);
+
+            if (error is not null)
+            {
+                ConnectionCheckMessage = $"Check failed: {error.Message}";
+                return;
+            }
+
+            bool everythingInSync =
+                plan.UploadCount == 0 &&
+                plan.DownloadCount == 0 &&
+                plan.ConflictCount == 0;
+
+            ConnectionCheckMessage = everythingInSync
+                ? plan.InSyncCount > 0
+                    ? $"Connected. Everything is in sync: {plan.InSyncCount} run(s) match the sync target."
+                    : "Connected. Neither side has any backup runs yet."
+                : $"Connected. In sync: {plan.InSyncCount}, to upload: {plan.UploadCount}, to download: {plan.DownloadCount}, conflicts: {plan.ConflictCount}.";
+        }
+
         public ObservableCollection<SyncItemRowViewModel> Items { get; } = new();
 
         public ObservableCollection<TransferWarningRowViewModel> Warnings { get; } = new();
@@ -264,6 +311,7 @@ namespace GameSaves.App.ViewModels
             Warnings.Clear();
             SummaryDisplay = "";
             SelectedSummaryDisplay = "";
+            ConnectionCheckMessage = "";
             CanExecuteSync = false;
         }
 
@@ -382,9 +430,10 @@ namespace GameSaves.App.ViewModels
                     $"In sync: {plan.InSyncCount}   Conflicts: {plan.ConflictCount}";
 
                 UpdateSelectedSummary();
+                UpdateConnectionCheckMessage(plan);
                 CanExecuteSync = plan.CanExecute;
 
-                if (plan.CanExecute)
+                if (plan.CanExecute && !_keepTargetSectionOpen)
                 {
                     // Tuck the connection settings away so the plan gets the
                     // screen; the expander header brings them back anytime.
@@ -403,6 +452,7 @@ namespace GameSaves.App.ViewModels
             catch (Exception ex)
             {
                 StatusMessage = $"Failed to build sync preview: {ex.Message}";
+                ConnectionCheckMessage = $"Check failed: {ex.Message}";
             }
             finally
             {

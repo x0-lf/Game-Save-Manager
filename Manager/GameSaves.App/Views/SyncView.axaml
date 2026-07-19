@@ -15,14 +15,45 @@
         <SolidColorBrush x:Key="AccentBrush" Color="#7C9CFF" />
         <SolidColorBrush x:Key="SuccessBrush" Color="#6EE7A8" />
         <SolidColorBrush x:Key="WarningBrush" Color="#FACC6B" />
+
+        <!-- Blend the Fluent Expander chrome into the card look: header and
+             content share the card background instead of the theme's darker
+             content band. -->
+        <SolidColorBrush x:Key="ExpanderHeaderBackground" Color="#1A1B22" />
+        <SolidColorBrush x:Key="ExpanderHeaderBackgroundPointerOver" Color="#20222B" />
+        <SolidColorBrush x:Key="ExpanderHeaderBackgroundPressed" Color="#20222B" />
+        <SolidColorBrush x:Key="ExpanderHeaderBorderBrush" Color="Transparent" />
+        <SolidColorBrush x:Key="ExpanderContentBackground" Color="#1A1B22" />
+        <SolidColorBrush x:Key="ExpanderContentBorderBrush" Color="#2A2C36" />
+        <SolidColorBrush x:Key="ToggleButtonBackground" Color="Transparent" />
+        <SolidColorBrush x:Key="ToggleButtonBackgroundPointerOver" Color="#20222B" />
+        <SolidColorBrush x:Key="ToggleButtonBackgroundPressed" Color="#20222B" />
+        <SolidColorBrush x:Key="ToggleButtonBackgroundChecked" Color="Transparent" />
+        <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPointerOver" Color="#20222B" />
+        <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPressed" Color="#20222B" />
     </UserControl.Resources>
 
     <UserControl.Styles>
         <Style Selector="Expander">
             <Setter Property="HorizontalAlignment" Value="Stretch" />
             <Setter Property="Background" Value="#1A1B22" />
+            <Setter Property="BorderBrush" Value="#2A2C36" />
+            <Setter Property="BorderThickness" Value="1" />
             <Setter Property="CornerRadius" Value="14" />
             <Setter Property="Padding" Value="12,8" />
+        </Style>
+
+        <Style Selector="Expander /template/ ToggleButton#ExpanderHeader">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="#F4F4F5" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+
+        <Style Selector="Expander /template/ Border#ExpanderContent">
+            <Setter Property="Background" Value="#1A1B22" />
+            <Setter Property="BorderThickness" Value="0" />
         </Style>
     </UserControl.Styles>
 
@@ -235,6 +266,18 @@
                                            VerticalAlignment="Center" />
                             </StackPanel>
                         </StackPanel>
+
+                        <Button Content="Check Connection &amp; Sync Status"
+                                Command="{Binding CheckSyncStatusCommand}"
+                                Height="30"
+                                FontSize="12"
+                                Margin="0,4,0,0"
+                                ToolTip.Tip="Connects to the sync target and reports whether the backup runs are in sync - without copying anything. Preview Sync (Dry Run) performs the same check automatically." />
+
+                        <TextBlock Text="{Binding ConnectionCheckMessage}"
+                                   Foreground="{StaticResource AccentBrush}"
+                                   FontSize="12"
+                                   TextWrapping="Wrap" />
 
                         <TextBlock Text="Sync copies whole backup runs both ways. A run missing on one side is copied there - nothing is ever deleted or overwritten. Runs that differ on both sides are reported as conflicts and never copied automatically."
                                    Foreground="{StaticResource MutedTextBrush}"

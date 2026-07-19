@@ -3,107 +3,186 @@
              xmlns:vm="using:GameSaves.App.ViewModels"
              xmlns:models="using:GameSaves.App.Models"
              x:Class="GameSaves.App.Views.InstalledGamesView"
-             x:DataType="vm:InstalledGamesViewModel">
+             x:DataType="vm:InstalledGamesViewModel"
+             Background="#111217">
+
+    <UserControl.Resources>
+        <SolidColorBrush x:Key="CardBackgroundBrush" Color="#1A1B22" />
+        <SolidColorBrush x:Key="CardBorderBrush" Color="#2A2C36" />
+        <SolidColorBrush x:Key="PrimaryTextBrush" Color="#F4F4F5" />
+        <SolidColorBrush x:Key="SecondaryTextBrush" Color="#A7AAB4" />
+        <SolidColorBrush x:Key="MutedTextBrush" Color="#777B86" />
+        <SolidColorBrush x:Key="AccentBrush" Color="#7C9CFF" />
+        <SolidColorBrush x:Key="SuccessBrush" Color="#6EE7A8" />
+        <SolidColorBrush x:Key="WarningBrush" Color="#FACC6B" />
+        <SolidColorBrush x:Key="DangerBrush" Color="#F87171" />
+    </UserControl.Resources>
 
     <Grid RowDefinitions="Auto,*"
-          Margin="16"
-          RowSpacing="12">
+          RowSpacing="10"
+          Margin="0,12,0,0">
 
-        <StackPanel Grid.Row="0"
-                    Orientation="Horizontal"
-                    Spacing="12">
+        <!-- Header -->
+        <Border Grid.Row="0"
+                Background="{StaticResource CardBackgroundBrush}"
+                BorderBrush="{StaticResource CardBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="14"
+                Padding="14,10">
 
-            <Button Content="Refresh Installed Games"
-                    Command="{Binding RefreshCommand}" />
+            <Grid ColumnDefinitions="*,Auto"
+                  ColumnSpacing="12">
 
-            <TextBlock Text="{Binding StatusMessage}"
-                       VerticalAlignment="Center" />
-        </StackPanel>
+                <StackPanel Grid.Column="0"
+                            Spacing="2">
+                    <TextBlock Text="Installed Games"
+                               Foreground="{StaticResource PrimaryTextBrush}"
+                               FontSize="18"
+                               FontWeight="Bold" />
 
-        <!-- Table scrolls horizontally as a whole so columns never get crushed;
-             rows scroll vertically inside. -->
-        <ScrollViewer Grid.Row="1"
-                      HorizontalScrollBarVisibility="Auto"
-                      VerticalScrollBarVisibility="Disabled">
+                    <TextBlock Text="{Binding StatusMessage}"
+                               Foreground="{StaticResource SecondaryTextBrush}"
+                               FontSize="12"
+                               TextWrapping="Wrap" />
+                </StackPanel>
 
-            <Grid RowDefinitions="Auto,*"
-                  MinWidth="1150">
-
-                <Border Grid.Row="0"
-                        Padding="8"
-                        BorderThickness="1">
-                    <Grid ColumnDefinitions="2*,90,2*,2*,100,100,100,100,100,120"
-                          ColumnSpacing="8">
-                        <TextBlock Grid.Column="0" Text="Game" FontWeight="Bold" />
-                        <TextBlock Grid.Column="1" Text="AppID" FontWeight="Bold" />
-                        <TextBlock Grid.Column="2" Text="Install path" FontWeight="Bold" />
-                        <TextBlock Grid.Column="3" Text="Library" FontWeight="Bold" />
-                        <TextBlock Grid.Column="4" Text="Approved" FontWeight="Bold" />
-                        <TextBlock Grid.Column="5" Text="Pending" FontWeight="Bold" />
-                        <TextBlock Grid.Column="6" Text="NeedsFix" FontWeight="Bold" />
-                        <TextBlock Grid.Column="7" Text="Exists" FontWeight="Bold" />
-                        <TextBlock Grid.Column="8" Text="Files" FontWeight="Bold" />
-                        <TextBlock Grid.Column="9" Text="Status" FontWeight="Bold" />
-                    </Grid>
-                </Border>
-
-                <ScrollViewer Grid.Row="1"
-                              HorizontalScrollBarVisibility="Disabled">
-                    <ItemsControl ItemsSource="{Binding Games}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="models:InstalledGameRowViewModel">
-                                <Border Padding="8"
-                                        BorderThickness="0,0,0,1">
-                                    <Grid ColumnDefinitions="2*,90,2*,2*,100,100,100,100,100,120"
-                                          ColumnSpacing="8">
-
-                                        <TextBlock Grid.Column="0"
-                                                   Text="{Binding GameName}"
-                                                   ToolTip.Tip="{Binding GameName}"
-                                                   TextTrimming="CharacterEllipsis" />
-
-                                        <TextBlock Grid.Column="1"
-                                                   Text="{Binding AppId}" />
-
-                                        <TextBlock Grid.Column="2"
-                                                   Text="{Binding InstallPath}"
-                                                   ToolTip.Tip="{Binding InstallPath}"
-                                                   TextTrimming="CharacterEllipsis" />
-
-                                        <TextBlock Grid.Column="3"
-                                                   Text="{Binding LibraryPath}"
-                                                   ToolTip.Tip="{Binding LibraryPath}"
-                                                   TextTrimming="CharacterEllipsis" />
-
-                                        <TextBlock Grid.Column="4"
-                                                   Text="{Binding ApprovedMappings}" />
-
-                                        <TextBlock Grid.Column="5"
-                                                   Text="{Binding PendingMappings}" />
-
-                                        <TextBlock Grid.Column="6"
-                                                   Text="{Binding NeedsFixMappings}" />
-
-                                        <TextBlock Grid.Column="7"
-                                                   Text="{Binding SavePathExists}" />
-
-                                        <StackPanel Grid.Column="8">
-                                            <TextBlock Text="{Binding FileCount}" />
-                                            <TextBlock Text="{Binding TotalSizeDisplay}"
-                                                       FontSize="11"
-                                                       Opacity="0.7" />
-                                        </StackPanel>
-
-                                        <TextBlock Grid.Column="9"
-                                                   Text="{Binding Status}"
-                                                   FontWeight="SemiBold" />
-                                    </Grid>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </ScrollViewer>
+                <Button Grid.Column="1"
+                        Content="Refresh Installed Games"
+                        Command="{Binding RefreshCommand}"
+                        Height="34"
+                        VerticalAlignment="Center" />
             </Grid>
-        </ScrollViewer>
+        </Border>
+
+        <!-- Games table: scrolls horizontally as one unit so columns never
+             get crushed; rows scroll vertically inside. -->
+        <Border Grid.Row="1"
+                Background="{StaticResource CardBackgroundBrush}"
+                BorderBrush="{StaticResource CardBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="14"
+                Padding="4">
+
+            <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                          VerticalScrollBarVisibility="Disabled">
+
+                <Grid RowDefinitions="Auto,*"
+                      MinWidth="1150">
+
+                    <Border Grid.Row="0"
+                            Padding="10,8"
+                            BorderBrush="{StaticResource CardBorderBrush}"
+                            BorderThickness="0,0,0,1">
+
+                        <Grid ColumnDefinitions="2*,80,2*,90,80,80,80,70,90,120"
+                              ColumnSpacing="10">
+
+                            <TextBlock Grid.Column="0" Text="Game" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
+                            <TextBlock Grid.Column="1" Text="AppID" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
+                            <TextBlock Grid.Column="2" Text="Install path" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
+                            <TextBlock Grid.Column="3" Text="Library" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
+                            <TextBlock Grid.Column="4" Text="Approved" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
+                            <TextBlock Grid.Column="5" Text="Pending" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
+                            <TextBlock Grid.Column="6" Text="NeedsFix" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
+                            <TextBlock Grid.Column="7" Text="Exists" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
+                            <TextBlock Grid.Column="8" Text="Files" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
+                            <TextBlock Grid.Column="9" Text="Status" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
+                        </Grid>
+                    </Border>
+
+                    <ScrollViewer Grid.Row="1"
+                                  HorizontalScrollBarVisibility="Disabled">
+                        <ItemsControl ItemsSource="{Binding Games}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:InstalledGameRowViewModel">
+                                    <Border Padding="10,7"
+                                            BorderBrush="#252733"
+                                            BorderThickness="0,0,0,1">
+
+                                        <Grid ColumnDefinitions="2*,80,2*,90,80,80,80,70,90,120"
+                                              ColumnSpacing="10">
+
+                                            <TextBlock Grid.Column="0"
+                                                       Text="{Binding GameName}"
+                                                       Foreground="{StaticResource PrimaryTextBrush}"
+                                                       ToolTip.Tip="{Binding GameName}"
+                                                       FontSize="12"
+                                                       FontWeight="SemiBold"
+                                                       VerticalAlignment="Center"
+                                                       TextTrimming="CharacterEllipsis" />
+
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding AppId}"
+                                                       Foreground="{StaticResource MutedTextBrush}"
+                                                       FontSize="12"
+                                                       VerticalAlignment="Center" />
+
+                                            <TextBlock Grid.Column="2"
+                                                       Text="{Binding InstallPath}"
+                                                       Foreground="{StaticResource SecondaryTextBrush}"
+                                                       ToolTip.Tip="{Binding InstallPath}"
+                                                       FontSize="12"
+                                                       VerticalAlignment="Center"
+                                                       TextTrimming="CharacterEllipsis" />
+
+                                            <TextBlock Grid.Column="3"
+                                                       Text="{Binding LibraryPath}"
+                                                       Foreground="{StaticResource MutedTextBrush}"
+                                                       ToolTip.Tip="{Binding LibraryPath}"
+                                                       FontSize="12"
+                                                       VerticalAlignment="Center"
+                                                       TextTrimming="CharacterEllipsis" />
+
+                                            <TextBlock Grid.Column="4"
+                                                       Text="{Binding ApprovedMappings}"
+                                                       Foreground="{StaticResource SuccessBrush}"
+                                                       FontSize="12"
+                                                       VerticalAlignment="Center" />
+
+                                            <TextBlock Grid.Column="5"
+                                                       Text="{Binding PendingMappings}"
+                                                       Foreground="{StaticResource WarningBrush}"
+                                                       FontSize="12"
+                                                       VerticalAlignment="Center" />
+
+                                            <TextBlock Grid.Column="6"
+                                                       Text="{Binding NeedsFixMappings}"
+                                                       Foreground="{StaticResource DangerBrush}"
+                                                       FontSize="12"
+                                                       VerticalAlignment="Center" />
+
+                                            <TextBlock Grid.Column="7"
+                                                       Text="{Binding SavePathExists}"
+                                                       Foreground="{StaticResource AccentBrush}"
+                                                       FontSize="12"
+                                                       VerticalAlignment="Center" />
+
+                                            <StackPanel Grid.Column="8"
+                                                        VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding FileCount}"
+                                                           Foreground="{StaticResource PrimaryTextBrush}"
+                                                           FontSize="12" />
+
+                                                <TextBlock Text="{Binding TotalSizeDisplay}"
+                                                           Foreground="{StaticResource MutedTextBrush}"
+                                                           FontSize="10" />
+                                            </StackPanel>
+
+                                            <TextBlock Grid.Column="9"
+                                                       Text="{Binding Status}"
+                                                       Foreground="{StaticResource PrimaryTextBrush}"
+                                                       FontSize="12"
+                                                       FontWeight="SemiBold"
+                                                       VerticalAlignment="Center"
+                                                       TextWrapping="Wrap" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Grid>
+            </ScrollViewer>
+        </Border>
     </Grid>
 </UserControl>

@@ -46,11 +46,15 @@ The long-term goal is a cross-platform Steam save manager with backup profiles, 
   * **SFTP**: host/port/username with password or private-key-file authentication; passwords and passphrases are session-only and never written to disk. Host keys use trust-on-first-use: the SHA-256 fingerprint is shown on first connect, stored like SSH known_hosts, and any later change fails loudly ("Forget Stored Host Key" covers planned reinstalls). Non-secret connection settings are remembered between sessions.
   * Copy-only, both ways: a run missing on one side is copied there; nothing is ever deleted or overwritten.
   * Sync preview with per-run actions (upload / download / in sync / conflict), counts, and sizes; execution requires explicit confirmation.
+  * **Per-run selection**: every upload/download in the plan has a checkbox (plus Select All / Select None and a live "selected X of Y" summary); deselected runs are reported as skipped and stay pending for the next sync.
+  * **Live progress**: a byte-accurate progress bar with run x/y and the current file, updated after every copied file.
+  * **Connection & sync-status check**: a one-line verdict ("Everything is in sync: N run(s) match the sync target" / counts / the failure reason) shown next to the connection fields - via a dedicated check button or automatically on every preview. Nothing is copied by the check.
   * **Conflict detection**: same run name with different content (compared via manifest identity and per-file SHA-256) is reported and never copied automatically.
   * **Version-history metadata**: every executed sync is appended to a `sync-log.json` stored alongside the remote data (device, timestamp, uploaded/downloaded runs), shared by all devices syncing with that folder.
   * Downloaded runs get their manifest paths rewritten and verified, so they are immediately restorable.
+  * The whole tab scrolls as one, and every section (connection, plan, warnings, results, history) is collapsible; a successful preview tucks the connection section away automatically.
 * **History tab** - durable run history in SQLite (`transfer_runs` / `transfer_items`):
-  * Every executed transfer copy, restore, and manual backup is recorded automatically - counts, bytes, flags (dry run, overwrite, backups), blocking reason if refused, and per-file outcomes.
+  * Every executed transfer copy, restore, manual backup, cleanup, and sync is recorded automatically - counts, bytes, flags (dry run, overwrite, backups), blocking reason if refused, and per-file outcomes.
   * Recording failures never fail the run itself; history is a pure audit trail.
 * Resizable panes (drag the dividers) so the app works on 1080p displays.
 
@@ -95,13 +99,15 @@ Manager/
 │   ├── Steam/                 # Discovery models and interfaces
 │   ├── Profiles/              # Steam profile model and detector interface
 │   ├── Save/                  # Mappings, verification, save-status models
-│   └── Transfers/             # Transfer preview/execution, overwrite backups, history, restore
+│   ├── Transfers/             # Transfer preview/execution, overwrite backups, history, restore
+│   └── Sync/                  # ISyncProvider abstraction, sync plans/results, SFTP settings
 ├── GameSaves.Infrastructure/  # Real implementations
 │   ├── Registry/              # Steam root from Windows registry
 │   ├── Steam/                 # VDF/manifest readers, discovery, fallback scanner
 │   ├── Profiles/              # userdata profile detection
 │   ├── Save/                  # SQLite repository, path expander, verifier
 │   ├── Transfers/             # Preview, transfer, overwrite backup, history, restore services
+│   ├── Sync/                  # SyncEngine + IRemoteFileSystem backends (local folder, SFTP)
 │   └── DependencyInjection/   # Service registration
 ├── GameSaves.App/             # Avalonia + CommunityToolkit.Mvvm desktop app
 │   ├── ViewModels/            # MainWindow, InstalledGames, Profiles, TransferPreview, BackupHistory
@@ -143,7 +149,8 @@ Tabs:
 | Transfer Preview   | Copy saves between profiles: pick source, target, and game → Preview Copy (Dry Run) → confirm → Copy to Target Profile. |
 | Manual Backup      | Back up one game's saves for one profile on demand: choose sources and destination → preview → confirm → Back Up Now.   |
 | Backups            | Every backup run with its files and hashes; restore with dry-run preview and confirmation.          |
-| History            | Every executed transfer, restore, and manual backup from SQLite, with per-file outcomes.             |
+| Sync               | Sync backup runs with a local/mounted folder or an SFTP server: check status → preview → select runs → confirm → Sync Now, with live progress. |
+| History            | Every executed transfer, restore, manual backup, cleanup, and sync from SQLite, with per-file outcomes. |
 
 ### How a profile-to-profile copy works
 
@@ -174,6 +181,15 @@ Restore (Backups tab) copies backed-up files to their original locations:
 * Files that differ are only replaced with overwrite enabled - and the replaced version is backed up first as a new restore-kind run.
 * Every backup file is verified against its manifest SHA-256 before it is restored.
 
+### Syncing backups (Sync tab)
+
+1. Pick the sync target: a local/mounted folder, or an SFTP server (host, port, username, password or private key file, remote path). SFTP secrets are session-only; on the first connection, verify the shown host-key fingerprint and enable "Trust this server's host key on first connect".
+2. **Check Connection & Sync Status** answers "am I in sync?" in one line without copying anything; **Preview Sync (Dry Run)** additionally builds the full plan (upload / download / in sync / conflict per run).
+3. Untick any runs you do not want to copy, confirm, and press **Sync Now** - a byte-accurate progress bar tracks the copy.
+4. The remote keeps a shared `sync-log.json` of every executed sync; downloaded runs are immediately restorable from the Backups tab.
+
+Sync never deletes or overwrites anything on either side; conflicts are reported and left for you to resolve (export one side as ZIP, or delete one side via Cleanup).
+
 ---
 
 ## Requirements
@@ -183,7 +199,7 @@ Restore (Backups tab) copies backed-up files to their original locations:
 * Windows (registry-based Steam discovery; other platforms are planned)
 * Internet access only for Steam catalog / PCGamingWiki harvesting commands
 
-Main packages: `Avalonia` 12, `CommunityToolkit.Mvvm`, `Microsoft.Extensions.DependencyInjection`, `Microsoft.Data.Sqlite`, `Gameloop.Vdf`.
+Main packages: `Avalonia` 12, `CommunityToolkit.Mvvm`, `Microsoft.Extensions.DependencyInjection`, `Microsoft.Data.Sqlite`, `Gameloop.Vdf`, `SSH.NET`.
 
 ---
 
