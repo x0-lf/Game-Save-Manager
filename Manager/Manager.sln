@@ -13,6 +13,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GameSaves.App", "GameSaves.
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GameSaves", "GameSaves\GameSaves.csproj", "{0D6DF9F6-0C02-2CF3-36A8-5447B746FEFF}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GameSaves.Tests", "GameSaves.Tests\GameSaves.Tests.csproj", "{D5960821-6D69-43B2-855B-B6FC7418B9C8}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -39,6 +41,10 @@ Global
 		{0D6DF9F6-0C02-2CF3-36A8-5447B746FEFF}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0D6DF9F6-0C02-2CF3-36A8-5447B746FEFF}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{0D6DF9F6-0C02-2CF3-36A8-5447B746FEFF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D5960821-6D69-43B2-855B-B6FC7418B9C8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D5960821-6D69-43B2-855B-B6FC7418B9C8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D5960821-6D69-43B2-855B-B6FC7418B9C8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D5960821-6D69-43B2-855B-B6FC7418B9C8}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

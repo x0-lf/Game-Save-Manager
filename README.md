@@ -56,6 +56,7 @@ The long-term goal is a cross-platform Steam save manager with backup profiles, 
 * **History tab** - durable run history in SQLite (`transfer_runs` / `transfer_items`):
   * Every executed transfer copy, restore, manual backup, cleanup, and sync is recorded automatically - counts, bytes, flags (dry run, overwrite, backups), blocking reason if refused, and per-file outcomes.
   * Recording failures never fail the run itself; history is a pure audit trail.
+* **Regression suite** - repeatable .NET tests for transfer no-overwrite and safe overwrite, backup manifests and hashes, restore integrity, ZIP archive import/export, SQLite history, and shared sync-engine safety.
 * Resizable panes (drag the dividers) so the app works on 1080p displays.
 
 ### Implemented - CLI / developer tooling
@@ -66,16 +67,6 @@ The long-term goal is a cross-platform Steam save manager with backup profiles, 
 * Save-path template expansion (environment tokens, Steam tokens, wildcards) and verification with confidence scores.
 * Verified-path backups with SHA-256 hashing and backup run/item records.
 * Steam catalog fetching and PCGamingWiki harvesting workflows.
-
-### Not implemented yet
-
-* Compressed-by-default backups and 7z support (ZIP export/import of runs is done).
-* Remote sync providers: WebDAV/Nextcloud, OneDrive/Google Drive (local folder and SFTP/SSH are done).
-* Encrypted credential storage (SFTP passwords are session-only until the secret store is decided).
-* Linux / macOS / Steam Deck discovery and platform-specific path expansion.
-* Scheduled backups, diff viewer, encryption.
-
----
 
 ## Safety model
 
@@ -126,6 +117,7 @@ Layering rules:
 | `GameSaves.App`            | Thin Avalonia UI over the services. No business logic in views.                              |
 | `GameSaves`                | Developer CLI and data-harvesting tooling. Kept working as a test harness.                   |
 | `GameSaves.Reviewer`       | Internal Avalonia tool to review whether scraped save paths are accurate before they are trusted (approve/reject/needs-fix with notes, search/filter, keyboard shortcuts). Self-contained: it does not reference Core or Infrastructure. |
+| `GameSaves.Tests`          | xUnit regression tests for transfer, backup, restore, archive, history, and sync safety.      |
 
 Trusted data rule: only mappings with review status **Approved** are used by the transfer flow. Pending/NeedsFix mappings are visible but never trusted automatically.
 
@@ -200,6 +192,8 @@ Sync never deletes or overwrites anything on either side; conflicts are reported
 * Internet access only for Steam catalog / PCGamingWiki harvesting commands
 
 Main packages: `Avalonia` 12, `CommunityToolkit.Mvvm`, `Microsoft.Extensions.DependencyInjection`, `Microsoft.Data.Sqlite`, `Gameloop.Vdf`, `SSH.NET`.
+
+Test packages: `Microsoft.NET.Test.Sdk`, `xunit`, `xunit.runner.visualstudio`.
 
 ---
 
@@ -286,51 +280,402 @@ Harvested data is candidate data: save locations can be wrong, incomplete, outda
 
 ---
 
-## Roadmap
+## Development roadmap
 
-### Milestone 1 - Local GUI manager and safe local transfer ✅ done
+### A — Baseline and regression protection
 
-* [x] 1A - Foundation: Core/Infrastructure/App split, CLI kept as tooling, approved-mappings trust model.
-* [x] 1B - GUI discovery: Steam root, libraries, installed games, profiles, dashboard, mapping status.
-* [x] 1C - Steam userdata game-folder transfer as a first-class concept:
-  * [x] `SteamUserDataGameFolder` transfer source and `CopyScope` semantics.
-  * [x] Preview independent of approved mappings; grouped UI.
-  * [x] Path containment checks at preview and execution.
-  * [x] Copy-only wording; no delete anywhere; overwrite off by default; explicit confirmation.
-* [x] Resizable, 1080p-friendly UI.
+* [x] Steam discovery
+* [x] Installed-game discovery
+* [x] Steam profile detection
+* [x] Approved save-path mappings
+* [x] Profile-to-profile transfer preview
+* [x] Guarded transfer execution
+* [x] Backup-before-overwrite
+* [x] Manual backup
+* [x] Restore workflow
+* [x] Restore target selection
+* [x] Backup retention cleanup
+* [x] ZIP export/import
+* [x] SQLite operation history
+* [x] Local-folder sync
+* [x] SFTP/SSH sync
+* [x] Add repeatable regression tests for the current transfer, backup, restore, archive, history, and sync behavior
 
-### Phase 2 - Backup system ✅ done
+### B — Replace the two-provider Boolean model
 
-* [x] Backup-before-overwrite hook with Safe Mode (failed backup refuses the overwrite).
-* [x] SHA-256 hashing and per-run `manifest.json`.
-* [x] Backup history read from manifests.
-* [x] Restore with dry-run preview, confirmation gate, overwrite opt-in, integrity check, and pre-restore backup.
-* [x] Manual on-demand backups - back up a selected game's saves for a chosen profile to a chosen destination (Manual Backup tab), without waiting for an overwrite.
-* [x] Backup and copy from profile to profile, sourced from the Steam userdata game folder and/or approved mappings in the database
-    at C:\Users\<username>\AppData\Local\GameSave\gamesave.db (copy-only by design - move/delete is intentionally not supported).
-* [x] Named backup presets (saved destination + source selection, stored in SQLite, applied from the Manual Backup tab).
-* [x] SQLite history tables (`transfer_runs`, `transfer_items`) recording transfers, restores, and manual backups, with a History tab.
-* [x] Retention/cleanup for old backup runs (preview-first, confirmation-gated, strictly scoped to the backup base, recorded in run history).
-* [x] ZIP archive support: export a run as one self-contained ZIP, import it back restorable (7z later).
+Replace the current `UseSftp` Boolean with a scalable, type-safe provider kind:
 
-### Phase 3 - Cloud sync abstraction 🔨 in progress
+```text
+LocalFolder
+Sftp
+GoogleDrive
+WebDav
+OneDrive
+```
 
-* [x] `ISyncProvider` abstraction and sync preview (Sync tab, dry-run first, confirmation-gated).
-* [x] `LocalFolderSyncProvider` first (no cloud dependency; NAS/USB/cloud-synced folders).
-* [x] Conflict detection (manifest + SHA-256 comparison, conflicts reported, never auto-resolved) and version-history metadata (`sync-log.json` on the remote).
-* [x] SFTP/SSH provider (SSH.NET, password or key-file auth, trust-on-first-use host keys, session-only secrets).
-* [ ] WebDAV/Nextcloud → OneDrive/Google Drive (Mega only if feasible) - on hold until the provider approach and the credential store are reviewed.
+* [ ] Keep provider selection type-safe
+* [ ] Preserve existing local-folder and SFTP behavior
+* [ ] Migrate existing `sync-settings.json` values
+* [ ] Preserve the user's saved SFTP settings
+* [ ] Avoid empty Boolean combinations such as `UseSftp`, `UseGoogleDrive`, and `UseWebDav`
 
-### Phase 4 - Cross-platform
+### C — Saved sync remote profiles
 
-* [ ] Windows path-resolver cleanup.
-* [ ] Linux and macOS Steam discovery.
-* [ ] Proton/Wine prefix support; Steam Deck support.
-* [ ] Platform-specific save-path expansion and per-platform mapping validation.
+Add named remote configurations such as Personal Google Drive, Home SFTP Server, USB Backup, and Nextcloud.
 
-### Phase 5 - Advanced features
+Each profile contains non-secret information only:
 
-* [ ] Encryption, scheduled backups, diff viewer, cloud conflict UI, modding export/import.
+* [ ] Profile ID
+* [ ] Display name
+* [ ] Provider kind
+* [ ] Account display name
+* [ ] Remote root display name
+* [ ] Provider-specific non-secret settings
+* [ ] Creation date
+* [ ] Last-used date
+* [ ] Last successful connection
+* [ ] Optional remote folder ID
+* [ ] Never store passwords, passphrases, refresh tokens, or OAuth token caches in plain JSON or plain SQLite fields
+
+### D — Provider capabilities
+
+Introduce a provider capability description so the App does not rely on provider-name checks.
+
+* [ ] Requires interactive login
+* [ ] Requires server credentials
+* [ ] Supports resumable upload
+* [ ] Supports remote quota
+* [ ] Supports selecting a remote folder
+* [ ] Supports persistent authentication
+* [ ] Supports connection testing
+* [ ] Supports logout
+* [ ] Supports opening the remote location in a browser
+* [ ] Drive UI behavior from capabilities instead of scattered provider-name checks
+
+### E — Secret-store abstraction
+
+Add a platform-neutral secret-storage interface.
+
+* [ ] Store secret
+* [ ] Read secret
+* [ ] Delete secret
+* [ ] Check whether a secret exists
+* [ ] Keep the interface in Core only if it remains platform-neutral and contains no Windows-specific types
+* [ ] Put the Windows implementation in Infrastructure
+* [ ] Support Google OAuth token data, future OneDrive tokens, future WebDAV app passwords, and optionally saved SFTP passwords/passphrases
+
+### F — Windows secure secret storage
+
+Study and choose between Windows DPAPI through `.NET ProtectedData` and Windows Credential Manager.
+
+* [ ] Encrypt for the current Windows user
+* [ ] Never log secret values
+* [ ] Never show stored tokens in the UI
+* [ ] Remove secrets when the remote profile is deleted or disconnected
+* [ ] Handle unreadable or corrupted secret data safely
+* [ ] Document Linux and macOS secret stores as future implementations
+
+### G — Google Cloud setup documentation
+
+Document the developer setup:
+
+* [ ] Create a Google Cloud project
+* [ ] Enable Google Drive API
+* [ ] Configure the OAuth consent screen
+* [ ] Add development test users while the app is in Testing mode
+* [ ] Create an OAuth client for a desktop application
+* [ ] Configure the application's client ID
+* [ ] Never commit client secrets, downloaded credential files, tokens, or personal account data
+* [ ] Add relevant local configuration files to `.gitignore`
+* [ ] Never place a personal Google OAuth token or downloaded private configuration in the repository
+
+### H — Google Drive dependencies and boundaries
+
+* [ ] Add only the Google packages needed by Infrastructure
+* [ ] Keep Google SDK types out of GameSaves.Core, transfer models, backup models, and App view models where practical
+* [ ] Keep Google SDK usage inside Infrastructure services
+* [ ] Review and update project package references
+* [ ] Update `THIRD-PARTY-NOTICES.md`
+* [ ] Update the README package list and license notices if required
+
+### I — Google Drive connection settings
+
+Add pure connection/settings models containing no persisted access or refresh tokens:
+
+* [ ] Remote profile ID
+* [ ] Account display name
+* [ ] Account email, when available
+* [ ] Google Drive root folder ID
+* [ ] Google Drive root folder display name
+* [ ] Requested scope
+* [ ] Connection status
+* [ ] Whether a token is stored
+
+### J — Google OAuth login inside the existing App
+
+Implement Google sign-in directly in `GameSaves.App`; do not create another application project.
+
+* [ ] User selects Google Drive as the sync provider
+* [ ] User clicks **Connect Google Drive**
+* [ ] Authentication opens through the supported desktop OAuth flow
+* [ ] Request only `https://www.googleapis.com/auth/drive.file`
+* [ ] Display the connected account
+* [ ] Store tokens through the secure secret store
+* [ ] Keep the user connected after restarting the app
+* [ ] Refresh authentication without forcing a new login
+* [ ] Return safely to the UI when authentication is cancelled
+* [ ] Show a friendly message when authorization is denied
+* [ ] Do not request full Drive access unless a later feature proves it is necessary
+
+### K — Google account lifecycle
+
+* [ ] Connect
+* [ ] Reconnect
+* [ ] Disconnect
+* [ ] Remove stored authentication
+* [ ] Handle revoked authorization
+* [ ] Show the connected account
+* [ ] Show connection state
+* [ ] Prevent sync when no valid account is connected
+* [ ] Remove locally stored token data when disconnecting
+
+### L — Google Drive application root folder
+
+For the first Google Drive version, create or find one visible application folder instead of building a full Drive browser:
+
+```text
+My Drive/
+└── GameSave Manager Backups/
+```
+
+* [ ] Store the Drive folder ID and use it as the authoritative identity
+* [ ] Use names only for display
+* [ ] Reuse the existing folder when reconnecting
+* [ ] Do not create duplicate root folders
+* [ ] Handle a deleted or moved root folder
+* [ ] Recreate the root folder only after explicit user confirmation
+* [ ] Do not use Google Drive `appDataFolder` for user backup runs
+
+### M — Refine remote metadata write semantics
+
+Separate the two meanings currently represented by `IRemoteFileSystem.WriteTextFileAsync`:
+
+* [ ] Create a backup-run file only if it is missing
+* [ ] Replace or update explicitly mutable provider metadata such as `.gamesave-sync/sync-log.json`
+* [ ] Read provider metadata
+* [ ] Keep backup-run content create-only and never weaken the no-overwrite rule
+
+### N — Google Drive object/path resolver
+
+Add an Infrastructure component responsible for:
+
+* [ ] Resolving a relative Game Save Manager path to Drive file/folder IDs
+* [ ] Finding a child by parent ID and name
+* [ ] Creating missing parent folders
+* [ ] Escaping Drive search values safely
+* [ ] Handling pagination
+* [ ] Rejecting ambiguous duplicate objects
+* [ ] Caching IDs only when safe
+* [ ] Invalidating stale cached IDs
+* [ ] Identifying trashed files and folders
+* [ ] Keeping Drive query construction out of the provider
+
+### O — GoogleDriveRemoteFileSystem validation
+
+Implement `ValidateAsync` to verify:
+
+* [ ] Google account is connected
+* [ ] Token can be refreshed
+* [ ] Drive API is reachable
+* [ ] Configured root folder exists
+* [ ] Configured root is a folder
+* [ ] Configured root is not trashed
+* [ ] The app can read and write there
+* [ ] Return provider-specific, user-friendly errors such as `GoogleDriveNotConnected`, `GoogleDriveAuthorizationRevoked`, `GoogleDriveRootMissing`, `GoogleDriveRootInaccessible`, `GoogleDriveUnavailable`, and `GoogleDriveQuotaExceeded`
+
+### P — Google Drive listing and text metadata
+
+Implement:
+
+* [ ] `RootExistsAsync`
+* [ ] `ListRunFolderNamesAsync`
+* [ ] `FolderExistsAsync`
+* [ ] `ReadTextFileAsync`
+* [ ] The safe metadata-write operations introduced in milestone M
+* [ ] Support API pagination and request only required fields
+* [ ] Use folder/file IDs
+* [ ] Ignore folders without `manifest.json`
+* [ ] Handle unreadable manifests as warnings
+* [ ] Preserve existing `SyncEngine` behavior
+* [ ] Support `.gamesave-sync/sync-log.json`
+
+### Q — Google Drive file listing
+
+Implement recursive file listing beneath a backup-run folder.
+
+* [ ] Return paths relative to the run folder
+* [ ] Keep `/` as the remote relative separator
+* [ ] Handle nested directories
+* [ ] Handle pagination
+* [ ] Ignore trashed objects
+* [ ] Detect ambiguous duplicate names instead of choosing one arbitrarily
+* [ ] Support cancellation
+
+### R — Google Drive uploads
+
+* [ ] Stream file uploads without loading entire files into memory
+* [ ] Create parent folders as required
+* [ ] Never overwrite an existing remote file
+* [ ] Report progress through the existing sync progress model
+* [ ] Support cancellation
+* [ ] Use resumable uploads for larger files
+* [ ] Keep `manifest.json` uploaded last
+* [ ] Ensure interrupted runs without a manifest are not treated as complete backups
+* [ ] Map quota, authentication, permission, and transient errors to clear warnings
+
+### S — Google Drive downloads
+
+* [ ] Stream downloads to a temporary local file first
+* [ ] Never overwrite an existing final local file
+* [ ] Move the temporary file into place only after a successful download
+* [ ] Delete failed temporary files
+* [ ] Report byte progress
+* [ ] Support cancellation
+* [ ] Preserve current manifest rewriting
+* [ ] Verify downloaded backup runs before they become restorable
+* [ ] Keep SHA-256 manifests as the content identity source
+
+### T — GoogleDriveSyncProvider
+
+Add a thin provider wrapper following the existing SFTP pattern.
+
+* [ ] Own the Google Drive remote filesystem lifetime
+* [ ] Create the existing `SyncEngine`
+* [ ] Forward preview to `SyncEngine`
+* [ ] Forward execution to `SyncEngine`
+* [ ] Forward sync-log reading to `SyncEngine`
+* [ ] Dispose provider-specific resources
+* [ ] Do not reimplement conflict detection, sync plans, selection logic, sync history, manifest comparison, or upload/download decisions
+
+### U — Sync provider factory
+
+* [ ] Extend the existing factory to create Google Drive providers
+* [ ] Keep existing local and SFTP factory methods working
+* [ ] Keep provider creation free of UI logic
+* [ ] Receive dependencies through DI
+* [ ] Inject OAuth/token services and secret storage
+* [ ] Keep secrets and tokens out of display roots
+
+### V — Sync tab provider selector
+
+Replace the two-provider Sync UI with a selector that initially shows:
+
+```text
+Local folder
+SFTP server
+Google Drive
+```
+
+* [ ] Change provider-specific connection fields with the selected provider
+* [ ] For Google Drive, show connection status and the connected account
+* [ ] Add **Connect Google Drive** and **Disconnect**
+* [ ] Show the remote folder name
+* [ ] Add **Open in Google Drive/browser** later if safe
+* [ ] Keep **Check Connection & Sync Status**
+* [ ] Keep upload enabled, download enabled, preview, per-run selection, Select All, Select None, explicit confirmation, Sync Now, live progress, warnings, execution results, and sync history shared by every provider
+* [ ] Keep Google Drive in the existing Sync tab
+
+### W — Google Drive sync integration
+
+Connect Google Drive to the existing Sync tab workflow:
+
+* [ ] Local-only run → upload
+* [ ] Remote-only run → download
+* [ ] Matching run → in sync
+* [ ] Same run name with different content → conflict
+* [ ] Never copy a conflict automatically
+* [ ] Keep deselected runs pending
+* [ ] Never overwrite an existing remote run
+* [ ] Never overwrite an existing local run
+* [ ] Introduce no delete operation
+* [ ] Make downloaded runs appear in Backups and remain restorable
+* [ ] Record every executed sync in SQLite history
+* [ ] Update the shared `sync-log.json`
+
+### X — Retry, cancellation, and incomplete uploads
+
+Add provider-neutral hardening where possible:
+
+* [ ] Expose a Cancel Sync button
+* [ ] Cancel the current operation through existing cancellation tokens
+* [ ] Retry transient Google API and network failures with bounded retries
+* [ ] Respect server retry instructions
+* [ ] Do not endlessly retry authentication or permission failures
+* [ ] Do not upload the manifest when payload upload fails
+* [ ] Identify incomplete remote folders that have no manifest
+* [ ] Do not treat incomplete folders as backup runs
+* [ ] Initially report incomplete folders without deleting them automatically
+
+### Y — Google Drive acceptance verification
+
+Add automated tests where API calls can be mocked or abstracted, then run live manual verification with a development Google account.
+
+1. [ ] Connect one Google account
+2. [ ] Restart the app and remain connected
+3. [ ] Disconnect and remove the local token
+4. [ ] Create or find one application root folder
+5. [ ] Detect a local-only run
+6. [ ] Upload the selected run
+7. [ ] Verify the manifest is uploaded last
+8. [ ] Detect a remote-only run
+9. [ ] Download the selected run
+10. [ ] Restore the downloaded run
+11. [ ] Identify identical runs as in sync
+12. [ ] Detect a same-name/different-manifest conflict
+13. [ ] Never overwrite remote files
+14. [ ] Never overwrite local runs
+15. [ ] Never delete local or remote runs
+16. [ ] Cancel an active upload
+17. [ ] Handle revoked access
+18. [ ] Handle a missing root folder
+19. [ ] Handle quota and network errors
+20. [ ] Record Google Drive sync in SQLite history
+21. [ ] App builds
+22. [ ] CLI builds
+23. [ ] Reviewer builds
+
+### Z — Documentation and next roadmap
+
+After Google Drive is verified:
+
+* [ ] Update README current status
+* [ ] Mark Google Drive sync complete
+* [ ] Document Google Cloud setup
+* [ ] Document the requested OAuth scope
+* [ ] Document where tokens are stored
+* [ ] Document connect/disconnect behavior
+* [ ] Document the visible Drive folder structure
+* [ ] Document the copy-only safety model
+* [ ] Update `THIRD-PARTY-NOTICES.md`
+* [ ] Add screenshots later if useful
+
+Then continue with these future milestones in order:
+
+1. [ ] WebDAV/Nextcloud provider
+2. [ ] OneDrive provider
+3. [ ] Multiple active/saved remote profiles
+4. [ ] Remote quota and health dashboard
+5. [ ] Compressed-by-default backups
+6. [ ] 7z support
+7. [ ] Scheduled backups and sync
+8. [ ] Backup diff viewer
+9. [ ] Optional client-side encryption before cloud upload
+10. [ ] Linux Steam discovery
+11. [ ] Proton/Wine prefix support
+12. [ ] Steam Deck support
+13. [ ] macOS discovery
+14. [ ] Cross-platform secret stores
+15. [ ] Release packaging, update system, and migration testing
 
 ---
 
@@ -351,6 +696,12 @@ Build everything:
 
 ```bash
 dotnet build Manager/Manager.sln
+```
+
+Run the regression suite:
+
+```bash
+dotnet test Manager/GameSaves.Tests
 ```
 
 Run the desktop app:

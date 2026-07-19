@@ -21,4 +21,8 @@
     <Folder Include="Profiles\" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="GameSaves.Tests" />
+  </ItemGroup>
+
 </Project>
