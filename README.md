@@ -41,8 +41,9 @@ The long-term goal is a cross-platform Steam save manager with backup profiles, 
   * **ZIP archive export / import**: export any backup run as a single self-contained ZIP (files + manifest) for cold storage or another machine, and import such a ZIP back into the backup base - the manifest's backup-file paths are rewritten to the extracted location and verified, so the imported run is fully restorable. Nothing is ever overwritten.
   * SHA-256 integrity check: tampered or missing backup files are never restored.
   * Pre-restore backup: files replaced by a restore are themselves backed up, so a restore is always undoable.
-* **Sync tab** - backup-run sync with a local or mounted folder (NAS share, USB drive, cloud-synced folder):
-  * `ISyncProvider` abstraction with `LocalFolderSyncProvider` as the first provider (WebDAV/SFTP/cloud come later).
+* **Sync tab** - backup-run sync with a local/mounted folder or an SFTP server:
+  * `ISyncProvider` abstraction with `LocalFolderSyncProvider` and `SftpSyncProvider` (SSH.NET); WebDAV and cloud providers come later.
+  * **SFTP**: host/port/username with password or private-key-file authentication; passwords and passphrases are session-only and never written to disk. Host keys use trust-on-first-use: the SHA-256 fingerprint is shown on first connect, stored like SSH known_hosts, and any later change fails loudly ("Forget Stored Host Key" covers planned reinstalls). Non-secret connection settings are remembered between sessions.
   * Copy-only, both ways: a run missing on one side is copied there; nothing is ever deleted or overwritten.
   * Sync preview with per-run actions (upload / download / in sync / conflict), counts, and sizes; execution requires explicit confirmation.
   * **Conflict detection**: same run name with different content (compared via manifest identity and per-file SHA-256) is reported and never copied automatically.
@@ -65,7 +66,8 @@ The long-term goal is a cross-platform Steam save manager with backup profiles, 
 ### Not implemented yet
 
 * Compressed-by-default backups and 7z support (ZIP export/import of runs is done).
-* Remote sync providers: WebDAV/Nextcloud, SFTP/SSH, OneDrive/Google Drive (the local-folder provider and the `ISyncProvider` abstraction are done).
+* Remote sync providers: WebDAV/Nextcloud, OneDrive/Google Drive (local folder and SFTP/SSH are done).
+* Encrypted credential storage (SFTP passwords are session-only until the secret store is decided).
 * Linux / macOS / Steam Deck discovery and platform-specific path expansion.
 * Scheduled backups, diff viewer, encryption.
 
@@ -300,7 +302,8 @@ Harvested data is candidate data: save locations can be wrong, incomplete, outda
 * [x] `ISyncProvider` abstraction and sync preview (Sync tab, dry-run first, confirmation-gated).
 * [x] `LocalFolderSyncProvider` first (no cloud dependency; NAS/USB/cloud-synced folders).
 * [x] Conflict detection (manifest + SHA-256 comparison, conflicts reported, never auto-resolved) and version-history metadata (`sync-log.json` on the remote).
-* [ ] WebDAV/Nextcloud → SFTP/SSH → OneDrive/Google Drive (Mega only if feasible) - deliberately on hold until the provider approach is reviewed.
+* [x] SFTP/SSH provider (SSH.NET, password or key-file auth, trust-on-first-use host keys, session-only secrets).
+* [ ] WebDAV/Nextcloud → OneDrive/Google Drive (Mega only if feasible) - on hold until the provider approach and the credential store are reviewed.
 
 ### Phase 4 - Cross-platform
 

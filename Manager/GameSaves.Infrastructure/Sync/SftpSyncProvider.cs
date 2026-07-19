@@ -4,34 +4,33 @@ using GameSaves.Core.Transfers;
 namespace GameSaves.Infrastructure.Sync
 {
     /// <summary>
-    /// Syncs backup runs with another local or mounted folder (NAS share, USB
-    /// drive, cloud-synced folder). All sync logic lives in the shared
-    /// SyncEngine; this provider only supplies the local-folder file system.
-    /// Future providers (WebDAV, SFTP, ...) follow the same shape: implement
-    /// IRemoteFileSystem and hand it to the engine.
+    /// Syncs backup runs with a folder on an SFTP server. All sync logic lives
+    /// in the shared SyncEngine; this provider only supplies the SFTP file
+    /// system and owns its connection lifetime.
     /// </summary>
-    public sealed class LocalFolderSyncProvider : ISyncProvider
+    public sealed class SftpSyncProvider : ISyncProvider
     {
+        private readonly SftpRemoteFileSystem _fileSystem;
         private readonly SyncEngine _engine;
 
-        public LocalFolderSyncProvider(
-            string remoteRoot,
+        internal SftpSyncProvider(
+            SftpConnectionSettings settings,
+            SftpKnownHostsStore knownHosts,
             IBackupHistoryService backupHistoryService,
             ITransferHistoryRepository historyRepository)
         {
-            RemoteRoot = remoteRoot;
+            RemoteRoot = settings.DisplayRoot;
+            _fileSystem = new SftpRemoteFileSystem(settings, knownHosts);
 
             _engine = new SyncEngine(
-                new LocalFolderRemoteFileSystem(
-                    remoteRoot,
-                    backupHistoryService.GetBackupBasePath()),
+                _fileSystem,
                 ProviderName,
-                remoteRoot,
+                RemoteRoot,
                 backupHistoryService,
                 historyRepository);
         }
 
-        public string ProviderName => "Local folder";
+        public string ProviderName => "SFTP";
 
         public string RemoteRoot { get; }
 
@@ -58,7 +57,7 @@ namespace GameSaves.Infrastructure.Sync
 
         public void Dispose()
         {
-            // The local-folder backend holds no connections.
+            _fileSystem.Dispose();
         }
     }
 }

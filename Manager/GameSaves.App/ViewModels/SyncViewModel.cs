@@ -28,6 +28,39 @@ namespace GameSaves.App.ViewModels
         private string remoteRootPath = "";
 
         [ObservableProperty]
+        private bool useSftp;
+
+        [ObservableProperty]
+        private string sftpHost = "";
+
+        [ObservableProperty]
+        private string sftpPort = "22";
+
+        [ObservableProperty]
+        private string sftpUsername = "";
+
+        [ObservableProperty]
+        private bool sftpUsePassword = true;
+
+        [ObservableProperty]
+        private bool sftpUsePrivateKey;
+
+        [ObservableProperty]
+        private string sftpPassword = "";
+
+        [ObservableProperty]
+        private string sftpKeyFilePath = "";
+
+        [ObservableProperty]
+        private string sftpKeyPassphrase = "";
+
+        [ObservableProperty]
+        private string sftpRemotePath = "/gamesave-sync";
+
+        [ObservableProperty]
+        private bool sftpTrustNewHostKey;
+
+        [ObservableProperty]
         private bool uploadEnabled = true;
 
         [ObservableProperty]
@@ -59,6 +92,17 @@ namespace GameSaves.App.ViewModels
         {
             _syncProviderFactory = syncProviderFactory;
             _folderPickerService = folderPickerService;
+
+            SyncUiSettings saved = SyncSettingsStore.Load();
+            useSftp = saved.UseSftp;
+            remoteRootPath = saved.LocalFolderPath;
+            sftpHost = saved.SftpHost;
+            sftpPort = saved.SftpPort;
+            sftpUsername = saved.SftpUsername;
+            sftpUsePrivateKey = saved.SftpUsePrivateKey;
+            sftpUsePassword = !saved.SftpUsePrivateKey;
+            sftpKeyFilePath = saved.SftpKeyFilePath;
+            sftpRemotePath = saved.SftpRemotePath;
         }
 
         partial void OnRemoteRootPathChanged(string value) => InvalidatePlan();
@@ -67,16 +111,121 @@ namespace GameSaves.App.ViewModels
 
         partial void OnDownloadEnabledChanged(bool value) => InvalidatePlan();
 
-        // A plan built against different settings must not stay executable.
+        partial void OnUseSftpChanged(bool value) => InvalidatePlan();
+
+        partial void OnSftpHostChanged(string value) => InvalidatePlan();
+
+        partial void OnSftpPortChanged(string value) => InvalidatePlan();
+
+        partial void OnSftpUsernameChanged(string value) => InvalidatePlan();
+
+        partial void OnSftpPasswordChanged(string value) => InvalidatePlan();
+
+        partial void OnSftpKeyFilePathChanged(string value) => InvalidatePlan();
+
+        partial void OnSftpKeyPassphraseChanged(string value) => InvalidatePlan();
+
+        partial void OnSftpRemotePathChanged(string value) => InvalidatePlan();
+
+        partial void OnSftpTrustNewHostKeyChanged(bool value) => InvalidatePlan();
+
+        partial void OnSftpUsePasswordChanged(bool value)
+        {
+            if (value)
+                SftpUsePrivateKey = false;
+
+            InvalidatePlan();
+        }
+
+        partial void OnSftpUsePrivateKeyChanged(bool value)
+        {
+            if (value)
+                SftpUsePassword = false;
+
+            InvalidatePlan();
+        }
+
+        // A plan built against different settings must not stay executable,
+        // and a provider holding a live connection must be released.
         private void InvalidatePlan()
         {
-            if (_lastPlan is null)
+            if (_lastPlan is null && _lastProvider is null)
                 return;
 
             _lastPlan = null;
+            _lastProvider?.Dispose();
             _lastProvider = null;
             ClearPreview();
             StatusMessage = "Sync settings changed. Build a new sync preview.";
+        }
+
+        private ISyncProvider CreateConfiguredProvider()
+        {
+            if (!UseSftp)
+                return _syncProviderFactory.CreateLocalFolderProvider(RemoteRootPath);
+
+            int port = int.TryParse(SftpPort.Trim(), out int parsed) ? parsed : 22;
+
+            return _syncProviderFactory.CreateSftpProvider(new SftpConnectionSettings(
+                Host: SftpHost.Trim(),
+                Port: port,
+                Username: SftpUsername.Trim(),
+                AuthMethod: SftpUsePrivateKey ? SftpAuthMethod.PrivateKey : SftpAuthMethod.Password,
+                Password: string.IsNullOrEmpty(SftpPassword) ? null : SftpPassword,
+                PrivateKeyPath: string.IsNullOrWhiteSpace(SftpKeyFilePath) ? null : SftpKeyFilePath.Trim(),
+                PrivateKeyPassphrase: string.IsNullOrEmpty(SftpKeyPassphrase) ? null : SftpKeyPassphrase,
+                RemotePath: SftpRemotePath,
+                TrustNewHostKey: SftpTrustNewHostKey));
+        }
+
+        private void SaveNonSecretSettings()
+        {
+            SyncSettingsStore.Save(new SyncUiSettings(
+                UseSftp: UseSftp,
+                LocalFolderPath: RemoteRootPath,
+                SftpHost: SftpHost,
+                SftpPort: SftpPort,
+                SftpUsername: SftpUsername,
+                SftpUsePrivateKey: SftpUsePrivateKey,
+                SftpKeyFilePath: SftpKeyFilePath,
+                SftpRemotePath: SftpRemotePath));
+        }
+
+        [RelayCommand]
+        private async Task ChooseKeyFileAsync()
+        {
+            try
+            {
+                string? picked = await _folderPickerService.PickFileAsync(
+                    "Select the SSH private key file.",
+                    "Private key files",
+                    new[] { "*" });
+
+                // Cancel keeps the current key file unchanged.
+                if (!string.IsNullOrWhiteSpace(picked))
+                    SftpKeyFilePath = picked;
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Could not open the file picker: {ex.Message}";
+            }
+        }
+
+        [RelayCommand]
+        private void ForgetSftpHostKey()
+        {
+            if (string.IsNullOrWhiteSpace(SftpHost))
+            {
+                StatusMessage = "Enter the SFTP host first.";
+                return;
+            }
+
+            int port = int.TryParse(SftpPort.Trim(), out int parsed) ? parsed : 22;
+
+            _syncProviderFactory.ForgetSftpHostKey(SftpHost.Trim(), port);
+            InvalidatePlan();
+
+            StatusMessage = $"Stored host key for {SftpHost.Trim()}:{port} forgotten. The next connection is treated as a first connect.";
         }
 
         private void ClearPreview()
@@ -113,12 +262,20 @@ namespace GameSaves.App.ViewModels
                 return;
 
             _lastPlan = null;
+            _lastProvider?.Dispose();
             _lastProvider = null;
             ClearPreview();
 
-            if (string.IsNullOrWhiteSpace(RemoteRootPath))
+            if (!UseSftp && string.IsNullOrWhiteSpace(RemoteRootPath))
             {
                 StatusMessage = "Choose a sync folder first.";
+                return;
+            }
+
+            if (UseSftp &&
+                (string.IsNullOrWhiteSpace(SftpHost) || string.IsNullOrWhiteSpace(SftpUsername)))
+            {
+                StatusMessage = "Enter at least the SFTP host and username first.";
                 return;
             }
 
@@ -128,13 +285,17 @@ namespace GameSaves.App.ViewModels
                 return;
             }
 
+            SaveNonSecretSettings();
+
             try
             {
                 IsLoading = true;
-                StatusMessage = "Building sync preview (dry run, nothing is copied)...";
+                StatusMessage = UseSftp
+                    ? "Connecting to the SFTP server and building the sync preview (dry run, nothing is copied)..."
+                    : "Building sync preview (dry run, nothing is copied)...";
 
-                ISyncProvider provider =
-                    _syncProviderFactory.CreateLocalFolderProvider(RemoteRootPath);
+                ISyncProvider provider = CreateConfiguredProvider();
+                _lastProvider = provider;
 
                 SyncPlan plan = await provider.CreatePreviewAsync(new SyncOptions
                 {
@@ -143,7 +304,6 @@ namespace GameSaves.App.ViewModels
                 });
 
                 _lastPlan = plan;
-                _lastProvider = provider;
                 ExecutionResults.Clear();
                 ExecutionStatusMessage = "No sync executed.";
                 ConfirmSync = false;
