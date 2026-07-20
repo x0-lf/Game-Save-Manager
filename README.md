@@ -178,7 +178,7 @@ Restore (Backups tab) copies backed-up files to their original locations:
 
 ### Syncing backups (Sync tab)
 
-1. Select a named Local Folder or SFTP profile, or choose **New** and configure an unsaved target. Profile selection only fills the form; it never connects or starts work.
+1. Select a named Local Folder or SFTP profile, choose **No saved profile (use current settings)** to work directly from the form, or choose **New** to reset an unsaved target. Profile selection only fills the form; it never connects or starts work.
 2. Save, Save As, rename, or explicitly delete profile configuration as needed. Deletion affects only the profile row, never backups, remote files, history, archives, or SFTP known-host entries.
 3. For SFTP, enter the session-only password or passphrase after selecting the profile; profile changes clear these values and the trust-new-host confirmation.
 4. **Check Connection & Sync Status** answers "am I in sync?" in one line without copying anything; **Preview Sync (Dry Run)** additionally builds the full plan (upload / download / in sync / conflict per run).

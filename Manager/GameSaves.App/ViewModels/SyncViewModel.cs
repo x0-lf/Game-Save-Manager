@@ -23,6 +23,7 @@ namespace GameSaves.App.ViewModels
         private ISyncProvider? _lastProvider;
         private bool _applyingProfile;
         private bool _suppressProfileSelection;
+        private bool _suppressProfileOptionSelection;
 
         [ObservableProperty]
         private bool isLoading;
@@ -123,6 +124,9 @@ namespace GameSaves.App.ViewModels
         private SyncRemoteProfile? selectedRemoteProfile;
 
         [ObservableProperty]
+        private SyncRemoteProfileOption? selectedRemoteProfileOption;
+
+        [ObservableProperty]
         private string remoteProfileDisplayName = "";
 
         [ObservableProperty]
@@ -184,6 +188,8 @@ namespace GameSaves.App.ViewModels
         public ObservableCollection<SyncLogEntryRowViewModel> SyncLog { get; } = new();
 
         public ObservableCollection<SyncRemoteProfile> RemoteProfiles { get; } = new();
+
+        public ObservableCollection<SyncRemoteProfileOption> RemoteProfileOptions { get; } = new();
 
         public IReadOnlyList<SyncProviderOption> ProviderOptions { get; } =
             new[]
@@ -289,7 +295,27 @@ namespace GameSaves.App.ViewModels
         partial void OnSelectedRemoteProfileChanged(SyncRemoteProfile? value)
         {
             if (!_suppressProfileSelection && value is not null)
+            {
+                SelectProfileOption(value.Id);
                 ApplyRemoteProfile(value, persistSelection: true);
+            }
+        }
+
+        partial void OnSelectedRemoteProfileOptionChanged(SyncRemoteProfileOption? value)
+        {
+            if (_suppressProfileOptionSelection || value is null)
+                return;
+
+            if (value.Profile is null)
+            {
+                UseWithoutSavedProfile();
+                return;
+            }
+
+            _suppressProfileSelection = true;
+            SelectedRemoteProfile = value.Profile;
+            _suppressProfileSelection = false;
+            ApplyRemoteProfile(value.Profile, persistSelection: true);
         }
 
         private void OnPersistentSettingChanged()
@@ -321,13 +347,13 @@ namespace GameSaves.App.ViewModels
 
         private void LoadProfiles(Guid? selectedProfileId)
         {
-            RemoteProfiles.Clear();
-
-            foreach (SyncRemoteProfile profile in _profileRepository.GetAll())
-                RemoteProfiles.Add(profile);
+            ReplaceProfileCollections(_profileRepository.GetAll());
 
             if (selectedProfileId is null)
+            {
+                SelectNoProfileOption();
                 return;
+            }
 
             SyncRemoteProfile? selected = RemoteProfiles
                 .FirstOrDefault(profile => profile.Id == selectedProfileId.Value);
@@ -337,8 +363,38 @@ namespace GameSaves.App.ViewModels
                 _suppressProfileSelection = true;
                 SelectedRemoteProfile = selected;
                 _suppressProfileSelection = false;
+                SelectProfileOption(selected.Id);
                 ApplyRemoteProfile(selected, persistSelection: false);
             }
+            else
+            {
+                SelectNoProfileOption();
+            }
+        }
+
+        private void UseWithoutSavedProfile()
+        {
+            _suppressProfileSelection = true;
+            SelectedRemoteProfile = null;
+            _suppressProfileSelection = false;
+
+            _applyingProfile = true;
+
+            try
+            {
+                RemoteProfileDisplayName = "";
+                ClearSessionOnlySftpState();
+            }
+            finally
+            {
+                _applyingProfile = false;
+            }
+
+            InvalidatePlan(force: true);
+            ConfirmDeleteRemoteProfile = false;
+            RemoteProfileState = "Unsaved settings (no profile)";
+            StatusMessage = "Using the current sync settings without a saved remote profile. Build a new preview when ready.";
+            SaveNonSecretSettings();
         }
 
         private void ApplyRemoteProfile(
@@ -403,6 +459,7 @@ namespace GameSaves.App.ViewModels
             _suppressProfileSelection = true;
             SelectedRemoteProfile = null;
             _suppressProfileSelection = false;
+            SelectNoProfileOption();
 
             _applyingProfile = true;
 
@@ -557,14 +614,8 @@ namespace GameSaves.App.ViewModels
             try
             {
                 string deletedName = SelectedRemoteProfile.DisplayName;
-                Guid deletedId = SelectedRemoteProfile.Id;
                 _profileRepository.Delete(SelectedRemoteProfile.Id);
-                SyncRemoteProfile? deleted = RemoteProfiles
-                    .FirstOrDefault(profile => profile.Id == deletedId);
-
-                if (deleted is not null)
-                    RemoteProfiles.Remove(deleted);
-
+                ReplaceProfileCollections(_profileRepository.GetAll());
                 NewRemoteProfile();
                 ConfirmDeleteRemoteProfile = false;
                 StatusMessage = $"Deleted profile '{deletedName}' only. No backup, history, known-host, or remote data was removed.";
@@ -687,18 +738,49 @@ namespace GameSaves.App.ViewModels
         private void RefreshProfileList(Guid selectedId)
         {
             IReadOnlyList<SyncRemoteProfile> profiles = _profileRepository.GetAll();
-            RemoteProfiles.Clear();
-
-            foreach (SyncRemoteProfile profile in profiles)
-                RemoteProfiles.Add(profile);
+            ReplaceProfileCollections(profiles);
 
             SyncRemoteProfile selected = profiles.First(profile => profile.Id == selectedId);
             _suppressProfileSelection = true;
             SelectedRemoteProfile = selected;
             _suppressProfileSelection = false;
+            SelectProfileOption(selected.Id);
             _applyingProfile = true;
             RemoteProfileDisplayName = selected.DisplayName;
             _applyingProfile = false;
+        }
+
+        private void ReplaceProfileCollections(IReadOnlyList<SyncRemoteProfile> profiles)
+        {
+            RemoteProfiles.Clear();
+            RemoteProfileOptions.Clear();
+            RemoteProfileOptions.Add(new SyncRemoteProfileOption(
+                Profile: null,
+                DisplayName: "No saved profile (use current settings)"));
+
+            foreach (SyncRemoteProfile profile in profiles)
+            {
+                RemoteProfiles.Add(profile);
+                RemoteProfileOptions.Add(new SyncRemoteProfileOption(
+                    profile,
+                    profile.DisplayName));
+            }
+        }
+
+        private void SelectNoProfileOption()
+        {
+            _suppressProfileOptionSelection = true;
+            SelectedRemoteProfileOption = RemoteProfileOptions
+                .FirstOrDefault(option => option.Profile is null);
+            _suppressProfileOptionSelection = false;
+        }
+
+        private void SelectProfileOption(Guid profileId)
+        {
+            _suppressProfileOptionSelection = true;
+            SelectedRemoteProfileOption = RemoteProfileOptions
+                .FirstOrDefault(option => option.Profile?.Id == profileId);
+            _suppressProfileOptionSelection = false;
         }
 
         private void TryUpdateLastUsed()

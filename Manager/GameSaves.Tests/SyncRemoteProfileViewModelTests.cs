@@ -1,3 +1,4 @@
+using GameSaves.App.Models;
 using GameSaves.App.Services;
 using GameSaves.App.ViewModels;
 using GameSaves.Core.Sync;
@@ -57,10 +58,68 @@ public sealed class SyncRemoteProfileViewModelTests
         Assert.Null(repository.GetById(copiedId));
         Assert.NotNull(repository.GetById(original.Id));
         Assert.DoesNotContain(viewModel.RemoteProfiles, profile => profile.Id == copiedId);
+        Assert.DoesNotContain(
+            viewModel.RemoteProfileOptions,
+            option => option.Profile?.Id == copiedId);
         Assert.Null(viewModel.SelectedRemoteProfile);
         Assert.Equal("Unsaved changes", viewModel.RemoteProfileState);
         Assert.Equal(0, factory.CreateCount);
         Assert.Equal(0, factory.ExecuteCount);
+    }
+
+    [Fact]
+    public async Task NoSavedProfileOption_PreservesFormAndAllowsPreviewWithoutProfile()
+    {
+        DateTimeOffset now = DateTimeOffset.Parse("2026-07-20T10:00:00Z");
+        var clock = new FixedUtcClock(now);
+        var repository = new InMemorySyncRemoteProfileRepository();
+        SyncRemoteProfile sftp = repository.Create(SftpProfile(
+            "Home SFTP", "home.example.test", now));
+        var factory = new ProfileTestProviderFactory();
+        SyncUiSettings settings = SyncUiSettings.Default with
+        {
+            SelectedRemoteProfileId = sftp.Id,
+            LegacyProfileMigrationCompleted = true
+        };
+        var store = new RecordingSettingsStore(settings);
+        var viewModel = new SyncViewModel(
+            factory,
+            new NullProfileFolderPicker(),
+            store,
+            repository,
+            new StubSyncRemoteProfileMigrationService(settings),
+            clock);
+        viewModel.SftpPassword = "first-session-password";
+        await viewModel.PreviewSyncCommand.ExecuteAsync(null);
+        ProfileTestProvider firstProvider =
+            Assert.IsType<ProfileTestProvider>(factory.LastProvider);
+        SyncRemoteProfileOption noProfile = viewModel.RemoteProfileOptions[0];
+
+        Assert.Null(noProfile.Profile);
+        Assert.Equal("No saved profile (use current settings)", noProfile.DisplayName);
+
+        viewModel.SelectedRemoteProfileOption = noProfile;
+
+        Assert.True(firstProvider.IsDisposed);
+        Assert.Null(viewModel.SelectedRemoteProfile);
+        Assert.Equal(noProfile, viewModel.SelectedRemoteProfileOption);
+        Assert.Equal(SyncProviderKind.Sftp, viewModel.SelectedProviderKind);
+        Assert.Equal("home.example.test", viewModel.SftpHost);
+        Assert.Equal("", viewModel.SftpPassword);
+        Assert.Equal("", viewModel.SftpKeyPassphrase);
+        Assert.False(viewModel.SftpTrustNewHostKey);
+        Assert.Empty(viewModel.Items);
+        Assert.False(viewModel.CanExecuteSync);
+        Assert.Equal("Unsaved settings (no profile)", viewModel.RemoteProfileState);
+        Assert.Null(store.Saved!.SelectedRemoteProfileId);
+        Assert.Equal("home.example.test", store.Saved.SftpHost);
+
+        viewModel.SftpPassword = "second-session-password";
+        await viewModel.PreviewSyncCommand.ExecuteAsync(null);
+
+        Assert.Equal(2, factory.CreateCount);
+        Assert.True(viewModel.CanExecuteSync);
+        Assert.Null(viewModel.SelectedRemoteProfile);
     }
 
     [Fact]

@@ -152,10 +152,9 @@
                                        FontSize="12" />
 
                             <ComboBox Grid.Column="1"
-                                      ItemsSource="{Binding RemoteProfiles}"
-                                      SelectedItem="{Binding SelectedRemoteProfile}"
-                                      MinHeight="32"
-                                      PlaceholderText="Unsaved profile">
+                                      ItemsSource="{Binding RemoteProfileOptions}"
+                                      SelectedItem="{Binding SelectedRemoteProfileOption}"
+                                      MinHeight="32">
                                 <ComboBox.ItemTemplate>
                                     <DataTemplate>
                                         <TextBlock Text="{Binding DisplayName}" />
