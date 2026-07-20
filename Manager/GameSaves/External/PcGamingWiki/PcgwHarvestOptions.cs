@@ -12,9 +12,9 @@ namespace GameSaves.External
 
         public IReadOnlyList<string> SteamAppIds { get; init; } = Array.Empty<string>();
 
-        public int RequestsPerMinute { get; init; } = 20;
+        public int RequestsPerMinute { get; init; } = 25;
 
-        public int PauseEveryRequests { get; init; } = 20;
+        public int PauseEveryRequests { get; init; } = 25;
 
         public TimeSpan PauseEveryRequestsDuration { get; init; } = TimeSpan.FromMinutes(1);
 

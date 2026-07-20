@@ -41,6 +41,8 @@ namespace GameSaves.Infrastructure.DependencyInjection
             services.AddSingleton<IBackupCleanupService, BackupCleanupService>();
             services.AddSingleton<IBackupArchiveService, BackupArchiveService>();
             services.AddSingleton<ISyncProviderFactory, SyncProviderFactory>();
+            services.AddSingleton<IUtcClock, SystemUtcClock>();
+            services.AddSingleton<SyncRemoteProfileSettingsSerializer>();
 
             services.AddSingleton<ISavePathMappingRepository>(provider =>
             {
@@ -67,6 +69,18 @@ namespace GameSaves.Infrastructure.DependencyInjection
 
                 return new SqliteManualBackupPresetRepository(
                     pathProvider.GetDatabasePath());
+            });
+
+            services.AddSingleton<ISyncRemoteProfileRepository>(provider =>
+            {
+                IAppDatabasePathProvider pathProvider =
+                    provider.GetRequiredService<IAppDatabasePathProvider>();
+                SyncRemoteProfileSettingsSerializer serializer =
+                    provider.GetRequiredService<SyncRemoteProfileSettingsSerializer>();
+
+                return new SqliteSyncRemoteProfileRepository(
+                    pathProvider.GetDatabasePath(),
+                    serializer);
             });
 
             return services;

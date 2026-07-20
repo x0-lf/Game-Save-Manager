@@ -17,8 +17,12 @@ namespace GameSaves.App.ViewModels
         private readonly ISyncProviderFactory _syncProviderFactory;
         private readonly IFolderPickerService _folderPickerService;
         private readonly ISyncSettingsStore _syncSettingsStore;
+        private readonly ISyncRemoteProfileRepository _profileRepository;
+        private readonly IUtcClock _clock;
         private SyncPlan? _lastPlan;
         private ISyncProvider? _lastProvider;
+        private bool _applyingProfile;
+        private bool _suppressProfileSelection;
 
         [ObservableProperty]
         private bool isLoading;
@@ -115,6 +119,18 @@ namespace GameSaves.App.ViewModels
         [ObservableProperty]
         private string connectionCheckMessage = "";
 
+        [ObservableProperty]
+        private SyncRemoteProfile? selectedRemoteProfile;
+
+        [ObservableProperty]
+        private string remoteProfileDisplayName = "";
+
+        [ObservableProperty]
+        private string remoteProfileState = "Unsaved changes";
+
+        [ObservableProperty]
+        private bool confirmDeleteRemoteProfile;
+
         private bool _keepTargetSectionOpen;
 
         /// <summary>
@@ -167,6 +183,8 @@ namespace GameSaves.App.ViewModels
 
         public ObservableCollection<SyncLogEntryRowViewModel> SyncLog { get; } = new();
 
+        public ObservableCollection<SyncRemoteProfile> RemoteProfiles { get; } = new();
+
         public IReadOnlyList<SyncProviderOption> ProviderOptions { get; } =
             new[]
             {
@@ -187,13 +205,18 @@ namespace GameSaves.App.ViewModels
         public SyncViewModel(
             ISyncProviderFactory syncProviderFactory,
             IFolderPickerService folderPickerService,
-            ISyncSettingsStore syncSettingsStore)
+            ISyncSettingsStore syncSettingsStore,
+            ISyncRemoteProfileRepository profileRepository,
+            ISyncRemoteProfileMigrationService profileMigrationService,
+            IUtcClock clock)
         {
             _syncProviderFactory = syncProviderFactory;
             _folderPickerService = folderPickerService;
             _syncSettingsStore = syncSettingsStore;
+            _profileRepository = profileRepository;
+            _clock = clock;
 
-            SyncUiSettings saved = _syncSettingsStore.Load();
+            SyncUiSettings saved = profileMigrationService.LoadAndMigrate();
             selectedProviderKind = saved.SelectedProviderKind;
             remoteRootPath = saved.LocalFolderPath;
             sftpHost = saved.SftpHost;
@@ -204,13 +227,15 @@ namespace GameSaves.App.ViewModels
             sftpKeyFilePath = saved.SftpKeyFilePath;
             sftpRemotePath = saved.SftpRemotePath;
 
+            LoadProfiles(saved.SelectedRemoteProfileId);
+
             string? unavailable = GetUnavailableProviderMessage(selectedProviderKind);
 
             if (unavailable is not null)
                 statusMessage = unavailable;
         }
 
-        partial void OnRemoteRootPathChanged(string value) => InvalidatePlan();
+        partial void OnRemoteRootPathChanged(string value) => OnPersistentSettingChanged();
 
         partial void OnUploadEnabledChanged(bool value) => InvalidatePlan();
 
@@ -219,24 +244,25 @@ namespace GameSaves.App.ViewModels
         partial void OnSelectedProviderKindChanged(SyncProviderKind value)
         {
             InvalidatePlan();
+            MarkProfileDirty();
 
             StatusMessage = GetUnavailableProviderMessage(value)
                 ?? "Sync provider changed. Configure it and build a new sync preview.";
         }
 
-        partial void OnSftpHostChanged(string value) => InvalidatePlan();
+        partial void OnSftpHostChanged(string value) => OnPersistentSettingChanged();
 
-        partial void OnSftpPortChanged(string value) => InvalidatePlan();
+        partial void OnSftpPortChanged(string value) => OnPersistentSettingChanged();
 
-        partial void OnSftpUsernameChanged(string value) => InvalidatePlan();
+        partial void OnSftpUsernameChanged(string value) => OnPersistentSettingChanged();
 
         partial void OnSftpPasswordChanged(string value) => InvalidatePlan();
 
-        partial void OnSftpKeyFilePathChanged(string value) => InvalidatePlan();
+        partial void OnSftpKeyFilePathChanged(string value) => OnPersistentSettingChanged();
 
         partial void OnSftpKeyPassphraseChanged(string value) => InvalidatePlan();
 
-        partial void OnSftpRemotePathChanged(string value) => InvalidatePlan();
+        partial void OnSftpRemotePathChanged(string value) => OnPersistentSettingChanged();
 
         partial void OnSftpTrustNewHostKeyChanged(bool value) => InvalidatePlan();
 
@@ -246,6 +272,7 @@ namespace GameSaves.App.ViewModels
                 SftpUsePrivateKey = false;
 
             InvalidatePlan();
+            MarkProfileDirty();
         }
 
         partial void OnSftpUsePrivateKeyChanged(bool value)
@@ -254,20 +281,461 @@ namespace GameSaves.App.ViewModels
                 SftpUsePassword = false;
 
             InvalidatePlan();
+            MarkProfileDirty();
+        }
+
+        partial void OnRemoteProfileDisplayNameChanged(string value) => MarkProfileDirty();
+
+        partial void OnSelectedRemoteProfileChanged(SyncRemoteProfile? value)
+        {
+            if (!_suppressProfileSelection && value is not null)
+                ApplyRemoteProfile(value, persistSelection: true);
+        }
+
+        private void OnPersistentSettingChanged()
+        {
+            InvalidatePlan();
+            MarkProfileDirty();
+        }
+
+        private void MarkProfileDirty()
+        {
+            if (!_applyingProfile && SelectedRemoteProfile is not null)
+                RemoteProfileState = "Unsaved changes";
         }
 
         // A plan built against different settings must not stay executable,
         // and a provider holding a live connection must be released.
-        private void InvalidatePlan()
+        private void InvalidatePlan(bool force = false)
         {
-            if (_lastPlan is null && _lastProvider is null)
+            if (!force && _lastPlan is null && _lastProvider is null)
                 return;
 
             _lastPlan = null;
             _lastProvider?.Dispose();
             _lastProvider = null;
             ClearPreview();
+            ConfirmSync = false;
             StatusMessage = "Sync settings changed. Build a new sync preview.";
+        }
+
+        private void LoadProfiles(Guid? selectedProfileId)
+        {
+            RemoteProfiles.Clear();
+
+            foreach (SyncRemoteProfile profile in _profileRepository.GetAll())
+                RemoteProfiles.Add(profile);
+
+            if (selectedProfileId is null)
+                return;
+
+            SyncRemoteProfile? selected = RemoteProfiles
+                .FirstOrDefault(profile => profile.Id == selectedProfileId.Value);
+
+            if (selected is not null)
+            {
+                _suppressProfileSelection = true;
+                SelectedRemoteProfile = selected;
+                _suppressProfileSelection = false;
+                ApplyRemoteProfile(selected, persistSelection: false);
+            }
+        }
+
+        private void ApplyRemoteProfile(
+            SyncRemoteProfile profile,
+            bool persistSelection)
+        {
+            _applyingProfile = true;
+
+            try
+            {
+                ClearSessionOnlySftpState();
+                SelectedProviderKind = profile.ProviderKind;
+                RemoteProfileDisplayName = profile.DisplayName;
+
+                switch (profile.ProviderSettings)
+                {
+                    case LocalFolderSyncRemoteSettings local:
+                        RemoteRootPath = local.LocalFolderPath;
+                        ResetSftpNonSecretFields();
+                        break;
+
+                    case SftpSyncRemoteSettings sftp:
+                        RemoteRootPath = "";
+                        SftpHost = sftp.Host;
+                        SftpPort = sftp.Port.ToString();
+                        SftpUsername = sftp.Username;
+                        SftpUsePrivateKey =
+                            sftp.AuthenticationMethod == SftpAuthMethod.PrivateKey;
+                        SftpUsePassword = !SftpUsePrivateKey;
+                        SftpKeyFilePath = sftp.PrivateKeyFilePath ?? "";
+                        SftpRemotePath = sftp.RemotePath;
+                        break;
+
+                    default:
+                        RemoteRootPath = "";
+                        ResetSftpNonSecretFields();
+                        break;
+                }
+            }
+            finally
+            {
+                _applyingProfile = false;
+            }
+
+            InvalidatePlan(force: true);
+            ConfirmDeleteRemoteProfile = false;
+            RemoteProfileState = profile.SettingsError is null &&
+                                 GetUnavailableProviderMessage(profile.ProviderKind) is null
+                ? "Saved"
+                : "Profile unavailable";
+            StatusMessage = profile.SettingsError ??
+                GetUnavailableProviderMessage(profile.ProviderKind) ??
+                $"Loaded remote profile '{profile.DisplayName}'. Build a new sync preview when ready.";
+
+            if (persistSelection)
+                SaveNonSecretSettings();
+        }
+
+        [RelayCommand]
+        private void NewRemoteProfile()
+        {
+            _suppressProfileSelection = true;
+            SelectedRemoteProfile = null;
+            _suppressProfileSelection = false;
+
+            _applyingProfile = true;
+
+            try
+            {
+                RemoteProfileDisplayName = "";
+                SelectedProviderKind = SyncProviderKind.LocalFolder;
+                RemoteRootPath = "";
+                ResetSftpNonSecretFields();
+                ClearSessionOnlySftpState();
+            }
+            finally
+            {
+                _applyingProfile = false;
+            }
+
+            InvalidatePlan(force: true);
+            ConfirmDeleteRemoteProfile = false;
+            RemoteProfileState = "Unsaved changes";
+            StatusMessage = "New unsaved remote profile. Configure it, enter a name, then choose Save.";
+            SaveNonSecretSettings();
+        }
+
+        [RelayCommand]
+        private void SaveRemoteProfile()
+        {
+            try
+            {
+                DateTimeOffset now = _clock.UtcNow;
+                SyncRemoteProfile profile;
+
+                if (SelectedRemoteProfile is null)
+                {
+                    profile = _profileRepository.Create(BuildProfile(
+                        Guid.NewGuid(),
+                        createdUtc: now,
+                        updatedUtc: now,
+                        lastUsedUtc: null,
+                        lastSuccessfulConnectionUtc: null));
+                }
+                else
+                {
+                    profile = _profileRepository.Update(BuildProfile(
+                        SelectedRemoteProfile.Id,
+                        SelectedRemoteProfile.CreatedUtc,
+                        now,
+                        SelectedRemoteProfile.LastUsedUtc,
+                        SelectedRemoteProfile.LastSuccessfulConnectionUtc));
+                }
+
+                RefreshProfileList(profile.Id);
+                RemoteProfileState = "Saved";
+                StatusMessage = $"Remote profile '{profile.DisplayName}' saved. No connection was started.";
+                SaveNonSecretSettings();
+            }
+            catch (ArgumentException ex)
+            {
+                StatusMessage = ex.Message;
+            }
+            catch (SyncRemoteProfileDuplicateNameException ex)
+            {
+                StatusMessage = ex.Message;
+            }
+            catch
+            {
+                StatusMessage = "The remote profile could not be saved.";
+            }
+        }
+
+        [RelayCommand]
+        private void SaveRemoteProfileAs()
+        {
+            try
+            {
+                DateTimeOffset now = _clock.UtcNow;
+                SyncRemoteProfile profile = _profileRepository.Create(BuildProfile(
+                    Guid.NewGuid(),
+                    createdUtc: now,
+                    updatedUtc: now,
+                    lastUsedUtc: null,
+                    lastSuccessfulConnectionUtc: null));
+
+                RefreshProfileList(profile.Id);
+                ClearSessionOnlySftpState();
+                InvalidatePlan(force: true);
+                RemoteProfileState = "Saved";
+                StatusMessage = $"Saved a new remote profile '{profile.DisplayName}'. No connection was started.";
+                SaveNonSecretSettings();
+            }
+            catch (ArgumentException ex)
+            {
+                StatusMessage = ex.Message;
+            }
+            catch (SyncRemoteProfileDuplicateNameException ex)
+            {
+                StatusMessage = ex.Message;
+            }
+            catch
+            {
+                StatusMessage = "The new remote profile could not be saved.";
+            }
+        }
+
+        [RelayCommand]
+        private void RenameRemoteProfile()
+        {
+            if (SelectedRemoteProfile is null)
+            {
+                StatusMessage = "Select a saved remote profile to rename.";
+                return;
+            }
+
+            try
+            {
+                SyncRemoteProfile renamed = _profileRepository.Rename(
+                    SelectedRemoteProfile.Id,
+                    RemoteProfileDisplayName,
+                    _clock.UtcNow);
+                RefreshProfileList(renamed.Id);
+                RemoteProfileState = "Saved";
+                StatusMessage = $"Remote profile renamed to '{renamed.DisplayName}'.";
+            }
+            catch (ArgumentException ex)
+            {
+                StatusMessage = ex.Message;
+            }
+            catch (SyncRemoteProfileDuplicateNameException ex)
+            {
+                StatusMessage = ex.Message;
+            }
+            catch
+            {
+                StatusMessage = "The remote profile could not be renamed.";
+            }
+        }
+
+        [RelayCommand]
+        private void DeleteRemoteProfile()
+        {
+            if (SelectedRemoteProfile is null)
+            {
+                StatusMessage = "Select a saved remote profile to delete.";
+                return;
+            }
+
+            if (!ConfirmDeleteRemoteProfile)
+            {
+                StatusMessage = "Confirm profile deletion first. Backup and remote data will not be deleted.";
+                return;
+            }
+
+            try
+            {
+                string deletedName = SelectedRemoteProfile.DisplayName;
+                Guid deletedId = SelectedRemoteProfile.Id;
+                _profileRepository.Delete(SelectedRemoteProfile.Id);
+                SyncRemoteProfile? deleted = RemoteProfiles
+                    .FirstOrDefault(profile => profile.Id == deletedId);
+
+                if (deleted is not null)
+                    RemoteProfiles.Remove(deleted);
+
+                NewRemoteProfile();
+                ConfirmDeleteRemoteProfile = false;
+                StatusMessage = $"Deleted profile '{deletedName}' only. No backup, history, known-host, or remote data was removed.";
+            }
+            catch
+            {
+                StatusMessage = "The remote profile configuration could not be deleted.";
+            }
+        }
+
+        private SyncRemoteProfile BuildProfile(
+            Guid id,
+            DateTimeOffset createdUtc,
+            DateTimeOffset updatedUtc,
+            DateTimeOffset? lastUsedUtc,
+            DateTimeOffset? lastSuccessfulConnectionUtc)
+        {
+            string displayName = SyncRemoteProfileValidation.NormalizeDisplayName(
+                RemoteProfileDisplayName);
+            SyncRemoteProfileSettings settings;
+            string? accountDisplayName;
+            string remoteRootDisplayName;
+
+            switch (SelectedProviderKind)
+            {
+                case SyncProviderKind.LocalFolder:
+                    if (string.IsNullOrWhiteSpace(RemoteRootPath))
+                        throw new ArgumentException("Choose a local or mounted sync folder first.");
+
+                    string localPath = RemoteRootPath.Trim();
+                    settings = new LocalFolderSyncRemoteSettings(localPath);
+                    accountDisplayName = null;
+                    remoteRootDisplayName = localPath;
+                    break;
+
+                case SyncProviderKind.Sftp:
+                    string? issue = ValidateSftpNonSecretProfileSettings();
+
+                    if (issue is not null)
+                        throw new ArgumentException(issue);
+
+                    int port = int.Parse(SftpPort.Trim());
+                    string host = SftpHost.Trim();
+                    string username = SftpUsername.Trim();
+                    string remotePath = SftpRemotePath.Trim();
+                    settings = new SftpSyncRemoteSettings(
+                        host,
+                        port,
+                        username,
+                        SftpUsePrivateKey
+                            ? SftpAuthMethod.PrivateKey
+                            : SftpAuthMethod.Password,
+                        string.IsNullOrWhiteSpace(SftpKeyFilePath)
+                            ? null
+                            : SftpKeyFilePath.Trim(),
+                        remotePath);
+                    accountDisplayName = $"{username}@{host}";
+                    remoteRootDisplayName =
+                        $"sftp://{username}@{host}:{port}" +
+                        (remotePath.StartsWith('/') ? remotePath : "/" + remotePath);
+                    break;
+
+                default:
+                    throw new ArgumentException(
+                        GetUnavailableProviderMessage(SelectedProviderKind) ??
+                        "The selected provider is unavailable.");
+            }
+
+            return new SyncRemoteProfile(
+                id,
+                displayName,
+                SelectedProviderKind,
+                accountDisplayName,
+                remoteRootDisplayName,
+                settings,
+                createdUtc,
+                updatedUtc,
+                lastUsedUtc,
+                lastSuccessfulConnectionUtc,
+                RemoteFolderId: null);
+        }
+
+        private string? ValidateSftpNonSecretProfileSettings()
+        {
+            if (string.IsNullOrWhiteSpace(SftpHost))
+                return "Enter the SFTP host first.";
+
+            if (string.IsNullOrWhiteSpace(SftpUsername))
+                return "Enter the SFTP username first.";
+
+            if (!int.TryParse(SftpPort.Trim(), out int port) || port is < 1 or > 65535)
+                return "Enter an SFTP port between 1 and 65535.";
+
+            if (string.IsNullOrWhiteSpace(SftpRemotePath))
+                return "Enter the SFTP remote folder path.";
+
+            return SftpUsePrivateKey && string.IsNullOrWhiteSpace(SftpKeyFilePath)
+                ? "Choose an SFTP private key file first."
+                : null;
+        }
+
+        private void ResetSftpNonSecretFields()
+        {
+            SftpHost = "";
+            SftpPort = "22";
+            SftpUsername = "";
+            SftpUsePrivateKey = false;
+            SftpUsePassword = true;
+            SftpKeyFilePath = "";
+            SftpRemotePath = "/gamesave-sync";
+        }
+
+        private void ClearSessionOnlySftpState()
+        {
+            SftpPassword = "";
+            SftpKeyPassphrase = "";
+            SftpTrustNewHostKey = false;
+        }
+
+        private void RefreshProfileList(Guid selectedId)
+        {
+            IReadOnlyList<SyncRemoteProfile> profiles = _profileRepository.GetAll();
+            RemoteProfiles.Clear();
+
+            foreach (SyncRemoteProfile profile in profiles)
+                RemoteProfiles.Add(profile);
+
+            SyncRemoteProfile selected = profiles.First(profile => profile.Id == selectedId);
+            _suppressProfileSelection = true;
+            SelectedRemoteProfile = selected;
+            _suppressProfileSelection = false;
+            _applyingProfile = true;
+            RemoteProfileDisplayName = selected.DisplayName;
+            _applyingProfile = false;
+        }
+
+        private void TryUpdateLastUsed()
+        {
+            if (SelectedRemoteProfile is null)
+                return;
+
+            try
+            {
+                SyncRemoteProfile updated = _profileRepository.UpdateLastUsed(
+                    SelectedRemoteProfile.Id,
+                    _clock.UtcNow);
+                RefreshProfileList(updated.Id);
+            }
+            catch
+            {
+                // Profile metadata is best-effort and never fails sync.
+            }
+        }
+
+        private void TryUpdateLastSuccessfulConnection()
+        {
+            if (SelectedRemoteProfile is null)
+                return;
+
+            try
+            {
+                SyncRemoteProfile updated =
+                    _profileRepository.UpdateLastSuccessfulConnection(
+                        SelectedRemoteProfile.Id,
+                        _clock.UtcNow);
+                RefreshProfileList(updated.Id);
+            }
+            catch
+            {
+                // Profile metadata is best-effort and never fails sync.
+            }
         }
 
         private ISyncProvider CreateConfiguredProvider()
@@ -304,16 +772,20 @@ namespace GameSaves.App.ViewModels
 
         private void SaveNonSecretSettings()
         {
+            bool persistUnsavedForm = SelectedRemoteProfile is null;
+
             _syncSettingsStore.Save(new SyncUiSettings(
                 SchemaVersion: SyncUiSettings.CurrentSchemaVersion,
                 SelectedProviderKind: SelectedProviderKind,
-                LocalFolderPath: RemoteRootPath,
-                SftpHost: SftpHost,
-                SftpPort: SftpPort,
-                SftpUsername: SftpUsername,
-                SftpUsePrivateKey: SftpUsePrivateKey,
-                SftpKeyFilePath: SftpKeyFilePath,
-                SftpRemotePath: SftpRemotePath));
+                LocalFolderPath: persistUnsavedForm ? RemoteRootPath : "",
+                SftpHost: persistUnsavedForm ? SftpHost : "",
+                SftpPort: persistUnsavedForm ? SftpPort : "22",
+                SftpUsername: persistUnsavedForm ? SftpUsername : "",
+                SftpUsePrivateKey: persistUnsavedForm && SftpUsePrivateKey,
+                SftpKeyFilePath: persistUnsavedForm ? SftpKeyFilePath : "",
+                SftpRemotePath: persistUnsavedForm ? SftpRemotePath : "/gamesave-sync",
+                SelectedRemoteProfileId: SelectedRemoteProfile?.Id,
+                LegacyProfileMigrationCompleted: true));
         }
 
         private string? ValidateProviderSelection()
@@ -497,6 +969,7 @@ namespace GameSaves.App.ViewModels
             }
 
             SaveNonSecretSettings();
+            TryUpdateLastUsed();
 
             try
             {
@@ -515,6 +988,9 @@ namespace GameSaves.App.ViewModels
                 });
 
                 _lastPlan = plan;
+
+                if (plan.ProviderValidationSucceeded)
+                    TryUpdateLastSuccessfulConnection();
                 ExecutionResults.Clear();
                 ExecutionStatusMessage = "No sync executed.";
                 ConfirmSync = false;
@@ -595,6 +1071,7 @@ namespace GameSaves.App.ViewModels
             {
                 IsLoading = true;
                 IsSyncRunning = true;
+                TryUpdateLastUsed();
                 ResultsSectionExpanded = true;
                 ProgressValue = 0;
                 ProgressMax = 1;

@@ -19,9 +19,11 @@ namespace GameSaves.App.Services
         string SftpUsername,
         bool SftpUsePrivateKey,
         string SftpKeyFilePath,
-        string SftpRemotePath)
+        string SftpRemotePath,
+        Guid? SelectedRemoteProfileId = null,
+        bool LegacyProfileMigrationCompleted = false)
     {
-        public const int CurrentSchemaVersion = 1;
+        public const int CurrentSchemaVersion = 2;
 
         public static SyncUiSettings Default { get; } = new(
             SchemaVersion: CurrentSchemaVersion,
@@ -32,7 +34,9 @@ namespace GameSaves.App.Services
             SftpUsername: "",
             SftpUsePrivateKey: false,
             SftpKeyFilePath: "",
-            SftpRemotePath: "/gamesave-sync");
+            SftpRemotePath: "/gamesave-sync",
+            SelectedRemoteProfileId: null,
+            LegacyProfileMigrationCompleted: true);
     }
 
     public interface ISyncSettingsStore
@@ -79,11 +83,13 @@ namespace GameSaves.App.Services
                 JsonElement root = document.RootElement;
                 SyncProviderKind providerKind = ReadProviderKind(root);
 
-                return new SyncUiSettings(
-                    SchemaVersion: ReadInt32(
+                int schemaVersion = ReadInt32(
                         root,
                         nameof(SyncUiSettings.SchemaVersion),
-                        SyncUiSettings.CurrentSchemaVersion),
+                        defaultValue: 0);
+
+                return new SyncUiSettings(
+                    SchemaVersion: schemaVersion,
                     SelectedProviderKind: providerKind,
                     LocalFolderPath: ReadString(
                         root,
@@ -112,7 +118,14 @@ namespace GameSaves.App.Services
                     SftpRemotePath: ReadString(
                         root,
                         nameof(SyncUiSettings.SftpRemotePath),
-                        SyncUiSettings.Default.SftpRemotePath));
+                        SyncUiSettings.Default.SftpRemotePath),
+                    SelectedRemoteProfileId: ReadGuid(
+                        root,
+                        nameof(SyncUiSettings.SelectedRemoteProfileId)),
+                    LegacyProfileMigrationCompleted: ReadBoolean(
+                        root,
+                        nameof(SyncUiSettings.LegacyProfileMigrationCompleted),
+                        defaultValue: schemaVersion >= SyncUiSettings.CurrentSchemaVersion));
             }
             catch
             {
@@ -239,6 +252,20 @@ namespace GameSaves.App.Services
                    bool.TryParse(value.GetString(), out bool parsed)
                 ? parsed
                 : defaultValue;
+        }
+
+        private static Guid? ReadGuid(JsonElement root, string propertyName)
+        {
+            if (!TryGetProperty(root, propertyName, out JsonElement value) ||
+                value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            {
+                return null;
+            }
+
+            return value.ValueKind == JsonValueKind.String &&
+                   Guid.TryParse(value.GetString(), out Guid parsed)
+                ? parsed
+                : null;
         }
 
         private static bool TryGetProperty(

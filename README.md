@@ -42,9 +42,11 @@ The long-term goal is a cross-platform Steam save manager with backup profiles, 
   * SHA-256 integrity check: tampered or missing backup files are never restored.
   * Pre-restore backup: files replaced by a restore are themselves backed up, so a restore is always undoable.
 * **Sync tab** - backup-run sync with a local/mounted folder or an SFTP server:
+  * **Saved remote profiles**: create, update, Save As, rename, and explicitly delete named Local Folder or SFTP configurations in the existing Sync target section. Selecting or saving a profile never connects, previews, or syncs.
+  * Profiles are stored in SQLite with stable IDs and non-secret settings only. Existing meaningful `sync-settings.json` configuration is migrated once; when a profile is selected, its SQLite values take precedence over the lightweight UI-state file.
   * Type-safe provider selection through `SyncProviderKind`; the selector exposes the implemented `LocalFolder` and `Sftp` providers. `GoogleDrive`, `WebDav`, and `OneDrive` are reserved roadmap values only and cannot be previewed or executed.
   * `ISyncProvider` abstraction with `LocalFolderSyncProvider` and `SftpSyncProvider` (SSH.NET); WebDAV and cloud providers come later.
-  * **SFTP**: host/port/username with password or private-key-file authentication; passwords and passphrases are session-only and never written to disk. Host keys use trust-on-first-use: the SHA-256 fingerprint is shown on first connect, stored like SSH known_hosts, and any later change fails loudly ("Forget Stored Host Key" covers planned reinstalls). Legacy `UseSftp` settings are migrated while all saved non-secret local-folder and SFTP values are preserved.
+  * **SFTP**: host/port/username with password or private-key-file authentication; passwords, passphrases, and trust-new-host confirmation are session-only, cleared when profiles change, and never written to disk. Host keys use trust-on-first-use: the SHA-256 fingerprint is shown on first connect, stored like SSH known_hosts, and any later change fails loudly ("Forget Stored Host Key" covers planned reinstalls).
   * Copy-only, both ways: a run missing on one side is copied there; nothing is ever deleted or overwritten.
   * Sync preview with per-run actions (upload / download / in sync / conflict), counts, and sizes; execution requires explicit confirmation.
   * **Per-run selection**: every upload/download in the plan has a checkbox (plus Select All / Select None and a live "selected X of Y" summary); deselected runs are reported as skipped and stay pending for the next sync.
@@ -57,7 +59,7 @@ The long-term goal is a cross-platform Steam save manager with backup profiles, 
 * **History tab** - durable run history in SQLite (`transfer_runs` / `transfer_items`):
   * Every executed transfer copy, restore, manual backup, cleanup, and sync is recorded automatically - counts, bytes, flags (dry run, overwrite, backups), blocking reason if refused, and per-file outcomes.
   * Recording failures never fail the run itself; history is a pure audit trail.
-* **Regression suite** - repeatable .NET tests for transfer no-overwrite and safe overwrite, backup manifests and hashes, restore integrity, ZIP archive import/export, SQLite history, shared sync-engine safety, provider selection, and sync-settings migration.
+* **Regression suite** - repeatable .NET tests for transfer no-overwrite and safe overwrite, backup manifests and hashes, restore integrity, ZIP archive import/export, SQLite history, shared sync-engine safety, provider selection, settings migration, saved profiles, and secret exclusion.
 * Resizable panes (drag the dividers) so the app works on 1080p displays.
 
 ### Implemented - CLI / developer tooling
@@ -176,10 +178,12 @@ Restore (Backups tab) copies backed-up files to their original locations:
 
 ### Syncing backups (Sync tab)
 
-1. Pick the sync target: a local/mounted folder, or an SFTP server (host, port, username, password or private key file, remote path). SFTP secrets are session-only; on the first connection, verify the shown host-key fingerprint and enable "Trust this server's host key on first connect".
-2. **Check Connection & Sync Status** answers "am I in sync?" in one line without copying anything; **Preview Sync (Dry Run)** additionally builds the full plan (upload / download / in sync / conflict per run).
-3. Untick any runs you do not want to copy, confirm, and press **Sync Now** - a byte-accurate progress bar tracks the copy.
-4. The remote keeps a shared `sync-log.json` of every executed sync; downloaded runs are immediately restorable from the Backups tab.
+1. Select a named Local Folder or SFTP profile, or choose **New** and configure an unsaved target. Profile selection only fills the form; it never connects or starts work.
+2. Save, Save As, rename, or explicitly delete profile configuration as needed. Deletion affects only the profile row, never backups, remote files, history, archives, or SFTP known-host entries.
+3. For SFTP, enter the session-only password or passphrase after selecting the profile; profile changes clear these values and the trust-new-host confirmation.
+4. **Check Connection & Sync Status** answers "am I in sync?" in one line without copying anything; **Preview Sync (Dry Run)** additionally builds the full plan (upload / download / in sync / conflict per run).
+5. Untick any runs you do not want to copy, confirm, and press **Sync Now** - a byte-accurate progress bar tracks the copy.
+6. The remote keeps a shared `sync-log.json` of every executed sync; downloaded runs are immediately restorable from the Backups tab.
 
 Sync never deletes or overwrites anything on either side; conflicts are reported and left for you to resolve (export one side as ZIP, or delete one side via Cleanup).
 
@@ -204,7 +208,7 @@ Test packages: `Microsoft.NET.Test.Sdk`, `xunit`, `xunit.runner.visualstudio`.
 %LOCALAPPDATA%\GameSave\gamesave.db
 ```
 
-Stores save-path mappings (with review status), verification results, backup runs/items (CLI), Steam catalog records, and harvesting queues.
+Stores save-path mappings (with review status), verification results, backup runs/items (CLI), operation history, named non-secret sync remote profiles, Steam catalog records, and harvesting queues.
 
 Initialize:
 
@@ -324,21 +328,21 @@ Only `LocalFolder` and `Sftp` are implemented and shown in the Sync selector. Th
 
 ### C — Saved sync remote profiles
 
-Add named remote configurations such as Personal Google Drive, Home SFTP Server, USB Backup, and Nextcloud.
+Named remote configurations are stored in SQLite. Local Folder and SFTP profiles are usable now; Google Drive, WebDAV, and OneDrive profiles remain unavailable roadmap values.
 
 Each profile contains non-secret information only:
 
-* [ ] Profile ID
-* [ ] Display name
-* [ ] Provider kind
-* [ ] Account display name
-* [ ] Remote root display name
-* [ ] Provider-specific non-secret settings
-* [ ] Creation date
-* [ ] Last-used date
-* [ ] Last successful connection
-* [ ] Optional remote folder ID
-* [ ] Never store passwords, passphrases, refresh tokens, or OAuth token caches in plain JSON or plain SQLite fields
+* [x] Profile ID
+* [x] Display name
+* [x] Provider kind
+* [x] Account display name
+* [x] Remote root display name
+* [x] Provider-specific non-secret settings
+* [x] Creation date
+* [x] Last-used date
+* [x] Last successful connection
+* [x] Optional remote folder ID
+* [x] Never store passwords, passphrases, refresh tokens, or OAuth token caches in plain JSON or plain SQLite fields
 
 ### D — Provider capabilities
 

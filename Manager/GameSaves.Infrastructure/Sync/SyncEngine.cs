@@ -64,7 +64,7 @@ namespace GameSaves.Infrastructure.Sync
             }
 
             if (warnings.Any(w => w.Severity == TransferWarningSeverity.Error))
-                return BuildPlan(items, warnings);
+                return BuildPlan(items, warnings, invalid is null);
 
             IReadOnlyList<TransferBackupRunInfo> localRuns =
                 await _backupHistoryService.GetRunsAsync(cancellationToken);
@@ -181,7 +181,7 @@ namespace GameSaves.Infrastructure.Sync
                     TransferWarningSeverity.Info));
             }
 
-            SyncPlan plan = BuildPlan(items, warnings);
+            SyncPlan plan = BuildPlan(items, warnings, validationSucceeded: true);
 
             if (plan.UploadCount + plan.DownloadCount == 0 &&
                 warnings.All(w => w.Severity != TransferWarningSeverity.Error))
@@ -193,7 +193,7 @@ namespace GameSaves.Infrastructure.Sync
                         : "Everything is in sync. There is nothing to copy.",
                     TransferWarningSeverity.Info));
 
-                plan = BuildPlan(items, warnings);
+                plan = BuildPlan(items, warnings, validationSucceeded: true);
             }
 
             return plan;
@@ -239,7 +239,8 @@ namespace GameSaves.Infrastructure.Sync
 
         private SyncPlan BuildPlan(
             List<SyncItem> items,
-            List<TransferPreviewWarning> warnings)
+            List<TransferPreviewWarning> warnings,
+            bool validationSucceeded)
         {
             int uploads = items.Count(i => i.Action == SyncItemAction.UploadToRemote);
             int downloads = items.Count(i => i.Action == SyncItemAction.DownloadToLocal);
@@ -257,7 +258,10 @@ namespace GameSaves.Infrastructure.Sync
                 InSyncCount: items.Count(i => i.Action == SyncItemAction.InSync),
                 ConflictCount: items.Count(i => i.Action == SyncItemAction.Conflict),
                 BytesToUpload: items.Where(i => i.Action == SyncItemAction.UploadToRemote).Sum(i => i.TotalBytes),
-                BytesToDownload: items.Where(i => i.Action == SyncItemAction.DownloadToLocal).Sum(i => i.TotalBytes));
+                BytesToDownload: items.Where(i => i.Action == SyncItemAction.DownloadToLocal).Sum(i => i.TotalBytes))
+            {
+                ProviderValidationSucceeded = validationSucceeded
+            };
         }
 
         // ---------------------------------------------------------------

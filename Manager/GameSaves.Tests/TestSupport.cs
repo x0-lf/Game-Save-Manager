@@ -1,7 +1,9 @@
+using GameSaves.App.Services;
 using GameSaves.Core.Platform;
 using GameSaves.Core.Profiles;
 using GameSaves.Core.Save;
 using GameSaves.Core.Steam;
+using GameSaves.Core.Sync;
 using GameSaves.Core.Transfers;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -51,6 +53,124 @@ internal sealed class TestDatabasePathProvider : IAppDatabasePathProvider
     }
 
     public string GetDatabasePath() => _databasePath;
+}
+
+internal sealed class FixedUtcClock : IUtcClock
+{
+    public FixedUtcClock(DateTimeOffset utcNow)
+    {
+        UtcNow = utcNow;
+    }
+
+    public DateTimeOffset UtcNow { get; set; }
+}
+
+internal sealed class StubSyncRemoteProfileMigrationService : ISyncRemoteProfileMigrationService
+{
+    private readonly SyncUiSettings _settings;
+
+    public StubSyncRemoteProfileMigrationService(SyncUiSettings settings)
+    {
+        _settings = settings;
+    }
+
+    public SyncUiSettings LoadAndMigrate() => _settings;
+}
+
+internal sealed class InMemorySyncRemoteProfileRepository : ISyncRemoteProfileRepository
+{
+    private readonly List<SyncRemoteProfile> _profiles = new();
+
+    public int CreateCalls { get; private set; }
+
+    public IReadOnlyList<SyncRemoteProfile> GetAll() => _profiles
+        .OrderBy(profile => profile.LastUsedUtc is null)
+        .ThenByDescending(profile => profile.LastUsedUtc)
+        .ThenBy(profile => profile.DisplayName, StringComparer.OrdinalIgnoreCase)
+        .ToList();
+
+    public SyncRemoteProfile? GetById(Guid id) =>
+        _profiles.FirstOrDefault(profile => profile.Id == id);
+
+    public SyncRemoteProfile Create(SyncRemoteProfile profile)
+    {
+        EnsureName(profile.DisplayName, null);
+        CreateCalls++;
+        _profiles.Add(profile with
+        {
+            DisplayName = SyncRemoteProfileValidation.NormalizeDisplayName(profile.DisplayName)
+        });
+        return GetById(profile.Id)!;
+    }
+
+    public SyncRemoteProfile Update(SyncRemoteProfile profile)
+    {
+        int index = RequireIndex(profile.Id);
+        EnsureName(profile.DisplayName, profile.Id);
+        SyncRemoteProfile existing = _profiles[index];
+        _profiles[index] = profile with
+        {
+            DisplayName = SyncRemoteProfileValidation.NormalizeDisplayName(profile.DisplayName),
+            CreatedUtc = existing.CreatedUtc
+        };
+        return _profiles[index];
+    }
+
+    public SyncRemoteProfile Rename(Guid id, string displayName, DateTimeOffset updatedUtc)
+    {
+        int index = RequireIndex(id);
+        EnsureName(displayName, id);
+        _profiles[index] = _profiles[index] with
+        {
+            DisplayName = SyncRemoteProfileValidation.NormalizeDisplayName(displayName),
+            UpdatedUtc = updatedUtc
+        };
+        return _profiles[index];
+    }
+
+    public void Delete(Guid id)
+    {
+        _profiles.RemoveAt(RequireIndex(id));
+    }
+
+    public SyncRemoteProfile UpdateLastUsed(Guid id, DateTimeOffset lastUsedUtc)
+    {
+        int index = RequireIndex(id);
+        _profiles[index] = _profiles[index] with { LastUsedUtc = lastUsedUtc };
+        return _profiles[index];
+    }
+
+    public SyncRemoteProfile UpdateLastSuccessfulConnection(
+        Guid id,
+        DateTimeOffset lastSuccessfulConnectionUtc)
+    {
+        int index = RequireIndex(id);
+        _profiles[index] = _profiles[index] with
+        {
+            LastSuccessfulConnectionUtc = lastSuccessfulConnectionUtc
+        };
+        return _profiles[index];
+    }
+
+    private int RequireIndex(Guid id)
+    {
+        int index = _profiles.FindIndex(profile => profile.Id == id);
+        return index >= 0
+            ? index
+            : throw new SyncRemoteProfileNotFoundException(id);
+    }
+
+    private void EnsureName(string displayName, Guid? excludingId)
+    {
+        string normalized = SyncRemoteProfileValidation.NormalizeDisplayName(displayName);
+
+        if (_profiles.Any(profile =>
+                profile.Id != excludingId &&
+                profile.DisplayName.Equals(normalized, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new SyncRemoteProfileDuplicateNameException(normalized);
+        }
+    }
 }
 
 internal sealed class RecordingHistoryRepository : ITransferHistoryRepository

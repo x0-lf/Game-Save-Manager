@@ -28,6 +28,12 @@ namespace GameSaves.Core.Sync
         long BytesToUpload,
         long BytesToDownload)
     {
+        /// <summary>
+        /// True only when the provider-specific remote validation completed
+        /// successfully. Later manifest warnings do not change this result.
+        /// </summary>
+        public bool ProviderValidationSucceeded { get; init; } = true;
+
         public bool HasErrors =>
             Warnings.Any(warning => warning.Severity == TransferWarningSeverity.Error);
     }

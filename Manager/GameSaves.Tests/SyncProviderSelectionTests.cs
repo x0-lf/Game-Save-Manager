@@ -201,7 +201,13 @@ public sealed class SyncProviderSelectionTests
     {
         var factory = new RecordingSyncProviderFactory();
         var store = new InMemorySyncSettingsStore(SyncUiSettings.Default);
-        var viewModel = new SyncViewModel(factory, new NullFolderPickerService(), store)
+        var viewModel = new SyncViewModel(
+            factory,
+            new NullFolderPickerService(),
+            store,
+            new InMemorySyncRemoteProfileRepository(),
+            new StubSyncRemoteProfileMigrationService(SyncUiSettings.Default),
+            new FixedUtcClock(DateTimeOffset.Parse("2026-07-20T12:00:00Z")))
         {
             SelectedProviderKind = SyncProviderKind.Sftp,
             SftpHost = "backup.example.test",
@@ -227,7 +233,10 @@ public sealed class SyncProviderSelectionTests
         return new SyncViewModel(
             factory,
             new NullFolderPickerService(),
-            new InMemorySyncSettingsStore(settings));
+            new InMemorySyncSettingsStore(settings),
+            new InMemorySyncRemoteProfileRepository(),
+            new StubSyncRemoteProfileMigrationService(settings),
+            new FixedUtcClock(DateTimeOffset.Parse("2026-07-20T12:00:00Z")));
     }
 
     private sealed class InMemorySyncSettingsStore : ISyncSettingsStore

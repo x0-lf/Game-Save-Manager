@@ -62,6 +62,27 @@ public sealed class SyncSettingsStoreTests
         Assert.Equal(expected, store.Load());
     }
 
+    [Fact]
+    public void SelectedRemoteProfileId_RoundTripsInSchemaTwo()
+    {
+        using var temp = new TemporaryDirectory();
+        var store = new SyncSettingsStore(temp.GetPath("sync-settings.json"));
+        Guid profileId = Guid.NewGuid();
+        SyncUiSettings expected = SyncUiSettings.Default with
+        {
+            SelectedRemoteProfileId = profileId,
+            SelectedProviderKind = SyncProviderKind.Sftp,
+            LegacyProfileMigrationCompleted = true
+        };
+
+        store.Save(expected);
+        SyncUiSettings actual = store.Load();
+
+        Assert.Equal(profileId, actual.SelectedRemoteProfileId);
+        Assert.True(actual.LegacyProfileMigrationCompleted);
+        Assert.Equal(SyncUiSettings.CurrentSchemaVersion, actual.SchemaVersion);
+    }
+
     [Theory]
     [InlineData(false, SyncProviderKind.LocalFolder)]
     [InlineData(true, SyncProviderKind.Sftp)]

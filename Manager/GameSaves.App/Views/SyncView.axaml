@@ -143,6 +143,66 @@
                     <StackPanel Spacing="6"
                                 Margin="0,6,0,0">
 
+                        <Grid ColumnDefinitions="Auto,*"
+                              ColumnSpacing="10">
+                            <TextBlock Grid.Column="0"
+                                       Text="Remote profile"
+                                       VerticalAlignment="Center"
+                                       Foreground="{StaticResource MutedTextBrush}"
+                                       FontSize="12" />
+
+                            <ComboBox Grid.Column="1"
+                                      ItemsSource="{Binding RemoteProfiles}"
+                                      SelectedItem="{Binding SelectedRemoteProfile}"
+                                      MinHeight="32"
+                                      PlaceholderText="Unsaved profile">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding DisplayName}" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                        </Grid>
+
+                        <Grid ColumnDefinitions="*,Auto"
+                              ColumnSpacing="10">
+                            <TextBox Grid.Column="0"
+                                     Text="{Binding RemoteProfileDisplayName}"
+                                     PlaceholderText="Profile name, for example Home SFTP Server"
+                                     MaxLength="100"
+                                     MinHeight="32" />
+
+                            <TextBlock Grid.Column="1"
+                                       Text="{Binding RemoteProfileState}"
+                                       VerticalAlignment="Center"
+                                       Foreground="{StaticResource AccentBrush}"
+                                       FontSize="12" />
+                        </Grid>
+
+                        <StackPanel Orientation="Horizontal"
+                                    Spacing="6">
+                            <Button Content="New"
+                                    Command="{Binding NewRemoteProfileCommand}"
+                                    Height="30" />
+                            <Button Content="Save"
+                                    Command="{Binding SaveRemoteProfileCommand}"
+                                    Height="30" />
+                            <Button Content="Save As"
+                                    Command="{Binding SaveRemoteProfileAsCommand}"
+                                    Height="30" />
+                            <Button Content="Rename"
+                                    Command="{Binding RenameRemoteProfileCommand}"
+                                    Height="30" />
+                            <Button Content="Delete"
+                                    Command="{Binding DeleteRemoteProfileCommand}"
+                                    Height="30" />
+                        </StackPanel>
+
+                        <CheckBox Content="Confirm deleting only the selected profile configuration"
+                                  IsChecked="{Binding ConfirmDeleteRemoteProfile}"
+                                  FontSize="11"
+                                  ToolTip.Tip="Profile deletion never removes backup runs, remote files, sync history, ZIP archives, save files, or SFTP known-host entries." />
+
                         <Grid ColumnDefinitions="Auto,280"
                               ColumnSpacing="10">
                             <TextBlock Grid.Column="0"

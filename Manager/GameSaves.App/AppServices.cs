@@ -15,6 +15,7 @@ namespace GameSaves.App
 
             services.AddSingleton<IFolderPickerService, FolderPickerService>();
             services.AddSingleton<ISyncSettingsStore, SyncSettingsStore>();
+            services.AddSingleton<ISyncRemoteProfileMigrationService, SyncRemoteProfileMigrationService>();
 
             services.AddSingleton<MainWindowViewModel>();
 
