@@ -3,6 +3,7 @@ using GameSaves.App.Services;
 using GameSaves.App.ViewModels;
 using GameSaves.Core.Sync;
 using GameSaves.Core.Transfers;
+using GameSaves.Infrastructure.Sync;
 
 namespace GameSaves.Tests;
 
@@ -84,6 +85,7 @@ public sealed class SyncRemoteProfileViewModelTests
         var store = new RecordingSettingsStore(settings);
         var viewModel = new SyncViewModel(
             factory,
+            new SyncProviderCatalog(),
             new NullProfileFolderPicker(),
             store,
             repository,
@@ -227,6 +229,7 @@ public sealed class SyncRemoteProfileViewModelTests
         var store = new RecordingSettingsStore(settings);
         return new SyncViewModel(
             factory,
+            new SyncProviderCatalog(),
             new NullProfileFolderPicker(),
             store,
             repository,

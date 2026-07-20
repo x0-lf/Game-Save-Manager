@@ -40,6 +40,7 @@ namespace GameSaves.Infrastructure.DependencyInjection
             services.AddSingleton<IManualBackupService, ManualBackupService>();
             services.AddSingleton<IBackupCleanupService, BackupCleanupService>();
             services.AddSingleton<IBackupArchiveService, BackupArchiveService>();
+            services.AddSingleton<ISyncProviderCatalog, SyncProviderCatalog>();
             services.AddSingleton<ISyncProviderFactory, SyncProviderFactory>();
             services.AddSingleton<IUtcClock, SystemUtcClock>();
             services.AddSingleton<SyncRemoteProfileSettingsSerializer>();

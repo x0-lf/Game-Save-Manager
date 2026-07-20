@@ -14,11 +14,23 @@ namespace GameSaves.Infrastructure.Sync
     /// </summary>
     public sealed class SyncRemoteProfileSettingsSerializer
     {
+        private readonly ISyncProviderCatalog _providerCatalog;
+
         private static readonly JsonSerializerOptions Options = new()
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
             WriteIndented = false
         };
+
+        public SyncRemoteProfileSettingsSerializer()
+            : this(new SyncProviderCatalog())
+        {
+        }
+
+        public SyncRemoteProfileSettingsSerializer(ISyncProviderCatalog providerCatalog)
+        {
+            _providerCatalog = providerCatalog;
+        }
 
         public string Serialize(
             SyncProviderKind providerKind,
@@ -60,7 +72,8 @@ namespace GameSaves.Infrastructure.Sync
             {
                 return new SyncRemoteProfileSettingsReadResult(
                     null,
-                    GetUnavailableProviderMessage(providerKind));
+                    _providerCatalog.GetDescriptor(providerKind).UnavailableMessage ??
+                    "The saved sync provider is unavailable.");
             }
 
             if (providerSettingsVersion != 1)
@@ -142,15 +155,6 @@ namespace GameSaves.Infrastructure.Sync
 
         private static SyncRemoteProfileSettingsReadResult Corrupted() =>
             new(null, "The saved provider settings are unreadable or corrupted.");
-
-        private static string GetUnavailableProviderMessage(SyncProviderKind kind) =>
-            kind switch
-            {
-                SyncProviderKind.GoogleDrive => "Google Drive sync is not implemented yet.",
-                SyncProviderKind.WebDav => "WebDAV sync is not implemented yet.",
-                SyncProviderKind.OneDrive => "OneDrive sync is not implemented yet.",
-                _ => $"Sync provider value {(int)kind} is not supported by this version."
-            };
 
         private static bool TryReadString(
             JsonElement root,

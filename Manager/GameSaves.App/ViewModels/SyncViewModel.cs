@@ -7,6 +7,8 @@ using GameSaves.Core.Transfers;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 
@@ -15,6 +17,7 @@ namespace GameSaves.App.ViewModels
     public partial class SyncViewModel : ViewModelBase
     {
         private readonly ISyncProviderFactory _syncProviderFactory;
+        private readonly ISyncProviderCatalog _providerCatalog;
         private readonly IFolderPickerService _folderPickerService;
         private readonly ISyncSettingsStore _syncSettingsStore;
         private readonly ISyncRemoteProfileRepository _profileRepository;
@@ -37,6 +40,22 @@ namespace GameSaves.App.ViewModels
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(IsLocalFolderSelected))]
         [NotifyPropertyChangedFor(nameof(IsSftpSelected))]
+        [NotifyPropertyChangedFor(nameof(SelectedProviderDescriptor))]
+        [NotifyPropertyChangedFor(nameof(RequiresInteractiveLogin))]
+        [NotifyPropertyChangedFor(nameof(RequiresServerCredentials))]
+        [NotifyPropertyChangedFor(nameof(SupportsResumableUpload))]
+        [NotifyPropertyChangedFor(nameof(SupportsRemoteQuota))]
+        [NotifyPropertyChangedFor(nameof(SupportsRemoteFolderSelection))]
+        [NotifyPropertyChangedFor(nameof(SupportsPersistentAuthentication))]
+        [NotifyPropertyChangedFor(nameof(SupportsConnectionTesting))]
+        [NotifyPropertyChangedFor(nameof(SupportsLogout))]
+        [NotifyPropertyChangedFor(nameof(SupportsOpenRemoteLocation))]
+        [NotifyPropertyChangedFor(nameof(CanSelectRemoteFolder))]
+        [NotifyPropertyChangedFor(nameof(CanCheckConnection))]
+        [NotifyPropertyChangedFor(nameof(CanLogout))]
+        [NotifyPropertyChangedFor(nameof(CanOpenRemoteLocation))]
+        [NotifyPropertyChangedFor(nameof(CanShowQuota))]
+        [NotifyPropertyChangedFor(nameof(ProviderCapabilitySummary))]
         private SyncProviderKind selectedProviderKind = SyncProviderKind.LocalFolder;
 
         [ObservableProperty]
@@ -191,25 +210,88 @@ namespace GameSaves.App.ViewModels
 
         public ObservableCollection<SyncRemoteProfileOption> RemoteProfileOptions { get; } = new();
 
-        public IReadOnlyList<SyncProviderOption> ProviderOptions { get; } =
-            new[]
+        public IReadOnlyList<SyncProviderDescriptor> ProviderOptions { get; }
+
+        public SyncProviderDescriptor SelectedProviderDescriptor =>
+            _providerCatalog.GetDescriptor(SelectedProviderKind);
+
+        public bool RequiresInteractiveLogin =>
+            SelectedProviderDescriptor.Capabilities.RequiresInteractiveLogin;
+
+        public bool RequiresServerCredentials =>
+            SelectedProviderDescriptor.Capabilities.RequiresServerCredentials;
+
+        public bool SupportsResumableUpload =>
+            SelectedProviderDescriptor.Capabilities.SupportsResumableUpload;
+
+        public bool SupportsRemoteQuota =>
+            SelectedProviderDescriptor.Capabilities.SupportsRemoteQuota;
+
+        public bool SupportsRemoteFolderSelection =>
+            SelectedProviderDescriptor.Capabilities.SupportsRemoteFolderSelection;
+
+        public bool SupportsPersistentAuthentication =>
+            SelectedProviderDescriptor.Capabilities.SupportsPersistentAuthentication;
+
+        public bool SupportsConnectionTesting =>
+            SelectedProviderDescriptor.Capabilities.SupportsConnectionTesting;
+
+        public bool SupportsLogout =>
+            SelectedProviderDescriptor.Capabilities.SupportsLogout;
+
+        public bool SupportsOpenRemoteLocation =>
+            SelectedProviderDescriptor.Capabilities.SupportsOpenRemoteLocation;
+
+        public bool CanSelectRemoteFolder =>
+            SelectedProviderDescriptor.IsImplemented && SupportsRemoteFolderSelection;
+
+        public bool CanCheckConnection =>
+            SelectedProviderDescriptor.IsImplemented && SupportsConnectionTesting;
+
+        public bool CanLogout =>
+            SelectedProviderDescriptor.IsImplemented && SupportsLogout;
+
+        public bool CanOpenRemoteLocation =>
+            SelectedProviderDescriptor.IsImplemented && SupportsOpenRemoteLocation;
+
+        public bool CanShowQuota =>
+            SelectedProviderDescriptor.IsImplemented && SupportsRemoteQuota;
+
+        public string ProviderCapabilitySummary
+        {
+            get
             {
-                new SyncProviderOption(
-                    SyncProviderKind.LocalFolder,
-                    "Local or mounted folder"),
-                new SyncProviderOption(
-                    SyncProviderKind.Sftp,
-                    "SFTP server (SSH)")
-            };
+                if (!SelectedProviderDescriptor.IsImplemented)
+                    return SelectedProviderDescriptor.UnavailableMessage ?? "Provider unavailable.";
+
+                var capabilities = new List<string>();
+
+                if (RequiresServerCredentials)
+                    capabilities.Add("server credentials required");
+                if (RequiresInteractiveLogin)
+                    capabilities.Add("interactive login required");
+                if (SupportsConnectionTesting)
+                    capabilities.Add("connection testing supported");
+                if (SupportsRemoteFolderSelection)
+                    capabilities.Add("remote folder selection supported");
+                if (SupportsPersistentAuthentication)
+                    capabilities.Add("persistent authentication supported");
+
+                return string.Join("; ", capabilities) + ".";
+            }
+        }
 
         public bool IsLocalFolderSelected =>
-            SelectedProviderKind == SyncProviderKind.LocalFolder;
+            SelectedProviderDescriptor.ConfigurationSurface ==
+            SyncProviderConfigurationSurface.LocalFolder;
 
         public bool IsSftpSelected =>
-            SelectedProviderKind == SyncProviderKind.Sftp;
+            SelectedProviderDescriptor.ConfigurationSurface ==
+            SyncProviderConfigurationSurface.Sftp;
 
         public SyncViewModel(
             ISyncProviderFactory syncProviderFactory,
+            ISyncProviderCatalog providerCatalog,
             IFolderPickerService folderPickerService,
             ISyncSettingsStore syncSettingsStore,
             ISyncRemoteProfileRepository profileRepository,
@@ -217,10 +299,14 @@ namespace GameSaves.App.ViewModels
             IUtcClock clock)
         {
             _syncProviderFactory = syncProviderFactory;
+            _providerCatalog = providerCatalog;
             _folderPickerService = folderPickerService;
             _syncSettingsStore = syncSettingsStore;
             _profileRepository = profileRepository;
             _clock = clock;
+            ProviderOptions = _providerCatalog.GetAll()
+                .Where(descriptor => descriptor.IsImplemented)
+                .ToArray();
 
             SyncUiSettings saved = profileMigrationService.LoadAndMigrate();
             selectedProviderKind = saved.SelectedProviderKind;
@@ -911,16 +997,17 @@ namespace GameSaves.App.ViewModels
                 : null;
         }
 
-        private static string? GetUnavailableProviderMessage(SyncProviderKind kind)
+        private string? GetUnavailableProviderMessage(SyncProviderKind kind)
         {
-            return kind switch
-            {
-                SyncProviderKind.LocalFolder or SyncProviderKind.Sftp => null,
-                SyncProviderKind.GoogleDrive => "Google Drive sync is not implemented yet.",
-                SyncProviderKind.WebDav => "WebDAV sync is not implemented yet.",
-                SyncProviderKind.OneDrive => "OneDrive sync is not implemented yet.",
-                _ => $"Sync provider value {(int)kind} is not supported by this version."
-            };
+            SyncProviderDescriptor descriptor = _providerCatalog.GetDescriptor(kind);
+
+            if (descriptor.IsImplemented)
+                return null;
+
+            return descriptor.Kind == SyncProviderKind.Unknown &&
+                   kind != SyncProviderKind.Unknown
+                ? $"Sync provider value {(int)kind} is not supported by this version."
+                : descriptor.UnavailableMessage ?? "The selected sync provider is unavailable.";
         }
 
         [RelayCommand]
@@ -1025,6 +1112,36 @@ namespace GameSaves.App.ViewModels
         }
 
         [RelayCommand]
+        private void OpenRemoteLocation()
+        {
+            if (!CanOpenRemoteLocation || !IsLocalFolderSelected)
+            {
+                StatusMessage = "Opening the selected provider location is unavailable.";
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(RemoteRootPath) ||
+                !Directory.Exists(RemoteRootPath))
+            {
+                StatusMessage = "Choose an existing local or mounted sync folder first.";
+                return;
+            }
+
+            try
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = RemoteRootPath,
+                    UseShellExecute = true
+                });
+            }
+            catch
+            {
+                StatusMessage = "The sync folder could not be opened.";
+            }
+        }
+
+        [RelayCommand]
         private async Task PreviewSyncAsync()
         {
             if (IsLoading)
@@ -1056,8 +1173,8 @@ namespace GameSaves.App.ViewModels
             try
             {
                 IsLoading = true;
-                StatusMessage = SelectedProviderKind == SyncProviderKind.Sftp
-                    ? "Connecting to the SFTP server and building the sync preview (dry run, nothing is copied)..."
+                StatusMessage = RequiresServerCredentials
+                    ? "Connecting to the configured server and building the sync preview (dry run, nothing is copied)..."
                     : "Building sync preview (dry run, nothing is copied)...";
 
                 ISyncProvider provider = CreateConfiguredProvider();

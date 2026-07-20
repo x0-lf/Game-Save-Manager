@@ -2,6 +2,7 @@ using GameSaves.App.Services;
 using GameSaves.App.ViewModels;
 using GameSaves.Core.Sync;
 using GameSaves.Core.Transfers;
+using GameSaves.Infrastructure.Sync;
 
 namespace GameSaves.Tests;
 
@@ -203,6 +204,7 @@ public sealed class SyncProviderSelectionTests
         var store = new InMemorySyncSettingsStore(SyncUiSettings.Default);
         var viewModel = new SyncViewModel(
             factory,
+            new SyncProviderCatalog(),
             new NullFolderPickerService(),
             store,
             new InMemorySyncRemoteProfileRepository(),
@@ -232,6 +234,7 @@ public sealed class SyncProviderSelectionTests
     {
         return new SyncViewModel(
             factory,
+            new SyncProviderCatalog(),
             new NullFolderPickerService(),
             new InMemorySyncSettingsStore(settings),
             new InMemorySyncRemoteProfileRepository(),
@@ -239,7 +242,7 @@ public sealed class SyncProviderSelectionTests
             new FixedUtcClock(DateTimeOffset.Parse("2026-07-20T12:00:00Z")));
     }
 
-    private sealed class InMemorySyncSettingsStore : ISyncSettingsStore
+    internal sealed class InMemorySyncSettingsStore : ISyncSettingsStore
     {
         private readonly SyncUiSettings _loaded;
 
@@ -258,7 +261,7 @@ public sealed class SyncProviderSelectionTests
         }
     }
 
-    private sealed class NullFolderPickerService : IFolderPickerService
+    internal sealed class NullFolderPickerService : IFolderPickerService
     {
         public Task<string?> PickFolderAsync(string title, string? startLocation = null) =>
             Task.FromResult<string?>(null);
@@ -269,7 +272,7 @@ public sealed class SyncProviderSelectionTests
             string[] patterns) => Task.FromResult<string?>(null);
     }
 
-    private sealed class RecordingSyncProviderFactory : ISyncProviderFactory
+    internal sealed class RecordingSyncProviderFactory : ISyncProviderFactory
     {
         public int LocalFolderCreateCount { get; private set; }
         public int SftpCreateCount { get; private set; }

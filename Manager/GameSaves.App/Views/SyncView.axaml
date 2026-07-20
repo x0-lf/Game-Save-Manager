@@ -226,7 +226,7 @@
                         <!-- Local folder target -->
                         <StackPanel Spacing="4"
                                     IsVisible="{Binding IsLocalFolderSelected}">
-                            <Grid ColumnDefinitions="*,Auto"
+                            <Grid ColumnDefinitions="*,Auto,Auto"
                                   ColumnSpacing="6">
 
                                 <TextBox Grid.Column="0"
@@ -238,6 +238,14 @@
                                 <Button Grid.Column="1"
                                         Content="Choose Folder..."
                                         Command="{Binding ChooseRemoteFolderCommand}"
+                                        IsEnabled="{Binding CanSelectRemoteFolder}"
+                                        Height="32"
+                                        VerticalAlignment="Top" />
+
+                                <Button Grid.Column="2"
+                                        Content="Open Folder"
+                                        Command="{Binding OpenRemoteLocationCommand}"
+                                        IsVisible="{Binding CanOpenRemoteLocation}"
                                         Height="32"
                                         VerticalAlignment="Top" />
                             </Grid>
@@ -334,8 +342,14 @@
                             </StackPanel>
                         </StackPanel>
 
+                        <TextBlock Text="{Binding ProviderCapabilitySummary}"
+                                   Foreground="{StaticResource MutedTextBrush}"
+                                   FontSize="11"
+                                   TextWrapping="Wrap" />
+
                         <Button Content="Check Connection &amp; Sync Status"
                                 Command="{Binding CheckSyncStatusCommand}"
+                                IsVisible="{Binding CanCheckConnection}"
                                 Height="30"
                                 FontSize="12"
                                 Margin="0,4,0,0"
