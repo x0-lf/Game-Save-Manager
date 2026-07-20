@@ -24,6 +24,7 @@ dependencies are added, removed, or upgraded.
 | Microsoft.Extensions.DependencyInjection.Abstractions | 10.0.9 | MIT | Dependency injection abstractions. |
 | Microsoft.Extensions.Hosting | 10.0.9 | MIT | Generic hosting infrastructure. |
 | Microsoft.Data.Sqlite | 10.0.9 | MIT | SQLite ADO.NET provider. |
+| System.Security.Cryptography.ProtectedData | 10.0.0 | MIT | Windows DPAPI access for current-user secret protection. |
 | System.Text.Json | 10.0.9 | MIT | JSON serialization used by sync settings and regression tests. |
 | Gameloop.Vdf | 0.6.2 | MIT | Valve Data Format parser used for Steam VDF files. |
 | SSH.NET | 2024.2.0 | MIT | SFTP/SSH client used by the SFTP sync provider. |
@@ -73,6 +74,12 @@ verification data, catalog/harvest data, and application history.
 
 System.Text.Json is used to read, migrate, and write the non-secret Sync UI settings.
 
+### System.Security.Cryptography.ProtectedData
+
+System.Security.Cryptography.ProtectedData is used only by Infrastructure to
+protect sync authentication payloads with Windows DPAPI current-user scope.
+Core and App do not reference DPAPI types.
+
 ### Gameloop.Vdf
 
 Gameloop.Vdf is used to parse Steam VDF files, including Steam library and manifest data.
@@ -95,3 +102,4 @@ Before publishing binary releases, review the full dependency graph with:
 
 ```bash
 dotnet list package --include-transitive
+```

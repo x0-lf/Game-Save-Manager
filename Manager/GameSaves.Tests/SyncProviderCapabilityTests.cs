@@ -173,12 +173,14 @@ public sealed class SyncProviderCapabilityTests
 
     private SyncViewModel CreateViewModel()
     {
+        var repository = new InMemorySyncRemoteProfileRepository();
         return new SyncViewModel(
             new SyncProviderSelectionTests.RecordingSyncProviderFactory(),
             _catalog,
             new SyncProviderSelectionTests.NullFolderPickerService(),
             new SyncProviderSelectionTests.InMemorySyncSettingsStore(SyncUiSettings.Default),
-            new InMemorySyncRemoteProfileRepository(),
+            repository,
+            new SyncRemoteProfileService(repository, new InMemorySecretStore()),
             new StubSyncRemoteProfileMigrationService(SyncUiSettings.Default),
             new FixedUtcClock(DateTimeOffset.Parse("2026-07-20T12:00:00Z")));
     }

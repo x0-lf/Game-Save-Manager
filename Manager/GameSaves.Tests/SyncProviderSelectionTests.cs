@@ -202,12 +202,14 @@ public sealed class SyncProviderSelectionTests
     {
         var factory = new RecordingSyncProviderFactory();
         var store = new InMemorySyncSettingsStore(SyncUiSettings.Default);
+        var repository = new InMemorySyncRemoteProfileRepository();
         var viewModel = new SyncViewModel(
             factory,
             new SyncProviderCatalog(),
             new NullFolderPickerService(),
             store,
-            new InMemorySyncRemoteProfileRepository(),
+            repository,
+            new SyncRemoteProfileService(repository, new InMemorySecretStore()),
             new StubSyncRemoteProfileMigrationService(SyncUiSettings.Default),
             new FixedUtcClock(DateTimeOffset.Parse("2026-07-20T12:00:00Z")))
         {
@@ -232,12 +234,14 @@ public sealed class SyncProviderSelectionTests
         RecordingSyncProviderFactory factory,
         SyncUiSettings settings)
     {
+        var repository = new InMemorySyncRemoteProfileRepository();
         return new SyncViewModel(
             factory,
             new SyncProviderCatalog(),
             new NullFolderPickerService(),
             new InMemorySyncSettingsStore(settings),
-            new InMemorySyncRemoteProfileRepository(),
+            repository,
+            new SyncRemoteProfileService(repository, new InMemorySecretStore()),
             new StubSyncRemoteProfileMigrationService(settings),
             new FixedUtcClock(DateTimeOffset.Parse("2026-07-20T12:00:00Z")));
     }

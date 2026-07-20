@@ -10,7 +10,7 @@ namespace GameSaves.Tests;
 public sealed class SyncRemoteProfileViewModelTests
 {
     [Fact]
-    public void SaveRenameSaveAsAndDelete_ManageOnlyProfileConfiguration()
+    public async Task SaveRenameSaveAsAndDelete_ManageOnlyProfileConfiguration()
     {
         DateTimeOffset start = DateTimeOffset.Parse("2026-07-20T10:00:00Z");
         var clock = new FixedUtcClock(start);
@@ -54,7 +54,7 @@ public sealed class SyncRemoteProfileViewModelTests
 
         Guid copiedId = viewModel.SelectedRemoteProfile.Id;
         viewModel.ConfirmDeleteRemoteProfile = true;
-        viewModel.DeleteRemoteProfileCommand.Execute(null);
+        await viewModel.DeleteRemoteProfileCommand.ExecuteAsync(null);
 
         Assert.Null(repository.GetById(copiedId));
         Assert.NotNull(repository.GetById(original.Id));
@@ -89,6 +89,7 @@ public sealed class SyncRemoteProfileViewModelTests
             new NullProfileFolderPicker(),
             store,
             repository,
+            new SyncRemoteProfileService(repository, new InMemorySecretStore()),
             new StubSyncRemoteProfileMigrationService(settings),
             clock);
         viewModel.SftpPassword = "first-session-password";
@@ -215,11 +216,79 @@ public sealed class SyncRemoteProfileViewModelTests
         Assert.Equal(0, factory.ExecuteCount);
     }
 
+    [Fact]
+    public async Task DeleteCommand_DisposesProviderClearsSessionSecretsAndDeletesOwnedSecrets()
+    {
+        DateTimeOffset now = DateTimeOffset.Parse("2026-07-20T10:00:00Z");
+        var repository = new InMemorySyncRemoteProfileRepository();
+        SyncRemoteProfile profile = repository.Create(LocalProfile(
+            "USB Backup", @"D:\Backups", now));
+        var secretStore = new InMemorySecretStore();
+        var secretKey = new GameSaves.Core.Secrets.SecretKey(
+            profile.Id,
+            GameSaves.Core.Secrets.SecretNames.OAuthTokenData);
+        await secretStore.StoreAsync(secretKey, new byte[] { 42 });
+        var factory = new ProfileTestProviderFactory();
+        SyncViewModel viewModel = CreateViewModel(
+            repository,
+            factory,
+            new FixedUtcClock(now),
+            selectedProfileId: profile.Id,
+            secretStore: secretStore);
+        await viewModel.PreviewSyncCommand.ExecuteAsync(null);
+        ProfileTestProvider provider =
+            Assert.IsType<ProfileTestProvider>(factory.LastProvider);
+        viewModel.SftpPassword = "session-password";
+        viewModel.SftpKeyPassphrase = "session-passphrase";
+        viewModel.ConfirmDeleteRemoteProfile = true;
+
+        await viewModel.DeleteRemoteProfileCommand.ExecuteAsync(null);
+
+        Assert.True(provider.IsDisposed);
+        Assert.Equal("", viewModel.SftpPassword);
+        Assert.Equal("", viewModel.SftpKeyPassphrase);
+        Assert.False(await secretStore.ExistsAsync(secretKey));
+        Assert.Null(repository.GetById(profile.Id));
+    }
+
+    [Fact]
+    public async Task DisconnectCommand_RemovesSecretsButPreservesProfileAndConfiguration()
+    {
+        DateTimeOffset now = DateTimeOffset.Parse("2026-07-20T10:00:00Z");
+        var repository = new InMemorySyncRemoteProfileRepository();
+        SyncRemoteProfile profile = repository.Create(SftpProfile(
+            "Home SFTP", "home.example.test", now));
+        var secretStore = new InMemorySecretStore();
+        var secretKey = new GameSaves.Core.Secrets.SecretKey(
+            profile.Id,
+            GameSaves.Core.Secrets.SecretNames.OAuthTokenData);
+        await secretStore.StoreAsync(secretKey, new byte[] { 42 });
+        SyncViewModel viewModel = CreateViewModel(
+            repository,
+            new ProfileTestProviderFactory(),
+            new FixedUtcClock(now),
+            selectedProfileId: profile.Id,
+            secretStore: secretStore);
+        viewModel.SftpPassword = "session-password";
+        viewModel.SftpKeyPassphrase = "session-passphrase";
+
+        await viewModel.DisconnectAuthenticationCommand.ExecuteAsync(null);
+
+        Assert.False(await secretStore.ExistsAsync(secretKey));
+        Assert.NotNull(repository.GetById(profile.Id));
+        Assert.Equal("home.example.test",
+            Assert.IsType<SftpSyncRemoteSettings>(
+                repository.GetById(profile.Id)!.ProviderSettings).Host);
+        Assert.Equal("", viewModel.SftpPassword);
+        Assert.Equal("", viewModel.SftpKeyPassphrase);
+    }
+
     private static SyncViewModel CreateViewModel(
         InMemorySyncRemoteProfileRepository repository,
         ProfileTestProviderFactory factory,
         FixedUtcClock clock,
-        Guid? selectedProfileId = null)
+        Guid? selectedProfileId = null,
+        InMemorySecretStore? secretStore = null)
     {
         SyncUiSettings settings = SyncUiSettings.Default with
         {
@@ -227,12 +296,14 @@ public sealed class SyncRemoteProfileViewModelTests
             LegacyProfileMigrationCompleted = true
         };
         var store = new RecordingSettingsStore(settings);
+        secretStore ??= new InMemorySecretStore();
         return new SyncViewModel(
             factory,
             new SyncProviderCatalog(),
             new NullProfileFolderPicker(),
             store,
             repository,
+            new SyncRemoteProfileService(repository, secretStore),
             new StubSyncRemoteProfileMigrationService(settings),
             clock);
     }

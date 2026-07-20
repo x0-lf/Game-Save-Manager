@@ -44,6 +44,8 @@ The long-term goal is a cross-platform Steam save manager with backup profiles, 
 * **Sync tab** - backup-run sync with a local/mounted folder or an SFTP server:
   * **Saved remote profiles**: create, update, Save As, rename, and explicitly delete named Local Folder or SFTP configurations in the existing Sync target section. Selecting or saving a profile never connects, previews, or syncs.
   * Profiles are stored in SQLite with stable IDs and non-secret settings only. Existing meaningful `sync-settings.json` configuration is migrated once; when a profile is selected, its SQLite values take precedence over the lightweight UI-state file.
+  * Provider behavior is described by one capability catalog. The selector and generic connection controls are capability-driven; planned Google Drive, WebDAV, and OneDrive capabilities do not make those providers usable.
+  * Saved-provider authentication has a platform-neutral secret-store contract. On Windows, payloads are protected for the current user with DPAPI and SQLite stores encrypted BLOBs only. Profile deletion and disconnect remove owned encrypted secrets; SFTP passwords and passphrases remain session-only.
   * Type-safe provider selection through `SyncProviderKind`; the selector exposes the implemented `LocalFolder` and `Sftp` providers. `GoogleDrive`, `WebDav`, and `OneDrive` are reserved roadmap values only and cannot be previewed or executed.
   * `ISyncProvider` abstraction with `LocalFolderSyncProvider` and `SftpSyncProvider` (SSH.NET); WebDAV and cloud providers come later.
   * **SFTP**: host/port/username with password or private-key-file authentication; passwords, passphrases, and trust-new-host confirmation are session-only, cleared when profiles change, and never written to disk. Host keys use trust-on-first-use: the SHA-256 fingerprint is shown on first connect, stored like SSH known_hosts, and any later change fails loudly ("Forget Stored Host Key" covers planned reinstalls).
@@ -196,7 +198,7 @@ Sync never deletes or overwrites anything on either side; conflicts are reported
 * Windows (registry-based Steam discovery; other platforms are planned)
 * Internet access only for Steam catalog / PCGamingWiki harvesting commands
 
-Main packages: `Avalonia` 12, `CommunityToolkit.Mvvm`, `Microsoft.Extensions.DependencyInjection`, `Microsoft.Data.Sqlite`, `Gameloop.Vdf`, `SSH.NET`.
+Main packages: `Avalonia` 12, `CommunityToolkit.Mvvm`, `Microsoft.Extensions.DependencyInjection`, `Microsoft.Data.Sqlite`, `System.Security.Cryptography.ProtectedData`, `Gameloop.Vdf`, `SSH.NET`.
 
 Test packages: `Microsoft.NET.Test.Sdk`, `xunit`, `xunit.runner.visualstudio`.
 
@@ -208,7 +210,7 @@ Test packages: `Microsoft.NET.Test.Sdk`, `xunit`, `xunit.runner.visualstudio`.
 %LOCALAPPDATA%\GameSave\gamesave.db
 ```
 
-Stores save-path mappings (with review status), verification results, backup runs/items (CLI), operation history, named non-secret sync remote profiles, Steam catalog records, and harvesting queues.
+Stores save-path mappings (with review status), verification results, backup runs/items (CLI), operation history, named non-secret sync remote profiles, current-user DPAPI-protected sync-secret BLOBs, Steam catalog records, and harvesting queues.
 
 Initialize:
 
@@ -348,39 +350,45 @@ Each profile contains non-secret information only:
 
 Introduce a provider capability description so the App does not rely on provider-name checks.
 
-* [ ] Requires interactive login
-* [ ] Requires server credentials
-* [ ] Supports resumable upload
-* [ ] Supports remote quota
-* [ ] Supports selecting a remote folder
-* [ ] Supports persistent authentication
-* [ ] Supports connection testing
-* [ ] Supports logout
-* [ ] Supports opening the remote location in a browser
-* [ ] Drive UI behavior from capabilities instead of scattered provider-name checks
+The catalog is the authoritative metadata source. Future-provider capabilities describe the intended design only; `IsImplemented` remains false and preview/execution stay blocked.
+
+* [x] Requires interactive login
+* [x] Requires server credentials
+* [x] Supports resumable upload
+* [x] Supports remote quota
+* [x] Supports selecting a remote folder
+* [x] Supports persistent authentication
+* [x] Supports connection testing
+* [x] Supports logout
+* [x] Supports opening the remote location in a browser
+* [x] Drive UI behavior from capabilities instead of scattered provider-name checks
 
 ### E — Secret-store abstraction
 
 Add a platform-neutral secret-storage interface.
 
-* [ ] Store secret
-* [ ] Read secret
-* [ ] Delete secret
-* [ ] Check whether a secret exists
-* [ ] Keep the interface in Core only if it remains platform-neutral and contains no Windows-specific types
-* [ ] Put the Windows implementation in Infrastructure
-* [ ] Support Google OAuth token data, future OneDrive tokens, future WebDAV app passwords, and optionally saved SFTP passwords/passphrases
+The byte-oriented abstraction can securely hold planned OAuth token data, OneDrive token data, WebDAV passwords, and optional SFTP secrets. This storage capability does not implement those providers or enable SFTP credential persistence.
+
+* [x] Store secret
+* [x] Read secret
+* [x] Delete secret
+* [x] Check whether a secret exists
+* [x] Keep the interface in Core only if it remains platform-neutral and contains no Windows-specific types
+* [x] Put the Windows implementation in Infrastructure
+* [x] Support Google OAuth token data, future OneDrive tokens, future WebDAV app passwords, and optionally saved SFTP passwords/passphrases
 
 ### F — Windows secure secret storage
 
 Study and choose between Windows DPAPI through `.NET ProtectedData` and Windows Credential Manager.
 
-* [ ] Encrypt for the current Windows user
-* [ ] Never log secret values
-* [ ] Never show stored tokens in the UI
-* [ ] Remove secrets when the remote profile is deleted or disconnected
-* [ ] Handle unreadable or corrupted secret data safely
-* [ ] Document Linux and macOS secret stores as future implementations
+Windows DPAPI with `DataProtectionScope.CurrentUser` was selected. SQLite contains only versioned encrypted BLOBs; copied data is not expected to decrypt for another Windows user or machine. Corrupted, revoked, or otherwise unreadable authentication remains removable and requires reauthentication. Linux Secret Service and macOS Keychain implementations are future work.
+
+* [x] Encrypt for the current Windows user
+* [x] Never log secret values
+* [x] Never show stored tokens in the UI
+* [x] Remove secrets when the remote profile is deleted or disconnected
+* [x] Handle unreadable or corrupted secret data safely
+* [x] Document Linux and macOS secret stores as future implementations
 
 ### G — Google Cloud setup documentation
 

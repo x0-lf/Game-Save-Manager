@@ -21,6 +21,7 @@ namespace GameSaves.App.ViewModels
         private readonly IFolderPickerService _folderPickerService;
         private readonly ISyncSettingsStore _syncSettingsStore;
         private readonly ISyncRemoteProfileRepository _profileRepository;
+        private readonly ISyncRemoteProfileService _profileService;
         private readonly IUtcClock _clock;
         private SyncPlan? _lastPlan;
         private ISyncProvider? _lastProvider;
@@ -153,6 +154,9 @@ namespace GameSaves.App.ViewModels
 
         [ObservableProperty]
         private bool confirmDeleteRemoteProfile;
+
+        [ObservableProperty]
+        private bool hasStoredAuthentication;
 
         private bool _keepTargetSectionOpen;
 
@@ -295,6 +299,7 @@ namespace GameSaves.App.ViewModels
             IFolderPickerService folderPickerService,
             ISyncSettingsStore syncSettingsStore,
             ISyncRemoteProfileRepository profileRepository,
+            ISyncRemoteProfileService profileService,
             ISyncRemoteProfileMigrationService profileMigrationService,
             IUtcClock clock)
         {
@@ -303,6 +308,7 @@ namespace GameSaves.App.ViewModels
             _folderPickerService = folderPickerService;
             _syncSettingsStore = syncSettingsStore;
             _profileRepository = profileRepository;
+            _profileService = profileService;
             _clock = clock;
             ProviderOptions = _providerCatalog.GetAll()
                 .Where(descriptor => descriptor.IsImplemented)
@@ -401,6 +407,7 @@ namespace GameSaves.App.ViewModels
             _suppressProfileSelection = true;
             SelectedRemoteProfile = value.Profile;
             _suppressProfileSelection = false;
+            HasStoredAuthentication = false;
             ApplyRemoteProfile(value.Profile, persistSelection: true);
         }
 
@@ -477,6 +484,7 @@ namespace GameSaves.App.ViewModels
             }
 
             InvalidatePlan(force: true);
+            HasStoredAuthentication = false;
             ConfirmDeleteRemoteProfile = false;
             RemoteProfileState = "Unsaved settings (no profile)";
             StatusMessage = "Using the current sync settings without a saved remote profile. Build a new preview when ready.";
@@ -487,6 +495,7 @@ namespace GameSaves.App.ViewModels
             SyncRemoteProfile profile,
             bool persistSelection)
         {
+            HasStoredAuthentication = false;
             _applyingProfile = true;
 
             try
@@ -537,6 +546,8 @@ namespace GameSaves.App.ViewModels
 
             if (persistSelection)
                 SaveNonSecretSettings();
+
+            _ = RefreshStoredAuthenticationAsync(profile.Id);
         }
 
         [RelayCommand]
@@ -563,6 +574,7 @@ namespace GameSaves.App.ViewModels
             }
 
             InvalidatePlan(force: true);
+            HasStoredAuthentication = false;
             ConfirmDeleteRemoteProfile = false;
             RemoteProfileState = "Unsaved changes";
             StatusMessage = "New unsaved remote profile. Configure it, enter a name, then choose Save.";
@@ -683,7 +695,7 @@ namespace GameSaves.App.ViewModels
         }
 
         [RelayCommand]
-        private void DeleteRemoteProfile()
+        private async Task DeleteRemoteProfileAsync()
         {
             if (SelectedRemoteProfile is null)
             {
@@ -699,16 +711,75 @@ namespace GameSaves.App.ViewModels
 
             try
             {
+                Guid profileId = SelectedRemoteProfile.Id;
                 string deletedName = SelectedRemoteProfile.DisplayName;
-                _profileRepository.Delete(SelectedRemoteProfile.Id);
+                InvalidatePlan(force: true);
+                ClearSessionOnlySftpState();
+
+                SyncRemoteProfileDeleteResult result =
+                    await _profileService.DeleteAsync(profileId);
+
+                if (!result.ProfileDeleted)
+                {
+                    HasStoredAuthentication =
+                        await _profileService.HasStoredAuthenticationAsync(profileId);
+                    StatusMessage = result.CleanupWarning ??
+                        "The remote profile configuration could not be deleted.";
+                    return;
+                }
+
                 ReplaceProfileCollections(_profileRepository.GetAll());
                 NewRemoteProfile();
                 ConfirmDeleteRemoteProfile = false;
-                StatusMessage = $"Deleted profile '{deletedName}' only. No backup, history, known-host, or remote data was removed.";
+                HasStoredAuthentication = false;
+                StatusMessage = result.CleanupWarning is null
+                    ? $"Deleted profile '{deletedName}' and its stored authentication only. No backup, history, known-host, or remote data was removed."
+                    : $"Deleted profile '{deletedName}'. {result.CleanupWarning}";
             }
             catch
             {
                 StatusMessage = "The remote profile configuration could not be deleted.";
+            }
+        }
+
+        [RelayCommand]
+        private async Task DisconnectAuthenticationAsync()
+        {
+            if (SelectedRemoteProfile is null)
+            {
+                StatusMessage = "Select a saved remote profile to disconnect.";
+                return;
+            }
+
+            Guid profileId = SelectedRemoteProfile.Id;
+            InvalidatePlan(force: true);
+            ClearSessionOnlySftpState();
+
+            SyncRemoteProfileAuthenticationResult result =
+                await _profileService.DisconnectAuthenticationAsync(profileId);
+
+            HasStoredAuthentication =
+                await _profileService.HasStoredAuthenticationAsync(profileId);
+            StatusMessage = result.Succeeded
+                ? "Stored authentication was removed. The saved non-secret profile configuration was kept."
+                : result.CleanupWarning ??
+                  "Stored authentication could not be removed.";
+        }
+
+        private async Task RefreshStoredAuthenticationAsync(Guid profileId)
+        {
+            try
+            {
+                bool exists =
+                    await _profileService.HasStoredAuthenticationAsync(profileId);
+
+                if (SelectedRemoteProfile?.Id == profileId)
+                    HasStoredAuthentication = exists;
+            }
+            catch
+            {
+                if (SelectedRemoteProfile?.Id == profileId)
+                    HasStoredAuthentication = false;
             }
         }
 

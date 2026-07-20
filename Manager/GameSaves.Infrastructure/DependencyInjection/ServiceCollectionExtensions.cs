@@ -1,6 +1,7 @@
 ﻿using GameSaves.Core.Platform;
 using GameSaves.Core.Profiles;
 using GameSaves.Core.Save;
+using GameSaves.Core.Secrets;
 using GameSaves.Core.Steam;
 using GameSaves.Core.Transfers;
 using GameSaves.Core.Sync;
@@ -8,6 +9,7 @@ using GameSaves.Infrastructure.Platform;
 using GameSaves.Infrastructure.Profiles;
 using GameSaves.Infrastructure.Registry;
 using GameSaves.Infrastructure.Save;
+using GameSaves.Infrastructure.Secrets;
 using GameSaves.Infrastructure.Steam;
 using GameSaves.Infrastructure.Transfers;
 using GameSaves.Infrastructure.Sync;
@@ -83,6 +85,18 @@ namespace GameSaves.Infrastructure.DependencyInjection
                     pathProvider.GetDatabasePath(),
                     serializer);
             });
+
+            services.AddSingleton<ISecretStore>(provider =>
+            {
+                IAppDatabasePathProvider pathProvider =
+                    provider.GetRequiredService<IAppDatabasePathProvider>();
+                IUtcClock clock = provider.GetRequiredService<IUtcClock>();
+
+                return new WindowsDpapiSecretStore(
+                    pathProvider.GetDatabasePath(),
+                    clock);
+            });
+            services.AddSingleton<ISyncRemoteProfileService, SyncRemoteProfileService>();
 
             return services;
         }
