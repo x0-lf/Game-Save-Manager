@@ -5,6 +5,7 @@ using GameSaves.App.Services;
 using GameSaves.Core.Sync;
 using GameSaves.Core.Transfers;
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
@@ -15,6 +16,7 @@ namespace GameSaves.App.ViewModels
     {
         private readonly ISyncProviderFactory _syncProviderFactory;
         private readonly IFolderPickerService _folderPickerService;
+        private readonly ISyncSettingsStore _syncSettingsStore;
         private SyncPlan? _lastPlan;
         private ISyncProvider? _lastProvider;
 
@@ -28,7 +30,9 @@ namespace GameSaves.App.ViewModels
         private string remoteRootPath = "";
 
         [ObservableProperty]
-        private bool useSftp;
+        [NotifyPropertyChangedFor(nameof(IsLocalFolderSelected))]
+        [NotifyPropertyChangedFor(nameof(IsSftpSelected))]
+        private SyncProviderKind selectedProviderKind = SyncProviderKind.LocalFolder;
 
         [ObservableProperty]
         private string sftpHost = "";
@@ -163,15 +167,34 @@ namespace GameSaves.App.ViewModels
 
         public ObservableCollection<SyncLogEntryRowViewModel> SyncLog { get; } = new();
 
+        public IReadOnlyList<SyncProviderOption> ProviderOptions { get; } =
+            new[]
+            {
+                new SyncProviderOption(
+                    SyncProviderKind.LocalFolder,
+                    "Local or mounted folder"),
+                new SyncProviderOption(
+                    SyncProviderKind.Sftp,
+                    "SFTP server (SSH)")
+            };
+
+        public bool IsLocalFolderSelected =>
+            SelectedProviderKind == SyncProviderKind.LocalFolder;
+
+        public bool IsSftpSelected =>
+            SelectedProviderKind == SyncProviderKind.Sftp;
+
         public SyncViewModel(
             ISyncProviderFactory syncProviderFactory,
-            IFolderPickerService folderPickerService)
+            IFolderPickerService folderPickerService,
+            ISyncSettingsStore syncSettingsStore)
         {
             _syncProviderFactory = syncProviderFactory;
             _folderPickerService = folderPickerService;
+            _syncSettingsStore = syncSettingsStore;
 
-            SyncUiSettings saved = SyncSettingsStore.Load();
-            useSftp = saved.UseSftp;
+            SyncUiSettings saved = _syncSettingsStore.Load();
+            selectedProviderKind = saved.SelectedProviderKind;
             remoteRootPath = saved.LocalFolderPath;
             sftpHost = saved.SftpHost;
             sftpPort = saved.SftpPort;
@@ -180,6 +203,11 @@ namespace GameSaves.App.ViewModels
             sftpUsePassword = !saved.SftpUsePrivateKey;
             sftpKeyFilePath = saved.SftpKeyFilePath;
             sftpRemotePath = saved.SftpRemotePath;
+
+            string? unavailable = GetUnavailableProviderMessage(selectedProviderKind);
+
+            if (unavailable is not null)
+                statusMessage = unavailable;
         }
 
         partial void OnRemoteRootPathChanged(string value) => InvalidatePlan();
@@ -188,7 +216,13 @@ namespace GameSaves.App.ViewModels
 
         partial void OnDownloadEnabledChanged(bool value) => InvalidatePlan();
 
-        partial void OnUseSftpChanged(bool value) => InvalidatePlan();
+        partial void OnSelectedProviderKindChanged(SyncProviderKind value)
+        {
+            InvalidatePlan();
+
+            StatusMessage = GetUnavailableProviderMessage(value)
+                ?? "Sync provider changed. Configure it and build a new sync preview.";
+        }
 
         partial void OnSftpHostChanged(string value) => InvalidatePlan();
 
@@ -238,12 +272,25 @@ namespace GameSaves.App.ViewModels
 
         private ISyncProvider CreateConfiguredProvider()
         {
-            if (!UseSftp)
-                return _syncProviderFactory.CreateLocalFolderProvider(RemoteRootPath);
+            return SelectedProviderKind switch
+            {
+                SyncProviderKind.LocalFolder =>
+                    _syncProviderFactory.CreateLocalFolderProvider(RemoteRootPath),
 
-            int port = int.TryParse(SftpPort.Trim(), out int parsed) ? parsed : 22;
+                SyncProviderKind.Sftp =>
+                    _syncProviderFactory.CreateSftpProvider(BuildSftpSettings()),
 
-            return _syncProviderFactory.CreateSftpProvider(new SftpConnectionSettings(
+                _ => throw new NotSupportedException(
+                    GetUnavailableProviderMessage(SelectedProviderKind)
+                    ?? "The selected sync provider is unsupported.")
+            };
+        }
+
+        private SftpConnectionSettings BuildSftpSettings()
+        {
+            int port = int.Parse(SftpPort.Trim());
+
+            return new SftpConnectionSettings(
                 Host: SftpHost.Trim(),
                 Port: port,
                 Username: SftpUsername.Trim(),
@@ -251,14 +298,15 @@ namespace GameSaves.App.ViewModels
                 Password: string.IsNullOrEmpty(SftpPassword) ? null : SftpPassword,
                 PrivateKeyPath: string.IsNullOrWhiteSpace(SftpKeyFilePath) ? null : SftpKeyFilePath.Trim(),
                 PrivateKeyPassphrase: string.IsNullOrEmpty(SftpKeyPassphrase) ? null : SftpKeyPassphrase,
-                RemotePath: SftpRemotePath,
-                TrustNewHostKey: SftpTrustNewHostKey));
+                RemotePath: SftpRemotePath.Trim(),
+                TrustNewHostKey: SftpTrustNewHostKey);
         }
 
         private void SaveNonSecretSettings()
         {
-            SyncSettingsStore.Save(new SyncUiSettings(
-                UseSftp: UseSftp,
+            _syncSettingsStore.Save(new SyncUiSettings(
+                SchemaVersion: SyncUiSettings.CurrentSchemaVersion,
+                SelectedProviderKind: SelectedProviderKind,
                 LocalFolderPath: RemoteRootPath,
                 SftpHost: SftpHost,
                 SftpPort: SftpPort,
@@ -266,6 +314,59 @@ namespace GameSaves.App.ViewModels
                 SftpUsePrivateKey: SftpUsePrivateKey,
                 SftpKeyFilePath: SftpKeyFilePath,
                 SftpRemotePath: SftpRemotePath));
+        }
+
+        private string? ValidateProviderSelection()
+        {
+            return SelectedProviderKind switch
+            {
+                SyncProviderKind.LocalFolder when string.IsNullOrWhiteSpace(RemoteRootPath) =>
+                    "Choose a local or mounted sync folder first.",
+
+                SyncProviderKind.LocalFolder => null,
+
+                SyncProviderKind.Sftp => ValidateSftpSelection(),
+
+                _ => GetUnavailableProviderMessage(SelectedProviderKind)
+            };
+        }
+
+        private string? ValidateSftpSelection()
+        {
+            if (string.IsNullOrWhiteSpace(SftpHost))
+                return "Enter the SFTP host first.";
+
+            if (string.IsNullOrWhiteSpace(SftpUsername))
+                return "Enter the SFTP username first.";
+
+            if (!int.TryParse(SftpPort.Trim(), out int port) || port is < 1 or > 65535)
+                return "Enter an SFTP port between 1 and 65535.";
+
+            if (string.IsNullOrWhiteSpace(SftpRemotePath))
+                return "Enter the SFTP remote folder path.";
+
+            if (SftpUsePrivateKey)
+            {
+                return string.IsNullOrWhiteSpace(SftpKeyFilePath)
+                    ? "Choose an SFTP private key file first."
+                    : null;
+            }
+
+            return string.IsNullOrEmpty(SftpPassword)
+                ? "Enter the SFTP password (it remains session-only)."
+                : null;
+        }
+
+        private static string? GetUnavailableProviderMessage(SyncProviderKind kind)
+        {
+            return kind switch
+            {
+                SyncProviderKind.LocalFolder or SyncProviderKind.Sftp => null,
+                SyncProviderKind.GoogleDrive => "Google Drive sync is not implemented yet.",
+                SyncProviderKind.WebDav => "WebDAV sync is not implemented yet.",
+                SyncProviderKind.OneDrive => "OneDrive sync is not implemented yet.",
+                _ => $"Sync provider value {(int)kind} is not supported by this version."
+            };
         }
 
         [RelayCommand]
@@ -297,7 +398,11 @@ namespace GameSaves.App.ViewModels
                 return;
             }
 
-            int port = int.TryParse(SftpPort.Trim(), out int parsed) ? parsed : 22;
+            if (!int.TryParse(SftpPort.Trim(), out int port) || port is < 1 or > 65535)
+            {
+                StatusMessage = "Enter an SFTP port between 1 and 65535.";
+                return;
+            }
 
             _syncProviderFactory.ForgetSftpHostKey(SftpHost.Trim(), port);
             InvalidatePlan();
@@ -376,16 +481,12 @@ namespace GameSaves.App.ViewModels
             _lastProvider = null;
             ClearPreview();
 
-            if (!UseSftp && string.IsNullOrWhiteSpace(RemoteRootPath))
-            {
-                StatusMessage = "Choose a sync folder first.";
-                return;
-            }
+            string? providerIssue = ValidateProviderSelection();
 
-            if (UseSftp &&
-                (string.IsNullOrWhiteSpace(SftpHost) || string.IsNullOrWhiteSpace(SftpUsername)))
+            if (providerIssue is not null)
             {
-                StatusMessage = "Enter at least the SFTP host and username first.";
+                StatusMessage = providerIssue;
+                ConnectionCheckMessage = $"Check failed: {providerIssue}";
                 return;
             }
 
@@ -400,7 +501,7 @@ namespace GameSaves.App.ViewModels
             try
             {
                 IsLoading = true;
-                StatusMessage = UseSftp
+                StatusMessage = SelectedProviderKind == SyncProviderKind.Sftp
                     ? "Connecting to the SFTP server and building the sync preview (dry run, nothing is copied)..."
                     : "Building sync preview (dry run, nothing is copied)...";
 

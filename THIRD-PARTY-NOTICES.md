@@ -24,6 +24,7 @@ dependencies are added, removed, or upgraded.
 | Microsoft.Extensions.DependencyInjection.Abstractions | 10.0.9 | MIT | Dependency injection abstractions. |
 | Microsoft.Extensions.Hosting | 10.0.9 | MIT | Generic hosting infrastructure. |
 | Microsoft.Data.Sqlite | 10.0.9 | MIT | SQLite ADO.NET provider. |
+| System.Text.Json | 10.0.9 | MIT | JSON serialization used by sync settings and regression tests. |
 | Gameloop.Vdf | 0.6.2 | MIT | Valve Data Format parser used for Steam VDF files. |
 | SSH.NET | 2024.2.0 | MIT | SFTP/SSH client used by the SFTP sync provider. |
 | Microsoft.NET.Test.Sdk | 17.14.1 | MIT | .NET test host and discovery support; test project only. |
@@ -67,6 +68,10 @@ Packages used:
 
 Microsoft.Data.Sqlite is used for the local SQLite database storing save-path mappings,
 verification data, catalog/harvest data, and application history.
+
+### System.Text.Json
+
+System.Text.Json is used to read, migrate, and write the non-secret Sync UI settings.
 
 ### Gameloop.Vdf
 

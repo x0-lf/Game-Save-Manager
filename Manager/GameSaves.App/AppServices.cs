@@ -14,6 +14,7 @@ namespace GameSaves.App
             services.AddGameSavesInfrastructure();
 
             services.AddSingleton<IFolderPickerService, FolderPickerService>();
+            services.AddSingleton<ISyncSettingsStore, SyncSettingsStore>();
 
             services.AddSingleton<MainWindowViewModel>();
 

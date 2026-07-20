@@ -42,8 +42,9 @@ The long-term goal is a cross-platform Steam save manager with backup profiles, 
   * SHA-256 integrity check: tampered or missing backup files are never restored.
   * Pre-restore backup: files replaced by a restore are themselves backed up, so a restore is always undoable.
 * **Sync tab** - backup-run sync with a local/mounted folder or an SFTP server:
+  * Type-safe provider selection through `SyncProviderKind`; the selector exposes the implemented `LocalFolder` and `Sftp` providers. `GoogleDrive`, `WebDav`, and `OneDrive` are reserved roadmap values only and cannot be previewed or executed.
   * `ISyncProvider` abstraction with `LocalFolderSyncProvider` and `SftpSyncProvider` (SSH.NET); WebDAV and cloud providers come later.
-  * **SFTP**: host/port/username with password or private-key-file authentication; passwords and passphrases are session-only and never written to disk. Host keys use trust-on-first-use: the SHA-256 fingerprint is shown on first connect, stored like SSH known_hosts, and any later change fails loudly ("Forget Stored Host Key" covers planned reinstalls). Non-secret connection settings are remembered between sessions.
+  * **SFTP**: host/port/username with password or private-key-file authentication; passwords and passphrases are session-only and never written to disk. Host keys use trust-on-first-use: the SHA-256 fingerprint is shown on first connect, stored like SSH known_hosts, and any later change fails loudly ("Forget Stored Host Key" covers planned reinstalls). Legacy `UseSftp` settings are migrated while all saved non-secret local-folder and SFTP values are preserved.
   * Copy-only, both ways: a run missing on one side is copied there; nothing is ever deleted or overwritten.
   * Sync preview with per-run actions (upload / download / in sync / conflict), counts, and sizes; execution requires explicit confirmation.
   * **Per-run selection**: every upload/download in the plan has a checkbox (plus Select All / Select None and a live "selected X of Y" summary); deselected runs are reported as skipped and stay pending for the next sync.
@@ -56,7 +57,7 @@ The long-term goal is a cross-platform Steam save manager with backup profiles, 
 * **History tab** - durable run history in SQLite (`transfer_runs` / `transfer_items`):
   * Every executed transfer copy, restore, manual backup, cleanup, and sync is recorded automatically - counts, bytes, flags (dry run, overwrite, backups), blocking reason if refused, and per-file outcomes.
   * Recording failures never fail the run itself; history is a pure audit trail.
-* **Regression suite** - repeatable .NET tests for transfer no-overwrite and safe overwrite, backup manifests and hashes, restore integrity, ZIP archive import/export, SQLite history, and shared sync-engine safety.
+* **Regression suite** - repeatable .NET tests for transfer no-overwrite and safe overwrite, backup manifests and hashes, restore integrity, ZIP archive import/export, SQLite history, shared sync-engine safety, provider selection, and sync-settings migration.
 * Resizable panes (drag the dividers) so the app works on 1080p displays.
 
 ### Implemented - CLI / developer tooling
@@ -303,7 +304,7 @@ Harvested data is candidate data: save locations can be wrong, incomplete, outda
 
 ### B — Replace the two-provider Boolean model
 
-Replace the current `UseSftp` Boolean with a scalable, type-safe provider kind:
+Provider selection now uses one scalable, type-safe provider kind instead of the former `UseSftp` Boolean:
 
 ```text
 LocalFolder
@@ -313,11 +314,13 @@ WebDav
 OneDrive
 ```
 
-* [ ] Keep provider selection type-safe
-* [ ] Preserve existing local-folder and SFTP behavior
-* [ ] Migrate existing `sync-settings.json` values
-* [ ] Preserve the user's saved SFTP settings
-* [ ] Avoid empty Boolean combinations such as `UseSftp`, `UseGoogleDrive`, and `UseWebDav`
+Only `LocalFolder` and `Sftp` are implemented and shown in the Sync selector. The other values reserve stable persisted identities for later roadmap milestones. Existing settings migrate on load without a startup rewrite; passwords and private-key passphrases remain session-only.
+
+* [x] Keep provider selection type-safe
+* [x] Preserve existing local-folder and SFTP behavior
+* [x] Migrate existing `sync-settings.json` values
+* [x] Preserve the user's saved SFTP settings
+* [x] Avoid empty Boolean combinations such as `UseSftp`, `UseGoogleDrive`, and `UseWebDav`
 
 ### C — Saved sync remote profiles
 

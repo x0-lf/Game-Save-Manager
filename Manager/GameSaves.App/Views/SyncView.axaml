@@ -143,22 +143,30 @@
                     <StackPanel Spacing="6"
                                 Margin="0,6,0,0">
 
-                        <StackPanel Orientation="Horizontal"
-                                    Spacing="14">
-                            <RadioButton Content="Local or mounted folder"
-                                         GroupName="SyncProvider"
-                                         IsChecked="{Binding !UseSftp}"
-                                         FontSize="12" />
+                        <Grid ColumnDefinitions="Auto,280"
+                              ColumnSpacing="10">
+                            <TextBlock Grid.Column="0"
+                                       Text="Provider"
+                                       VerticalAlignment="Center"
+                                       Foreground="{StaticResource MutedTextBrush}"
+                                       FontSize="12" />
 
-                            <RadioButton Content="SFTP server (SSH)"
-                                         GroupName="SyncProvider"
-                                         IsChecked="{Binding UseSftp}"
-                                         FontSize="12" />
-                        </StackPanel>
+                            <ComboBox Grid.Column="1"
+                                      ItemsSource="{Binding ProviderOptions}"
+                                      SelectedValue="{Binding SelectedProviderKind}"
+                                      SelectedValueBinding="{Binding Kind}"
+                                      MinHeight="32">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding DisplayName}" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                        </Grid>
 
                         <!-- Local folder target -->
                         <StackPanel Spacing="4"
-                                    IsVisible="{Binding !UseSftp}">
+                                    IsVisible="{Binding IsLocalFolderSelected}">
                             <Grid ColumnDefinitions="*,Auto"
                                   ColumnSpacing="6">
 
@@ -178,7 +186,7 @@
 
                         <!-- SFTP target -->
                         <StackPanel Spacing="4"
-                                    IsVisible="{Binding UseSftp}">
+                                    IsVisible="{Binding IsSftpSelected}">
 
                             <Grid ColumnDefinitions="2*,90,*"
                                   ColumnSpacing="6">
