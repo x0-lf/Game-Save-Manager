@@ -20,6 +20,12 @@ The capability catalog describes provider behavior; the provider factory remains
 
 Unavailable providers never appear as normal selectable providers and cannot preview or execute sync.
 
+## Google Drive developer preparation
+
+Google Drive remains unavailable (`IsImplemented = false`): OAuth login, API clients, folder operations, and sync are not implemented. Developers preparing a private development Google Cloud project should follow [Google Drive Developer Setup](google-drive-developer-setup.md). The guide documents repository-safe project, consent, test-user, scope, and desktop-client configuration for later milestones; normal users do not create a Google Cloud project.
+
+The planned client configuration is non-secret and developer-local. Personal client configuration, downloaded credential files, account information, and user tokens must never be committed. Later OAuth token data must use the existing secret-store boundary rather than profile JSON or plaintext SQLite.
+
 ## Saved profiles and secrets
 
 Named Local Folder and SFTP profiles contain non-secret configuration only. Selecting or saving a profile never connects, previews, or syncs. Users may also work without a saved profile.

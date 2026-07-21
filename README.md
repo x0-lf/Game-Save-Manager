@@ -46,6 +46,7 @@ The long-term goal is a cross-platform Steam save manager with backup profiles, 
   * Profiles are stored in SQLite with stable IDs and non-secret settings only. Existing meaningful `sync-settings.json` configuration is migrated once; when a profile is selected, its SQLite values take precedence over the lightweight UI-state file.
   * Provider behavior is described by one capability catalog. The selector and generic connection controls are capability-driven; planned Google Drive, WebDAV, and OneDrive capabilities do not make those providers usable.
   * Saved-provider authentication has a platform-neutral secret-store contract. On Windows, payloads are protected for the current user with DPAPI and SQLite stores encrypted BLOBs only. Profile deletion and disconnect remove owned encrypted secrets; SFTP passwords and passphrases remain session-only.
+  * Google Drive is not implemented. The [Google Drive developer setup guide](docs/google-drive-developer-setup.md) prepares a development Google Cloud project for later milestones only; normal users do not create a Cloud project, and personal credentials or tokens must never be committed.
   * Type-safe provider selection through `SyncProviderKind`; the selector exposes the implemented `LocalFolder` and `Sftp` providers. `GoogleDrive`, `WebDav`, and `OneDrive` are reserved roadmap values only and cannot be previewed or executed.
   * `ISyncProvider` abstraction with `LocalFolderSyncProvider` and `SftpSyncProvider` (SSH.NET); WebDAV and cloud providers come later.
   * **SFTP**: host/port/username with password or private-key-file authentication; passwords, passphrases, and trust-new-host confirmation are session-only, cleared when profiles change, and never written to disk. Host keys use trust-on-first-use: the SHA-256 fingerprint is shown on first connect, stored like SSH known_hosts, and any later change fails loudly ("Forget Stored Host Key" covers planned reinstalls).
@@ -392,17 +393,17 @@ Windows DPAPI with `DataProtectionScope.CurrentUser` was selected. SQLite contai
 
 ### G — Google Cloud setup documentation
 
-Document the developer setup:
+The [developer setup guide](docs/google-drive-developer-setup.md) documents the current Google Cloud and Google Auth Platform workflow and adds repository ignore protections. These completed documentation tasks do not create a personal Cloud project, install Google packages, or make Google Drive sync functional.
 
-* [ ] Create a Google Cloud project
-* [ ] Enable Google Drive API
-* [ ] Configure the OAuth consent screen
-* [ ] Add development test users while the app is in Testing mode
-* [ ] Create an OAuth client for a desktop application
-* [ ] Configure the application's client ID
-* [ ] Never commit client secrets, downloaded credential files, tokens, or personal account data
-* [ ] Add relevant local configuration files to `.gitignore`
-* [ ] Never place a personal Google OAuth token or downloaded private configuration in the repository
+* [x] Create a Google Cloud project
+* [x] Enable Google Drive API
+* [x] Configure the OAuth consent screen
+* [x] Add development test users while the app is in Testing mode
+* [x] Create an OAuth client for a desktop application
+* [x] Configure the application's client ID
+* [x] Never commit client secrets, downloaded credential files, tokens, or personal account data
+* [x] Add relevant local configuration files to `.gitignore`
+* [x] Never place a personal Google OAuth token or downloaded private configuration in the repository
 
 ### H — Google Drive dependencies and boundaries
 

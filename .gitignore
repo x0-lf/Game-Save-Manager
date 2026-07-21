@@ -440,3 +440,12 @@ FodyWeavers.xsd
 
 *.7z
 .\Manager\.github\
+
+# Google OAuth / Drive developer-local configuration
+# Prefer storing these files outside the repository; these rules are a second line of defence.
+**/client_secret_*.json
+Manager/GameSaves.App/credentials.json
+Manager/GameSaves.App/google-oauth-client.local.json
+Manager/GameSaves.App/google-drive.local.json
+Manager/GameSaves.App/.google-oauth/
+Manager/GameSaves.App/google-oauth-token-cache/
