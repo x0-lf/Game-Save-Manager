@@ -42,7 +42,37 @@ GameSaves.App
 
 `SyncEngine` and `IRemoteFileSystem` remain provider-neutral and unchanged. Google Drive remains unimplemented and unavailable, so the factory creates no Google provider and the normal selector continues to expose only Local Folder and SFTP.
 
-Later OAuth work must adapt token persistence to the existing `ISecretStore`; Google's file-based token store must not become a second persistence system. The desktop Client ID remains local developer configuration: the application does not read `GAMESAVES_GOOGLE_CLIENT_ID` or load downloaded credential JSON during Milestone H.
+Later OAuth work must adapt token persistence to the existing `ISecretStore`; Google's file-based token store must not become a second persistence system. The desktop Client ID remains local developer configuration: through Milestone I, the application does not read `GAMESAVES_GOOGLE_CLIENT_ID` or load downloaded credential JSON.
+
+## Google Drive connection settings boundary
+
+Milestone I adds pure Game Save Manager models for representing future Google Drive connection configuration without introducing OAuth or Drive API behavior. Field ownership remains explicit:
+
+```text
+SyncRemoteProfile
+    -> remote profile ID
+    -> account display name
+    -> root folder display name
+    -> root folder ID
+
+GoogleDriveSyncRemoteSettings
+    -> optional account email
+    -> requested OAuth scope
+
+GoogleDriveConnectionSettings
+    -> combined runtime view
+    -> connection status
+    -> whether protected OAuth data exists
+
+ISecretStore
+    -> protected OAuth token bytes
+```
+
+The provider-settings serializer uses an explicit Google Drive DTO containing only schema version 1, the optional account email, and the exact `https://www.googleapis.com/auth/drive.file` scope. Access tokens, refresh tokens, client IDs, credential objects, connection status, and `HasStoredToken` never enter profile JSON.
+
+`GoogleDriveConnectionSettingsService` builds the runtime view from the saved profile and checks only the exact `SecretNames.OAuthTokenData` key through `ISecretStore.ExistsAsync`; it does not read or deserialize token bytes. A stored token produces `StoredAuthenticationAvailable`, not `Connected`, because existence does not prove validity. Connection status and token presence are not persisted as authoritative profile data.
+
+Folder IDs are authoritative when a later milestone populates them; folder names are display-only. Google Drive remains `IsImplemented = false`: there is still no OAuth login, client-ID reader, Google credential, `DriveService`, API request, provider factory entry, or enabled selector option.
 
 ## Saved profiles and secrets
 

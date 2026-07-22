@@ -195,7 +195,7 @@ public sealed class SyncRemoteProfileRepositoryTests
         Assert.Contains("corrupted", corrupted.SettingsError!, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(SyncProviderKind.GoogleDrive, future.ProviderKind);
         Assert.Null(future.ProviderSettings);
-        Assert.Contains("not implemented", future.SettingsError!, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("corrupted", future.SettingsError!, StringComparison.OrdinalIgnoreCase);
     }
 
     private static SqliteSyncRemoteProfileRepository CreateRepository(TemporaryDirectory temp) =>

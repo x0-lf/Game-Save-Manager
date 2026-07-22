@@ -46,6 +46,7 @@ The long-term goal is a cross-platform Steam save manager with backup profiles, 
   * Profiles are stored in SQLite with stable IDs and non-secret settings only. Existing meaningful `sync-settings.json` configuration is migrated once; when a profile is selected, its SQLite values take precedence over the lightweight UI-state file.
   * Provider behavior is described by one capability catalog. The selector and generic connection controls are capability-driven; planned Google Drive, WebDAV, and OneDrive capabilities do not make those providers usable.
   * Saved-provider authentication has a platform-neutral secret-store contract. On Windows, payloads are protected for the current user with DPAPI and SQLite stores encrypted BLOBs only. Profile deletion and disconnect remove owned encrypted secrets; SFTP passwords and passphrases remain session-only.
+  * Pure Google Drive connection-settings models now represent future non-secret account and root-folder metadata. OAuth token presence is derived at runtime from the secure secret store without reading token bytes; it does not prove that authentication is valid or make Google Drive usable.
   * Google Drive is not implemented. The [Google Drive developer setup guide](docs/google-drive-developer-setup.md) prepares a development Google Cloud project for later milestones only; normal users do not create a Cloud project, and personal credentials or tokens must never be committed.
   * Type-safe provider selection through `SyncProviderKind`; the selector exposes the implemented `LocalFolder` and `Sftp` providers. `GoogleDrive`, `WebDav`, and `OneDrive` are reserved roadmap values only and cannot be previewed or executed.
   * `ISyncProvider` abstraction with `LocalFolderSyncProvider` and `SftpSyncProvider` (SSH.NET); WebDAV and cloud providers come later.
@@ -422,14 +423,16 @@ The official Google Drive and authentication packages are referenced only by Inf
 
 Add pure connection/settings models containing no persisted access or refresh tokens:
 
-* [ ] Remote profile ID
-* [ ] Account display name
-* [ ] Account email, when available
-* [ ] Google Drive root folder ID
-* [ ] Google Drive root folder display name
-* [ ] Requested scope
-* [ ] Connection status
-* [ ] Whether a token is stored
+Existing profile columns remain authoritative for the profile ID, account display name, root-folder display name, and root-folder ID. The allowlisted provider JSON contains only the optional account email and exact `drive.file` requested scope. Connection status and token presence are runtime-derived; token presence is not authentication validation. Google Drive remains unavailable, and no OAuth login or Drive API request is implemented.
+
+* [x] Remote profile ID
+* [x] Account display name
+* [x] Account email, when available
+* [x] Google Drive root folder ID
+* [x] Google Drive root folder display name
+* [x] Requested scope
+* [x] Connection status
+* [x] Whether a token is stored
 
 ### J — Google OAuth login inside the existing App
 

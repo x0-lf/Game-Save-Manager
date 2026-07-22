@@ -7,6 +7,7 @@ using GameSaves.Core.Transfers;
 using GameSaves.Core.Sync;
 using GameSaves.Infrastructure.Platform;
 using GameSaves.Infrastructure.Profiles;
+using GameSaves.Infrastructure.GoogleDrive;
 using GameSaves.Infrastructure.Registry;
 using GameSaves.Infrastructure.Save;
 using GameSaves.Infrastructure.Secrets;
@@ -97,6 +98,9 @@ namespace GameSaves.Infrastructure.DependencyInjection
                     clock);
             });
             services.AddSingleton<ISyncRemoteProfileService, SyncRemoteProfileService>();
+            services.AddSingleton<
+                IGoogleDriveConnectionSettingsService,
+                GoogleDriveConnectionSettingsService>();
 
             return services;
         }

@@ -57,8 +57,16 @@ namespace GameSaves.Infrastructure.Sync
                             sftp.RemotePath),
                         Options),
 
+                (SyncProviderKind.GoogleDrive, GoogleDriveSyncRemoteSettings googleDrive) =>
+                    JsonSerializer.Serialize(
+                        new GoogleDriveSettingsDto(
+                            googleDrive.SchemaVersion,
+                            googleDrive.AccountEmail,
+                            googleDrive.RequestedScope),
+                        Options),
+
                 _ => throw new ArgumentException(
-                    "The provider settings do not match an implemented provider.",
+                    "The provider settings do not match a supported persisted settings model.",
                     nameof(settings))
             };
         }
@@ -68,7 +76,9 @@ namespace GameSaves.Infrastructure.Sync
             int providerSettingsVersion,
             string json)
         {
-            if (providerKind is not SyncProviderKind.LocalFolder and not SyncProviderKind.Sftp)
+            if (providerKind is not SyncProviderKind.LocalFolder and
+                not SyncProviderKind.Sftp and
+                not SyncProviderKind.GoogleDrive)
             {
                 return new SyncRemoteProfileSettingsReadResult(
                     null,
@@ -102,6 +112,7 @@ namespace GameSaves.Infrastructure.Sync
                 {
                     SyncProviderKind.LocalFolder => ReadLocalFolder(root),
                     SyncProviderKind.Sftp => ReadSftp(root),
+                    SyncProviderKind.GoogleDrive => ReadGoogleDrive(root),
                     _ => Corrupted()
                 };
             }
@@ -151,6 +162,43 @@ namespace GameSaves.Infrastructure.Sync
                     privateKeyFilePath,
                     remotePath),
                 null);
+        }
+
+        private static SyncRemoteProfileSettingsReadResult ReadGoogleDrive(JsonElement root)
+        {
+            if (!TryReadString(root, "requestedScope", out string requestedScope))
+                return Corrupted();
+
+            if (!string.Equals(
+                    requestedScope,
+                    GoogleDriveAuthorizationScopes.DriveFile,
+                    StringComparison.Ordinal))
+            {
+                return new SyncRemoteProfileSettingsReadResult(
+                    null,
+                    "The saved Google Drive authorization scope is not supported.");
+            }
+
+            string? accountEmail = null;
+
+            if (TryGetProperty(root, "accountEmail", out JsonElement emailElement))
+            {
+                if (emailElement.ValueKind == JsonValueKind.String)
+                    accountEmail = emailElement.GetString();
+                else if (emailElement.ValueKind != JsonValueKind.Null)
+                    return Corrupted();
+            }
+
+            try
+            {
+                return new SyncRemoteProfileSettingsReadResult(
+                    new GoogleDriveSyncRemoteSettings(accountEmail, requestedScope),
+                    null);
+            }
+            catch (ArgumentException)
+            {
+                return Corrupted();
+            }
         }
 
         private static SyncRemoteProfileSettingsReadResult Corrupted() =>
@@ -227,5 +275,10 @@ namespace GameSaves.Infrastructure.Sync
             int AuthenticationMethod,
             string? PrivateKeyFilePath,
             string RemotePath);
+
+        private sealed record GoogleDriveSettingsDto(
+            int SchemaVersion,
+            string? AccountEmail,
+            string RequestedScope);
     }
 }
