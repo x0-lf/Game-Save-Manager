@@ -199,7 +199,9 @@ Sync never deletes or overwrites anything on either side; conflicts are reported
 * Windows (registry-based Steam discovery; other platforms are planned)
 * Internet access only for Steam catalog / PCGamingWiki harvesting commands
 
-Main packages: `Avalonia` 12, `CommunityToolkit.Mvvm`, `Microsoft.Extensions.DependencyInjection`, `Microsoft.Data.Sqlite`, `System.Security.Cryptography.ProtectedData`, `Gameloop.Vdf`, `SSH.NET`.
+Main packages: `Avalonia` 12, `CommunityToolkit.Mvvm`, `Microsoft.Extensions.DependencyInjection`, `Microsoft.Data.Sqlite`, `System.Security.Cryptography.ProtectedData`, `Gameloop.Vdf`, `SSH.NET`, `Google.Apis.Auth` 1.75.0, and `Google.Apis.Drive.v3` 1.75.0.4210.
+
+The official Google client-library packages are referenced only by `GameSaves.Infrastructure` to prepare later roadmap milestones. Google Drive remains unavailable: OAuth login is not implemented, no client ID or token is read or stored, and no Drive API request is made.
 
 Test packages: `Microsoft.NET.Test.Sdk`, `xunit`, `xunit.runner.visualstudio`.
 
@@ -407,12 +409,14 @@ The [developer setup guide](docs/google-drive-developer-setup.md) documents the 
 
 ### H — Google Drive dependencies and boundaries
 
-* [ ] Add only the Google packages needed by Infrastructure
-* [ ] Keep Google SDK types out of GameSaves.Core, transfer models, backup models, and App view models where practical
-* [ ] Keep Google SDK usage inside Infrastructure services
-* [ ] Review and update project package references
-* [ ] Update `THIRD-PARTY-NOTICES.md`
-* [ ] Update the README package list and license notices if required
+The official Google Drive and authentication packages are referenced only by Infrastructure. Regression tests enforce that Google SDK types do not cross into Core or App public APIs. Google Drive remains unavailable, and no OAuth, token, folder, upload, download, or API-request functionality was implemented.
+
+* [x] Add only the Google packages needed by Infrastructure
+* [x] Keep Google SDK types out of GameSaves.Core, transfer models, backup models, and App view models where practical
+* [x] Keep Google SDK usage inside Infrastructure services
+* [x] Review and update project package references
+* [x] Update `THIRD-PARTY-NOTICES.md`
+* [x] Update the README package list and license notices if required
 
 ### I — Google Drive connection settings
 

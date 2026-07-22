@@ -20,6 +20,8 @@ dependencies are added, removed, or upgraded.
 | Avalonia.Fonts.Inter | 12.0.5 | MIT | Inter font package used by Avalonia. |
 | AvaloniaUI.DiagnosticsSupport | 2.2.3 | MIT | Avalonia diagnostics support package used for development/debug builds. |
 | CommunityToolkit.Mvvm | 8.4.2 | MIT | MVVM helpers, observable objects, and relay commands. |
+| Google.Apis.Auth | 1.75.0 | Apache-2.0 | Official OAuth 2.0 authorization and credential primitives; referenced only by Infrastructure for later Google provider milestones. |
+| Google.Apis.Drive.v3 | 1.75.0.4210 | Apache-2.0 | Official generated Google Drive API v3 client library; referenced only by Infrastructure. |
 | Microsoft.Extensions.DependencyInjection | 10.0.9 | MIT | Dependency injection container and service registration helpers. |
 | Microsoft.Extensions.DependencyInjection.Abstractions | 10.0.9 | MIT | Dependency injection abstractions. |
 | Microsoft.Extensions.Hosting | 10.0.9 | MIT | Generic hosting infrastructure. |
@@ -54,6 +56,26 @@ CommunityToolkit.Mvvm is used for the MVVM application structure, including:
 - generated properties
 - relay commands
 - async relay commands
+
+### Google API Client Library for .NET
+
+`Google.Apis.Drive.v3` is the official generated Google Drive API v3 client
+library. `Google.Apis.Auth` provides OAuth 2.0 authorization and credential
+primitives for the official Google API Client Library for .NET. Both packages
+are referenced only by `GameSaves.Infrastructure`; no Google SDK type is part
+of Core or App APIs, and adding these packages does not implement Google Drive
+sync or OAuth login.
+
+Official project and package information:
+
+- [Google API Client Library for .NET source](https://github.com/googleapis/google-api-dotnet-client)
+- [Google.Apis.Drive.v3 on NuGet](https://www.nuget.org/packages/Google.Apis.Drive.v3/1.75.0.4210)
+- [Google.Apis.Auth on NuGet](https://www.nuget.org/packages/Google.Apis.Auth/1.75.0)
+
+The packages are licensed under Apache-2.0. Their direct transitive Google
+dependencies resolve to `Google.Apis` 1.75.0 and `Google.Apis.Core` 1.75.0;
+`System.Management` 7.0.2 is also supplied transitively by `Google.Apis.Auth`.
+These transitive packages are not promoted to direct project references.
 
 ### Microsoft.Extensions packages
 

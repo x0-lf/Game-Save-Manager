@@ -2,6 +2,8 @@
 
 This guide is for developers working on Game Save Manager. Normal end users do not need to create a Google Cloud project. Completing these steps prepares a development project only: it does not make Google Drive sync functional. OAuth login and Google Drive integration begin in later roadmap milestones.
 
+Milestone H installs the official Google authentication and Drive client packages in `GameSaves.Infrastructure` only. The application still does not read `GAMESAVES_GOOGLE_CLIENT_ID`, perform OAuth login, load a downloaded credential file, store a Google token, or call the Drive API. Builds and tests require no personal Google configuration.
+
 Never use or commit a personal OAuth token for repository development, and never send a Google Account password to the application. A later milestone must use Google's supported browser-based OAuth flow for installed desktop applications.
 
 ## Prerequisites

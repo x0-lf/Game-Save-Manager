@@ -26,6 +26,24 @@ Google Drive remains unavailable (`IsImplemented = false`): OAuth login, API cli
 
 The planned client configuration is non-secret and developer-local. Personal client configuration, downloaded credential files, account information, and user tokens must never be committed. Later OAuth token data must use the existing secret-store boundary rather than profile JSON or plaintext SQLite.
 
+## Google SDK dependency boundary
+
+The official Google packages are direct dependencies of Infrastructure only:
+
+```text
+GameSaves.App
+    -> Game Save Manager-owned interfaces and models
+        -> GameSaves.Infrastructure.GoogleDrive (future implementation)
+            -> Google.Apis.Auth
+            -> Google.Apis.Drive.v3
+```
+
+`GameSaves.Infrastructure.GoogleDrive` is the reserved namespace for later implementation; no Google Drive service class exists yet. Core and App have no Google package reference, and regression tests reject Google SDK types in their public boundaries. Future source files containing `using Google.` belong in Infrastructure.
+
+`SyncEngine` and `IRemoteFileSystem` remain provider-neutral and unchanged. Google Drive remains unimplemented and unavailable, so the factory creates no Google provider and the normal selector continues to expose only Local Folder and SFTP.
+
+Later OAuth work must adapt token persistence to the existing `ISecretStore`; Google's file-based token store must not become a second persistence system. The desktop Client ID remains local developer configuration: the application does not read `GAMESAVES_GOOGLE_CLIENT_ID` or load downloaded credential JSON during Milestone H.
+
 ## Saved profiles and secrets
 
 Named Local Folder and SFTP profiles contain non-secret configuration only. Selecting or saving a profile never connects, previews, or syncs. Users may also work without a saved profile.
