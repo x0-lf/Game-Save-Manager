@@ -34,7 +34,8 @@ namespace GameSaves.Core.Sync
         bool IsImplemented,
         SyncProviderCapabilities Capabilities,
         SyncProviderConfigurationSurface ConfigurationSurface,
-        string? UnavailableMessage = null);
+        string? UnavailableMessage = null,
+        bool IsConfigurationAvailable = false);
 
     /// <summary>
     /// Authoritative provider metadata. Provider construction remains the

@@ -65,6 +65,57 @@ internal sealed class FixedUtcClock : IUtcClock
     public DateTimeOffset UtcNow { get; set; }
 }
 
+internal sealed class StubGoogleDriveOAuthService : IGoogleDriveOAuthService
+{
+    public GoogleDriveOAuthClientConfigurationState ConfigurationState { get; set; } =
+        new(GoogleDriveOAuthClientConfigurationStatus.Missing,
+            GoogleDriveOAuthErrorCodes.ClientIdMissing,
+            "Google Drive OAuth client configuration is unavailable in this test.");
+
+    public GoogleDriveAuthenticationResult RestoreResult { get; set; } =
+        new(GoogleDriveAuthenticationStatus.NoStoredAuthentication,
+            Message: "No stored Google Drive authentication is available.");
+
+    public GoogleDriveAuthenticationResult ConnectResult { get; set; } =
+        new(GoogleDriveAuthenticationStatus.Failed,
+            ErrorCode: GoogleDriveOAuthErrorCodes.Failed,
+            Message: "Google Drive authentication is unavailable in this test.");
+
+    public int ConnectCalls { get; private set; }
+    public int RestoreCalls { get; private set; }
+
+    public Func<Guid, CancellationToken, Task<GoogleDriveAuthenticationResult>>?
+        ConnectHandler { get; set; }
+
+    public Func<Guid, CancellationToken, Task<GoogleDriveAuthenticationResult>>?
+        RestoreHandler { get; set; }
+
+    public GoogleDriveOAuthClientConfigurationState GetClientConfigurationState() =>
+        ConfigurationState;
+
+    public async Task<GoogleDriveAuthenticationResult> ConnectAsync(
+        Guid remoteProfileId,
+        CancellationToken cancellationToken = default)
+    {
+        ConnectCalls++;
+        cancellationToken.ThrowIfCancellationRequested();
+        return ConnectHandler is null
+            ? ConnectResult
+            : await ConnectHandler(remoteProfileId, cancellationToken);
+    }
+
+    public async Task<GoogleDriveAuthenticationResult> RestoreAsync(
+        Guid remoteProfileId,
+        CancellationToken cancellationToken = default)
+    {
+        RestoreCalls++;
+        cancellationToken.ThrowIfCancellationRequested();
+        return RestoreHandler is null
+            ? RestoreResult
+            : await RestoreHandler(remoteProfileId, cancellationToken);
+    }
+}
+
 internal sealed class StubSyncRemoteProfileMigrationService : ISyncRemoteProfileMigrationService
 {
     private readonly SyncUiSettings _settings;

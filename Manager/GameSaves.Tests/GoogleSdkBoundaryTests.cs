@@ -123,6 +123,37 @@ public sealed class GoogleSdkBoundaryTests
         Assert.DoesNotContain(
             descriptor,
             catalog.GetAll().Where(candidate => candidate.IsImplemented));
+        Assert.True(descriptor.IsConfigurationAvailable);
+    }
+
+    [Fact]
+    public void OAuthImplementation_UsesPkceLoopbackAndNoFileDataStore()
+    {
+        string managerRoot = FindManagerRoot();
+        string googleRoot = Path.Combine(
+            managerRoot,
+            "GameSaves.Infrastructure",
+            "GoogleDrive");
+        string authorizer = File.ReadAllText(
+            Path.Combine(googleRoot, "GoogleInstalledAppAuthorizer.cs"));
+
+        Assert.Contains("usePkce: true", authorizer, StringComparison.Ordinal);
+        Assert.Contains("LocalServerCodeReceiver", authorizer, StringComparison.Ordinal);
+        Assert.Contains("ForceLoopbackIp", authorizer, StringComparison.Ordinal);
+        Assert.Contains(
+            "ClientSecret = configuration.ClientSecret",
+            authorizer,
+            StringComparison.Ordinal);
+
+        foreach (string sourceFile in Directory.EnumerateFiles(
+                     googleRoot,
+                     "*.cs",
+                     SearchOption.AllDirectories))
+        {
+            string source = File.ReadAllText(sourceFile);
+            Assert.DoesNotContain("new FileDataStore", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("GoogleCredential.GetApplicationDefault", source, StringComparison.Ordinal);
+        }
     }
 
     private static IReadOnlyDictionary<string, string> GetGooglePackageReferences(

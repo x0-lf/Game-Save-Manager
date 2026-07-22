@@ -8,21 +8,21 @@ ISyncProvider
     -> IRemoteFileSystem
 ```
 
-The capability catalog describes provider behavior; the provider factory remains the only component that creates working providers. A capability never implies availability unless the descriptor also has `IsImplemented = true`.
+The capability catalog describes provider behavior; the provider factory remains the only component that creates working sync providers. Configuration availability is separate from `IsImplemented`.
 
-| Provider | Implemented | Configuration | Current capabilities |
-|---|---:|---|---|
-| Local or mounted folder | Yes | Folder path | Folder selection, connection testing, open in native file manager |
-| SFTP server (SSH) | Yes | Session credentials | Server credentials, connection testing |
-| Google Drive | No | Planned interactive OAuth | Planned resumable upload, quota, folder selection, persistent authentication, logout, open location |
-| WebDAV | No | Planned server credentials | Planned persistent authentication, connection testing, logout, open location |
-| OneDrive | No | Planned interactive OAuth | Same planned high-level capabilities as Google Drive |
+| Provider | Sync implemented | Configuration available | Configuration | Current capabilities |
+|---|---:|---:|---|---|
+| Local or mounted folder | Yes | Yes | Folder path | Folder selection, connection testing, open in native file manager |
+| SFTP server (SSH) | Yes | Yes | Session credentials | Server credentials, connection testing |
+| Google Drive | No | Yes | Interactive desktop OAuth | Planned resumable upload, quota, folder selection, persistent authentication, logout, open location |
+| WebDAV | No | No | Planned server credentials | Planned persistent authentication, connection testing, logout, open location |
+| OneDrive | No | No | Planned interactive OAuth | Same planned high-level capabilities as Google Drive |
 
-Unavailable providers never appear as normal selectable providers and cannot preview or execute sync.
+Google Drive appears for account connection but cannot preview, execute, or create an `ISyncProvider`. Unavailable providers never silently fall back.
 
 ## Google Drive developer preparation
 
-Google Drive remains unavailable (`IsImplemented = false`): OAuth login, API clients, folder operations, and sync are not implemented. Developers preparing a private development Google Cloud project should follow [Google Drive Developer Setup](google-drive-developer-setup.md). The guide documents repository-safe project, consent, test-user, scope, and desktop-client configuration for later milestones; normal users do not create a Google Cloud project.
+Google Drive sync remains unavailable (`IsImplemented = false`), while account authorization is configuration-available. Developers preparing a private development Google Cloud project should follow [Google Drive Developer Setup](google-drive-developer-setup.md). Normal users do not create a Google Cloud project.
 
 The planned client configuration is non-secret and developer-local. Personal client configuration, downloaded credential files, account information, and user tokens must never be committed. Later OAuth token data must use the existing secret-store boundary rather than profile JSON or plaintext SQLite.
 
@@ -33,16 +33,16 @@ The official Google packages are direct dependencies of Infrastructure only:
 ```text
 GameSaves.App
     -> Game Save Manager-owned interfaces and models
-        -> GameSaves.Infrastructure.GoogleDrive (future implementation)
+        -> GameSaves.Infrastructure.GoogleDrive
             -> Google.Apis.Auth
             -> Google.Apis.Drive.v3
 ```
 
-`GameSaves.Infrastructure.GoogleDrive` is the reserved namespace for later implementation; no Google Drive service class exists yet. Core and App have no Google package reference, and regression tests reject Google SDK types in their public boundaries. Future source files containing `using Google.` belong in Infrastructure.
+Core and App have no Google package reference, and regression tests reject Google SDK types in their public boundaries. Google SDK source remains in `GameSaves.Infrastructure.GoogleDrive`.
 
-`SyncEngine` and `IRemoteFileSystem` remain provider-neutral and unchanged. Google Drive remains unimplemented and unavailable, so the factory creates no Google provider and the normal selector continues to expose only Local Folder and SFTP.
+`SyncEngine` and `IRemoteFileSystem` remain provider-neutral and unchanged. The factory creates no Google provider; Local Folder and SFTP remain the only sync-capable choices.
 
-Later OAuth work must adapt token persistence to the existing `ISecretStore`; Google's file-based token store must not become a second persistence system. The desktop Client ID remains local developer configuration: through Milestone I, the application does not read `GAMESAVES_GOOGLE_CLIENT_ID` or load downloaded credential JSON.
+OAuth token persistence adapts Google `IDataStore` to the existing `ISecretStore`; `FileDataStore` is never used. The desktop Client ID is read only from local `GAMESAVES_GOOGLE_CLIENT_ID`, preferring a process value and then the persistent Windows user value. When the generated Desktop OAuth client requires its non-confidential client secret for token exchange, the same precedence is used for developer-local `GAMESAVES_GOOGLE_CLIENT_SECRET`. Neither value is persisted or displayed, and downloaded credential JSON is not loaded.
 
 ## Google Drive connection settings boundary
 
@@ -72,11 +72,29 @@ The provider-settings serializer uses an explicit Google Drive DTO containing on
 
 `GoogleDriveConnectionSettingsService` builds the runtime view from the saved profile and checks only the exact `SecretNames.OAuthTokenData` key through `ISecretStore.ExistsAsync`; it does not read or deserialize token bytes. A stored token produces `StoredAuthenticationAvailable`, not `Connected`, because existence does not prove validity. Connection status and token presence are not persisted as authoritative profile data.
 
-Folder IDs are authoritative when a later milestone populates them; folder names are display-only. Google Drive remains `IsImplemented = false`: there is still no OAuth login, client-ID reader, Google credential, `DriveService`, API request, provider factory entry, or enabled selector option.
+Folder IDs are authoritative when a later milestone populates them; folder names are display-only. Google Drive remains `IsImplemented = false` and has no provider-factory entry, root-folder behavior, or sync operations.
+
+## Google Drive OAuth boundary
+
+```text
+GameSaves.App
+    -> IGoogleDriveOAuthService
+        -> GameSaves.Infrastructure.GoogleDrive
+            -> GoogleWebAuthorizationBroker / GoogleAuthorizationCodeFlow
+            -> LocalServerCodeReceiver
+            -> GoogleSecretDataStore
+                -> ISecretStore
+```
+
+Interactive authorization opens the system browser, uses a random loopback listener and PKCE, and requests exactly `https://www.googleapis.com/auth/drive.file`. The profile GUID is the stable Google-library user key. `GoogleSecretDataStore` allowlists a version-1 token DTO and maps it to `SecretNames.OAuthTokenData`; it never creates a plaintext token file or clears another profile's or provider's secrets.
+
+Silent restore never opens a browser. `UserCredential` refreshes stale access tokens through the official flow and writes refreshed data back through `ISecretStore`. Invalid refresh credentials produce `ReauthenticationRequired` without deleting the saved profile or encrypted token. Connected status is reported only after a minimal Drive `about.get` request for `user(displayName,emailAddress)` succeeds.
+
+The App displays safe connection state and account metadata. Cancellation, denial, browser/callback failures, corrupt storage, and refresh failures map to stable, non-secret results. Authorization does not create a root folder or enable preview/execution.
 
 ## Saved profiles and secrets
 
-Named Local Folder and SFTP profiles contain non-secret configuration only. Selecting or saving a profile never connects, previews, or syncs. Users may also work without a saved profile.
+Named profiles contain non-secret configuration only. Selecting a saved Google Drive profile may silently validate already-protected authentication, but it never opens a browser; saving any profile never starts authentication. Profile selection and saving never preview or execute sync. Users may also work without a saved profile.
 
 Secret identity uses the immutable profile GUID plus a stable canonical secret name; mutable display names, account names, and remote URLs are not secret keys. The Core `ISecretStore` contract accepts byte payloads so later token caches are not forced into password strings.
 
@@ -92,6 +110,6 @@ DPAPI ciphertext is tied to the Windows user profile and machine protection envi
 
 Profile deletion removes the profile's encrypted secrets and configuration only. It does not remove backup runs, remote files, sync history, SFTP known-host entries, archives, or save files. Disconnect removes encrypted authentication but keeps the saved non-secret profile.
 
-SFTP passwords and private-key passphrases remain session-only and are not automatically written to the secret store. Google Drive, WebDAV, OneDrive, OAuth login, quota calls, and cloud folder browsing are not implemented.
+SFTP passwords and private-key passphrases remain session-only and are not automatically written to the secret store. Google Drive sync, WebDAV, OneDrive, quota calls, and cloud folder browsing are not implemented.
 
 Linux Secret Service and macOS Keychain secret-store implementations are future work.

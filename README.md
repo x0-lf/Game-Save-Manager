@@ -44,11 +44,11 @@ The long-term goal is a cross-platform Steam save manager with backup profiles, 
 * **Sync tab** - backup-run sync with a local/mounted folder or an SFTP server:
   * **Saved remote profiles**: create, update, Save As, rename, and explicitly delete named Local Folder or SFTP configurations in the existing Sync target section. Selecting or saving a profile never connects, previews, or syncs.
   * Profiles are stored in SQLite with stable IDs and non-secret settings only. Existing meaningful `sync-settings.json` configuration is migrated once; when a profile is selected, its SQLite values take precedence over the lightweight UI-state file.
-  * Provider behavior is described by one capability catalog. The selector and generic connection controls are capability-driven; planned Google Drive, WebDAV, and OneDrive capabilities do not make those providers usable.
+  * Provider behavior is described by one capability catalog. Google Drive is configuration-selectable for account authorization while `IsImplemented` remains false for sync.
   * Saved-provider authentication has a platform-neutral secret-store contract. On Windows, payloads are protected for the current user with DPAPI and SQLite stores encrypted BLOBs only. Profile deletion and disconnect remove owned encrypted secrets; SFTP passwords and passphrases remain session-only.
-  * Pure Google Drive connection-settings models now represent future non-secret account and root-folder metadata. OAuth token presence is derived at runtime from the secure secret store without reading token bytes; it does not prove that authentication is valid or make Google Drive usable.
-  * Google Drive is not implemented. The [Google Drive developer setup guide](docs/google-drive-developer-setup.md) prepares a development Google Cloud project for later milestones only; normal users do not create a Cloud project, and personal credentials or tokens must never be committed.
-  * Type-safe provider selection through `SyncProviderKind`; the selector exposes the implemented `LocalFolder` and `Sftp` providers. `GoogleDrive`, `WebDav`, and `OneDrive` are reserved roadmap values only and cannot be previewed or executed.
+  * Google Drive authorization runs in the system browser with PKCE and a loopback callback, requests only `drive.file`, stores tokens through the protected secret store, restores them after restart, refreshes access when possible, and displays non-secret account metadata.
+  * Google Drive backup synchronization is not implemented. The [Google Drive developer setup guide](docs/google-drive-developer-setup.md) explains private development configuration; normal users do not create a Cloud project, and personal credentials or tokens must never be committed.
+  * Type-safe provider selection exposes `LocalFolder`, `Sftp`, and configuration-only `GoogleDrive`. Only Local Folder and SFTP can preview or execute sync; WebDAV and OneDrive remain unavailable.
   * `ISyncProvider` abstraction with `LocalFolderSyncProvider` and `SftpSyncProvider` (SSH.NET); WebDAV and cloud providers come later.
   * **SFTP**: host/port/username with password or private-key-file authentication; passwords, passphrases, and trust-new-host confirmation are session-only, cleared when profiles change, and never written to disk. Host keys use trust-on-first-use: the SHA-256 fingerprint is shown on first connect, stored like SSH known_hosts, and any later change fails loudly ("Forget Stored Host Key" covers planned reinstalls).
   * Copy-only, both ways: a run missing on one side is copied there; nothing is ever deleted or overwritten.
@@ -182,12 +182,14 @@ Restore (Backups tab) copies backed-up files to their original locations:
 
 ### Syncing backups (Sync tab)
 
-1. Select a named Local Folder or SFTP profile, choose **No saved profile (use current settings)** to work directly from the form, or choose **New** to reset an unsaved target. Profile selection only fills the form; it never connects or starts work.
+1. Select a named Local Folder or SFTP profile, choose **No saved profile (use current settings)** to work directly from the form, or choose **New** to reset an unsaved target. Profile selection never previews or executes sync. Selecting a saved Google Drive profile may silently validate existing protected authentication, but never opens a browser automatically.
 2. Save, Save As, rename, or explicitly delete profile configuration as needed. Deletion affects only the profile row, never backups, remote files, history, archives, or SFTP known-host entries.
 3. For SFTP, enter the session-only password or passphrase after selecting the profile; profile changes clear these values and the trust-new-host confirmation.
 4. **Check Connection & Sync Status** answers "am I in sync?" in one line without copying anything; **Preview Sync (Dry Run)** additionally builds the full plan (upload / download / in sync / conflict per run).
 5. Untick any runs you do not want to copy, confirm, and press **Sync Now** - a byte-accurate progress bar tracks the copy.
 6. The remote keeps a shared `sync-log.json` of every executed sync; downloaded runs are immediately restorable from the Backups tab.
+
+Google Drive also appears in the provider selector for saved-profile setup and account authorization. It opens Google's supported system-browser flow, requests only `drive.file`, and displays the validated account metadata. Google Drive preview and execution stay disabled because root-folder and remote-file operations are not implemented yet.
 
 Sync never deletes or overwrites anything on either side; conflicts are reported and left for you to resolve (export one side as ZIP, or delete one side via Cleanup).
 
@@ -202,7 +204,7 @@ Sync never deletes or overwrites anything on either side; conflicts are reported
 
 Main packages: `Avalonia` 12, `CommunityToolkit.Mvvm`, `Microsoft.Extensions.DependencyInjection`, `Microsoft.Data.Sqlite`, `System.Security.Cryptography.ProtectedData`, `Gameloop.Vdf`, `SSH.NET`, `Google.Apis.Auth` 1.75.0, and `Google.Apis.Drive.v3` 1.75.0.4210.
 
-The official Google client-library packages are referenced only by `GameSaves.Infrastructure` to prepare later roadmap milestones. Google Drive remains unavailable: OAuth login is not implemented, no client ID or token is read or stored, and no Drive API request is made.
+The official Google client-library packages are referenced only by `GameSaves.Infrastructure`. Milestone J reads developer-local client configuration, performs installed-app OAuth with PKCE, persists tokens only through `ISecretStore`, and makes one minimal Drive `about.get` request for account metadata. No root-folder, listing, upload, download, or sync implementation exists.
 
 Test packages: `Microsoft.NET.Test.Sdk`, `xunit`, `xunit.runner.visualstudio`.
 
@@ -410,7 +412,7 @@ The [developer setup guide](docs/google-drive-developer-setup.md) documents the 
 
 ### H — Google Drive dependencies and boundaries
 
-The official Google Drive and authentication packages are referenced only by Infrastructure. Regression tests enforce that Google SDK types do not cross into Core or App public APIs. Google Drive remains unavailable, and no OAuth, token, folder, upload, download, or API-request functionality was implemented.
+Milestone H placed the official Google Drive and authentication packages only in Infrastructure and added regression tests preventing Google SDK types from crossing into Core or App public APIs. Later OAuth work preserves that boundary; Drive synchronization remains unavailable.
 
 * [x] Add only the Google packages needed by Infrastructure
 * [x] Keep Google SDK types out of GameSaves.Core, transfer models, backup models, and App view models where practical
@@ -423,7 +425,7 @@ The official Google Drive and authentication packages are referenced only by Inf
 
 Add pure connection/settings models containing no persisted access or refresh tokens:
 
-Existing profile columns remain authoritative for the profile ID, account display name, root-folder display name, and root-folder ID. The allowlisted provider JSON contains only the optional account email and exact `drive.file` requested scope. Connection status and token presence are runtime-derived; token presence is not authentication validation. Google Drive remains unavailable, and no OAuth login or Drive API request is implemented.
+Existing profile columns remain authoritative for the profile ID, account display name, root-folder display name, and root-folder ID. The allowlisted provider JSON contains only the optional account email and exact `drive.file` requested scope. Connection status and token presence are runtime-derived; token presence is not authentication validation. Milestone J now validates authentication through a minimal account lookup, while Drive synchronization remains unavailable.
 
 * [x] Remote profile ID
 * [x] Account display name
@@ -438,17 +440,19 @@ Existing profile columns remain authoritative for the profile ID, account displa
 
 Implement Google sign-in directly in `GameSaves.App`; do not create another application project.
 
-* [ ] User selects Google Drive as the sync provider
-* [ ] User clicks **Connect Google Drive**
-* [ ] Authentication opens through the supported desktop OAuth flow
-* [ ] Request only `https://www.googleapis.com/auth/drive.file`
-* [ ] Display the connected account
-* [ ] Store tokens through the secure secret store
-* [ ] Keep the user connected after restarting the app
-* [ ] Refresh authentication without forcing a new login
-* [ ] Return safely to the UI when authentication is cancelled
-* [ ] Show a friendly message when authorization is denied
-* [ ] Do not request full Drive access unless a later feature proves it is necessary
+Google Drive account authorization uses the system browser, a loopback callback, and PKCE. Profile-scoped token data uses the existing protected secret store, and account identity comes from the minimal Drive `about.get` response. This does not enable Drive synchronization, and Milestone K account-lifecycle actions are not included.
+
+* [x] User selects Google Drive as the sync provider
+* [x] User clicks **Connect Google Drive**
+* [x] Authentication opens through the supported desktop OAuth flow
+* [x] Request only `https://www.googleapis.com/auth/drive.file`
+* [x] Display the connected account
+* [x] Store tokens through the secure secret store
+* [x] Keep the user connected after restarting the app
+* [x] Refresh authentication without forcing a new login
+* [x] Return safely to the UI when authentication is cancelled
+* [x] Show a friendly message when authorization is denied
+* [x] Do not request full Drive access unless a later feature proves it is necessary
 
 ### K — Google account lifecycle
 

@@ -1,10 +1,10 @@
 # Google Drive Developer Setup
 
-This guide is for developers working on Game Save Manager. Normal end users do not need to create a Google Cloud project. Completing these steps prepares a development project only: it does not make Google Drive sync functional. OAuth login and Google Drive integration begin in later roadmap milestones.
+This guide is for developers working on Game Save Manager. Normal end users do not need to create a Google Cloud project. Completing these steps prepares a development project only: it does not make Google Drive sync functional. Google Drive account authorization is available for development, while backup synchronization remains a later roadmap milestone.
 
-Milestone H installs the official Google authentication and Drive client packages in `GameSaves.Infrastructure` only. The application still does not read `GAMESAVES_GOOGLE_CLIENT_ID`, perform OAuth login, load a downloaded credential file, store a Google token, or call the Drive API. Builds and tests require no personal Google configuration.
+Milestone J reads `GAMESAVES_GOOGLE_CLIENT_ID` from the local process environment or, on Windows, directly from the persistent user environment and performs installed-desktop OAuth in the system browser. A process-scoped value takes precedence. Tokens are stored only through the protected `ISecretStore`, and the only Drive API request is the minimal account lookup described below. The application never loads a downloaded credential file. Builds and automated tests require no personal Google configuration.
 
-Never use or commit a personal OAuth token for repository development, and never send a Google Account password to the application. A later milestone must use Google's supported browser-based OAuth flow for installed desktop applications.
+Never use or commit a personal OAuth token for repository development, and never send a Google Account password to the application. Authorization uses Google's supported system-browser flow for installed desktop applications, a loopback callback, and PKCE.
 
 ## Prerequisites
 
@@ -114,7 +114,7 @@ https://www.googleapis.com/auth/drive.file
 
 Google describes `drive.file` as per-file access for files the application creates or files the user makes available to it. It is narrower than full Drive access and is listed as non-sensitive in Google's [Drive scope reference](https://developers.google.com/workspace/drive/api/guides/api-specific-auth).
 
-In **Google Auth Platform** > **Data Access**, use **Add or Remove Scopes** to review or declare this scope for the development configuration. Google requires scopes to be declared in the console and requested by application code. Milestone G documents the intended scope only; it adds no code that requests it.
+In **Google Auth Platform** > **Data Access**, use **Add or Remove Scopes** to review or declare this scope for the development configuration. Google requires scopes to be declared in the console and requested by application code. Game Save Manager now requests this exact scope and no other Google or OpenID scope.
 
 Do not configure these broader scopes unless a later milestone demonstrates that they are unavoidable:
 
@@ -146,7 +146,7 @@ Do not create Web application, Android, iOS, Chrome extension, or service-accoun
 
 Google's [OAuth guide for desktop apps](https://developers.google.com/identity/protocols/oauth2/native-app) states that installed applications cannot keep embedded secrets confidential. A desktop client secret is not an application password and must never be used as proof that a request came from an authentic copy of Game Save Manager.
 
-A later implementation must rely on the supported installed-app flow, system-browser authorization, PKCE where applicable, redirect and state validation, and secure token storage. Account access and refresh tokens are real secrets and must use the existing secure secret store.
+The implementation relies on the supported installed-app flow, system-browser authorization, PKCE, the library's loopback redirect and state validation, and secure token storage. Account access and refresh tokens are real secrets and use the existing protected secret store.
 
 Repository policy is deliberately stricter than the installed-client confidentiality model:
 
@@ -156,9 +156,9 @@ Repository policy is deliberately stricter than the installed-client confidentia
 - never commit user tokens; and
 - never commit test-user account information.
 
-## Planned local Client ID configuration
+## Local desktop OAuth client configuration
 
-The future application will read the development Client ID from:
+The application reads the development Client ID from:
 
 ```text
 GAMESAVES_GOOGLE_CLIENT_ID
@@ -179,11 +179,28 @@ Or set a persistent Windows user environment variable:
     "User")
 ```
 
-A new terminal or App process might be required after setting a persistent variable.
+Game Save Manager reads the persistent Windows user value directly, so an existing Explorer or terminal process does not need to inherit the newly configured value. Restart the App itself after changing the variable so its connection panel is initialized from the current configuration.
 
-> Reading this environment variable is implemented in a later milestone. Milestone G establishes and documents the configuration name only.
+> Milestone J reads this variable when Google Drive account authorization is requested. It is never copied into profile JSON, SQLite, logs, or the UI.
 
-There is no committed default Client ID and no client-secret environment variable. Do not add a real Client ID to source code, project files, README, JSON, tests, CI, screenshots, or error messages.
+Google documents `client_secret` as optional for the installed-app token exchange, but a generated Desktop OAuth client can require its generated value when used through the selected Google .NET client library. If the App reports that it could not complete the authorization exchange, configure the value from that same Desktop OAuth client locally:
+
+```powershell
+[Environment]::SetEnvironmentVariable(
+    "GAMESAVES_GOOGLE_CLIENT_SECRET",
+    "YOUR_DESKTOP_CLIENT_SECRET",
+    "User")
+```
+
+Game Save Manager reads this optional value from the process environment or, on Windows, directly from the persistent user environment. It passes the value only to the installed-app authorization flow; it is never copied into profile JSON, SQLite, logs, result formatting, or the UI. Restart the App after changing it.
+
+There is no committed default Client ID or client secret. A desktop application cannot keep its client secret confidential, so this value is not treated as an application password or proof that the application is authentic. PKCE remains enabled and provides the installed-app authorization protection. Do not add a real Client ID or client secret to source code, project files, README, JSON, tests, CI, screenshots, or error messages. Official end-user releases must inject their release OAuth configuration through the build or release environment.
+
+## What account connection does
+
+After authorization, Infrastructure makes one short-lived Google Drive `about.get` request and asks only for `user(displayName,emailAddress)`. The returned display name and optional email are saved as non-secret profile metadata. Access and refresh token bytes remain in `ISecretStore`; connection status and token-presence flags are runtime state and are not persisted in profile JSON.
+
+Account connection does not create or discover a Drive folder, list Drive content, show quota, upload or download a backup, or enable Google Drive sync preview or execution.
 
 ## Handle downloaded credential files
 
@@ -205,7 +222,7 @@ The recommended local directory is outside the repository:
 %LOCALAPPDATA%\GameSave\Developer\GoogleOAuth\desktop-client.json
 ```
 
-Later application token data belongs in the existing secure secret store, not beside this file.
+Application token data belongs in the existing secure secret store, not beside this file.
 
 ## Repository ignore protections
 

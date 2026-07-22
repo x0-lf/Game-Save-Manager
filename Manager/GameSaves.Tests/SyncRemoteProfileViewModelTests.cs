@@ -91,7 +91,8 @@ public sealed class SyncRemoteProfileViewModelTests
             repository,
             new SyncRemoteProfileService(repository, new InMemorySecretStore()),
             new StubSyncRemoteProfileMigrationService(settings),
-            clock);
+            clock,
+            new StubGoogleDriveOAuthService());
         viewModel.SftpPassword = "first-session-password";
         await viewModel.PreviewSyncCommand.ExecuteAsync(null);
         ProfileTestProvider firstProvider =
@@ -210,7 +211,7 @@ public sealed class SyncRemoteProfileViewModelTests
 
         Assert.Equal("Personal Google Drive", viewModel.SelectedRemoteProfile!.DisplayName);
         Assert.Equal("Profile unavailable", viewModel.RemoteProfileState);
-        Assert.Contains("not implemented", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("later milestones", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
         Assert.False(viewModel.CanExecuteSync);
         Assert.Equal(0, factory.CreateCount);
         Assert.Equal(0, factory.ExecuteCount);
@@ -305,7 +306,8 @@ public sealed class SyncRemoteProfileViewModelTests
             repository,
             new SyncRemoteProfileService(repository, secretStore),
             new StubSyncRemoteProfileMigrationService(settings),
-            clock);
+            clock,
+            new StubGoogleDriveOAuthService());
     }
 
     private static SyncRemoteProfile LocalProfile(

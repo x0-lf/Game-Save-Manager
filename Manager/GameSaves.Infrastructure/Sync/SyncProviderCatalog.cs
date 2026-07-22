@@ -11,7 +11,8 @@ namespace GameSaves.Infrastructure.Sync
             IsImplemented: false,
             SyncProviderCapabilities.None,
             SyncProviderConfigurationSurface.Unavailable,
-            "This sync provider is not supported by this version.");
+            "This sync provider is not supported by this version.",
+            IsConfigurationAvailable: false);
 
         private static readonly IReadOnlyList<SyncProviderDescriptor> Descriptors =
             new[]
@@ -31,7 +32,8 @@ namespace GameSaves.Infrastructure.Sync
                         SupportsConnectionTesting: true,
                         SupportsLogout: false,
                         SupportsOpenRemoteLocation: true),
-                    SyncProviderConfigurationSurface.LocalFolder),
+                    SyncProviderConfigurationSurface.LocalFolder,
+                    IsConfigurationAvailable: true),
                 new SyncProviderDescriptor(
                     SyncProviderKind.Sftp,
                     "SFTP server (SSH)",
@@ -46,14 +48,16 @@ namespace GameSaves.Infrastructure.Sync
                         SupportsConnectionTesting: true,
                         SupportsLogout: false,
                         SupportsOpenRemoteLocation: false),
-                    SyncProviderConfigurationSurface.Sftp),
+                    SyncProviderConfigurationSurface.Sftp,
+                    IsConfigurationAvailable: true),
                 new SyncProviderDescriptor(
                     SyncProviderKind.GoogleDrive,
                     "Google Drive",
                     IsImplemented: false,
                     CloudCapabilities(),
                     SyncProviderConfigurationSurface.InteractiveOAuth,
-                    "Google Drive sync is not implemented yet."),
+                    "Google Drive account connection is available. Backup synchronization is implemented in later milestones.",
+                    IsConfigurationAvailable: true),
                 new SyncProviderDescriptor(
                     SyncProviderKind.WebDav,
                     "WebDAV",
@@ -69,14 +73,16 @@ namespace GameSaves.Infrastructure.Sync
                         SupportsLogout: true,
                         SupportsOpenRemoteLocation: true),
                     SyncProviderConfigurationSurface.ServerCredentials,
-                    "WebDAV sync is not implemented yet."),
+                    "WebDAV sync is not implemented yet.",
+                    IsConfigurationAvailable: false),
                 new SyncProviderDescriptor(
                     SyncProviderKind.OneDrive,
                     "OneDrive",
                     IsImplemented: false,
                     CloudCapabilities(),
                     SyncProviderConfigurationSurface.InteractiveOAuth,
-                    "OneDrive sync is not implemented yet.")
+                    "OneDrive sync is not implemented yet.",
+                    IsConfigurationAvailable: false)
             };
 
         private static readonly IReadOnlyDictionary<SyncProviderKind, SyncProviderDescriptor> ByKind =

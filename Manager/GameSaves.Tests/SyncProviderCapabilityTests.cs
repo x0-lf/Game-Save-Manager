@@ -33,7 +33,7 @@ public sealed class SyncProviderCapabilityTests
     }
 
     [Fact]
-    public void OnlyLocalFolderAndSftp_AreImplementedAndNormallyVisible()
+    public void OnlyLocalFolderAndSftp_AreImplemented_GoogleIsConfigurationVisible()
     {
         Assert.Equal(
             new[] { SyncProviderKind.LocalFolder, SyncProviderKind.Sftp },
@@ -43,8 +43,17 @@ public sealed class SyncProviderCapabilityTests
 
         SyncViewModel viewModel = CreateViewModel();
         Assert.Equal(
-            new[] { SyncProviderKind.LocalFolder, SyncProviderKind.Sftp },
+            new[]
+            {
+                SyncProviderKind.LocalFolder,
+                SyncProviderKind.Sftp,
+                SyncProviderKind.GoogleDrive
+            },
             viewModel.ProviderOptions.Select(option => option.Kind));
+
+        Assert.True(_catalog.GetDescriptor(SyncProviderKind.GoogleDrive).IsConfigurationAvailable);
+        Assert.False(_catalog.GetDescriptor(SyncProviderKind.WebDav).IsConfigurationAvailable);
+        Assert.False(_catalog.GetDescriptor(SyncProviderKind.OneDrive).IsConfigurationAvailable);
     }
 
     [Fact]
@@ -150,7 +159,7 @@ public sealed class SyncProviderCapabilityTests
         await viewModel.PreviewSyncCommand.ExecuteAsync(null);
 
         Assert.False(viewModel.CanExecuteSync);
-        Assert.Contains("not implemented", viewModel.StatusMessage);
+        Assert.Contains("later milestones", viewModel.StatusMessage);
     }
 
     [Fact]
@@ -182,6 +191,7 @@ public sealed class SyncProviderCapabilityTests
             repository,
             new SyncRemoteProfileService(repository, new InMemorySecretStore()),
             new StubSyncRemoteProfileMigrationService(SyncUiSettings.Default),
-            new FixedUtcClock(DateTimeOffset.Parse("2026-07-20T12:00:00Z")));
+            new FixedUtcClock(DateTimeOffset.Parse("2026-07-20T12:00:00Z")),
+            new StubGoogleDriveOAuthService());
     }
 }

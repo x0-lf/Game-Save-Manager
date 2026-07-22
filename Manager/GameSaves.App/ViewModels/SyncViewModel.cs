@@ -10,6 +10,7 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace GameSaves.App.ViewModels
@@ -22,12 +23,15 @@ namespace GameSaves.App.ViewModels
         private readonly ISyncSettingsStore _syncSettingsStore;
         private readonly ISyncRemoteProfileRepository _profileRepository;
         private readonly ISyncRemoteProfileService _profileService;
+        private readonly IGoogleDriveOAuthService _googleDriveOAuthService;
         private readonly IUtcClock _clock;
         private SyncPlan? _lastPlan;
         private ISyncProvider? _lastProvider;
         private bool _applyingProfile;
         private bool _suppressProfileSelection;
         private bool _suppressProfileOptionSelection;
+        private CancellationTokenSource? _googleAuthenticationCancellation;
+        private long _googleAuthenticationGeneration;
 
         [ObservableProperty]
         private bool isLoading;
@@ -41,6 +45,7 @@ namespace GameSaves.App.ViewModels
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(IsLocalFolderSelected))]
         [NotifyPropertyChangedFor(nameof(IsSftpSelected))]
+        [NotifyPropertyChangedFor(nameof(IsGoogleDriveSelected))]
         [NotifyPropertyChangedFor(nameof(SelectedProviderDescriptor))]
         [NotifyPropertyChangedFor(nameof(RequiresInteractiveLogin))]
         [NotifyPropertyChangedFor(nameof(RequiresServerCredentials))]
@@ -57,6 +62,8 @@ namespace GameSaves.App.ViewModels
         [NotifyPropertyChangedFor(nameof(CanOpenRemoteLocation))]
         [NotifyPropertyChangedFor(nameof(CanShowQuota))]
         [NotifyPropertyChangedFor(nameof(ProviderCapabilitySummary))]
+        [NotifyPropertyChangedFor(nameof(CanPreviewSync))]
+        [NotifyPropertyChangedFor(nameof(CanConnectGoogleDrive))]
         private SyncProviderKind selectedProviderKind = SyncProviderKind.LocalFolder;
 
         [ObservableProperty]
@@ -141,6 +148,7 @@ namespace GameSaves.App.ViewModels
         private string connectionCheckMessage = "";
 
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(CanConnectGoogleDrive))]
         private SyncRemoteProfile? selectedRemoteProfile;
 
         [ObservableProperty]
@@ -157,6 +165,27 @@ namespace GameSaves.App.ViewModels
 
         [ObservableProperty]
         private bool hasStoredAuthentication;
+
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(CanConnectGoogleDrive))]
+        [NotifyPropertyChangedFor(nameof(CanCancelGoogleDriveConnection))]
+        private bool isGoogleDriveConnecting;
+
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(GoogleDriveAccountDisplayText))]
+        private string? googleDriveAccountDisplayName;
+
+        [ObservableProperty]
+        private string? googleDriveAccountEmail;
+
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(CanConnectGoogleDrive))]
+        private GoogleDriveConnectionStatus googleDriveConnectionStatus =
+            GoogleDriveConnectionStatus.NotConfigured;
+
+        [ObservableProperty]
+        private string googleDriveConnectionMessage =
+            "Save a Google Drive profile before connecting.";
 
         private bool _keepTargetSectionOpen;
 
@@ -216,6 +245,9 @@ namespace GameSaves.App.ViewModels
 
         public IReadOnlyList<SyncProviderDescriptor> ProviderOptions { get; }
 
+        public Task GoogleAuthenticationInitializationTask { get; private set; } =
+            Task.CompletedTask;
+
         public SyncProviderDescriptor SelectedProviderDescriptor =>
             _providerCatalog.GetDescriptor(SelectedProviderKind);
 
@@ -261,12 +293,18 @@ namespace GameSaves.App.ViewModels
         public bool CanShowQuota =>
             SelectedProviderDescriptor.IsImplemented && SupportsRemoteQuota;
 
+        public bool CanPreviewSync =>
+            SelectedProviderDescriptor.IsImplemented && !IsLoading;
+
         public string ProviderCapabilitySummary
         {
             get
             {
                 if (!SelectedProviderDescriptor.IsImplemented)
-                    return SelectedProviderDescriptor.UnavailableMessage ?? "Provider unavailable.";
+                    return SelectedProviderDescriptor.IsConfigurationAvailable
+                        ? SelectedProviderDescriptor.UnavailableMessage ??
+                          "Provider configuration is available, but sync is unavailable."
+                        : SelectedProviderDescriptor.UnavailableMessage ?? "Provider unavailable.";
 
                 var capabilities = new List<string>();
 
@@ -293,6 +331,38 @@ namespace GameSaves.App.ViewModels
             SelectedProviderDescriptor.ConfigurationSurface ==
             SyncProviderConfigurationSurface.Sftp;
 
+        public bool IsGoogleDriveSelected =>
+            SelectedProviderKind == SyncProviderKind.GoogleDrive &&
+            SelectedProviderDescriptor.ConfigurationSurface ==
+            SyncProviderConfigurationSurface.InteractiveOAuth;
+
+        public bool IsGoogleOAuthClientConfigurationAvailable =>
+            _googleDriveOAuthService.GetClientConfigurationState().IsAvailable;
+
+        public string GoogleDriveAccountDisplayText =>
+            string.IsNullOrWhiteSpace(GoogleDriveAccountDisplayName)
+                ? "Not connected"
+                : GoogleDriveAccountDisplayName;
+
+        public bool CanConnectGoogleDrive =>
+            IsGoogleDriveSelected &&
+            SelectedRemoteProfile is
+            {
+                ProviderKind: SyncProviderKind.GoogleDrive,
+                SettingsError: null,
+                ProviderSettings: GoogleDriveSyncRemoteSettings
+                {
+                    SchemaVersion: GoogleDriveSyncRemoteSettings.CurrentSchemaVersion,
+                    RequestedScope: GoogleDriveAuthorizationScopes.DriveFile
+                }
+            } &&
+            !IsGoogleDriveConnecting &&
+            IsGoogleOAuthClientConfigurationAvailable &&
+            GoogleDriveConnectionStatus != GoogleDriveConnectionStatus.Connected;
+
+        public bool CanCancelGoogleDriveConnection =>
+            IsGoogleDriveSelected && IsGoogleDriveConnecting;
+
         public SyncViewModel(
             ISyncProviderFactory syncProviderFactory,
             ISyncProviderCatalog providerCatalog,
@@ -301,7 +371,8 @@ namespace GameSaves.App.ViewModels
             ISyncRemoteProfileRepository profileRepository,
             ISyncRemoteProfileService profileService,
             ISyncRemoteProfileMigrationService profileMigrationService,
-            IUtcClock clock)
+            IUtcClock clock,
+            IGoogleDriveOAuthService googleDriveOAuthService)
         {
             _syncProviderFactory = syncProviderFactory;
             _providerCatalog = providerCatalog;
@@ -310,8 +381,9 @@ namespace GameSaves.App.ViewModels
             _profileRepository = profileRepository;
             _profileService = profileService;
             _clock = clock;
+            _googleDriveOAuthService = googleDriveOAuthService;
             ProviderOptions = _providerCatalog.GetAll()
-                .Where(descriptor => descriptor.IsImplemented)
+                .Where(descriptor => descriptor.IsConfigurationAvailable)
                 .ToArray();
 
             SyncUiSettings saved = profileMigrationService.LoadAndMigrate();
@@ -339,13 +411,28 @@ namespace GameSaves.App.ViewModels
 
         partial void OnDownloadEnabledChanged(bool value) => InvalidatePlan();
 
+        partial void OnIsLoadingChanged(bool value) =>
+            OnPropertyChanged(nameof(CanPreviewSync));
+
         partial void OnSelectedProviderKindChanged(SyncProviderKind value)
         {
+            CancelGoogleAuthentication();
+
+            if (value != SyncProviderKind.Sftp)
+                ClearSessionOnlySftpState();
+
             InvalidatePlan();
             MarkProfileDirty();
 
             StatusMessage = GetUnavailableProviderMessage(value)
                 ?? "Sync provider changed. Configure it and build a new sync preview.";
+
+            if (value == SyncProviderKind.GoogleDrive && SelectedRemoteProfile is null)
+            {
+                GoogleDriveConnectionStatus = GoogleDriveConnectionStatus.NotConfigured;
+                GoogleDriveConnectionMessage =
+                    "Save the Google Drive profile before connecting so its authentication can be stored securely.";
+            }
         }
 
         partial void OnSftpHostChanged(string value) => OnPersistentSettingChanged();
@@ -467,6 +554,7 @@ namespace GameSaves.App.ViewModels
 
         private void UseWithoutSavedProfile()
         {
+            CancelGoogleAuthentication();
             _suppressProfileSelection = true;
             SelectedRemoteProfile = null;
             _suppressProfileSelection = false;
@@ -485,6 +573,7 @@ namespace GameSaves.App.ViewModels
 
             InvalidatePlan(force: true);
             HasStoredAuthentication = false;
+            ResetGoogleDriveState();
             ConfirmDeleteRemoteProfile = false;
             RemoteProfileState = "Unsaved settings (no profile)";
             StatusMessage = "Using the current sync settings without a saved remote profile. Build a new preview when ready.";
@@ -495,6 +584,7 @@ namespace GameSaves.App.ViewModels
             SyncRemoteProfile profile,
             bool persistSelection)
         {
+            CancelGoogleAuthentication();
             HasStoredAuthentication = false;
             _applyingProfile = true;
 
@@ -509,6 +599,7 @@ namespace GameSaves.App.ViewModels
                     case LocalFolderSyncRemoteSettings local:
                         RemoteRootPath = local.LocalFolderPath;
                         ResetSftpNonSecretFields();
+                        ResetGoogleDriveState();
                         break;
 
                     case SftpSyncRemoteSettings sftp:
@@ -521,11 +612,24 @@ namespace GameSaves.App.ViewModels
                         SftpUsePassword = !SftpUsePrivateKey;
                         SftpKeyFilePath = sftp.PrivateKeyFilePath ?? "";
                         SftpRemotePath = sftp.RemotePath;
+                        ResetGoogleDriveState();
+                        break;
+
+                    case GoogleDriveSyncRemoteSettings googleDrive:
+                        RemoteRootPath = "";
+                        ResetSftpNonSecretFields();
+                        GoogleDriveAccountDisplayName = profile.AccountDisplayName;
+                        GoogleDriveAccountEmail = googleDrive.AccountEmail;
+                        GoogleDriveConnectionStatus =
+                            GoogleDriveConnectionStatus.StoredAuthenticationAvailable;
+                        GoogleDriveConnectionMessage =
+                            "Checking stored Google Drive authentication…";
                         break;
 
                     default:
                         RemoteRootPath = "";
                         ResetSftpNonSecretFields();
+                        ResetGoogleDriveState();
                         break;
                 }
             }
@@ -537,22 +641,35 @@ namespace GameSaves.App.ViewModels
             InvalidatePlan(force: true);
             ConfirmDeleteRemoteProfile = false;
             RemoteProfileState = profile.SettingsError is null &&
-                                 GetUnavailableProviderMessage(profile.ProviderKind) is null
+                                 (profile.ProviderKind == SyncProviderKind.GoogleDrive ||
+                                  GetUnavailableProviderMessage(profile.ProviderKind) is null)
                 ? "Saved"
                 : "Profile unavailable";
-            StatusMessage = profile.SettingsError ??
-                GetUnavailableProviderMessage(profile.ProviderKind) ??
-                $"Loaded remote profile '{profile.DisplayName}'. Build a new sync preview when ready.";
+            StatusMessage = profile.ProviderKind == SyncProviderKind.GoogleDrive &&
+                            profile.SettingsError is null
+                ? "Loaded the Google Drive profile. Checking stored authentication without opening a browser. Backup synchronization remains unavailable."
+                : profile.SettingsError ??
+                  GetUnavailableProviderMessage(profile.ProviderKind) ??
+                  $"Loaded remote profile '{profile.DisplayName}'. Build a new sync preview when ready.";
 
             if (persistSelection)
                 SaveNonSecretSettings();
 
-            _ = RefreshStoredAuthenticationAsync(profile.Id);
+            if (profile.ProviderKind == SyncProviderKind.GoogleDrive &&
+                profile.ProviderSettings is GoogleDriveSyncRemoteSettings)
+            {
+                BeginGoogleAuthenticationRestore(profile.Id);
+            }
+            else
+            {
+                _ = RefreshStoredAuthenticationAsync(profile.Id);
+            }
         }
 
         [RelayCommand]
         private void NewRemoteProfile()
         {
+            CancelGoogleAuthentication();
             _suppressProfileSelection = true;
             SelectedRemoteProfile = null;
             _suppressProfileSelection = false;
@@ -567,6 +684,7 @@ namespace GameSaves.App.ViewModels
                 RemoteRootPath = "";
                 ResetSftpNonSecretFields();
                 ClearSessionOnlySftpState();
+                ResetGoogleDriveState();
             }
             finally
             {
@@ -587,9 +705,10 @@ namespace GameSaves.App.ViewModels
             try
             {
                 DateTimeOffset now = _clock.UtcNow;
+                bool isNewProfile = SelectedRemoteProfile is null;
                 SyncRemoteProfile profile;
 
-                if (SelectedRemoteProfile is null)
+                if (isNewProfile)
                 {
                     profile = _profileRepository.Create(BuildProfile(
                         Guid.NewGuid(),
@@ -600,15 +719,30 @@ namespace GameSaves.App.ViewModels
                 }
                 else
                 {
+                    SyncRemoteProfile selected = SelectedRemoteProfile!;
                     profile = _profileRepository.Update(BuildProfile(
-                        SelectedRemoteProfile.Id,
-                        SelectedRemoteProfile.CreatedUtc,
+                        selected.Id,
+                        selected.CreatedUtc,
                         now,
-                        SelectedRemoteProfile.LastUsedUtc,
-                        SelectedRemoteProfile.LastSuccessfulConnectionUtc));
+                        selected.LastUsedUtc,
+                        selected.LastSuccessfulConnectionUtc));
                 }
 
                 RefreshProfileList(profile.Id);
+                if (profile.ProviderKind == SyncProviderKind.GoogleDrive)
+                {
+                    GoogleDriveAccountDisplayName = profile.AccountDisplayName;
+                    GoogleDriveAccountEmail =
+                        (profile.ProviderSettings as GoogleDriveSyncRemoteSettings)?.AccountEmail;
+
+                    if (isNewProfile)
+                    {
+                        GoogleDriveConnectionStatus = GoogleDriveConnectionStatus.Disconnected;
+                        GoogleDriveConnectionMessage =
+                            "Profile saved. Connect Google Drive to authorize this account.";
+                        HasStoredAuthentication = false;
+                    }
+                }
                 RemoteProfileState = "Saved";
                 StatusMessage = $"Remote profile '{profile.DisplayName}' saved. No connection was started.";
                 SaveNonSecretSettings();
@@ -638,10 +772,20 @@ namespace GameSaves.App.ViewModels
                     createdUtc: now,
                     updatedUtc: now,
                     lastUsedUtc: null,
-                    lastSuccessfulConnectionUtc: null));
+                    lastSuccessfulConnectionUtc: null,
+                    includeGoogleAccountMetadata: false));
 
                 RefreshProfileList(profile.Id);
                 ClearSessionOnlySftpState();
+                if (profile.ProviderKind == SyncProviderKind.GoogleDrive)
+                {
+                    GoogleDriveAccountDisplayName = null;
+                    GoogleDriveAccountEmail = null;
+                    GoogleDriveConnectionStatus = GoogleDriveConnectionStatus.Disconnected;
+                    GoogleDriveConnectionMessage =
+                        "Profile saved. Connect Google Drive to authorize this account.";
+                    HasStoredAuthentication = false;
+                }
                 InvalidatePlan(force: true);
                 RemoteProfileState = "Saved";
                 StatusMessage = $"Saved a new remote profile '{profile.DisplayName}'. No connection was started.";
@@ -714,6 +858,7 @@ namespace GameSaves.App.ViewModels
                 Guid profileId = SelectedRemoteProfile.Id;
                 string deletedName = SelectedRemoteProfile.DisplayName;
                 InvalidatePlan(force: true);
+                CancelGoogleAuthentication();
                 ClearSessionOnlySftpState();
 
                 SyncRemoteProfileDeleteResult result =
@@ -783,18 +928,230 @@ namespace GameSaves.App.ViewModels
             }
         }
 
+        [RelayCommand]
+        private async Task ConnectGoogleDriveAsync()
+        {
+            if (!IsGoogleDriveSelected ||
+                SelectedRemoteProfile is not { ProviderKind: SyncProviderKind.GoogleDrive } profile)
+            {
+                GoogleDriveConnectionStatus = GoogleDriveConnectionStatus.NotConfigured;
+                GoogleDriveConnectionMessage =
+                    "Save the Google Drive profile before connecting so its authentication can be stored securely.";
+                StatusMessage = GoogleDriveConnectionMessage;
+                return;
+            }
+
+            GoogleDriveOAuthClientConfigurationState configuration =
+                _googleDriveOAuthService.GetClientConfigurationState();
+
+            if (!configuration.IsAvailable)
+            {
+                GoogleDriveConnectionStatus = GoogleDriveConnectionStatus.Unavailable;
+                GoogleDriveConnectionMessage = configuration.Message ??
+                    "Google Drive OAuth client configuration is unavailable.";
+                StatusMessage = GoogleDriveConnectionMessage;
+                return;
+            }
+
+            if (IsGoogleDriveConnecting)
+                return;
+
+            CancelGoogleAuthentication();
+            long generation = ++_googleAuthenticationGeneration;
+            var cancellation = new CancellationTokenSource();
+            _googleAuthenticationCancellation = cancellation;
+            IsGoogleDriveConnecting = true;
+            GoogleDriveConnectionStatus = GoogleDriveConnectionStatus.Connecting;
+            GoogleDriveConnectionMessage =
+                "Waiting for Google Drive authorization in the system browser…";
+            StatusMessage = GoogleDriveConnectionMessage;
+
+            try
+            {
+                GoogleDriveAuthenticationResult result =
+                    await _googleDriveOAuthService.ConnectAsync(
+                        profile.Id,
+                        cancellation.Token);
+                ApplyGoogleAuthenticationResult(profile.Id, generation, result);
+            }
+            catch (OperationCanceledException)
+            {
+                ApplyGoogleAuthenticationResult(
+                    profile.Id,
+                    generation,
+                    new GoogleDriveAuthenticationResult(
+                        GoogleDriveAuthenticationStatus.Cancelled,
+                        ErrorCode: GoogleDriveOAuthErrorCodes.Cancelled,
+                        Message: "Google Drive sign-in was cancelled. No backup data was changed."));
+            }
+            catch
+            {
+                ApplyGoogleAuthenticationResult(
+                    profile.Id,
+                    generation,
+                    new GoogleDriveAuthenticationResult(
+                        GoogleDriveAuthenticationStatus.Failed,
+                        ErrorCode: GoogleDriveOAuthErrorCodes.Failed,
+                        Message: "Google Drive sign-in failed. Review the developer OAuth configuration and try again."));
+            }
+            finally
+            {
+                if (generation == _googleAuthenticationGeneration)
+                {
+                    IsGoogleDriveConnecting = false;
+                    _googleAuthenticationCancellation?.Dispose();
+                    _googleAuthenticationCancellation = null;
+                }
+            }
+        }
+
+        [RelayCommand]
+        private void CancelGoogleDriveConnection()
+        {
+            if (!IsGoogleDriveConnecting)
+                return;
+
+            _googleAuthenticationCancellation?.Cancel();
+            GoogleDriveConnectionMessage =
+                "Cancelling Google Drive sign-in…";
+        }
+
+        private void BeginGoogleAuthenticationRestore(Guid profileId)
+        {
+            CancelGoogleAuthentication();
+            long generation = ++_googleAuthenticationGeneration;
+            var cancellation = new CancellationTokenSource();
+            _googleAuthenticationCancellation = cancellation;
+            IsGoogleDriveConnecting = true;
+            GoogleDriveConnectionStatus =
+                GoogleDriveConnectionStatus.StoredAuthenticationAvailable;
+            GoogleDriveConnectionMessage =
+                "Checking stored Google Drive authentication…";
+            GoogleAuthenticationInitializationTask = RestoreGoogleAuthenticationAsync(
+                profileId,
+                generation,
+                cancellation);
+        }
+
+        private async Task RestoreGoogleAuthenticationAsync(
+            Guid profileId,
+            long generation,
+            CancellationTokenSource cancellation)
+        {
+            try
+            {
+                GoogleDriveAuthenticationResult result =
+                    await _googleDriveOAuthService.RestoreAsync(
+                        profileId,
+                        cancellation.Token);
+                ApplyGoogleAuthenticationResult(profileId, generation, result);
+            }
+            catch (OperationCanceledException)
+            {
+                // A provider/profile change deliberately makes this result stale.
+            }
+            catch
+            {
+                ApplyGoogleAuthenticationResult(
+                    profileId,
+                    generation,
+                    new GoogleDriveAuthenticationResult(
+                        GoogleDriveAuthenticationStatus.Failed,
+                        ErrorCode: GoogleDriveOAuthErrorCodes.Failed,
+                        Message: "Stored Google Drive authentication could not be checked."));
+            }
+            finally
+            {
+                if (generation == _googleAuthenticationGeneration)
+                {
+                    IsGoogleDriveConnecting = false;
+                    cancellation.Dispose();
+                    _googleAuthenticationCancellation = null;
+                }
+            }
+        }
+
+        private void ApplyGoogleAuthenticationResult(
+            Guid profileId,
+            long generation,
+            GoogleDriveAuthenticationResult result)
+        {
+            if (generation != _googleAuthenticationGeneration ||
+                SelectedRemoteProfile?.Id != profileId ||
+                !IsGoogleDriveSelected)
+            {
+                return;
+            }
+
+            GoogleDriveConnectionStatus = result.Status switch
+            {
+                GoogleDriveAuthenticationStatus.Connected =>
+                    GoogleDriveConnectionStatus.Connected,
+                GoogleDriveAuthenticationStatus.NoStoredAuthentication =>
+                    GoogleDriveConnectionStatus.Disconnected,
+                GoogleDriveAuthenticationStatus.ReauthenticationRequired or
+                GoogleDriveAuthenticationStatus.TokenCorrupted =>
+                    GoogleDriveConnectionStatus.ReauthenticationRequired,
+                GoogleDriveAuthenticationStatus.ClientConfigurationMissing or
+                GoogleDriveAuthenticationStatus.SecretStoreUnavailable or
+                GoogleDriveAuthenticationStatus.Unavailable =>
+                    GoogleDriveConnectionStatus.Unavailable,
+                GoogleDriveAuthenticationStatus.Cancelled or
+                GoogleDriveAuthenticationStatus.AuthorizationDenied =>
+                    GoogleDriveConnectionStatus.Disconnected,
+                _ => GoogleDriveConnectionStatus.Failed
+            };
+
+            if (result.ConnectionSettings is { } settings)
+            {
+                GoogleDriveAccountDisplayName = settings.AccountDisplayName;
+                GoogleDriveAccountEmail = settings.AccountEmail;
+                HasStoredAuthentication = settings.HasStoredToken;
+
+                SyncRemoteProfile? updated = _profileRepository.GetById(profileId);
+
+                if (updated is not null)
+                {
+                    RefreshProfileList(updated.Id);
+                    GoogleDriveAccountDisplayName = updated.AccountDisplayName;
+                    GoogleDriveAccountEmail =
+                        (updated.ProviderSettings as GoogleDriveSyncRemoteSettings)?.AccountEmail;
+                }
+            }
+            else if (result.Status == GoogleDriveAuthenticationStatus.NoStoredAuthentication)
+            {
+                HasStoredAuthentication = false;
+            }
+
+            GoogleDriveConnectionMessage = result.Message ?? result.Status.ToString();
+            StatusMessage = GoogleDriveConnectionMessage;
+            OnPropertyChanged(nameof(CanConnectGoogleDrive));
+        }
+
+        private void CancelGoogleAuthentication()
+        {
+            _googleAuthenticationGeneration++;
+            _googleAuthenticationCancellation?.Cancel();
+            _googleAuthenticationCancellation?.Dispose();
+            _googleAuthenticationCancellation = null;
+            IsGoogleDriveConnecting = false;
+            GoogleAuthenticationInitializationTask = Task.CompletedTask;
+        }
+
         private SyncRemoteProfile BuildProfile(
             Guid id,
             DateTimeOffset createdUtc,
             DateTimeOffset updatedUtc,
             DateTimeOffset? lastUsedUtc,
-            DateTimeOffset? lastSuccessfulConnectionUtc)
+            DateTimeOffset? lastSuccessfulConnectionUtc,
+            bool includeGoogleAccountMetadata = true)
         {
             string displayName = SyncRemoteProfileValidation.NormalizeDisplayName(
                 RemoteProfileDisplayName);
             SyncRemoteProfileSettings settings;
             string? accountDisplayName;
-            string remoteRootDisplayName;
+            string? remoteRootDisplayName;
+            string? remoteFolderId = null;
 
             switch (SelectedProviderKind)
             {
@@ -835,6 +1192,23 @@ namespace GameSaves.App.ViewModels
                         (remotePath.StartsWith('/') ? remotePath : "/" + remotePath);
                     break;
 
+                case SyncProviderKind.GoogleDrive:
+                    settings = new GoogleDriveSyncRemoteSettings(
+                        includeGoogleAccountMetadata ? GoogleDriveAccountEmail : null,
+                        GoogleDriveAuthorizationScopes.DriveFile);
+                    accountDisplayName = includeGoogleAccountMetadata
+                        ? GoogleDriveAccountDisplayName
+                        : null;
+                    remoteRootDisplayName =
+                        SelectedRemoteProfile?.ProviderKind == SyncProviderKind.GoogleDrive
+                            ? SelectedRemoteProfile.RemoteRootDisplayName
+                            : null;
+                    remoteFolderId =
+                        SelectedRemoteProfile?.ProviderKind == SyncProviderKind.GoogleDrive
+                            ? SelectedRemoteProfile.RemoteFolderId
+                            : null;
+                    break;
+
                 default:
                     throw new ArgumentException(
                         GetUnavailableProviderMessage(SelectedProviderKind) ??
@@ -852,7 +1226,7 @@ namespace GameSaves.App.ViewModels
                 updatedUtc,
                 lastUsedUtc,
                 lastSuccessfulConnectionUtc,
-                RemoteFolderId: null);
+                RemoteFolderId: remoteFolderId);
         }
 
         private string? ValidateSftpNonSecretProfileSettings()
@@ -890,6 +1264,15 @@ namespace GameSaves.App.ViewModels
             SftpPassword = "";
             SftpKeyPassphrase = "";
             SftpTrustNewHostKey = false;
+        }
+
+        private void ResetGoogleDriveState()
+        {
+            GoogleDriveAccountDisplayName = null;
+            GoogleDriveAccountEmail = null;
+            GoogleDriveConnectionStatus = GoogleDriveConnectionStatus.NotConfigured;
+            GoogleDriveConnectionMessage =
+                "Save a Google Drive profile before connecting.";
         }
 
         private void RefreshProfileList(Guid selectedId)

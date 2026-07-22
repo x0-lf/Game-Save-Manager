@@ -9,7 +9,7 @@ namespace GameSaves.Tests;
 public sealed class SyncProviderSelectionTests
 {
     [Fact]
-    public void Selector_ExposesOnlyImplementedProvidersAndDefaultsToLocalFolder()
+    public void Selector_ExposesSyncProvidersAndGoogleConfiguration_DefaultsToLocalFolder()
     {
         var factory = new RecordingSyncProviderFactory();
         var viewModel = CreateViewModel(factory, SyncUiSettings.Default);
@@ -28,6 +28,11 @@ public sealed class SyncProviderSelectionTests
             {
                 Assert.Equal(SyncProviderKind.Sftp, option.Kind);
                 Assert.Equal("SFTP server (SSH)", option.DisplayName);
+            },
+            option =>
+            {
+                Assert.Equal(SyncProviderKind.GoogleDrive, option.Kind);
+                Assert.Equal("Google Drive", option.DisplayName);
             });
     }
 
@@ -73,7 +78,7 @@ public sealed class SyncProviderSelectionTests
     }
 
     [Theory]
-    [InlineData(SyncProviderKind.GoogleDrive, "Google Drive sync is not implemented yet.")]
+    [InlineData(SyncProviderKind.GoogleDrive, "Google Drive account connection is available. Backup synchronization is implemented in later milestones.")]
     [InlineData(SyncProviderKind.WebDav, "WebDAV sync is not implemented yet.")]
     [InlineData(SyncProviderKind.OneDrive, "OneDrive sync is not implemented yet.")]
     public async Task UnimplementedProvider_BlocksBeforeFactoryCreation(
@@ -211,7 +216,8 @@ public sealed class SyncProviderSelectionTests
             repository,
             new SyncRemoteProfileService(repository, new InMemorySecretStore()),
             new StubSyncRemoteProfileMigrationService(SyncUiSettings.Default),
-            new FixedUtcClock(DateTimeOffset.Parse("2026-07-20T12:00:00Z")))
+            new FixedUtcClock(DateTimeOffset.Parse("2026-07-20T12:00:00Z")),
+            new StubGoogleDriveOAuthService())
         {
             SelectedProviderKind = SyncProviderKind.Sftp,
             SftpHost = "backup.example.test",
@@ -243,7 +249,8 @@ public sealed class SyncProviderSelectionTests
             repository,
             new SyncRemoteProfileService(repository, new InMemorySecretStore()),
             new StubSyncRemoteProfileMigrationService(settings),
-            new FixedUtcClock(DateTimeOffset.Parse("2026-07-20T12:00:00Z")));
+            new FixedUtcClock(DateTimeOffset.Parse("2026-07-20T12:00:00Z")),
+            new StubGoogleDriveOAuthService());
     }
 
     internal sealed class InMemorySyncSettingsStore : ISyncSettingsStore
