@@ -88,9 +88,39 @@ GameSaves.App
 
 Interactive authorization opens the system browser, uses a random loopback listener and PKCE, and requests exactly `https://www.googleapis.com/auth/drive.file`. The profile GUID is the stable Google-library user key. `GoogleSecretDataStore` allowlists a version-1 token DTO and maps it to `SecretNames.OAuthTokenData`; it never creates a plaintext token file or clears another profile's or provider's secrets.
 
-Silent restore never opens a browser. `UserCredential` refreshes stale access tokens through the official flow and writes refreshed data back through `ISecretStore`. Invalid refresh credentials produce `ReauthenticationRequired` without deleting the saved profile or encrypted token. Connected status is reported only after a minimal Drive `about.get` request for `user(displayName,emailAddress)` succeeds.
+Silent restore never opens a browser. `UserCredential` refreshes stale access tokens through the official flow and writes refreshed data back through `ISecretStore`. Confirmed revoked or invalid authorization produces `ReauthenticationRequired`, removes exactly that profile's invalid Google OAuth token when possible, and preserves the saved profile. Unreadable authentication remains explicitly removable without first deserializing it. Connected status is reported only after a minimal Drive `about.get` request for `user(displayName,emailAddress)` succeeds.
 
 The App displays safe connection state and account metadata. Cancellation, denial, browser/callback failures, corrupt storage, and refresh failures map to stable, non-secret results. Authorization does not create a root folder or enable preview/execution.
+
+## Google Drive account lifecycle
+
+```text
+Connect
+    -> interactive protected authorization
+
+Restore
+    -> silent token restore and refresh
+
+Reconnect
+    -> interactive replacement authorization
+
+Disconnect
+    -> delete the selected profile's local OAuth token
+    -> clear saved account identity
+    -> preserve profile, root metadata, backups, and Drive data
+
+External revocation
+    -> detect confirmed invalid authorization
+    -> remove the invalid local token when possible
+    -> preserve last known account context
+    -> require explicit reconnect
+```
+
+Reconnect stages replacement authentication until Drive validates the newly authorized account. Cancellation, denial, and pre-validation failure therefore leave the previous protected token and account metadata unchanged. If a different account is authorized, account identity is replaced while any future root-folder identity is preserved but treated as requiring validation by the later root-folder milestone.
+
+Disconnect is deliberately local and works offline. It requires explicit confirmation, removes only `SecretNames.OAuthTokenData` for the selected profile, and does not call Google's revocation endpoint. It does not delete the Google Account, revoke the grant in Google Account settings, delete Drive files, delete backup data, delete history, or delete the saved remote profile. Programmatic remote grant revocation is not part of Milestone K.
+
+The lifecycle state machine distinguishes no saved profile, disconnected, stored-but-unchecked authentication, connecting, validated connection, reauthentication required, unavailable infrastructure, and failure. Token existence alone never displays Connected. Even a validated Google account cannot preview or execute sync because the catalog still reports Google Drive as `IsImplemented = false`.
 
 ## Saved profiles and secrets
 

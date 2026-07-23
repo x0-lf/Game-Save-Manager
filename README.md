@@ -45,8 +45,9 @@ The long-term goal is a cross-platform Steam save manager with backup profiles, 
   * **Saved remote profiles**: create, update, Save As, rename, and explicitly delete named Local Folder or SFTP configurations in the existing Sync target section. Selecting or saving a profile never connects, previews, or syncs.
   * Profiles are stored in SQLite with stable IDs and non-secret settings only. Existing meaningful `sync-settings.json` configuration is migrated once; when a profile is selected, its SQLite values take precedence over the lightweight UI-state file.
   * Provider behavior is described by one capability catalog. Google Drive is configuration-selectable for account authorization while `IsImplemented` remains false for sync.
-  * Saved-provider authentication has a platform-neutral secret-store contract. On Windows, payloads are protected for the current user with DPAPI and SQLite stores encrypted BLOBs only. Profile deletion and disconnect remove owned encrypted secrets; SFTP passwords and passphrases remain session-only.
+  * Saved-provider authentication has a platform-neutral secret-store contract. On Windows, payloads are protected for the current user with DPAPI and SQLite stores encrypted BLOBs only. Profile deletion removes secrets owned by that profile; Google Disconnect removes exactly its OAuth token. SFTP passwords and passphrases remain session-only.
   * Google Drive authorization runs in the system browser with PKCE and a loopback callback, requests only `drive.file`, stores tokens through the protected secret store, restores them after restart, refreshes access when possible, and displays non-secret account metadata.
+  * Google account lifecycle supports Connect, Reconnect, and explicit local Disconnect. Disconnect removes only the selected profile's protected OAuth token and clears its saved account identity; the profile, root-folder metadata, backups, history, and Drive files remain. External revocation is detected, its invalid local token is cleaned up when possible, and reconnect remains an explicit user action.
   * Google Drive backup synchronization is not implemented. The [Google Drive developer setup guide](docs/google-drive-developer-setup.md) explains private development configuration; normal users do not create a Cloud project, and personal credentials or tokens must never be committed.
   * Type-safe provider selection exposes `LocalFolder`, `Sftp`, and configuration-only `GoogleDrive`. Only Local Folder and SFTP can preview or execute sync; WebDAV and OneDrive remain unavailable.
   * `ISyncProvider` abstraction with `LocalFolderSyncProvider` and `SftpSyncProvider` (SSH.NET); WebDAV and cloud providers come later.
@@ -440,7 +441,7 @@ Existing profile columns remain authoritative for the profile ID, account displa
 
 Implement Google sign-in directly in `GameSaves.App`; do not create another application project.
 
-Google Drive account authorization uses the system browser, a loopback callback, and PKCE. Profile-scoped token data uses the existing protected secret store, and account identity comes from the minimal Drive `about.get` response. This does not enable Drive synchronization, and Milestone K account-lifecycle actions are not included.
+Google Drive account authorization uses the system browser, a loopback callback, and PKCE. Profile-scoped token data uses the existing protected secret store, and account identity comes from the minimal Drive `about.get` response. Milestone K extends this flow with lifecycle actions without enabling Drive synchronization.
 
 * [x] User selects Google Drive as the sync provider
 * [x] User clicks **Connect Google Drive**
@@ -456,15 +457,17 @@ Google Drive account authorization uses the system browser, a loopback callback,
 
 ### K — Google account lifecycle
 
-* [ ] Connect
-* [ ] Reconnect
-* [ ] Disconnect
-* [ ] Remove stored authentication
-* [ ] Handle revoked authorization
-* [ ] Show the connected account
-* [ ] Show connection state
-* [ ] Prevent sync when no valid account is connected
-* [ ] Remove locally stored token data when disconnecting
+Connect and Reconnect reuse the protected browser OAuth flow. Disconnect removes local protected authentication only; it does not revoke the Google Account grant or delete Drive content. Confirmed external revocation is detected and the invalid local token is removed when possible, while the saved profile, root-folder metadata, and backup data are preserved. Google Drive synchronization remains unavailable, and Milestone L has not started.
+
+* [x] Connect
+* [x] Reconnect
+* [x] Disconnect
+* [x] Remove stored authentication
+* [x] Handle revoked authorization
+* [x] Show the connected account
+* [x] Show connection state
+* [x] Prevent sync when no valid account is connected
+* [x] Remove locally stored token data when disconnecting
 
 ### L — Google Drive application root folder
 

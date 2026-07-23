@@ -202,6 +202,23 @@ After authorization, Infrastructure makes one short-lived Google Drive `about.ge
 
 Account connection does not create or discover a Drive folder, list Drive content, show quota, upload or download a backup, or enable Google Drive sync preview or execution.
 
+## Test the Google account lifecycle
+
+Use only an explicitly authorized development test account. Keep account details, screenshots, tokens, and OAuth configuration outside the repository.
+
+1. Start Game Save Manager, select a saved Google Drive profile, and confirm stored authentication restores without opening a browser.
+2. Choose **Reconnect**, complete the system-browser authorization, and confirm the validated account and Connected state return to the App.
+3. Start Reconnect again and cancel it. The previous valid account and protected token should remain connected.
+4. Start Reconnect again and deny access. The previous valid account and protected token should remain unchanged.
+5. Select **Confirm removing locally stored Google Drive authentication**, then choose **Disconnect**.
+6. Confirm the App shows Not connected after removing the local protected token. The saved profile, root-folder metadata, local backups, sync history, and Drive files must remain.
+7. Restart the App and confirm that profile remains disconnected until Connect is explicitly selected.
+8. Connect again, then remove the application's access from the test account's Google Account settings.
+9. Restart the App or select the profile so silent restoration runs. Confirm it reports that authorization expired or was revoked, does not open a browser, removes the invalid local token when possible, and offers Reconnect.
+10. Throughout the test, confirm Google Drive preview/execution stays disabled and no folder, upload, or download operation occurs.
+
+Ordinary **Disconnect** is local-only and works offline. It does not call Google's token-revocation endpoint, revoke the grant in Google Account settings, delete the Google Account, or delete Drive files. Remote programmatic grant revocation is outside Milestone K.
+
 ## Handle downloaded credential files
 
 If Google offers a downloaded OAuth client JSON:
