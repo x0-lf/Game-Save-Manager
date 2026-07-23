@@ -81,14 +81,34 @@ internal sealed class StubGoogleDriveOAuthService : IGoogleDriveOAuthService
             ErrorCode: GoogleDriveOAuthErrorCodes.Failed,
             Message: "Google Drive authentication is unavailable in this test.");
 
+    public GoogleDriveAuthenticationResult ReconnectResult { get; set; } =
+        new(GoogleDriveAuthenticationStatus.Failed,
+            ErrorCode: GoogleDriveOAuthErrorCodes.Failed,
+            Message: "Google Drive reauthentication is unavailable in this test.");
+
+    public GoogleDriveDisconnectionResult DisconnectResult { get; set; } =
+        new(GoogleDriveDisconnectionStatus.AlreadyDisconnected,
+            LocalAuthenticationRemoved: false,
+            ProfilePreserved: true,
+            AccountMetadataCleared: true,
+            Message: "Google Drive is already disconnected.");
+
     public int ConnectCalls { get; private set; }
     public int RestoreCalls { get; private set; }
+    public int ReconnectCalls { get; private set; }
+    public int DisconnectCalls { get; private set; }
 
     public Func<Guid, CancellationToken, Task<GoogleDriveAuthenticationResult>>?
         ConnectHandler { get; set; }
 
     public Func<Guid, CancellationToken, Task<GoogleDriveAuthenticationResult>>?
         RestoreHandler { get; set; }
+
+    public Func<Guid, CancellationToken, Task<GoogleDriveAuthenticationResult>>?
+        ReconnectHandler { get; set; }
+
+    public Func<Guid, CancellationToken, Task<GoogleDriveDisconnectionResult>>?
+        DisconnectHandler { get; set; }
 
     public GoogleDriveOAuthClientConfigurationState GetClientConfigurationState() =>
         ConfigurationState;
@@ -113,6 +133,28 @@ internal sealed class StubGoogleDriveOAuthService : IGoogleDriveOAuthService
         return RestoreHandler is null
             ? RestoreResult
             : await RestoreHandler(remoteProfileId, cancellationToken);
+    }
+
+    public async Task<GoogleDriveAuthenticationResult> ReconnectAsync(
+        Guid remoteProfileId,
+        CancellationToken cancellationToken = default)
+    {
+        ReconnectCalls++;
+        cancellationToken.ThrowIfCancellationRequested();
+        return ReconnectHandler is null
+            ? ReconnectResult
+            : await ReconnectHandler(remoteProfileId, cancellationToken);
+    }
+
+    public async Task<GoogleDriveDisconnectionResult> DisconnectAsync(
+        Guid remoteProfileId,
+        CancellationToken cancellationToken = default)
+    {
+        DisconnectCalls++;
+        cancellationToken.ThrowIfCancellationRequested();
+        return DisconnectHandler is null
+            ? DisconnectResult
+            : await DisconnectHandler(remoteProfileId, cancellationToken);
     }
 }
 

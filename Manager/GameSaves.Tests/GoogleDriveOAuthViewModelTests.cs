@@ -197,6 +197,215 @@ public sealed class GoogleDriveOAuthViewModelTests
     }
 
     [Fact]
+    public async Task ConnectedProfile_ShowsReconnectAndDisconnectButNeverEnablesSync()
+    {
+        var repository = new InMemorySyncRemoteProfileRepository();
+        Guid id = Guid.Parse("77777777-aaaa-bbbb-cccc-777777777777");
+        repository.Create(GoogleProfile(
+            id,
+            "Drive profile",
+            "Example User",
+            "user@example.invalid"));
+        var oauth = AvailableOAuth();
+        oauth.RestoreResult = ConnectedResult(id, "Example User", "user@example.invalid");
+        SyncViewModel viewModel = CreateViewModel(repository, oauth, id);
+
+        await viewModel.GoogleAuthenticationInitializationTask;
+
+        Assert.Equal(GoogleDriveConnectionStatus.Connected, viewModel.GoogleDriveConnectionStatus);
+        Assert.Equal("Account:", viewModel.GoogleDriveAccountLabel);
+        Assert.Equal("Example User", viewModel.GoogleDriveAccountDisplayText);
+        Assert.True(viewModel.CanShowReconnectGoogleDrive);
+        Assert.True(viewModel.CanReconnectGoogleDrive);
+        Assert.True(viewModel.CanShowDisconnectGoogleDrive);
+        Assert.False(viewModel.CanDisconnectGoogleDrive);
+        Assert.False(viewModel.CanShowConnectGoogleDrive);
+        Assert.False(viewModel.CanUseGoogleDriveForSync);
+        Assert.False(viewModel.CanPreviewSync);
+    }
+
+    [Fact]
+    public async Task CancelledReconnect_PreservesPreviousConnectedUiState()
+    {
+        var repository = new InMemorySyncRemoteProfileRepository();
+        Guid id = Guid.Parse("88888888-aaaa-bbbb-cccc-888888888888");
+        repository.Create(GoogleProfile(
+            id,
+            "Drive profile",
+            "Previous Account",
+            "previous@example.invalid"));
+        var oauth = AvailableOAuth();
+        oauth.RestoreResult = ConnectedResult(
+            id,
+            "Previous Account",
+            "previous@example.invalid");
+        oauth.ReconnectResult = new GoogleDriveAuthenticationResult(
+            GoogleDriveAuthenticationStatus.Cancelled,
+            ErrorCode: GoogleDriveOAuthErrorCodes.Cancelled,
+            Message: "Google Drive sign-in was cancelled. No backup data was changed.");
+        SyncViewModel viewModel = CreateViewModel(repository, oauth, id);
+        await viewModel.GoogleAuthenticationInitializationTask;
+
+        await viewModel.ReconnectGoogleDriveCommand.ExecuteAsync(null);
+
+        Assert.Equal(1, oauth.ReconnectCalls);
+        Assert.Equal(GoogleDriveConnectionStatus.Connected, viewModel.GoogleDriveConnectionStatus);
+        Assert.Equal("Previous Account", viewModel.GoogleDriveAccountDisplayName);
+        Assert.Equal("previous@example.invalid", viewModel.GoogleDriveAccountEmail);
+        Assert.True(viewModel.HasStoredAuthentication);
+    }
+
+    [Fact]
+    public async Task RevokedState_ShowsPreviousAccountAndCancelledReconnectKeepsReauthenticationState()
+    {
+        var repository = new InMemorySyncRemoteProfileRepository();
+        Guid id = Guid.Parse("99999999-aaaa-bbbb-cccc-999999999999");
+        repository.Create(GoogleProfile(
+            id,
+            "Drive profile",
+            "Previous Account",
+            "previous@example.invalid"));
+        var oauth = AvailableOAuth();
+        oauth.RestoreResult = new GoogleDriveAuthenticationResult(
+            GoogleDriveAuthenticationStatus.AuthorizationRevoked,
+            new GoogleDriveConnectionSettings(
+                id,
+                "Previous Account",
+                "previous@example.invalid",
+                null,
+                null,
+                GoogleDriveAuthorizationScopes.DriveFile,
+                GoogleDriveConnectionStatus.ReauthenticationRequired,
+                hasStoredToken: false),
+            GoogleDriveOAuthErrorCodes.AuthorizationRevoked,
+            "Google Drive authorization is no longer valid. Reconnect the account to continue.");
+        oauth.ReconnectResult = new GoogleDriveAuthenticationResult(
+            GoogleDriveAuthenticationStatus.Cancelled,
+            ErrorCode: GoogleDriveOAuthErrorCodes.Cancelled,
+            Message: "Google Drive sign-in was cancelled. No backup data was changed.");
+        SyncViewModel viewModel = CreateViewModel(repository, oauth, id);
+        await viewModel.GoogleAuthenticationInitializationTask;
+
+        Assert.Equal("Previously connected account:", viewModel.GoogleDriveAccountLabel);
+        Assert.Equal("Authorization expired or revoked", viewModel.GoogleDriveStatusDisplayText);
+        Assert.True(viewModel.CanShowReconnectGoogleDrive);
+
+        await viewModel.ReconnectGoogleDriveCommand.ExecuteAsync(null);
+
+        Assert.Equal(
+            GoogleDriveConnectionStatus.ReauthenticationRequired,
+            viewModel.GoogleDriveConnectionStatus);
+        Assert.Equal("Previous Account", viewModel.GoogleDriveAccountDisplayName);
+        Assert.False(viewModel.CanUseGoogleDriveForSync);
+    }
+
+    [Fact]
+    public async Task CorruptedStoredAuthentication_RemainsExplicitlyRemovable()
+    {
+        var repository = new InMemorySyncRemoteProfileRepository();
+        Guid id = Guid.Parse("dddddddd-1111-2222-3333-444444444444");
+        repository.Create(GoogleProfile(id, "Drive profile", null, null));
+        var oauth = AvailableOAuth();
+        oauth.RestoreResult = new GoogleDriveAuthenticationResult(
+            GoogleDriveAuthenticationStatus.TokenCorrupted,
+            ErrorCode: GoogleDriveOAuthErrorCodes.TokenCorrupted,
+            Message: "Stored Google Drive authentication is unreadable.");
+        SyncViewModel viewModel = CreateViewModel(repository, oauth, id);
+
+        await viewModel.GoogleAuthenticationInitializationTask;
+
+        Assert.Equal(
+            GoogleDriveConnectionStatus.ReauthenticationRequired,
+            viewModel.GoogleDriveConnectionStatus);
+        Assert.True(viewModel.HasStoredAuthentication);
+        Assert.True(viewModel.CanShowDisconnectGoogleDrive);
+        Assert.True(viewModel.CanShowReconnectGoogleDrive);
+        Assert.False(viewModel.CanPreviewSync);
+    }
+
+    [Fact]
+    public async Task Disconnect_RequiresConfirmationThenClearsRuntimeAccountAndKeepsProfile()
+    {
+        var repository = new InMemorySyncRemoteProfileRepository();
+        Guid id = Guid.Parse("aaaaaaaa-1111-2222-3333-444444444444");
+        repository.Create(GoogleProfile(
+            id,
+            "Drive profile",
+            "Example User",
+            "user@example.invalid"));
+        var oauth = AvailableOAuth();
+        oauth.RestoreResult = ConnectedResult(id, "Example User", "user@example.invalid");
+        oauth.DisconnectResult = new GoogleDriveDisconnectionResult(
+            GoogleDriveDisconnectionStatus.Disconnected,
+            LocalAuthenticationRemoved: true,
+            ProfilePreserved: true,
+            AccountMetadataCleared: true,
+            Message: "Google Drive was disconnected from this installation. Locally stored authentication was removed. The saved profile, backup data, and Google Drive files were not deleted.");
+        SyncViewModel viewModel = CreateViewModel(repository, oauth, id);
+        await viewModel.GoogleAuthenticationInitializationTask;
+
+        await viewModel.DisconnectGoogleDriveCommand.ExecuteAsync(null);
+        Assert.Equal(0, oauth.DisconnectCalls);
+        Assert.Contains("Confirm", viewModel.StatusMessage);
+
+        viewModel.ConfirmDisconnectGoogleDrive = true;
+        Assert.True(viewModel.CanDisconnectGoogleDrive);
+        await viewModel.DisconnectGoogleDriveCommand.ExecuteAsync(null);
+
+        Assert.Equal(1, oauth.DisconnectCalls);
+        Assert.False(viewModel.ConfirmDisconnectGoogleDrive);
+        Assert.False(viewModel.HasStoredAuthentication);
+        Assert.Equal(GoogleDriveConnectionStatus.Disconnected, viewModel.GoogleDriveConnectionStatus);
+        Assert.Equal("Not connected", viewModel.GoogleDriveAccountDisplayText);
+        Assert.Equal("Not available", viewModel.GoogleDriveEmailDisplayText);
+        Assert.NotNull(repository.GetById(id));
+        Assert.False(viewModel.CanUseGoogleDriveForSync);
+    }
+
+    [Fact]
+    public async Task ProfileChange_ResetsDisconnectConfirmationAndIgnoresLateReconnectResult()
+    {
+        var repository = new InMemorySyncRemoteProfileRepository();
+        Guid firstId = Guid.Parse("bbbbbbbb-1111-2222-3333-444444444444");
+        Guid secondId = Guid.Parse("cccccccc-1111-2222-3333-444444444444");
+        SyncRemoteProfile first = repository.Create(GoogleProfile(
+            firstId,
+            "First Drive",
+            "First Account",
+            "first@example.invalid"));
+        SyncRemoteProfile second = repository.Create(GoogleProfile(
+            secondId,
+            "Second Drive",
+            "Second Account",
+            "second@example.invalid"));
+        var reconnect = new TaskCompletionSource<GoogleDriveAuthenticationResult>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var oauth = AvailableOAuth();
+        oauth.RestoreResult = ConnectedResult(
+            firstId,
+            "First Account",
+            "first@example.invalid");
+        oauth.ReconnectHandler = (_, _) => reconnect.Task;
+        SyncViewModel viewModel = CreateViewModel(repository, oauth, first.Id);
+        await viewModel.GoogleAuthenticationInitializationTask;
+        viewModel.ConfirmDisconnectGoogleDrive = true;
+
+        Task reconnectTask = viewModel.ReconnectGoogleDriveCommand.ExecuteAsync(null);
+        viewModel.SelectedRemoteProfile = second;
+        await viewModel.GoogleAuthenticationInitializationTask;
+        reconnect.SetResult(ConnectedResult(
+            firstId,
+            "Stale Account",
+            "stale@example.invalid"));
+        await reconnectTask;
+
+        Assert.False(viewModel.ConfirmDisconnectGoogleDrive);
+        Assert.Equal(secondId, viewModel.SelectedRemoteProfile!.Id);
+        Assert.Equal("Second Account", viewModel.GoogleDriveAccountDisplayName);
+        Assert.NotEqual("Stale Account", viewModel.GoogleDriveAccountDisplayName);
+    }
+
+    [Fact]
     public void InvalidSavedGoogleSettings_DisableConnect()
     {
         var repository = new InMemorySyncRemoteProfileRepository();
@@ -222,6 +431,23 @@ public sealed class GoogleDriveOAuthViewModelTests
             GoogleDriveAuthenticationStatus.NoStoredAuthentication,
             Message: "No stored Google Drive authentication is available.")
     };
+
+    private static GoogleDriveAuthenticationResult ConnectedResult(
+        Guid profileId,
+        string accountName,
+        string email) =>
+        new(
+            GoogleDriveAuthenticationStatus.Connected,
+            new GoogleDriveConnectionSettings(
+                profileId,
+                accountName,
+                email,
+                null,
+                null,
+                GoogleDriveAuthorizationScopes.DriveFile,
+                GoogleDriveConnectionStatus.Connected,
+                hasStoredToken: true),
+            Message: "Google Drive account connected. Backup synchronization is not available yet.");
 
     private static SyncViewModel CreateViewModel(
         InMemorySyncRemoteProfileRepository repository,

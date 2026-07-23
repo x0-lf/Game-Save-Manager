@@ -348,6 +348,7 @@ public sealed class GoogleDriveOAuthTests
         var authorizer = new FakeAuthorizer();
         var service = new GoogleDriveOAuthService(
             repository,
+            new InMemorySecretStore(),
             new FakeConfigurationProvider(null),
             new GoogleSecretDataStoreFactory(new InMemorySecretStore()),
             authorizer,
@@ -475,6 +476,7 @@ public sealed class GoogleDriveOAuthTests
         IGoogleDriveAccountReader accountReader) =>
         new(
             repository,
+            secrets,
             new FakeConfigurationProvider(
                 new GoogleOAuthClientConfiguration(
                     "1234567890-example.apps.googleusercontent.com")),
