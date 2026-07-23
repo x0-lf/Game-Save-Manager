@@ -32,6 +32,19 @@ namespace GameSaves.App.ViewModels
         private bool _suppressProfileOptionSelection;
         private CancellationTokenSource? _googleAuthenticationCancellation;
         private long _googleAuthenticationGeneration;
+        private bool _googleDriveInteractiveOperation;
+
+        private enum GoogleDriveInteractiveOperation
+        {
+            Connect,
+            Reconnect
+        }
+
+        private sealed record GoogleDriveUiSnapshot(
+            GoogleDriveConnectionStatus Status,
+            string? AccountDisplayName,
+            string? AccountEmail,
+            bool HasStoredAuthentication);
 
         [ObservableProperty]
         private bool isLoading;
@@ -64,6 +77,12 @@ namespace GameSaves.App.ViewModels
         [NotifyPropertyChangedFor(nameof(ProviderCapabilitySummary))]
         [NotifyPropertyChangedFor(nameof(CanPreviewSync))]
         [NotifyPropertyChangedFor(nameof(CanConnectGoogleDrive))]
+        [NotifyPropertyChangedFor(nameof(CanReconnectGoogleDrive))]
+        [NotifyPropertyChangedFor(nameof(CanDisconnectGoogleDrive))]
+        [NotifyPropertyChangedFor(nameof(CanShowConnectGoogleDrive))]
+        [NotifyPropertyChangedFor(nameof(CanShowReconnectGoogleDrive))]
+        [NotifyPropertyChangedFor(nameof(CanShowDisconnectGoogleDrive))]
+        [NotifyPropertyChangedFor(nameof(CanUseGoogleDriveForSync))]
         private SyncProviderKind selectedProviderKind = SyncProviderKind.LocalFolder;
 
         [ObservableProperty]
@@ -149,6 +168,11 @@ namespace GameSaves.App.ViewModels
 
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(CanConnectGoogleDrive))]
+        [NotifyPropertyChangedFor(nameof(CanReconnectGoogleDrive))]
+        [NotifyPropertyChangedFor(nameof(CanDisconnectGoogleDrive))]
+        [NotifyPropertyChangedFor(nameof(CanShowConnectGoogleDrive))]
+        [NotifyPropertyChangedFor(nameof(CanShowReconnectGoogleDrive))]
+        [NotifyPropertyChangedFor(nameof(CanShowDisconnectGoogleDrive))]
         private SyncRemoteProfile? selectedRemoteProfile;
 
         [ObservableProperty]
@@ -164,24 +188,62 @@ namespace GameSaves.App.ViewModels
         private bool confirmDeleteRemoteProfile;
 
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(CanConnectGoogleDrive))]
+        [NotifyPropertyChangedFor(nameof(CanReconnectGoogleDrive))]
+        [NotifyPropertyChangedFor(nameof(CanShowConnectGoogleDrive))]
+        [NotifyPropertyChangedFor(nameof(CanShowReconnectGoogleDrive))]
+        [NotifyPropertyChangedFor(nameof(CanDisconnectGoogleDrive))]
+        [NotifyPropertyChangedFor(nameof(CanShowDisconnectGoogleDrive))]
+        [NotifyPropertyChangedFor(nameof(CanUseGoogleDriveForSync))]
         private bool hasStoredAuthentication;
 
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(CanConnectGoogleDrive))]
+        [NotifyPropertyChangedFor(nameof(CanReconnectGoogleDrive))]
+        [NotifyPropertyChangedFor(nameof(CanDisconnectGoogleDrive))]
         [NotifyPropertyChangedFor(nameof(CanCancelGoogleDriveConnection))]
         private bool isGoogleDriveConnecting;
 
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(GoogleDriveAccountDisplayText))]
+        [NotifyPropertyChangedFor(nameof(GoogleDriveEmailDisplayText))]
+        [NotifyPropertyChangedFor(nameof(GoogleDriveAccountLabel))]
+        [NotifyPropertyChangedFor(nameof(CanConnectGoogleDrive))]
+        [NotifyPropertyChangedFor(nameof(CanReconnectGoogleDrive))]
+        [NotifyPropertyChangedFor(nameof(CanShowConnectGoogleDrive))]
+        [NotifyPropertyChangedFor(nameof(CanShowReconnectGoogleDrive))]
+        [NotifyPropertyChangedFor(nameof(CanShowDisconnectGoogleDrive))]
         private string? googleDriveAccountDisplayName;
 
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(GoogleDriveAccountDisplayText))]
+        [NotifyPropertyChangedFor(nameof(GoogleDriveEmailDisplayText))]
+        [NotifyPropertyChangedFor(nameof(GoogleDriveAccountLabel))]
+        [NotifyPropertyChangedFor(nameof(CanConnectGoogleDrive))]
+        [NotifyPropertyChangedFor(nameof(CanReconnectGoogleDrive))]
+        [NotifyPropertyChangedFor(nameof(CanShowConnectGoogleDrive))]
+        [NotifyPropertyChangedFor(nameof(CanShowReconnectGoogleDrive))]
+        [NotifyPropertyChangedFor(nameof(CanShowDisconnectGoogleDrive))]
         private string? googleDriveAccountEmail;
 
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(CanConnectGoogleDrive))]
+        [NotifyPropertyChangedFor(nameof(CanReconnectGoogleDrive))]
+        [NotifyPropertyChangedFor(nameof(CanDisconnectGoogleDrive))]
+        [NotifyPropertyChangedFor(nameof(CanShowConnectGoogleDrive))]
+        [NotifyPropertyChangedFor(nameof(CanShowReconnectGoogleDrive))]
+        [NotifyPropertyChangedFor(nameof(CanShowDisconnectGoogleDrive))]
+        [NotifyPropertyChangedFor(nameof(CanUseGoogleDriveForSync))]
+        [NotifyPropertyChangedFor(nameof(GoogleDriveAccountDisplayText))]
+        [NotifyPropertyChangedFor(nameof(GoogleDriveEmailDisplayText))]
+        [NotifyPropertyChangedFor(nameof(GoogleDriveAccountLabel))]
+        [NotifyPropertyChangedFor(nameof(GoogleDriveStatusDisplayText))]
         private GoogleDriveConnectionStatus googleDriveConnectionStatus =
             GoogleDriveConnectionStatus.NotConfigured;
+
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(CanDisconnectGoogleDrive))]
+        private bool confirmDisconnectGoogleDrive;
 
         [ObservableProperty]
         private string googleDriveConnectionMessage =
@@ -340,12 +402,38 @@ namespace GameSaves.App.ViewModels
             _googleDriveOAuthService.GetClientConfigurationState().IsAvailable;
 
         public string GoogleDriveAccountDisplayText =>
-            string.IsNullOrWhiteSpace(GoogleDriveAccountDisplayName)
+            GoogleDriveConnectionStatus == GoogleDriveConnectionStatus.Disconnected ||
+            (string.IsNullOrWhiteSpace(GoogleDriveAccountDisplayName) &&
+             string.IsNullOrWhiteSpace(GoogleDriveAccountEmail))
                 ? "Not connected"
-                : GoogleDriveAccountDisplayName;
+                : GoogleDriveAccountDisplayName ?? GoogleDriveAccountEmail!;
 
-        public bool CanConnectGoogleDrive =>
-            IsGoogleDriveSelected &&
+        public string GoogleDriveEmailDisplayText =>
+            GoogleDriveConnectionStatus == GoogleDriveConnectionStatus.Disconnected ||
+            string.IsNullOrWhiteSpace(GoogleDriveAccountEmail)
+                ? "Not available"
+                : GoogleDriveAccountEmail;
+
+        public string GoogleDriveAccountLabel =>
+            GoogleDriveConnectionStatus == GoogleDriveConnectionStatus.Connected
+                ? "Account:"
+                : (GoogleDriveConnectionStatus is
+                       GoogleDriveConnectionStatus.ReauthenticationRequired or
+                       GoogleDriveConnectionStatus.StoredAuthenticationAvailable) &&
+                  (GoogleDriveAccountDisplayName is not null || GoogleDriveAccountEmail is not null)
+                    ? "Previously connected account:"
+                    : "Account:";
+
+        public string GoogleDriveStatusDisplayText => GoogleDriveConnectionStatus switch
+        {
+            GoogleDriveConnectionStatus.ReauthenticationRequired =>
+                "Authorization expired or revoked",
+            GoogleDriveConnectionStatus.StoredAuthenticationAvailable =>
+                "Checking stored authentication",
+            _ => GoogleDriveConnectionStatus.ToString()
+        };
+
+        private bool HasUsableGoogleDriveProfile =>
             SelectedRemoteProfile is
             {
                 ProviderKind: SyncProviderKind.GoogleDrive,
@@ -355,13 +443,65 @@ namespace GameSaves.App.ViewModels
                     SchemaVersion: GoogleDriveSyncRemoteSettings.CurrentSchemaVersion,
                     RequestedScope: GoogleDriveAuthorizationScopes.DriveFile
                 }
-            } &&
+            };
+
+        public bool CanShowConnectGoogleDrive =>
+            IsGoogleDriveSelected &&
+            HasUsableGoogleDriveProfile &&
+            (GoogleDriveConnectionStatus is GoogleDriveConnectionStatus.Disconnected or
+                GoogleDriveConnectionStatus.Failed) &&
+            !HasStoredAuthentication &&
+            GoogleDriveAccountDisplayName is null &&
+            GoogleDriveAccountEmail is null;
+
+        public bool CanConnectGoogleDrive =>
+            IsGoogleDriveSelected &&
+            HasUsableGoogleDriveProfile &&
+            CanShowConnectGoogleDrive &&
             !IsGoogleDriveConnecting &&
-            IsGoogleOAuthClientConfigurationAvailable &&
-            GoogleDriveConnectionStatus != GoogleDriveConnectionStatus.Connected;
+            IsGoogleOAuthClientConfigurationAvailable;
+
+        public bool CanShowReconnectGoogleDrive =>
+            IsGoogleDriveSelected &&
+            HasUsableGoogleDriveProfile &&
+            ((GoogleDriveConnectionStatus is GoogleDriveConnectionStatus.Connected or
+                  GoogleDriveConnectionStatus.ReauthenticationRequired) ||
+             (GoogleDriveConnectionStatus == GoogleDriveConnectionStatus.Failed &&
+              (HasStoredAuthentication ||
+               GoogleDriveAccountDisplayName is not null ||
+               GoogleDriveAccountEmail is not null)));
+
+        public bool CanReconnectGoogleDrive =>
+            CanShowReconnectGoogleDrive &&
+            !IsGoogleDriveConnecting &&
+            IsGoogleOAuthClientConfigurationAvailable;
+
+        public bool CanShowDisconnectGoogleDrive =>
+            IsGoogleDriveSelected &&
+            HasUsableGoogleDriveProfile &&
+            (HasStoredAuthentication ||
+             GoogleDriveConnectionStatus is
+                 GoogleDriveConnectionStatus.Connected or
+                 GoogleDriveConnectionStatus.ReauthenticationRequired or
+                 GoogleDriveConnectionStatus.StoredAuthenticationAvailable ||
+             GoogleDriveAccountDisplayName is not null ||
+             GoogleDriveAccountEmail is not null);
+
+        public bool CanDisconnectGoogleDrive =>
+            CanShowDisconnectGoogleDrive &&
+            !IsGoogleDriveConnecting &&
+            ConfirmDisconnectGoogleDrive;
 
         public bool CanCancelGoogleDriveConnection =>
-            IsGoogleDriveSelected && IsGoogleDriveConnecting;
+            IsGoogleDriveSelected &&
+            IsGoogleDriveConnecting &&
+            _googleDriveInteractiveOperation;
+
+        public bool CanUseGoogleDriveForSync =>
+            IsGoogleDriveSelected &&
+            SelectedProviderDescriptor.IsImplemented &&
+            GoogleDriveConnectionStatus == GoogleDriveConnectionStatus.Connected &&
+            HasStoredAuthentication;
 
         public SyncViewModel(
             ISyncProviderFactory syncProviderFactory,
@@ -417,6 +557,7 @@ namespace GameSaves.App.ViewModels
         partial void OnSelectedProviderKindChanged(SyncProviderKind value)
         {
             CancelGoogleAuthentication();
+            ConfirmDisconnectGoogleDrive = false;
 
             if (value != SyncProviderKind.Sftp)
                 ClearSessionOnlySftpState();
@@ -473,6 +614,8 @@ namespace GameSaves.App.ViewModels
 
         partial void OnSelectedRemoteProfileChanged(SyncRemoteProfile? value)
         {
+            ConfirmDisconnectGoogleDrive = false;
+
             if (!_suppressProfileSelection && value is not null)
             {
                 SelectProfileOption(value.Id);
@@ -555,6 +698,7 @@ namespace GameSaves.App.ViewModels
         private void UseWithoutSavedProfile()
         {
             CancelGoogleAuthentication();
+            ConfirmDisconnectGoogleDrive = false;
             _suppressProfileSelection = true;
             SelectedRemoteProfile = null;
             _suppressProfileSelection = false;
@@ -585,6 +729,7 @@ namespace GameSaves.App.ViewModels
             bool persistSelection)
         {
             CancelGoogleAuthentication();
+            ConfirmDisconnectGoogleDrive = false;
             HasStoredAuthentication = false;
             _applyingProfile = true;
 
@@ -670,6 +815,7 @@ namespace GameSaves.App.ViewModels
         private void NewRemoteProfile()
         {
             CancelGoogleAuthentication();
+            ConfirmDisconnectGoogleDrive = false;
             _suppressProfileSelection = true;
             SelectedRemoteProfile = null;
             _suppressProfileSelection = false;
@@ -929,7 +1075,15 @@ namespace GameSaves.App.ViewModels
         }
 
         [RelayCommand]
-        private async Task ConnectGoogleDriveAsync()
+        private Task ConnectGoogleDriveAsync() =>
+            RunGoogleInteractiveAuthenticationAsync(GoogleDriveInteractiveOperation.Connect);
+
+        [RelayCommand]
+        private Task ReconnectGoogleDriveAsync() =>
+            RunGoogleInteractiveAuthenticationAsync(GoogleDriveInteractiveOperation.Reconnect);
+
+        private async Task RunGoogleInteractiveAuthenticationAsync(
+            GoogleDriveInteractiveOperation operation)
         {
             if (!IsGoogleDriveSelected ||
                 SelectedRemoteProfile is not { ProviderKind: SyncProviderKind.GoogleDrive } profile)
@@ -956,23 +1110,42 @@ namespace GameSaves.App.ViewModels
             if (IsGoogleDriveConnecting)
                 return;
 
+            var previousState = new GoogleDriveUiSnapshot(
+                GoogleDriveConnectionStatus,
+                GoogleDriveAccountDisplayName,
+                GoogleDriveAccountEmail,
+                HasStoredAuthentication);
+
             CancelGoogleAuthentication();
             long generation = ++_googleAuthenticationGeneration;
             var cancellation = new CancellationTokenSource();
             _googleAuthenticationCancellation = cancellation;
+            _googleDriveInteractiveOperation = true;
             IsGoogleDriveConnecting = true;
+            OnPropertyChanged(nameof(CanCancelGoogleDriveConnection));
             GoogleDriveConnectionStatus = GoogleDriveConnectionStatus.Connecting;
             GoogleDriveConnectionMessage =
-                "Waiting for Google Drive authorization in the system browser…";
+                operation == GoogleDriveInteractiveOperation.Reconnect
+                    ? "Waiting for Google Drive reauthorization in the system browser…"
+                    : "Waiting for Google Drive authorization in the system browser…";
             StatusMessage = GoogleDriveConnectionMessage;
 
             try
             {
                 GoogleDriveAuthenticationResult result =
-                    await _googleDriveOAuthService.ConnectAsync(
-                        profile.Id,
-                        cancellation.Token);
-                ApplyGoogleAuthenticationResult(profile.Id, generation, result);
+                    operation == GoogleDriveInteractiveOperation.Reconnect
+                        ? await _googleDriveOAuthService.ReconnectAsync(
+                            profile.Id,
+                            cancellation.Token)
+                        : await _googleDriveOAuthService.ConnectAsync(
+                            profile.Id,
+                            cancellation.Token);
+                ApplyGoogleAuthenticationResult(
+                    profile.Id,
+                    generation,
+                    result,
+                    operation,
+                    previousState);
             }
             catch (OperationCanceledException)
             {
@@ -982,7 +1155,9 @@ namespace GameSaves.App.ViewModels
                     new GoogleDriveAuthenticationResult(
                         GoogleDriveAuthenticationStatus.Cancelled,
                         ErrorCode: GoogleDriveOAuthErrorCodes.Cancelled,
-                        Message: "Google Drive sign-in was cancelled. No backup data was changed."));
+                        Message: "Google Drive sign-in was cancelled. No backup data was changed."),
+                    operation,
+                    previousState);
             }
             catch
             {
@@ -992,13 +1167,17 @@ namespace GameSaves.App.ViewModels
                     new GoogleDriveAuthenticationResult(
                         GoogleDriveAuthenticationStatus.Failed,
                         ErrorCode: GoogleDriveOAuthErrorCodes.Failed,
-                        Message: "Google Drive sign-in failed. Review the developer OAuth configuration and try again."));
+                        Message: "Google Drive sign-in failed. Review the developer OAuth configuration and try again."),
+                    operation,
+                    previousState);
             }
             finally
             {
                 if (generation == _googleAuthenticationGeneration)
                 {
                     IsGoogleDriveConnecting = false;
+                    _googleDriveInteractiveOperation = false;
+                    OnPropertyChanged(nameof(CanCancelGoogleDriveConnection));
                     _googleAuthenticationCancellation?.Dispose();
                     _googleAuthenticationCancellation = null;
                 }
@@ -1012,8 +1191,109 @@ namespace GameSaves.App.ViewModels
                 return;
 
             _googleAuthenticationCancellation?.Cancel();
+            ConfirmDisconnectGoogleDrive = false;
             GoogleDriveConnectionMessage =
                 "Cancelling Google Drive sign-in…";
+        }
+
+        [RelayCommand]
+        private async Task DisconnectGoogleDriveAsync()
+        {
+            if (!IsGoogleDriveSelected ||
+                SelectedRemoteProfile is not { ProviderKind: SyncProviderKind.GoogleDrive } profile)
+            {
+                StatusMessage = "Select a saved Google Drive profile before disconnecting.";
+                return;
+            }
+
+            if (!ConfirmDisconnectGoogleDrive)
+            {
+                StatusMessage =
+                    "Confirm removing locally stored Google Drive authentication first. The saved profile, backups, and Drive files will remain.";
+                return;
+            }
+
+            CancelGoogleAuthentication();
+            long generation = ++_googleAuthenticationGeneration;
+            var cancellation = new CancellationTokenSource();
+            _googleAuthenticationCancellation = cancellation;
+            _googleDriveInteractiveOperation = false;
+            IsGoogleDriveConnecting = true;
+            InvalidatePlan(force: true);
+            ClearSessionOnlySftpState();
+            GoogleDriveConnectionMessage = "Removing locally stored Google Drive authentication...";
+            StatusMessage = GoogleDriveConnectionMessage;
+
+            try
+            {
+                GoogleDriveDisconnectionResult result =
+                    await _googleDriveOAuthService.DisconnectAsync(
+                        profile.Id,
+                        cancellation.Token);
+
+                if (generation != _googleAuthenticationGeneration ||
+                    SelectedRemoteProfile?.Id != profile.Id ||
+                    !IsGoogleDriveSelected)
+                {
+                    return;
+                }
+
+                if (result.Succeeded)
+                {
+                    HasStoredAuthentication = false;
+                    GoogleDriveConnectionStatus = GoogleDriveConnectionStatus.Disconnected;
+                    GoogleDriveAccountDisplayName = null;
+                    GoogleDriveAccountEmail = null;
+                    ConfirmDisconnectGoogleDrive = false;
+                    RefreshProfileList(profile.Id);
+                }
+                else
+                {
+                    if (result.LocalAuthenticationRemoved)
+                        HasStoredAuthentication = false;
+
+                    GoogleDriveConnectionStatus = result.Status ==
+                        GoogleDriveDisconnectionStatus.SecretStoreUnavailable
+                            ? GoogleDriveConnectionStatus.Unavailable
+                            : GoogleDriveConnectionStatus.Failed;
+
+                    SyncRemoteProfile? current = _profileRepository.GetById(profile.Id);
+
+                    if (current is not null)
+                    {
+                        RefreshProfileList(current.Id);
+                        GoogleDriveAccountDisplayName = current.AccountDisplayName;
+                        GoogleDriveAccountEmail =
+                            (current.ProviderSettings as GoogleDriveSyncRemoteSettings)?.AccountEmail;
+                    }
+                }
+
+                GoogleDriveConnectionMessage = result.Message ?? result.Status.ToString();
+                StatusMessage = GoogleDriveConnectionMessage;
+            }
+            catch (OperationCanceledException)
+            {
+                GoogleDriveConnectionMessage =
+                    "Google Drive disconnect was cancelled. No backup data was changed.";
+                StatusMessage = GoogleDriveConnectionMessage;
+                ConfirmDisconnectGoogleDrive = false;
+            }
+            catch
+            {
+                GoogleDriveConnectionStatus = GoogleDriveConnectionStatus.Failed;
+                GoogleDriveConnectionMessage =
+                    "Locally stored Google Drive authentication could not be removed.";
+                StatusMessage = GoogleDriveConnectionMessage;
+            }
+            finally
+            {
+                if (generation == _googleAuthenticationGeneration)
+                {
+                    IsGoogleDriveConnecting = false;
+                    cancellation.Dispose();
+                    _googleAuthenticationCancellation = null;
+                }
+            }
         }
 
         private void BeginGoogleAuthenticationRestore(Guid profileId)
@@ -1022,6 +1302,7 @@ namespace GameSaves.App.ViewModels
             long generation = ++_googleAuthenticationGeneration;
             var cancellation = new CancellationTokenSource();
             _googleAuthenticationCancellation = cancellation;
+            _googleDriveInteractiveOperation = false;
             IsGoogleDriveConnecting = true;
             GoogleDriveConnectionStatus =
                 GoogleDriveConnectionStatus.StoredAuthenticationAvailable;
@@ -1074,7 +1355,9 @@ namespace GameSaves.App.ViewModels
         private void ApplyGoogleAuthenticationResult(
             Guid profileId,
             long generation,
-            GoogleDriveAuthenticationResult result)
+            GoogleDriveAuthenticationResult result,
+            GoogleDriveInteractiveOperation? operation = null,
+            GoogleDriveUiSnapshot? previousState = null)
         {
             if (generation != _googleAuthenticationGeneration ||
                 SelectedRemoteProfile?.Id != profileId ||
@@ -1090,17 +1373,42 @@ namespace GameSaves.App.ViewModels
                 GoogleDriveAuthenticationStatus.NoStoredAuthentication =>
                     GoogleDriveConnectionStatus.Disconnected,
                 GoogleDriveAuthenticationStatus.ReauthenticationRequired or
-                GoogleDriveAuthenticationStatus.TokenCorrupted =>
+                GoogleDriveAuthenticationStatus.TokenCorrupted or
+                GoogleDriveAuthenticationStatus.AuthorizationRevoked =>
                     GoogleDriveConnectionStatus.ReauthenticationRequired,
                 GoogleDriveAuthenticationStatus.ClientConfigurationMissing or
                 GoogleDriveAuthenticationStatus.SecretStoreUnavailable or
                 GoogleDriveAuthenticationStatus.Unavailable =>
                     GoogleDriveConnectionStatus.Unavailable,
                 GoogleDriveAuthenticationStatus.Cancelled or
+                GoogleDriveAuthenticationStatus.AuthorizationDenied
+                    when operation == GoogleDriveInteractiveOperation.Reconnect &&
+                         previousState is not null => previousState.Status,
+                GoogleDriveAuthenticationStatus.Cancelled or
                 GoogleDriveAuthenticationStatus.AuthorizationDenied =>
                     GoogleDriveConnectionStatus.Disconnected,
+                GoogleDriveAuthenticationStatus.Failed or
+                GoogleDriveAuthenticationStatus.AccountLookupFailed or
+                GoogleDriveAuthenticationStatus.BrowserLaunchFailed or
+                GoogleDriveAuthenticationStatus.CallbackFailed
+                    when operation == GoogleDriveInteractiveOperation.Reconnect &&
+                         previousState is not null => previousState.Status,
                 _ => GoogleDriveConnectionStatus.Failed
             };
+
+            if (operation == GoogleDriveInteractiveOperation.Reconnect &&
+                previousState is not null &&
+                result.Status is (GoogleDriveAuthenticationStatus.Cancelled or
+                    GoogleDriveAuthenticationStatus.AuthorizationDenied or
+                    GoogleDriveAuthenticationStatus.Failed or
+                    GoogleDriveAuthenticationStatus.AccountLookupFailed or
+                    GoogleDriveAuthenticationStatus.BrowserLaunchFailed or
+                    GoogleDriveAuthenticationStatus.CallbackFailed))
+            {
+                GoogleDriveAccountDisplayName = previousState.AccountDisplayName;
+                GoogleDriveAccountEmail = previousState.AccountEmail;
+                HasStoredAuthentication = previousState.HasStoredAuthentication;
+            }
 
             if (result.ConnectionSettings is { } settings)
             {
@@ -1122,10 +1430,21 @@ namespace GameSaves.App.ViewModels
             {
                 HasStoredAuthentication = false;
             }
+            else if (result.Status is
+                     GoogleDriveAuthenticationStatus.ReauthenticationRequired or
+                     GoogleDriveAuthenticationStatus.TokenCorrupted)
+            {
+                // Both outcomes originate from an existing protected entry. It
+                // remains removable even though it cannot establish a session.
+                HasStoredAuthentication = true;
+            }
+            else if (result.Status == GoogleDriveAuthenticationStatus.AuthorizationRevoked)
+            {
+                HasStoredAuthentication = false;
+            }
 
             GoogleDriveConnectionMessage = result.Message ?? result.Status.ToString();
             StatusMessage = GoogleDriveConnectionMessage;
-            OnPropertyChanged(nameof(CanConnectGoogleDrive));
         }
 
         private void CancelGoogleAuthentication()
@@ -1134,7 +1453,9 @@ namespace GameSaves.App.ViewModels
             _googleAuthenticationCancellation?.Cancel();
             _googleAuthenticationCancellation?.Dispose();
             _googleAuthenticationCancellation = null;
+            _googleDriveInteractiveOperation = false;
             IsGoogleDriveConnecting = false;
+            OnPropertyChanged(nameof(CanCancelGoogleDriveConnection));
             GoogleAuthenticationInitializationTask = Task.CompletedTask;
         }
 

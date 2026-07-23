@@ -19,6 +19,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
         NetworkFailed,
         TokenExchangeFailed,
         RefreshFailed,
+        AuthorizationRevoked,
         Failed
     }
 
@@ -33,12 +34,20 @@ namespace GameSaves.Infrastructure.GoogleDrive
 
     internal sealed class GoogleAuthorizedCredential : IDisposable
     {
-        public GoogleAuthorizedCredential(UserCredential credential)
+        private readonly Func<CancellationToken, Task>? _commitToken;
+
+        public GoogleAuthorizedCredential(
+            UserCredential credential,
+            Func<CancellationToken, Task>? commitToken = null)
         {
             Credential = credential;
+            _commitToken = commitToken;
         }
 
         public UserCredential Credential { get; }
+
+        public Task CommitTokenAsync(CancellationToken cancellationToken = default) =>
+            _commitToken?.Invoke(cancellationToken) ?? Task.CompletedTask;
 
         public void Dispose()
         {
@@ -85,7 +94,9 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 var receiver = new LocalServerCodeReceiver(
                     ClosePage,
                     LocalServerCodeReceiver.CallbackUriChooserStrategy.ForceLoopbackIp);
-                var interactiveStore = new InteractiveAuthorizationDataStore(dataStore);
+                var interactiveStore = new StagedAuthorizationDataStore(
+                    dataStore,
+                    userKey);
                 UserCredential credential = await GoogleWebAuthorizationBroker.AuthorizeAsync(
                     initializer,
                     scopes,
@@ -95,7 +106,9 @@ namespace GameSaves.Infrastructure.GoogleDrive
                     interactiveStore,
                     receiver);
 
-                return new GoogleAuthorizedCredential(credential);
+                return new GoogleAuthorizedCredential(
+                    credential,
+                    interactiveStore.CommitAsync);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -209,6 +222,16 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 flow.Dispose();
                 throw;
             }
+            catch (TokenResponseException ex) when (
+                string.Equals(
+                    ex.Error?.Error,
+                    "invalid_grant",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                flow.Dispose();
+                throw new GoogleAuthorizationException(
+                    GoogleAuthorizationFailure.AuthorizationRevoked);
+            }
             catch
             {
                 flow.Dispose();
@@ -242,16 +265,62 @@ namespace GameSaves.Infrastructure.GoogleDrive
             }
         }
 
-        /// <summary>Forces Connect to open consent while preserving an old token if cancelled.</summary>
-        private sealed class InteractiveAuthorizationDataStore : IDataStore
+        /// <summary>
+        /// Forces interactive consent and stages the returned token until the
+        /// account has been validated. A cancelled or denied reconnect cannot
+        /// overwrite the previously protected token.
+        /// </summary>
+        private sealed class StagedAuthorizationDataStore : IDataStore
         {
             private readonly IDataStore _inner;
+            private readonly string _userKey;
+            private TokenResponse? _stagedToken;
 
-            public InteractiveAuthorizationDataStore(IDataStore inner) => _inner = inner;
+            public StagedAuthorizationDataStore(IDataStore inner, string userKey)
+            {
+                _inner = inner;
+                _userKey = userKey;
+            }
+
             public Task ClearAsync() => Task.CompletedTask;
             public Task DeleteAsync<T>(string key) => Task.CompletedTask;
             public Task<T?> GetAsync<T>(string key) => Task.FromResult<T?>(default);
-            public Task StoreAsync<T>(string key, T value) => _inner.StoreAsync(key, value);
+
+            public Task StoreAsync<T>(string key, T value)
+            {
+                if (value is not TokenResponse token ||
+                    !string.Equals(key, _userKey, StringComparison.Ordinal))
+                {
+                    throw new NotSupportedException(
+                        "Only the profile-scoped Google OAuth token can be staged.");
+                }
+
+                _stagedToken = Clone(token);
+                return Task.CompletedTask;
+            }
+
+            public async Task CommitAsync(CancellationToken cancellationToken)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (_stagedToken is null)
+                {
+                    throw new GoogleAuthorizationException(
+                        GoogleAuthorizationFailure.TokenExchangeFailed);
+                }
+
+                await _inner.StoreAsync(_userKey, Clone(_stagedToken));
+            }
+
+            private static TokenResponse Clone(TokenResponse token) => new()
+            {
+                AccessToken = token.AccessToken,
+                RefreshToken = token.RefreshToken,
+                TokenType = token.TokenType,
+                Scope = token.Scope,
+                ExpiresInSeconds = token.ExpiresInSeconds,
+                IssuedUtc = token.IssuedUtc
+            };
         }
 
         /// <summary>Google's refresh flow may delete rejected tokens; J keeps them for explicit K cleanup.</summary>

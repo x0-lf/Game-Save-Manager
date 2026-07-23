@@ -112,6 +112,7 @@ namespace GameSaves.Infrastructure.DependencyInjection
             services.AddSingleton<IGoogleDriveOAuthService>(provider =>
                 new GoogleDriveOAuthService(
                     provider.GetRequiredService<ISyncRemoteProfileRepository>(),
+                    provider.GetRequiredService<ISecretStore>(),
                     provider.GetRequiredService<IGoogleOAuthClientConfigurationProvider>(),
                     provider.GetRequiredService<IGoogleSecretDataStoreFactory>(),
                     provider.GetRequiredService<IGoogleInstalledAppAuthorizer>(),

@@ -18,6 +18,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
 
     internal enum GoogleDriveAccountReadFailure
     {
+        AuthorizationRevoked,
         Unavailable,
         Failed
     }
@@ -56,6 +57,11 @@ namespace GameSaves.Infrastructure.GoogleDrive
             {
                 throw;
             }
+            catch (GoogleApiException ex) when (IsConfirmedAuthenticationFailure(ex))
+            {
+                throw new GoogleDriveAccountReadException(
+                    GoogleDriveAccountReadFailure.AuthorizationRevoked);
+            }
             catch (GoogleApiException ex) when (
                 ex.HttpStatusCode is HttpStatusCode.RequestTimeout or
                     HttpStatusCode.TooManyRequests or
@@ -86,6 +92,19 @@ namespace GameSaves.Infrastructure.GoogleDrive
                     GoogleDriveAccountReadFailure.Failed);
 
             return new GoogleDriveAccountInfo(displayName, email);
+        }
+
+        private static bool IsConfirmedAuthenticationFailure(GoogleApiException exception)
+        {
+            if (exception.HttpStatusCode == HttpStatusCode.Unauthorized)
+                return true;
+
+            if (exception.HttpStatusCode != HttpStatusCode.Forbidden)
+                return false;
+
+            return exception.Error?.Errors?.Any(error =>
+                string.Equals(error.Reason, "authError", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(error.Reason, "invalidCredentials", StringComparison.OrdinalIgnoreCase)) == true;
         }
 
         private static string? Normalize(string? value, int maximumLength)

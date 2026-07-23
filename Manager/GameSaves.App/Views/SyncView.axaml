@@ -359,12 +359,12 @@
                                       RowDefinitions="Auto,Auto,Auto"
                                       ColumnSpacing="10"
                                       RowSpacing="3">
-                                    <TextBlock Grid.Row="0" Text="Account:" Foreground="{StaticResource MutedTextBrush}" />
+                                    <TextBlock Grid.Row="0" Text="{Binding GoogleDriveAccountLabel}" Foreground="{StaticResource MutedTextBrush}" />
                                     <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding GoogleDriveAccountDisplayText}" Foreground="{StaticResource SecondaryTextBrush}" />
                                     <TextBlock Grid.Row="1" Text="Email:" Foreground="{StaticResource MutedTextBrush}" />
-                                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding GoogleDriveAccountEmail}" Foreground="{StaticResource SecondaryTextBrush}" />
+                                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding GoogleDriveEmailDisplayText}" Foreground="{StaticResource SecondaryTextBrush}" />
                                     <TextBlock Grid.Row="2" Text="Status:" Foreground="{StaticResource MutedTextBrush}" />
-                                    <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding GoogleDriveConnectionStatus}" Foreground="{StaticResource AccentBrush}" />
+                                    <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding GoogleDriveStatusDisplayText}" Foreground="{StaticResource AccentBrush}" />
                                 </Grid>
 
                                 <TextBlock Text="Scope: Files created or opened by Game Save Manager (drive.file)"
@@ -376,12 +376,34 @@
                                     <Button Content="Connect Google Drive"
                                             Command="{Binding ConnectGoogleDriveCommand}"
                                             IsEnabled="{Binding CanConnectGoogleDrive}"
+                                            IsVisible="{Binding CanShowConnectGoogleDrive}"
+                                            Height="30" />
+                                    <Button Content="Reconnect"
+                                            Command="{Binding ReconnectGoogleDriveCommand}"
+                                            IsEnabled="{Binding CanReconnectGoogleDrive}"
+                                            IsVisible="{Binding CanShowReconnectGoogleDrive}"
+                                            Height="30" />
+                                    <Button Content="Disconnect"
+                                            Command="{Binding DisconnectGoogleDriveCommand}"
+                                            IsEnabled="{Binding CanDisconnectGoogleDrive}"
+                                            IsVisible="{Binding CanShowDisconnectGoogleDrive}"
                                             Height="30" />
                                     <Button Content="Cancel"
                                             Command="{Binding CancelGoogleDriveConnectionCommand}"
                                             IsVisible="{Binding CanCancelGoogleDriveConnection}"
                                             Height="30" />
                                 </StackPanel>
+
+                                <CheckBox Content="Confirm removing locally stored Google Drive authentication"
+                                          IsChecked="{Binding ConfirmDisconnectGoogleDrive}"
+                                          IsVisible="{Binding CanShowDisconnectGoogleDrive}"
+                                          ToolTip.Tip="The saved profile, local backups, remote Drive files, and Google Account grant remain. Connecting again will be required." />
+
+                                <TextBlock Text="Disconnect removes protected authentication from this installation only. It does not delete the Google account, revoke access in Google Account settings, or remove Drive files."
+                                           IsVisible="{Binding CanShowDisconnectGoogleDrive}"
+                                           Foreground="{StaticResource MutedTextBrush}"
+                                           FontSize="11"
+                                           TextWrapping="Wrap" />
 
                                 <TextBlock Text="{Binding GoogleDriveConnectionMessage}"
                                            Foreground="{StaticResource AccentBrush}"
