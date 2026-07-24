@@ -4,15 +4,17 @@ using GameSaves.App.Models;
 using GameSaves.Core.Transfers;
 using System;
 using System.Collections.ObjectModel;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace GameSaves.App.ViewModels
 {
-    public partial class TransferHistoryViewModel : ViewModelBase
+    public partial class TransferHistoryViewModel : ViewModelBase, IInitializableViewModel
     {
         private const int MaxRuns = 200;
 
         private readonly ITransferHistoryRepository _historyRepository;
+        private bool _initialized;
 
         [ObservableProperty]
         private bool isLoading;
@@ -30,6 +32,19 @@ namespace GameSaves.App.ViewModels
         public TransferHistoryViewModel(ITransferHistoryRepository historyRepository)
         {
             _historyRepository = historyRepository;
+        }
+
+        // Automatic startup load of the operation history. Reuses the manual
+        // Refresh path; history rows are read-only. Runs at most once, and a
+        // load failure is surfaced in status text rather than thrown.
+        public async Task InitializeAsync(CancellationToken cancellationToken = default)
+        {
+            if (_initialized)
+                return;
+
+            cancellationToken.ThrowIfCancellationRequested();
+            _initialized = true;
+            await RefreshRunsAsync();
         }
 
         partial void OnSelectedRunChanged(TransferRunRowViewModel? value)

@@ -5,17 +5,19 @@ using GameSaves.Core.Transfers;
 using System;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace GameSaves.App.ViewModels
 {
-    public partial class TransferPreviewViewModel : ViewModelBase
+    public partial class TransferPreviewViewModel : ViewModelBase, IInitializableViewModel
     {
         private readonly ITransferPreviewService _transferPreviewService;
         private readonly ProfilesViewModel _profilesViewModel;
         private readonly InstalledGamesViewModel _installedGamesViewModel;
         private readonly ISaveTransferService _saveTransferService;
         private TransferPreviewPlan? _lastPlan;
+        private bool _initialized;
 
         [ObservableProperty]
         private bool isLoading;
@@ -172,6 +174,19 @@ namespace GameSaves.App.ViewModels
             _saveTransferService = saveTransferService;
             _profilesViewModel = profilesViewModel;
             _installedGamesViewModel = installedGamesViewModel;
+        }
+
+        // Automatic startup load of the selectable inputs. Reuses the manual
+        // Refresh path, which itself reuses already-loaded profile/game data
+        // when present; no transfer is created or executed. Runs at most once.
+        public async Task InitializeAsync(CancellationToken cancellationToken = default)
+        {
+            if (_initialized)
+                return;
+
+            cancellationToken.ThrowIfCancellationRequested();
+            _initialized = true;
+            await RefreshInputsAsync();
         }
 
         [RelayCommand]

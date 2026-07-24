@@ -27,6 +27,21 @@ namespace GameSaves.App
             services.AddSingleton<TransferHistoryViewModel>();
             services.AddSingleton<SyncViewModel>();
 
+            // The Sync tab
+            // is intentionally absent - it manages its own connection, OAuth,
+            // and remote-profile state and must not be driven by startup loading.
+            services.AddSingleton<IStartupInitializer>(provider =>
+                new StartupInitializer(new IInitializableViewModel[]
+                {
+                    provider.GetRequiredService<MainWindowViewModel>(),
+                    provider.GetRequiredService<InstalledGamesViewModel>(),
+                    provider.GetRequiredService<ProfilesViewModel>(),
+                    provider.GetRequiredService<TransferPreviewViewModel>(),
+                    provider.GetRequiredService<ManualBackupViewModel>(),
+                    provider.GetRequiredService<BackupHistoryViewModel>(),
+                    provider.GetRequiredService<TransferHistoryViewModel>(),
+                }));
+
             return services.BuildServiceProvider();
         }
     }

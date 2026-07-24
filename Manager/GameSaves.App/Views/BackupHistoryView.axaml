@@ -525,7 +525,7 @@
                                            VerticalAlignment="Center" />
 
                                 <TextBox Text="{Binding OlderThanDaysText}"
-                                         Watermark="any age"
+                                         PlaceholderText="any age"
                                          Width="70"
                                          MinHeight="28" />
 

@@ -9,14 +9,16 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace GameSaves.App.ViewModels
 {
-    public partial class ProfilesViewModel : ViewModelBase
+    public partial class ProfilesViewModel : ViewModelBase, IInitializableViewModel
     {
         private readonly ISteamDiscoveryService _steamDiscoveryService;
         private readonly ISteamProfileDetector _steamProfileDetector;
+        private bool _initialized;
 
         [ObservableProperty]
         private bool isLoading;
@@ -75,6 +77,18 @@ namespace GameSaves.App.ViewModels
         {
             _steamDiscoveryService = steamDiscoveryService;
             _steamProfileDetector = steamProfileDetector;
+        }
+
+        // Automatic startup load. Reuses the manual Refresh path (including its
+        // safe default source/target selection), and runs at most once.
+        public async Task InitializeAsync(CancellationToken cancellationToken = default)
+        {
+            if (_initialized)
+                return;
+
+            cancellationToken.ThrowIfCancellationRequested();
+            _initialized = true;
+            await RefreshProfilesAsync();
         }
 
         [RelayCommand]

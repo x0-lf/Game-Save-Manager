@@ -232,7 +232,7 @@
 
                                 <TextBox Grid.Column="0"
                                          Text="{Binding RemoteRootPath}"
-                                         Watermark="Folder to sync backup runs with (NAS share, USB drive, cloud-synced folder)"
+                                         PlaceholderText="Folder to sync backup runs with (NAS share, USB drive, cloud-synced folder)"
                                          ToolTip.Tip="{Binding RemoteRootPath}"
                                          MinHeight="32" />
 
@@ -261,18 +261,18 @@
 
                                 <TextBox Grid.Column="0"
                                          Text="{Binding SftpHost}"
-                                         Watermark="Host name or IP address"
+                                         PlaceholderText="Host name or IP address"
                                          MinHeight="30" />
 
                                 <TextBox Grid.Column="1"
                                          Text="{Binding SftpPort}"
-                                         Watermark="22"
+                                         PlaceholderText="22"
                                          ToolTip.Tip="SSH port (default 22)"
                                          MinHeight="30" />
 
                                 <TextBox Grid.Column="2"
                                          Text="{Binding SftpUsername}"
-                                         Watermark="Username"
+                                         PlaceholderText="Username"
                                          MinHeight="30" />
                             </Grid>
 
@@ -291,7 +291,7 @@
 
                             <TextBox Text="{Binding SftpPassword}"
                                      PasswordChar="●"
-                                     Watermark="Password (kept in memory only, never stored)"
+                                     PlaceholderText="Password (kept in memory only, never stored)"
                                      IsVisible="{Binding SftpUsePassword}"
                                      MinHeight="30" />
 
@@ -302,7 +302,7 @@
 
                                     <TextBox Grid.Column="0"
                                              Text="{Binding SftpKeyFilePath}"
-                                             Watermark="Path to the private key file (e.g. C:\Users\you\.ssh\id_ed25519)"
+                                             PlaceholderText="Path to the private key file (e.g. C:\Users\you\.ssh\id_ed25519)"
                                              ToolTip.Tip="{Binding SftpKeyFilePath}"
                                              MinHeight="30" />
 
@@ -315,12 +315,12 @@
 
                                 <TextBox Text="{Binding SftpKeyPassphrase}"
                                          PasswordChar="●"
-                                         Watermark="Key passphrase, if any (kept in memory only, never stored)"
+                                         PlaceholderText="Key passphrase, if any (kept in memory only, never stored)"
                                          MinHeight="30" />
                             </StackPanel>
 
                             <TextBox Text="{Binding SftpRemotePath}"
-                                     Watermark="Remote folder path, e.g. /srv/gamesave-sync"
+                                     PlaceholderText="Remote folder path, e.g. /srv/gamesave-sync"
                                      MinHeight="30" />
 
                             <CheckBox Content="Trust this server's host key on first connect"

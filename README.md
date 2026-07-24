@@ -140,6 +140,18 @@ Run it:
 dotnet run --project Manager/GameSaves.App
 ```
 
+### Startup data loading
+
+When the app starts, its primary read-only data loads automatically in the
+background — the Dashboard, Installed Games, Profiles, Transfer Preview inputs,
+Manual Backup inputs, Backups, and History — so tabs are populated without
+pressing Refresh first. The window renders immediately and each tab fills in as
+its data arrives; a tab that fails to load shows a message and can be retried
+with its own Refresh button, which every tab still has. Startup loading is
+strictly read-only: it never starts a transfer, backup, restore, cleanup,
+authentication, folder creation, or synchronization. The Sync tab manages its
+own connection and account state and is not driven by startup loading.
+
 Tabs:
 
 | Tab                | What it does                                                                                       |

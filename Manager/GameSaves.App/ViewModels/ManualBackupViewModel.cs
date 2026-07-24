@@ -6,11 +6,12 @@ using GameSaves.Core.Transfers;
 using System;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace GameSaves.App.ViewModels
 {
-    public partial class ManualBackupViewModel : ViewModelBase
+    public partial class ManualBackupViewModel : ViewModelBase, IInitializableViewModel
     {
         private readonly IManualBackupService _manualBackupService;
         private readonly IBackupHistoryService _backupHistoryService;
@@ -21,6 +22,7 @@ namespace GameSaves.App.ViewModels
         private ManualBackupPlan? _lastPlan;
         private bool _presetsLoaded;
         private bool _applyingPreset;
+        private bool _initialized;
 
         [ObservableProperty]
         private bool isLoading;
@@ -306,6 +308,18 @@ namespace GameSaves.App.ViewModels
             _lastPlan = null;
             ClearPreview();
             StatusMessage = "Backup settings changed. Build a new backup preview.";
+        }
+
+        // Automatic startup load of the backup inputs (profiles, games, presets).
+        // Reuses the manual Refresh path; no backup is created. Runs at most once.
+        public async Task InitializeAsync(CancellationToken cancellationToken = default)
+        {
+            if (_initialized)
+                return;
+
+            cancellationToken.ThrowIfCancellationRequested();
+            _initialized = true;
+            await RefreshInputsAsync();
         }
 
         [RelayCommand]

@@ -108,7 +108,7 @@
 
                         <TextBox Grid.Column="0"
                                  Text="{Binding DestinationPath}"
-                                 Watermark="Select where this backup should be stored."
+                                 PlaceholderText="Select where this backup should be stored."
                                  ToolTip.Tip="{Binding DestinationPath}"
                                  MinHeight="32" />
 
@@ -170,7 +170,7 @@
                               ToolTip.Tip="Applying a preset fills the destination and backup sources. Presets never start a backup by themselves." />
 
                     <TextBox Text="{Binding PresetName}"
-                             Watermark="Preset name"
+                             PlaceholderText="Preset name"
                              MinHeight="30" />
 
                     <StackPanel Orientation="Horizontal"

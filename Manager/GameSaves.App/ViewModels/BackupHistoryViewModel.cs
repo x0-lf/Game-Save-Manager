@@ -6,11 +6,12 @@ using System;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace GameSaves.App.ViewModels
 {
-    public partial class BackupHistoryViewModel : ViewModelBase
+    public partial class BackupHistoryViewModel : ViewModelBase, IInitializableViewModel
     {
         private readonly IBackupHistoryService _backupHistoryService;
         private readonly IBackupRestoreService _backupRestoreService;
@@ -18,6 +19,7 @@ namespace GameSaves.App.ViewModels
         private readonly IBackupArchiveService _backupArchiveService;
         private readonly Services.IFolderPickerService _folderPickerService;
         private readonly ProfilesViewModel _profilesViewModel;
+        private bool _initialized;
 
         [ObservableProperty]
         private bool isLoading;
@@ -495,6 +497,18 @@ namespace GameSaves.App.ViewModels
                 _ = LoadMappingOptionsAsync();
 
             UpdateResolvedTargetDisplay();
+        }
+
+        // Automatic startup load of the backup runs. Reuses the manual Refresh
+        // path; no restore, delete, or manifest change occurs. Runs at most once.
+        public async Task InitializeAsync(CancellationToken cancellationToken = default)
+        {
+            if (_initialized)
+                return;
+
+            cancellationToken.ThrowIfCancellationRequested();
+            _initialized = true;
+            await RefreshRunsAsync();
         }
 
         [RelayCommand]

@@ -6,13 +6,15 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace GameSaves.App.ViewModels
 {
-    public partial class InstalledGamesViewModel : ViewModelBase
+    public partial class InstalledGamesViewModel : ViewModelBase, IInitializableViewModel
     {
         private readonly IInstalledGameSaveStatusService _statusService;
+        private bool _initialized;
 
         [ObservableProperty]
         private bool isLoading;
@@ -29,6 +31,18 @@ namespace GameSaves.App.ViewModels
             IInstalledGameSaveStatusService statusService)
         {
             _statusService = statusService;
+        }
+
+        // Automatic startup load. Reuses the manual Refresh path so both produce
+        // identical results, and runs at most once.
+        public async Task InitializeAsync(CancellationToken cancellationToken = default)
+        {
+            if (_initialized)
+                return;
+
+            cancellationToken.ThrowIfCancellationRequested();
+            _initialized = true;
+            await RefreshAsync();
         }
 
         [RelayCommand]
