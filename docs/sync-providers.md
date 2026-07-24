@@ -72,7 +72,7 @@ The provider-settings serializer uses an explicit Google Drive DTO containing on
 
 `GoogleDriveConnectionSettingsService` builds the runtime view from the saved profile and checks only the exact `SecretNames.OAuthTokenData` key through `ISecretStore.ExistsAsync`; it does not read or deserialize token bytes. A stored token produces `StoredAuthenticationAvailable`, not `Connected`, because existence does not prove validity. Connection status and token presence are not persisted as authoritative profile data.
 
-Folder IDs are authoritative when a later milestone populates them; folder names are display-only. Google Drive remains `IsImplemented = false` and has no provider-factory entry, root-folder behavior, or sync operations.
+The application-root milestone now populates folder IDs through a dedicated Infrastructure service; folder IDs are authoritative and folder names are display-only. Google Drive remains `IsImplemented = false` and has no provider-factory entry or sync operations.
 
 ## Google Drive OAuth boundary
 
@@ -121,6 +121,40 @@ Reconnect stages replacement authentication until Drive validates the newly auth
 Disconnect is deliberately local and works offline. It requires explicit confirmation, removes only `SecretNames.OAuthTokenData` for the selected profile, and does not call Google's revocation endpoint. It does not delete the Google Account, revoke the grant in Google Account settings, delete Drive files, delete backup data, delete history, or delete the saved remote profile. Programmatic remote grant revocation is not part of Milestone K.
 
 The lifecycle state machine distinguishes no saved profile, disconnected, stored-but-unchecked authentication, connecting, validated connection, reauthentication required, unavailable infrastructure, and failure. Token existence alone never displays Connected. Even a validated Google account cannot preview or execute sync because the catalog still reports Google Drive as `IsImplemented = false`.
+
+## Google Drive application root folder
+
+Milestone L manages exactly one visible folder and nothing beneath it:
+
+```text
+My Drive/
+└── GameSave Manager Backups/
+```
+
+The saved `SyncRemoteProfile.RemoteFolderId` is authoritative. `RemoteRootDisplayName` is refreshed from Drive for display only, so renaming the folder keeps the same identity. Moving a valid folder elsewhere within My Drive returns `Moved` but remains linked by ID; the App does not move it back or create a replacement.
+
+```text
+Validated account
+    -> validate stored root ID
+        -> valid: reuse by ID
+        -> renamed: update display name
+        -> moved in My Drive: continue by ID
+        -> missing/trashed/invalid: require explicit recreation
+
+No stored ID
+    -> search accessible top-level My Drive folder
+        -> one result: reuse
+        -> zero results: explicit setup may create
+        -> multiple results: stop as ambiguous
+```
+
+`InspectAsync` is read-only: after successful Restore, Connect, or Reconnect it validates the stored ID or discovers one unique accessible top-level candidate, but it never creates a folder. `EnsureAsync` is the explicit initial setup action. It searches twice under per-profile operation coordination before creating `GameSave Manager Backups` directly under My Drive. `RecreateAsync` accepts an explicit confirmation type, searches again, reuses a unique candidate, and creates only when no candidate exists.
+
+Deleted, trashed, wrong-type, inaccessible, and shared-drive roots retain their stale saved metadata until replacement succeeds. Existing Drive objects are never moved, renamed, restored, trashed, or deleted. Duplicate matches are never selected arbitrarily. Disconnect and external revocation preserve root metadata; reconnect validates it against the newly connected account before it can be treated as ready.
+
+The folder wrapper requests only `id`, `name`, `mimeType`, `trashed`, `parents`, and `driveId`, constrains discovery to the `drive` space and `user` corpus, excludes shared-drive items, and follows every page token. The hidden application-data space and its OAuth scope are forbidden for user backup runs.
+
+This milestone adds no generic path resolver, child folder, backup-run hierarchy, Picker, quota call, upload, download, `GoogleDriveRemoteFileSystem`, or sync provider. A Connected account with a Ready root still cannot preview or execute sync because `GoogleDrive.IsImplemented` remains false.
 
 ## Saved profiles and secrets
 

@@ -200,7 +200,7 @@ There is no committed default Client ID or client secret. A desktop application 
 
 After authorization, Infrastructure makes one short-lived Google Drive `about.get` request and asks only for `user(displayName,emailAddress)`. The returned display name and optional email are saved as non-secret profile metadata. Access and refresh token bytes remain in `ISecretStore`; connection status and token-presence flags are runtime state and are not persisted in profile JSON.
 
-Account connection does not create or discover a Drive folder, list Drive content, show quota, upload or download a backup, or enable Google Drive sync preview or execution.
+Account connection does not create a Drive folder, show quota, upload or download a backup, or enable Google Drive sync preview or execution. After a validated connection, the App performs a read-only application-root inspection: it validates a saved folder ID or discovers one unique accessible top-level `GameSave Manager Backups` folder. Creation requires the explicit **Set Up Drive Folder** action.
 
 ## Test the Google account lifecycle
 
@@ -218,6 +218,25 @@ Use only an explicitly authorized development test account. Keep account details
 10. Throughout the test, confirm Google Drive preview/execution stays disabled and no folder, upload, or download operation occurs.
 
 Ordinary **Disconnect** is local-only and works offline. It does not call Google's token-revocation endpoint, revoke the grant in Google Account settings, delete the Google Account, or delete Drive files. Remote programmatic grant revocation is outside Milestone K.
+
+## Test the application root folder
+
+Use only the private development test account and keep account details, Drive folder IDs, screenshots, and tokens outside the repository.
+
+1. Connect or restore a saved Google Drive profile and confirm no folder is created automatically.
+2. Select **Set Up Drive Folder** and confirm exactly one visible `GameSave Manager Backups` folder appears directly under My Drive.
+3. Restart the App and reconnect the same account. Confirm the same folder is reused and no duplicate appears.
+4. Rename the folder in Google Drive, select **Check Drive Folder**, and confirm the new display name appears while the saved identity remains linked.
+5. Move the folder into another folder in My Drive, check it again, and confirm the App reports **Moved** without creating or moving anything.
+6. Trash the folder and confirm the App reports it as missing or trashed without creating a replacement.
+7. Restore the folder from trash, check again, and confirm the original folder is reused.
+8. Remove or trash it again. Confirm **Recreate Drive Folder** remains blocked until the replacement confirmation is selected.
+9. Confirm recreation searches for one unique existing top-level candidate first and creates a replacement only when none exists.
+10. If duplicate top-level candidates are visible to this OAuth application, confirm the App reports ambiguity and selects neither.
+11. Disconnect and reconnect. Confirm the saved root metadata survives disconnect and is validated again after reconnect.
+12. Throughout the test, confirm no child backup-run folder, upload, download, preview, or sync operation occurs.
+
+The first Drive version supports My Drive only. Shared drives, Google Picker, a full folder browser, and custom root selection are not part of this milestone. User backup runs are never placed in hidden application storage.
 
 ## Handle downloaded credential files
 
@@ -293,3 +312,6 @@ Automated checks reduce risk but do not replace manual review.
 - [OAuth 2.0 for desktop applications](https://developers.google.com/identity/protocols/oauth2/native-app)
 - [OAuth authorization best practices](https://developers.google.com/identity/protocols/oauth2/resources/best-practices)
 - [Choose Google Drive API scopes](https://developers.google.com/workspace/drive/api/guides/api-specific-auth)
+- [Get Drive file metadata by ID](https://developers.google.com/workspace/drive/api/reference/rest/v3/files/get)
+- [List Drive files with queries and pagination](https://developers.google.com/workspace/drive/api/reference/rest/v3/files/list)
+- [Create and populate Drive folders](https://developers.google.com/workspace/drive/api/guides/folder)
