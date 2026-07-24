@@ -24,6 +24,7 @@ namespace GameSaves.App.ViewModels
         private readonly ISyncRemoteProfileRepository _profileRepository;
         private readonly ISyncRemoteProfileService _profileService;
         private readonly IGoogleDriveOAuthService _googleDriveOAuthService;
+        private readonly IGoogleDriveRootFolderService _googleDriveRootFolderService;
         private readonly IUtcClock _clock;
         private SyncPlan? _lastPlan;
         private ISyncProvider? _lastProvider;
@@ -33,11 +34,20 @@ namespace GameSaves.App.ViewModels
         private CancellationTokenSource? _googleAuthenticationCancellation;
         private long _googleAuthenticationGeneration;
         private bool _googleDriveInteractiveOperation;
+        private CancellationTokenSource? _googleRootFolderCancellation;
+        private long _googleRootFolderGeneration;
 
         private enum GoogleDriveInteractiveOperation
         {
             Connect,
             Reconnect
+        }
+
+        private enum GoogleDriveRootOperation
+        {
+            Inspect,
+            Ensure,
+            Recreate
         }
 
         private sealed record GoogleDriveUiSnapshot(
@@ -83,6 +93,10 @@ namespace GameSaves.App.ViewModels
         [NotifyPropertyChangedFor(nameof(CanShowReconnectGoogleDrive))]
         [NotifyPropertyChangedFor(nameof(CanShowDisconnectGoogleDrive))]
         [NotifyPropertyChangedFor(nameof(CanUseGoogleDriveForSync))]
+        [NotifyPropertyChangedFor(nameof(CanSetUpGoogleDriveRootFolder))]
+        [NotifyPropertyChangedFor(nameof(CanCheckGoogleDriveRootFolder))]
+        [NotifyPropertyChangedFor(nameof(CanShowRecreateGoogleDriveRootFolder))]
+        [NotifyPropertyChangedFor(nameof(CanRecreateGoogleDriveRootFolder))]
         private SyncProviderKind selectedProviderKind = SyncProviderKind.LocalFolder;
 
         [ObservableProperty]
@@ -173,6 +187,10 @@ namespace GameSaves.App.ViewModels
         [NotifyPropertyChangedFor(nameof(CanShowConnectGoogleDrive))]
         [NotifyPropertyChangedFor(nameof(CanShowReconnectGoogleDrive))]
         [NotifyPropertyChangedFor(nameof(CanShowDisconnectGoogleDrive))]
+        [NotifyPropertyChangedFor(nameof(CanSetUpGoogleDriveRootFolder))]
+        [NotifyPropertyChangedFor(nameof(CanCheckGoogleDriveRootFolder))]
+        [NotifyPropertyChangedFor(nameof(CanShowRecreateGoogleDriveRootFolder))]
+        [NotifyPropertyChangedFor(nameof(CanRecreateGoogleDriveRootFolder))]
         private SyncRemoteProfile? selectedRemoteProfile;
 
         [ObservableProperty]
@@ -202,6 +220,9 @@ namespace GameSaves.App.ViewModels
         [NotifyPropertyChangedFor(nameof(CanReconnectGoogleDrive))]
         [NotifyPropertyChangedFor(nameof(CanDisconnectGoogleDrive))]
         [NotifyPropertyChangedFor(nameof(CanCancelGoogleDriveConnection))]
+        [NotifyPropertyChangedFor(nameof(CanSetUpGoogleDriveRootFolder))]
+        [NotifyPropertyChangedFor(nameof(CanCheckGoogleDriveRootFolder))]
+        [NotifyPropertyChangedFor(nameof(CanRecreateGoogleDriveRootFolder))]
         private bool isGoogleDriveConnecting;
 
         [ObservableProperty]
@@ -238,6 +259,10 @@ namespace GameSaves.App.ViewModels
         [NotifyPropertyChangedFor(nameof(GoogleDriveEmailDisplayText))]
         [NotifyPropertyChangedFor(nameof(GoogleDriveAccountLabel))]
         [NotifyPropertyChangedFor(nameof(GoogleDriveStatusDisplayText))]
+        [NotifyPropertyChangedFor(nameof(CanSetUpGoogleDriveRootFolder))]
+        [NotifyPropertyChangedFor(nameof(CanCheckGoogleDriveRootFolder))]
+        [NotifyPropertyChangedFor(nameof(CanShowRecreateGoogleDriveRootFolder))]
+        [NotifyPropertyChangedFor(nameof(CanRecreateGoogleDriveRootFolder))]
         private GoogleDriveConnectionStatus googleDriveConnectionStatus =
             GoogleDriveConnectionStatus.NotConfigured;
 
@@ -248,6 +273,40 @@ namespace GameSaves.App.ViewModels
         [ObservableProperty]
         private string googleDriveConnectionMessage =
             "Save a Google Drive profile before connecting.";
+
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(GoogleDriveRootFolderDisplayText))]
+        [NotifyPropertyChangedFor(nameof(CanSetUpGoogleDriveRootFolder))]
+        [NotifyPropertyChangedFor(nameof(CanCheckGoogleDriveRootFolder))]
+        [NotifyPropertyChangedFor(nameof(CanShowRecreateGoogleDriveRootFolder))]
+        [NotifyPropertyChangedFor(nameof(CanRecreateGoogleDriveRootFolder))]
+        [NotifyPropertyChangedFor(nameof(CanUseGoogleDriveForSync))]
+        private string? googleDriveRootFolderDisplayName;
+
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(GoogleDriveRootFolderStatusDisplayText))]
+        [NotifyPropertyChangedFor(nameof(CanSetUpGoogleDriveRootFolder))]
+        [NotifyPropertyChangedFor(nameof(CanCheckGoogleDriveRootFolder))]
+        [NotifyPropertyChangedFor(nameof(CanShowRecreateGoogleDriveRootFolder))]
+        [NotifyPropertyChangedFor(nameof(CanRecreateGoogleDriveRootFolder))]
+        [NotifyPropertyChangedFor(nameof(CanUseGoogleDriveForSync))]
+        private GoogleDriveRootFolderStatus googleDriveRootFolderStatus =
+            GoogleDriveRootFolderStatus.Unconfigured;
+
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(CanSetUpGoogleDriveRootFolder))]
+        [NotifyPropertyChangedFor(nameof(CanCheckGoogleDriveRootFolder))]
+        [NotifyPropertyChangedFor(nameof(CanRecreateGoogleDriveRootFolder))]
+        [NotifyPropertyChangedFor(nameof(CanCancelGoogleDriveRootFolderOperation))]
+        private bool isGoogleDriveRootFolderBusy;
+
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(CanRecreateGoogleDriveRootFolder))]
+        private bool confirmRecreateGoogleDriveRootFolder;
+
+        [ObservableProperty]
+        private string googleDriveRootFolderMessage =
+            "Connect Google Drive before setting up its backup folder.";
 
         private bool _keepTargetSectionOpen;
 
@@ -308,6 +367,9 @@ namespace GameSaves.App.ViewModels
         public IReadOnlyList<SyncProviderDescriptor> ProviderOptions { get; }
 
         public Task GoogleAuthenticationInitializationTask { get; private set; } =
+            Task.CompletedTask;
+
+        public Task GoogleRootFolderInitializationTask { get; private set; } =
             Task.CompletedTask;
 
         public SyncProviderDescriptor SelectedProviderDescriptor =>
@@ -497,11 +559,82 @@ namespace GameSaves.App.ViewModels
             IsGoogleDriveConnecting &&
             _googleDriveInteractiveOperation;
 
+        public string GoogleDriveRootFolderDisplayText =>
+            GoogleDriveRootFolderDisplayName ?? "Not configured";
+
+        public string GoogleDriveRootFolderStatusDisplayText =>
+            GoogleDriveRootFolderStatus switch
+            {
+                GoogleDriveRootFolderStatus.Unconfigured => "Setup required",
+                GoogleDriveRootFolderStatus.Checking => "Checking",
+                GoogleDriveRootFolderStatus.Ready => "Ready",
+                GoogleDriveRootFolderStatus.Moved =>
+                    "Moved in My Drive — still linked by ID",
+                GoogleDriveRootFolderStatus.Missing => "Missing",
+                GoogleDriveRootFolderStatus.Trashed => "Trashed",
+                GoogleDriveRootFolderStatus.WrongType => "Invalid folder identity",
+                GoogleDriveRootFolderStatus.UnsupportedLocation =>
+                    "Unsupported location",
+                GoogleDriveRootFolderStatus.Ambiguous =>
+                    "Duplicate folders need attention",
+                GoogleDriveRootFolderStatus.RecreationConfirmationRequired =>
+                    "Replacement confirmation required",
+                GoogleDriveRootFolderStatus.Creating => "Creating",
+                GoogleDriveRootFolderStatus.ReauthenticationRequired =>
+                    "Reconnect Google Drive first",
+                GoogleDriveRootFolderStatus.Unavailable =>
+                    "Temporarily unavailable",
+                _ => "Failed"
+            };
+
+        private bool HasSavedGoogleDriveRootId =>
+            !string.IsNullOrWhiteSpace(SelectedRemoteProfile?.RemoteFolderId);
+
+        public bool CanSetUpGoogleDriveRootFolder =>
+            IsGoogleDriveSelected &&
+            HasUsableGoogleDriveProfile &&
+            GoogleDriveConnectionStatus == GoogleDriveConnectionStatus.Connected &&
+            !HasSavedGoogleDriveRootId &&
+            !IsGoogleDriveConnecting &&
+            !IsGoogleDriveRootFolderBusy;
+
+        public bool CanCheckGoogleDriveRootFolder =>
+            IsGoogleDriveSelected &&
+            HasUsableGoogleDriveProfile &&
+            GoogleDriveConnectionStatus == GoogleDriveConnectionStatus.Connected &&
+            HasSavedGoogleDriveRootId &&
+            !IsGoogleDriveConnecting &&
+            !IsGoogleDriveRootFolderBusy;
+
+        public bool CanShowRecreateGoogleDriveRootFolder =>
+            IsGoogleDriveSelected &&
+            HasSavedGoogleDriveRootId &&
+            GoogleDriveRootFolderStatus is
+                GoogleDriveRootFolderStatus.Missing or
+                GoogleDriveRootFolderStatus.Trashed or
+                GoogleDriveRootFolderStatus.WrongType or
+                GoogleDriveRootFolderStatus.UnsupportedLocation or
+                GoogleDriveRootFolderStatus.RecreationConfirmationRequired;
+
+        public bool CanRecreateGoogleDriveRootFolder =>
+            CanShowRecreateGoogleDriveRootFolder &&
+            GoogleDriveConnectionStatus == GoogleDriveConnectionStatus.Connected &&
+            ConfirmRecreateGoogleDriveRootFolder &&
+            !IsGoogleDriveConnecting &&
+            !IsGoogleDriveRootFolderBusy;
+
+        public bool CanCancelGoogleDriveRootFolderOperation =>
+            IsGoogleDriveSelected && IsGoogleDriveRootFolderBusy;
+
         public bool CanUseGoogleDriveForSync =>
             IsGoogleDriveSelected &&
             SelectedProviderDescriptor.IsImplemented &&
             GoogleDriveConnectionStatus == GoogleDriveConnectionStatus.Connected &&
-            HasStoredAuthentication;
+            HasStoredAuthentication &&
+            HasSavedGoogleDriveRootId &&
+            GoogleDriveRootFolderStatus is
+                GoogleDriveRootFolderStatus.Ready or
+                GoogleDriveRootFolderStatus.Moved;
 
         public SyncViewModel(
             ISyncProviderFactory syncProviderFactory,
@@ -512,7 +645,8 @@ namespace GameSaves.App.ViewModels
             ISyncRemoteProfileService profileService,
             ISyncRemoteProfileMigrationService profileMigrationService,
             IUtcClock clock,
-            IGoogleDriveOAuthService googleDriveOAuthService)
+            IGoogleDriveOAuthService googleDriveOAuthService,
+            IGoogleDriveRootFolderService? googleDriveRootFolderService = null)
         {
             _syncProviderFactory = syncProviderFactory;
             _providerCatalog = providerCatalog;
@@ -522,6 +656,12 @@ namespace GameSaves.App.ViewModels
             _profileService = profileService;
             _clock = clock;
             _googleDriveOAuthService = googleDriveOAuthService;
+            // Keep direct construction compatible with the pre-Milestone-L
+            // ViewModel contract. Application DI always supplies the real
+            // Infrastructure service; the fallback performs no external work.
+            _googleDriveRootFolderService =
+                googleDriveRootFolderService ??
+                UnavailableGoogleDriveRootFolderService.Instance;
             ProviderOptions = _providerCatalog.GetAll()
                 .Where(descriptor => descriptor.IsConfigurationAvailable)
                 .ToArray();
@@ -558,6 +698,7 @@ namespace GameSaves.App.ViewModels
         {
             CancelGoogleAuthentication();
             ConfirmDisconnectGoogleDrive = false;
+            ConfirmRecreateGoogleDriveRootFolder = false;
 
             if (value != SyncProviderKind.Sftp)
                 ClearSessionOnlySftpState();
@@ -615,6 +756,7 @@ namespace GameSaves.App.ViewModels
         partial void OnSelectedRemoteProfileChanged(SyncRemoteProfile? value)
         {
             ConfirmDisconnectGoogleDrive = false;
+            ConfirmRecreateGoogleDriveRootFolder = false;
 
             if (!_suppressProfileSelection && value is not null)
             {
@@ -699,6 +841,7 @@ namespace GameSaves.App.ViewModels
         {
             CancelGoogleAuthentication();
             ConfirmDisconnectGoogleDrive = false;
+            ConfirmRecreateGoogleDriveRootFolder = false;
             _suppressProfileSelection = true;
             SelectedRemoteProfile = null;
             _suppressProfileSelection = false;
@@ -730,6 +873,7 @@ namespace GameSaves.App.ViewModels
         {
             CancelGoogleAuthentication();
             ConfirmDisconnectGoogleDrive = false;
+            ConfirmRecreateGoogleDriveRootFolder = false;
             HasStoredAuthentication = false;
             _applyingProfile = true;
 
@@ -769,6 +913,16 @@ namespace GameSaves.App.ViewModels
                             GoogleDriveConnectionStatus.StoredAuthenticationAvailable;
                         GoogleDriveConnectionMessage =
                             "Checking stored Google Drive authentication…";
+                        GoogleDriveRootFolderDisplayName =
+                            profile.RemoteRootDisplayName;
+                        GoogleDriveRootFolderStatus =
+                            string.IsNullOrWhiteSpace(profile.RemoteFolderId)
+                                ? GoogleDriveRootFolderStatus.Unconfigured
+                                : GoogleDriveRootFolderStatus.Checking;
+                        GoogleDriveRootFolderMessage =
+                            string.IsNullOrWhiteSpace(profile.RemoteFolderId)
+                                ? "No Google Drive backup folder is configured."
+                                : "The saved Google Drive backup folder will be validated after authentication.";
                         break;
 
                     default:
@@ -816,6 +970,7 @@ namespace GameSaves.App.ViewModels
         {
             CancelGoogleAuthentication();
             ConfirmDisconnectGoogleDrive = false;
+            ConfirmRecreateGoogleDriveRootFolder = false;
             _suppressProfileSelection = true;
             SelectedRemoteProfile = null;
             _suppressProfileSelection = false;
@@ -887,6 +1042,11 @@ namespace GameSaves.App.ViewModels
                         GoogleDriveConnectionMessage =
                             "Profile saved. Connect Google Drive to authorize this account.";
                         HasStoredAuthentication = false;
+                        GoogleDriveRootFolderDisplayName = null;
+                        GoogleDriveRootFolderStatus =
+                            GoogleDriveRootFolderStatus.Unconfigured;
+                        GoogleDriveRootFolderMessage =
+                            "Connect Google Drive before setting up its backup folder.";
                     }
                 }
                 RemoteProfileState = "Saved";
@@ -931,6 +1091,11 @@ namespace GameSaves.App.ViewModels
                     GoogleDriveConnectionMessage =
                         "Profile saved. Connect Google Drive to authorize this account.";
                     HasStoredAuthentication = false;
+                    GoogleDriveRootFolderDisplayName = null;
+                    GoogleDriveRootFolderStatus =
+                        GoogleDriveRootFolderStatus.Unconfigured;
+                    GoogleDriveRootFolderMessage =
+                        "Connect Google Drive before setting up its backup folder.";
                 }
                 InvalidatePlan(force: true);
                 RemoteProfileState = "Saved";
@@ -1180,6 +1345,12 @@ namespace GameSaves.App.ViewModels
                     OnPropertyChanged(nameof(CanCancelGoogleDriveConnection));
                     _googleAuthenticationCancellation?.Dispose();
                     _googleAuthenticationCancellation = null;
+
+                    if (GoogleDriveConnectionStatus ==
+                        GoogleDriveConnectionStatus.Connected)
+                    {
+                        BeginGoogleDriveRootFolderInspection(profile.Id);
+                    }
                 }
             }
         }
@@ -1246,6 +1417,16 @@ namespace GameSaves.App.ViewModels
                     GoogleDriveAccountEmail = null;
                     ConfirmDisconnectGoogleDrive = false;
                     RefreshProfileList(profile.Id);
+                    GoogleDriveRootFolderDisplayName =
+                        SelectedRemoteProfile?.RemoteRootDisplayName;
+                    GoogleDriveRootFolderStatus =
+                        HasSavedGoogleDriveRootId
+                            ? GoogleDriveRootFolderStatus.ReauthenticationRequired
+                            : GoogleDriveRootFolderStatus.Unconfigured;
+                    GoogleDriveRootFolderMessage =
+                        HasSavedGoogleDriveRootId
+                            ? "The saved folder identity was preserved. Reconnect Google Drive to validate it."
+                            : "Connect Google Drive before setting up its backup folder.";
                 }
                 else
                 {
@@ -1348,6 +1529,13 @@ namespace GameSaves.App.ViewModels
                     IsGoogleDriveConnecting = false;
                     cancellation.Dispose();
                     _googleAuthenticationCancellation = null;
+
+                    if (SelectedRemoteProfile?.Id == profileId &&
+                        GoogleDriveConnectionStatus ==
+                        GoogleDriveConnectionStatus.Connected)
+                    {
+                        BeginGoogleDriveRootFolderInspection(profileId);
+                    }
                 }
             }
         }
@@ -1424,6 +1612,8 @@ namespace GameSaves.App.ViewModels
                     GoogleDriveAccountDisplayName = updated.AccountDisplayName;
                     GoogleDriveAccountEmail =
                         (updated.ProviderSettings as GoogleDriveSyncRemoteSettings)?.AccountEmail;
+                    GoogleDriveRootFolderDisplayName =
+                        updated.RemoteRootDisplayName;
                 }
             }
             else if (result.Status == GoogleDriveAuthenticationStatus.NoStoredAuthentication)
@@ -1445,10 +1635,235 @@ namespace GameSaves.App.ViewModels
 
             GoogleDriveConnectionMessage = result.Message ?? result.Status.ToString();
             StatusMessage = GoogleDriveConnectionMessage;
+
+            if (result.Status != GoogleDriveAuthenticationStatus.Connected &&
+                !(operation == GoogleDriveInteractiveOperation.Reconnect &&
+                       previousState is not null &&
+                       result.Status is
+                           GoogleDriveAuthenticationStatus.Cancelled or
+                           GoogleDriveAuthenticationStatus.AuthorizationDenied or
+                           GoogleDriveAuthenticationStatus.Failed or
+                           GoogleDriveAuthenticationStatus.AccountLookupFailed or
+                           GoogleDriveAuthenticationStatus.BrowserLaunchFailed or
+                           GoogleDriveAuthenticationStatus.CallbackFailed))
+            {
+                GoogleDriveRootFolderStatus =
+                    HasSavedGoogleDriveRootId
+                        ? GoogleDriveRootFolderStatus.ReauthenticationRequired
+                        : GoogleDriveRootFolderStatus.Unconfigured;
+                GoogleDriveRootFolderMessage =
+                    HasSavedGoogleDriveRootId
+                        ? "Reconnect Google Drive before checking the saved backup folder."
+                        : "Connect Google Drive before setting up its backup folder.";
+            }
+        }
+
+        [RelayCommand]
+        private Task SetUpGoogleDriveRootFolderAsync() =>
+            RunGoogleDriveRootFolderOperationAsync(
+                GoogleDriveRootOperation.Ensure);
+
+        [RelayCommand]
+        private Task CheckGoogleDriveRootFolderAsync() =>
+            RunGoogleDriveRootFolderOperationAsync(
+                GoogleDriveRootOperation.Inspect);
+
+        [RelayCommand]
+        private Task RecreateGoogleDriveRootFolderAsync() =>
+            RunGoogleDriveRootFolderOperationAsync(
+                GoogleDriveRootOperation.Recreate);
+
+        [RelayCommand]
+        private void CancelGoogleDriveRootFolder()
+        {
+            if (!IsGoogleDriveRootFolderBusy)
+                return;
+
+            _googleRootFolderCancellation?.Cancel();
+            GoogleDriveRootFolderMessage =
+                "Cancelling the Google Drive folder operation…";
+        }
+
+        private void BeginGoogleDriveRootFolderInspection(Guid profileId)
+        {
+            if (SelectedRemoteProfile?.Id != profileId ||
+                GoogleDriveConnectionStatus != GoogleDriveConnectionStatus.Connected)
+            {
+                return;
+            }
+
+            GoogleRootFolderInitializationTask =
+                RunGoogleDriveRootFolderOperationAsync(
+                    GoogleDriveRootOperation.Inspect);
+        }
+
+        private async Task RunGoogleDriveRootFolderOperationAsync(
+            GoogleDriveRootOperation operation)
+        {
+            if (!IsGoogleDriveSelected ||
+                SelectedRemoteProfile is not
+                {
+                    ProviderKind: SyncProviderKind.GoogleDrive
+                } profile)
+            {
+                GoogleDriveRootFolderMessage =
+                    "Select a saved Google Drive profile first.";
+                StatusMessage = GoogleDriveRootFolderMessage;
+                return;
+            }
+
+            if (GoogleDriveConnectionStatus != GoogleDriveConnectionStatus.Connected)
+            {
+                GoogleDriveRootFolderStatus =
+                    GoogleDriveRootFolderStatus.ReauthenticationRequired;
+                GoogleDriveRootFolderMessage =
+                    "Connect or reconnect Google Drive before managing its backup folder.";
+                StatusMessage = GoogleDriveRootFolderMessage;
+                return;
+            }
+
+            if (operation == GoogleDriveRootOperation.Recreate &&
+                !ConfirmRecreateGoogleDriveRootFolder)
+            {
+                GoogleDriveRootFolderMessage =
+                    "Confirm creating or selecting a replacement Google Drive root folder first.";
+                StatusMessage = GoogleDriveRootFolderMessage;
+                return;
+            }
+
+            if (IsGoogleDriveConnecting || IsGoogleDriveRootFolderBusy)
+                return;
+
+            CancelGoogleDriveRootFolderOperation();
+            long generation = ++_googleRootFolderGeneration;
+            var cancellation = new CancellationTokenSource();
+            _googleRootFolderCancellation = cancellation;
+            IsGoogleDriveRootFolderBusy = true;
+            GoogleDriveRootFolderStatus =
+                operation == GoogleDriveRootOperation.Inspect
+                    ? GoogleDriveRootFolderStatus.Checking
+                    : GoogleDriveRootFolderStatus.Creating;
+            GoogleDriveRootFolderMessage = operation switch
+            {
+                GoogleDriveRootOperation.Inspect =>
+                    "Checking the saved Google Drive backup folder…",
+                GoogleDriveRootOperation.Ensure =>
+                    "Looking for the visible Google Drive backup folder before creating one…",
+                _ =>
+                    "Looking for a safe replacement Google Drive backup folder…"
+            };
+            StatusMessage = GoogleDriveRootFolderMessage;
+
+            try
+            {
+                GoogleDriveRootFolderResult result = operation switch
+                {
+                    GoogleDriveRootOperation.Inspect =>
+                        await _googleDriveRootFolderService.InspectAsync(
+                            profile.Id,
+                            cancellation.Token),
+                    GoogleDriveRootOperation.Ensure =>
+                        await _googleDriveRootFolderService.EnsureAsync(
+                            profile.Id,
+                            cancellation.Token),
+                    GoogleDriveRootOperation.Recreate =>
+                        await _googleDriveRootFolderService.RecreateAsync(
+                            profile.Id,
+                            GoogleDriveRootFolderRecreationConfirmation.Confirmed,
+                            cancellation.Token),
+                    _ => throw new InvalidOperationException()
+                };
+
+                ApplyGoogleDriveRootFolderResult(
+                    profile.Id,
+                    generation,
+                    result);
+            }
+            catch (OperationCanceledException)
+            {
+                ApplyGoogleDriveRootFolderResult(
+                    profile.Id,
+                    generation,
+                    new GoogleDriveRootFolderResult(
+                        GoogleDriveRootFolderStatus.Failed,
+                        profile.Id,
+                        ErrorCode: GoogleDriveRootFolderErrorCodes.Cancelled,
+                        Message: "The Google Drive folder operation was cancelled. No backup data was changed."));
+            }
+            catch
+            {
+                ApplyGoogleDriveRootFolderResult(
+                    profile.Id,
+                    generation,
+                    new GoogleDriveRootFolderResult(
+                        GoogleDriveRootFolderStatus.Failed,
+                        profile.Id,
+                        ErrorCode: GoogleDriveRootFolderErrorCodes.Failed,
+                        Message: "The Google Drive root folder could not be checked."));
+            }
+            finally
+            {
+                if (generation == _googleRootFolderGeneration)
+                {
+                    IsGoogleDriveRootFolderBusy = false;
+                    cancellation.Dispose();
+                    _googleRootFolderCancellation = null;
+                }
+            }
+        }
+
+        private void ApplyGoogleDriveRootFolderResult(
+            Guid profileId,
+            long generation,
+            GoogleDriveRootFolderResult result)
+        {
+            if (generation != _googleRootFolderGeneration ||
+                SelectedRemoteProfile?.Id != profileId ||
+                !IsGoogleDriveSelected)
+            {
+                return;
+            }
+
+            GoogleDriveRootFolderStatus = result.Status;
+            GoogleDriveRootFolderDisplayName =
+                result.DisplayName ?? SelectedRemoteProfile.RemoteRootDisplayName;
+            GoogleDriveRootFolderMessage = result.Message ?? result.Status.ToString();
+            StatusMessage = GoogleDriveRootFolderMessage;
+
+            if (result.Succeeded)
+            {
+                SyncRemoteProfile? updated = _profileRepository.GetById(profileId);
+
+                if (updated is not null)
+                {
+                    RefreshProfileList(updated.Id);
+                    GoogleDriveRootFolderDisplayName =
+                        updated.RemoteRootDisplayName;
+                }
+
+                ConfirmRecreateGoogleDriveRootFolder = false;
+            }
+            else if (result.Status ==
+                     GoogleDriveRootFolderStatus.ReauthenticationRequired)
+            {
+                GoogleDriveConnectionStatus =
+                    GoogleDriveConnectionStatus.ReauthenticationRequired;
+            }
+        }
+
+        private void CancelGoogleDriveRootFolderOperation()
+        {
+            _googleRootFolderGeneration++;
+            _googleRootFolderCancellation?.Cancel();
+            _googleRootFolderCancellation?.Dispose();
+            _googleRootFolderCancellation = null;
+            IsGoogleDriveRootFolderBusy = false;
+            GoogleRootFolderInitializationTask = Task.CompletedTask;
         }
 
         private void CancelGoogleAuthentication()
         {
+            CancelGoogleDriveRootFolderOperation();
             _googleAuthenticationGeneration++;
             _googleAuthenticationCancellation?.Cancel();
             _googleAuthenticationCancellation?.Dispose();
@@ -1594,6 +2009,11 @@ namespace GameSaves.App.ViewModels
             GoogleDriveConnectionStatus = GoogleDriveConnectionStatus.NotConfigured;
             GoogleDriveConnectionMessage =
                 "Save a Google Drive profile before connecting.";
+            GoogleDriveRootFolderDisplayName = null;
+            GoogleDriveRootFolderStatus = GoogleDriveRootFolderStatus.Unconfigured;
+            GoogleDriveRootFolderMessage =
+                "Connect Google Drive before setting up its backup folder.";
+            ConfirmRecreateGoogleDriveRootFolder = false;
         }
 
         private void RefreshProfileList(Guid selectedId)
@@ -2139,6 +2559,41 @@ namespace GameSaves.App.ViewModels
             double gb = mb / 1024.0;
 
             return $"{gb:0.##} GB";
+        }
+
+        private sealed class UnavailableGoogleDriveRootFolderService
+            : IGoogleDriveRootFolderService
+        {
+            public static UnavailableGoogleDriveRootFolderService Instance { get; } =
+                new();
+
+            public Task<GoogleDriveRootFolderResult> InspectAsync(
+                Guid remoteProfileId,
+                CancellationToken cancellationToken = default) =>
+                Unavailable(remoteProfileId, cancellationToken);
+
+            public Task<GoogleDriveRootFolderResult> EnsureAsync(
+                Guid remoteProfileId,
+                CancellationToken cancellationToken = default) =>
+                Unavailable(remoteProfileId, cancellationToken);
+
+            public Task<GoogleDriveRootFolderResult> RecreateAsync(
+                Guid remoteProfileId,
+                GoogleDriveRootFolderRecreationConfirmation confirmation,
+                CancellationToken cancellationToken = default) =>
+                Unavailable(remoteProfileId, cancellationToken);
+
+            private static Task<GoogleDriveRootFolderResult> Unavailable(
+                Guid remoteProfileId,
+                CancellationToken cancellationToken)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return Task.FromResult(new GoogleDriveRootFolderResult(
+                    GoogleDriveRootFolderStatus.Unavailable,
+                    remoteProfileId,
+                    ErrorCode: GoogleDriveRootFolderErrorCodes.Unavailable,
+                    Message: "Google Drive root-folder services are unavailable."));
+            }
         }
     }
 }

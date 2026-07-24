@@ -109,6 +109,17 @@ namespace GameSaves.Infrastructure.DependencyInjection
                 GoogleInstalledAppAuthorizer>();
             services.AddSingleton<IGoogleDriveAccountReader,
                 GoogleDriveAccountReader>();
+            services.AddSingleton<IGoogleDriveAuthorizedSessionFactory,
+                GoogleDriveAuthorizedSessionFactory>();
+            services.AddSingleton<IGoogleDriveRootFolderApi,
+                GoogleDriveRootFolderApi>();
+            services.AddSingleton<IGoogleDriveRootFolderService>(provider =>
+                new GoogleDriveRootFolderService(
+                    provider.GetRequiredService<ISyncRemoteProfileRepository>(),
+                    provider.GetRequiredService<ISecretStore>(),
+                    provider.GetRequiredService<IGoogleDriveAuthorizedSessionFactory>(),
+                    provider.GetRequiredService<IGoogleDriveRootFolderApi>(),
+                    provider.GetRequiredService<IUtcClock>()));
             services.AddSingleton<IGoogleDriveOAuthService>(provider =>
                 new GoogleDriveOAuthService(
                     provider.GetRequiredService<ISyncRemoteProfileRepository>(),

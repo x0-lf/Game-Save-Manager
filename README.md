@@ -46,9 +46,10 @@ The long-term goal is a cross-platform Steam save manager with backup profiles, 
   * Profiles are stored in SQLite with stable IDs and non-secret settings only. Existing meaningful `sync-settings.json` configuration is migrated once; when a profile is selected, its SQLite values take precedence over the lightweight UI-state file.
   * Provider behavior is described by one capability catalog. Google Drive is configuration-selectable for account authorization while `IsImplemented` remains false for sync.
   * Saved-provider authentication has a platform-neutral secret-store contract. On Windows, payloads are protected for the current user with DPAPI and SQLite stores encrypted BLOBs only. Profile deletion removes secrets owned by that profile; Google Disconnect removes exactly its OAuth token. SFTP passwords and passphrases remain session-only.
-  * Google Drive authorization runs in the system browser with PKCE and a loopback callback, requests only `drive.file`, stores tokens through the protected secret store, restores them after restart, refreshes access when possible, and displays non-secret account metadata.
-  * Google account lifecycle supports Connect, Reconnect, and explicit local Disconnect. Disconnect removes only the selected profile's protected OAuth token and clears its saved account identity; the profile, root-folder metadata, backups, history, and Drive files remain. External revocation is detected, its invalid local token is cleaned up when possible, and reconnect remains an explicit user action.
-  * Google Drive backup synchronization is not implemented. The [Google Drive developer setup guide](docs/google-drive-developer-setup.md) explains private development configuration; normal users do not create a Cloud project, and personal credentials or tokens must never be committed.
+* Google Drive authorization runs in the system browser with PKCE and a loopback callback, requests only `drive.file`, stores tokens through the protected secret store, restores them after restart, refreshes access when possible, and displays non-secret account metadata.
+* Google account lifecycle supports Connect, Reconnect, and explicit local Disconnect. Disconnect removes only the selected profile's protected OAuth token and clears its saved account identity; the profile, root-folder metadata, backups, history, and Drive files remain. External revocation is detected, its invalid local token is cleaned up when possible, and reconnect remains an explicit user action.
+* A connected Google Drive profile can explicitly set up or discover one visible `My Drive/GameSave Manager Backups` folder. Its Drive ID is authoritative; renames and moves within My Drive remain linked, while missing, trashed, invalid, or unsupported roots require confirmed replacement and duplicate matches are never chosen automatically.
+* Google Drive backup synchronization is not implemented. The [Google Drive developer setup guide](docs/google-drive-developer-setup.md) explains private development configuration; normal users do not create a Cloud project, and personal credentials or tokens must never be committed.
   * Type-safe provider selection exposes `LocalFolder`, `Sftp`, and configuration-only `GoogleDrive`. Only Local Folder and SFTP can preview or execute sync; WebDAV and OneDrive remain unavailable.
   * `ISyncProvider` abstraction with `LocalFolderSyncProvider` and `SftpSyncProvider` (SSH.NET); WebDAV and cloud providers come later.
   * **SFTP**: host/port/username with password or private-key-file authentication; passwords, passphrases, and trust-new-host confirmation are session-only, cleared when profiles change, and never written to disk. Host keys use trust-on-first-use: the SHA-256 fingerprint is shown on first connect, stored like SSH known_hosts, and any later change fails loudly ("Forget Stored Host Key" covers planned reinstalls).
@@ -190,7 +191,7 @@ Restore (Backups tab) copies backed-up files to their original locations:
 5. Untick any runs you do not want to copy, confirm, and press **Sync Now** - a byte-accurate progress bar tracks the copy.
 6. The remote keeps a shared `sync-log.json` of every executed sync; downloaded runs are immediately restorable from the Backups tab.
 
-Google Drive also appears in the provider selector for saved-profile setup and account authorization. It opens Google's supported system-browser flow, requests only `drive.file`, and displays the validated account metadata. Google Drive preview and execution stay disabled because root-folder and remote-file operations are not implemented yet.
+Google Drive also appears in the provider selector for saved-profile setup and account authorization. It opens Google's supported system-browser flow, requests only `drive.file`, and displays the validated account metadata. After connection, an explicit setup action can create or discover the single visible `GameSave Manager Backups` folder in My Drive; read-only checks reuse its authoritative Drive ID across restarts, renames, moves, and reconnects. Google Drive preview and execution stay disabled because backup-run hierarchy and remote-file operations are not implemented yet.
 
 Sync never deletes or overwrites anything on either side; conflicts are reported and left for you to resolve (export one side as ZIP, or delete one side via Cleanup).
 
@@ -205,7 +206,7 @@ Sync never deletes or overwrites anything on either side; conflicts are reported
 
 Main packages: `Avalonia` 12, `CommunityToolkit.Mvvm`, `Microsoft.Extensions.DependencyInjection`, `Microsoft.Data.Sqlite`, `System.Security.Cryptography.ProtectedData`, `Gameloop.Vdf`, `SSH.NET`, `Google.Apis.Auth` 1.75.0, and `Google.Apis.Drive.v3` 1.75.0.4210.
 
-The official Google client-library packages are referenced only by `GameSaves.Infrastructure`. Milestone J reads developer-local client configuration, performs installed-app OAuth with PKCE, persists tokens only through `ISecretStore`, and makes one minimal Drive `about.get` request for account metadata. No root-folder, listing, upload, download, or sync implementation exists.
+The official Google client-library packages are referenced only by `GameSaves.Infrastructure`. Developer-local client configuration drives installed-app OAuth with PKCE, tokens persist only through `ISecretStore`, and short-lived Infrastructure services perform the minimal account and application-root metadata requests. No backup-run listing, path resolver, upload, download, or sync implementation exists.
 
 Test packages: `Microsoft.NET.Test.Sdk`, `xunit`, `xunit.runner.visualstudio`.
 
@@ -457,7 +458,7 @@ Google Drive account authorization uses the system browser, a loopback callback,
 
 ### K — Google account lifecycle
 
-Connect and Reconnect reuse the protected browser OAuth flow. Disconnect removes local protected authentication only; it does not revoke the Google Account grant or delete Drive content. Confirmed external revocation is detected and the invalid local token is removed when possible, while the saved profile, root-folder metadata, and backup data are preserved. Google Drive synchronization remains unavailable, and Milestone L has not started.
+Connect and Reconnect reuse the protected browser OAuth flow. Disconnect removes local protected authentication only; it does not revoke the Google Account grant or delete Drive content. Confirmed external revocation is detected and the invalid local token is removed when possible, while the saved profile, root-folder metadata, and backup data are preserved. Google Drive synchronization remains unavailable.
 
 * [x] Connect
 * [x] Reconnect
@@ -478,13 +479,15 @@ My Drive/
 └── GameSave Manager Backups/
 ```
 
-* [ ] Store the Drive folder ID and use it as the authoritative identity
-* [ ] Use names only for display
-* [ ] Reuse the existing folder when reconnecting
-* [ ] Do not create duplicate root folders
-* [ ] Handle a deleted or moved root folder
-* [ ] Recreate the root folder only after explicit user confirmation
-* [ ] Do not use Google Drive `appDataFolder` for user backup runs
+* [x] Store the Drive folder ID and use it as the authoritative identity
+* [x] Use names only for display
+* [x] Reuse the existing folder when reconnecting
+* [x] Do not create duplicate root folders
+* [x] Handle a deleted or moved root folder
+* [x] Recreate the root folder only after explicit user confirmation
+* [x] Do not use Google Drive `appDataFolder` for user backup runs
+
+The application folder is visible in My Drive and remains linked by its Drive ID when renamed or moved. Deleted, trashed, invalid, inaccessible, or unsupported roots are never silently replaced; explicit recreation searches again, rejects ambiguity, and creates a replacement only when no unique usable candidate exists. No backup upload, download, path resolver, or Google Drive synchronization was implemented, and Milestone M has not started.
 
 ### M — Refine remote metadata write semantics
 

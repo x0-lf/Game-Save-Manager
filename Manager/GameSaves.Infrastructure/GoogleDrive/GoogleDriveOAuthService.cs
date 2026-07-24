@@ -15,6 +15,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
         private readonly IGoogleSecretDataStoreFactory _dataStoreFactory;
         private readonly IGoogleInstalledAppAuthorizer _authorizer;
         private readonly IGoogleDriveAccountReader _accountReader;
+        private readonly IGoogleDriveAuthorizedSessionFactory _authorizedSessionFactory;
         private readonly IUtcClock _clock;
         private readonly ConcurrentDictionary<Guid, LifecycleOperation> _operations = new();
 
@@ -33,6 +34,12 @@ namespace GameSaves.Infrastructure.GoogleDrive
             _dataStoreFactory = dataStoreFactory;
             _authorizer = authorizer;
             _accountReader = accountReader;
+            _authorizedSessionFactory = new GoogleDriveAuthorizedSessionFactory(
+                secretStore,
+                configurationProvider,
+                dataStoreFactory,
+                authorizer,
+                accountReader);
             _clock = clock;
         }
 
@@ -159,34 +166,42 @@ namespace GameSaves.Infrastructure.GoogleDrive
                         "The saved Google Drive profile settings are invalid.");
                 }
 
-                GoogleOAuthClientConfigurationReadResult configuration =
-                    _configurationProvider.Read();
-
-                if (configuration.Configuration is null)
-                {
-                    return Failure(
-                        GoogleDriveAuthenticationStatus.ClientConfigurationMissing,
-                        configuration.State.ErrorCode ?? GoogleDriveOAuthErrorCodes.ClientIdMissing,
-                        configuration.State.Message ??
-                        "Google Drive OAuth client configuration is missing.");
-                }
-
-                GoogleSecretDataStore dataStore = _dataStoreFactory.Create(profileId);
                 bool interactive = operationKind is
                     AuthenticationOperation.Connect or AuthenticationOperation.Reconnect;
-                GoogleAuthorizedCredential? credential = interactive
-                    ? await _authorizer.ConnectAsync(
-                        configuration.Configuration,
-                        profileId,
-                        dataStore,
-                        RequestedScopes,
-                        operationToken)
-                    : await _authorizer.RestoreAsync(
+                GoogleDriveAccountInfo? restoredAccount = null;
+                GoogleAuthorizedCredential? credential;
+
+                if (interactive)
+                {
+                    GoogleOAuthClientConfigurationReadResult configuration =
+                        _configurationProvider.Read();
+
+                    if (configuration.Configuration is null)
+                    {
+                        return Failure(
+                            GoogleDriveAuthenticationStatus.ClientConfigurationMissing,
+                            configuration.State.ErrorCode ?? GoogleDriveOAuthErrorCodes.ClientIdMissing,
+                            configuration.State.Message ??
+                            "Google Drive OAuth client configuration is missing.");
+                    }
+
+                    GoogleSecretDataStore dataStore = _dataStoreFactory.Create(profileId);
+                    credential = await _authorizer.ConnectAsync(
                         configuration.Configuration,
                         profileId,
                         dataStore,
                         RequestedScopes,
                         operationToken);
+                }
+                else
+                {
+                    GoogleDriveAuthorizedSession session =
+                        await _authorizedSessionFactory.RestoreAsync(
+                            profile,
+                            operationToken);
+                    credential = session.Credential;
+                    restoredAccount = session.Account;
+                }
 
                 operationToken.ThrowIfCancellationRequested();
 
@@ -204,9 +219,10 @@ namespace GameSaves.Infrastructure.GoogleDrive
 
                     try
                     {
-                        account = await _accountReader.ReadAsync(
-                            credential,
-                            operationToken);
+                        account = restoredAccount ??
+                            await _accountReader.ReadAsync(
+                                credential,
+                                operationToken);
                     }
                     catch (OperationCanceledException)
                     {
@@ -345,6 +361,56 @@ namespace GameSaves.Infrastructure.GoogleDrive
                         GoogleDriveAuthenticationStatus.Failed,
                         GoogleDriveOAuthErrorCodes.Failed,
                         "Protected Google Drive authentication storage failed.")
+                };
+            }
+            catch (GoogleDriveAuthorizedSessionException ex) when (
+                ex.Failure is
+                    GoogleDriveAuthorizedSessionFailure.AuthorizationRevoked or
+                    GoogleDriveAuthorizedSessionFailure.RevokedTokenCleanupFailed &&
+                profile is not null)
+            {
+                return await HandleRevokedAuthorizationAsync(
+                    profile,
+                    CancellationToken.None);
+            }
+            catch (GoogleDriveAuthorizedSessionException ex)
+            {
+                return ex.Failure switch
+                {
+                    GoogleDriveAuthorizedSessionFailure.ClientConfigurationMissing =>
+                        Failure(
+                            GoogleDriveAuthenticationStatus.ClientConfigurationMissing,
+                            GoogleDriveOAuthErrorCodes.ClientIdMissing,
+                            "Google Drive OAuth client configuration is missing."),
+                    GoogleDriveAuthorizedSessionFailure.NoStoredAuthentication =>
+                        Failure(
+                            GoogleDriveAuthenticationStatus.NoStoredAuthentication,
+                            null,
+                            "No stored Google Drive authentication is available."),
+                    GoogleDriveAuthorizedSessionFailure.SecretStoreUnavailable =>
+                        Failure(
+                            GoogleDriveAuthenticationStatus.SecretStoreUnavailable,
+                            GoogleDriveOAuthErrorCodes.TokenStoreUnavailable,
+                            "Protected Google Drive authentication storage is unavailable."),
+                    GoogleDriveAuthorizedSessionFailure.TokenCorrupted =>
+                        Failure(
+                            GoogleDriveAuthenticationStatus.TokenCorrupted,
+                            GoogleDriveOAuthErrorCodes.TokenCorrupted,
+                            "Stored Google Drive authentication is unreadable. Remove the local authentication or reconnect the account."),
+                    GoogleDriveAuthorizedSessionFailure.ReauthenticationRequired =>
+                        Failure(
+                            GoogleDriveAuthenticationStatus.ReauthenticationRequired,
+                            GoogleDriveOAuthErrorCodes.ReauthenticationRequired,
+                            "Stored Google Drive authentication could not be refreshed. Reconnect the account to continue."),
+                    GoogleDriveAuthorizedSessionFailure.Unavailable =>
+                        Failure(
+                            GoogleDriveAuthenticationStatus.AccountLookupFailed,
+                            GoogleDriveOAuthErrorCodes.DriveUnavailable,
+                            "Google Drive is temporarily unavailable. The protected authentication was kept; try again later."),
+                    _ => Failure(
+                        GoogleDriveAuthenticationStatus.AccountLookupFailed,
+                        GoogleDriveOAuthErrorCodes.AccountLookupFailed,
+                        "Stored Google Drive authentication could not be validated.")
                 };
             }
             catch (GoogleAuthorizationException ex) when (

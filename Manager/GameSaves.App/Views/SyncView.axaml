@@ -405,12 +405,79 @@
                                            FontSize="11"
                                            TextWrapping="Wrap" />
 
-                                <TextBlock Text="{Binding GoogleDriveConnectionMessage}"
-                                           Foreground="{StaticResource AccentBrush}"
-                                           FontSize="12"
-                                           TextWrapping="Wrap" />
+                                 <TextBlock Text="{Binding GoogleDriveConnectionMessage}"
+                                            Foreground="{StaticResource AccentBrush}"
+                                            FontSize="12"
+                                            TextWrapping="Wrap" />
 
-                                <TextBlock Text="Google Drive account connection is available. Backup synchronization, root-folder setup, uploads, and downloads are implemented in later milestones."
+                                <Border Background="#10131A"
+                                        BorderBrush="{StaticResource CardBorderBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="8"
+                                        Padding="10">
+                                    <StackPanel Spacing="6">
+                                        <TextBlock Text="Application backup folder"
+                                                   Foreground="{StaticResource PrimaryTextBrush}"
+                                                   FontWeight="SemiBold"
+                                                   FontSize="12" />
+
+                                        <Grid ColumnDefinitions="Auto,*"
+                                              RowDefinitions="Auto,Auto"
+                                              ColumnSpacing="10"
+                                              RowSpacing="3">
+                                            <TextBlock Grid.Row="0"
+                                                       Text="Backup folder:"
+                                                       Foreground="{StaticResource MutedTextBrush}" />
+                                            <TextBlock Grid.Row="0"
+                                                       Grid.Column="1"
+                                                       Text="{Binding GoogleDriveRootFolderDisplayText}"
+                                                       Foreground="{StaticResource SecondaryTextBrush}" />
+                                            <TextBlock Grid.Row="1"
+                                                       Text="Folder status:"
+                                                       Foreground="{StaticResource MutedTextBrush}" />
+                                            <TextBlock Grid.Row="1"
+                                                       Grid.Column="1"
+                                                       Text="{Binding GoogleDriveRootFolderStatusDisplayText}"
+                                                       Foreground="{StaticResource AccentBrush}"
+                                                       TextWrapping="Wrap" />
+                                        </Grid>
+
+                                        <StackPanel Orientation="Horizontal"
+                                                    Spacing="8">
+                                            <Button Content="Set Up Drive Folder"
+                                                    Command="{Binding SetUpGoogleDriveRootFolderCommand}"
+                                                    IsEnabled="{Binding CanSetUpGoogleDriveRootFolder}"
+                                                    IsVisible="{Binding CanSetUpGoogleDriveRootFolder}"
+                                                    Height="30" />
+                                            <Button Content="Check Drive Folder"
+                                                    Command="{Binding CheckGoogleDriveRootFolderCommand}"
+                                                    IsEnabled="{Binding CanCheckGoogleDriveRootFolder}"
+                                                    IsVisible="{Binding CanCheckGoogleDriveRootFolder}"
+                                                    Height="30" />
+                                            <Button Content="Recreate Drive Folder"
+                                                    Command="{Binding RecreateGoogleDriveRootFolderCommand}"
+                                                    IsEnabled="{Binding CanRecreateGoogleDriveRootFolder}"
+                                                    IsVisible="{Binding CanShowRecreateGoogleDriveRootFolder}"
+                                                    Height="30" />
+                                            <Button Content="Cancel Folder Operation"
+                                                    Command="{Binding CancelGoogleDriveRootFolderCommand}"
+                                                    IsVisible="{Binding CanCancelGoogleDriveRootFolderOperation}"
+                                                    Height="30" />
+                                        </StackPanel>
+
+                                        <CheckBox Content="Confirm creating or selecting a replacement Google Drive root folder"
+                                                  IsChecked="{Binding ConfirmRecreateGoogleDriveRootFolder}"
+                                                  IsVisible="{Binding CanShowRecreateGoogleDriveRootFolder}"
+                                                  ToolTip.Tip="The old Drive object, remote files, local backups, and saved profile remain. A new folder is created only when no unique existing candidate is available." />
+
+                                        <TextBlock Text="{Binding GoogleDriveRootFolderMessage}"
+                                                   Foreground="{StaticResource AccentBrush}"
+                                                   FontSize="11"
+                                                   TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
+
+                                <TextBlock Text="The visible My Drive folder identity can now be configured and checked. Backup-run folders, uploads, downloads, preview, and synchronization are implemented in later milestones."
                                            Foreground="{StaticResource WarningBrush}"
                                            FontSize="11"
                                            TextWrapping="Wrap" />
