@@ -158,6 +158,83 @@ internal sealed class StubGoogleDriveOAuthService : IGoogleDriveOAuthService
     }
 }
 
+internal sealed class StubGoogleDriveRootFolderService
+    : IGoogleDriveRootFolderService
+{
+    public GoogleDriveRootFolderResult InspectResult { get; set; } =
+        new(
+            GoogleDriveRootFolderStatus.Unconfigured,
+            Guid.Empty,
+            Message: "No Google Drive root folder is configured.");
+
+    public GoogleDriveRootFolderResult EnsureResult { get; set; } =
+        new(
+            GoogleDriveRootFolderStatus.Failed,
+            Guid.Empty,
+            ErrorCode: GoogleDriveRootFolderErrorCodes.Failed,
+            Message: "Google Drive root-folder setup is unavailable in this test.");
+
+    public GoogleDriveRootFolderResult RecreateResult { get; set; } =
+        new(
+            GoogleDriveRootFolderStatus.Failed,
+            Guid.Empty,
+            ErrorCode: GoogleDriveRootFolderErrorCodes.Failed,
+            Message: "Google Drive root-folder recreation is unavailable in this test.");
+
+    public int InspectCalls { get; private set; }
+    public int EnsureCalls { get; private set; }
+    public int RecreateCalls { get; private set; }
+
+    public Func<Guid, CancellationToken, Task<GoogleDriveRootFolderResult>>?
+        InspectHandler { get; set; }
+
+    public Func<Guid, CancellationToken, Task<GoogleDriveRootFolderResult>>?
+        EnsureHandler { get; set; }
+
+    public Func<
+        Guid,
+        GoogleDriveRootFolderRecreationConfirmation,
+        CancellationToken,
+        Task<GoogleDriveRootFolderResult>>? RecreateHandler { get; set; }
+
+    public async Task<GoogleDriveRootFolderResult> InspectAsync(
+        Guid remoteProfileId,
+        CancellationToken cancellationToken = default)
+    {
+        InspectCalls++;
+        cancellationToken.ThrowIfCancellationRequested();
+        return InspectHandler is null
+            ? InspectResult with { RemoteProfileId = remoteProfileId }
+            : await InspectHandler(remoteProfileId, cancellationToken);
+    }
+
+    public async Task<GoogleDriveRootFolderResult> EnsureAsync(
+        Guid remoteProfileId,
+        CancellationToken cancellationToken = default)
+    {
+        EnsureCalls++;
+        cancellationToken.ThrowIfCancellationRequested();
+        return EnsureHandler is null
+            ? EnsureResult with { RemoteProfileId = remoteProfileId }
+            : await EnsureHandler(remoteProfileId, cancellationToken);
+    }
+
+    public async Task<GoogleDriveRootFolderResult> RecreateAsync(
+        Guid remoteProfileId,
+        GoogleDriveRootFolderRecreationConfirmation confirmation,
+        CancellationToken cancellationToken = default)
+    {
+        RecreateCalls++;
+        cancellationToken.ThrowIfCancellationRequested();
+        return RecreateHandler is null
+            ? RecreateResult with { RemoteProfileId = remoteProfileId }
+            : await RecreateHandler(
+                remoteProfileId,
+                confirmation,
+                cancellationToken);
+    }
+}
+
 internal sealed class StubSyncRemoteProfileMigrationService : ISyncRemoteProfileMigrationService
 {
     private readonly SyncUiSettings _settings;
