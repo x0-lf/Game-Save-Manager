@@ -203,9 +203,11 @@ Restore (Backups tab) copies backed-up files to their original locations:
 5. Untick any runs you do not want to copy, confirm, and press **Sync Now** - a byte-accurate progress bar tracks the copy.
 6. The remote keeps a shared `sync-log.json` of every executed sync; downloaded runs are immediately restorable from the Backups tab.
 
-Google Drive also appears in the provider selector for saved-profile setup and account authorization. It opens Google's supported system-browser flow, requests only `drive.file`, and displays the validated account metadata. After connection, an explicit setup action can create or rediscover the single app-accessible, visible `GameSave Manager Backups` folder in My Drive; read-only checks reuse its authoritative Drive ID across restarts, renames, moves, and reconnects. The per-file scope does not expose every arbitrary folder a user created outside the App. A future arbitrary-folder choice would use Google Picker without broadening the scope. Google Drive preview and execution stay disabled because backup-run hierarchy and remote-file operations are not implemented yet.
+Google Drive also appears in the provider selector for saved-profile setup and account authorization. It opens Google's supported system-browser flow, requests only `drive.file`, and displays the validated account metadata. After connection, an explicit setup action can create or rediscover the single app-accessible, visible `GameSave Manager Backups` folder in My Drive; read-only checks reuse its authoritative Drive ID across restarts, renames, moves, and reconnects. Sanitized development-account verification confirmed explicit setup reaches Ready and restart reuses the same root without broader consent. The per-file scope does not expose every arbitrary folder a user created outside the App. A future arbitrary-folder choice would use Google Picker without broadening the scope. Google Drive preview and execution stay disabled because backup-run hierarchy and remote-file operations are not implemented yet.
 
 Sync never deletes or overwrites anything on either side; conflicts are reported and left for you to resolve (export one side as ZIP, or delete one side via Cleanup).
+
+Remote writes now make mutability explicit. Backup-run text content uses create-only semantics and fails if a target already exists. Mutable provider metadata uses separate read-and-replace operations restricted to `.gamesave-sync/sync-log.json`; run manifests and backup files can never be routed through that replacement API. Local Folder uses a flushed temporary sibling and replacement move, while SFTP prefers exclusive creation and POSIX rename with a metadata-only fallback for servers that do not support replacement rename.
 
 ---
 
@@ -499,16 +501,18 @@ My Drive/
 * [x] Recreate the root folder only after explicit user confirmation
 * [x] Do not use Google Drive `appDataFolder` for user backup runs
 
-The application folder is visible in My Drive and remains linked by its Drive ID when renamed or moved. Deleted, trashed, invalid, inaccessible, or unsupported roots are never silently replaced; explicit recreation searches again, rejects ambiguity, and creates a replacement only when no unique usable candidate exists. No backup upload, download, path resolver, or Google Drive synchronization was implemented, and Milestone M has not started.
+The application folder is visible in My Drive and remains linked by its Drive ID when renamed or moved. Deleted, trashed, invalid, inaccessible, or unsupported roots are never silently replaced; explicit recreation searches again, rejects ambiguity, and creates a replacement only when no unique usable candidate exists. The live-API repair removed an unnecessary `files.get("root")` dependency without broadening the OAuth scope. No backup upload, download, path resolver, or Google Drive synchronization was implemented.
 
 ### M — Refine remote metadata write semantics
 
-Separate the two meanings currently represented by `IRemoteFileSystem.WriteTextFileAsync`:
+Separate the two meanings previously represented by `IRemoteFileSystem.WriteTextFileAsync`:
 
-* [ ] Create a backup-run file only if it is missing
-* [ ] Replace or update explicitly mutable provider metadata such as `.gamesave-sync/sync-log.json`
-* [ ] Read provider metadata
-* [ ] Keep backup-run content create-only and never weaken the no-overwrite rule
+* [x] Create a backup-run file only if it is missing
+* [x] Replace or update explicitly mutable provider metadata such as `.gamesave-sync/sync-log.json`
+* [x] Read provider metadata
+* [x] Keep backup-run content create-only and never weaken the no-overwrite rule
+
+The ambiguous write operation was removed. Local Folder and SFTP now expose explicit create-only and provider-metadata replacement operations; mutable paths are restricted to `.gamesave-sync/sync-log.json`. Sync logs remain updateable, while run manifests and backup files remain immutable. The Google Drive root setup was repaired without broadening OAuth scope, Google Drive synchronization remains unavailable, and Milestone N has not started.
 
 ### N — Google Drive object/path resolver
 

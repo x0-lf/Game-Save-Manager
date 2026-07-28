@@ -274,7 +274,7 @@ namespace GameSaves.Infrastructure.Sync
             }, cancellationToken);
         }
 
-        public Task WriteTextFileAsync(
+        public Task CreateTextFileIfMissingAsync(
             string relativePath,
             string content,
             CancellationToken cancellationToken = default)
@@ -285,7 +285,43 @@ namespace GameSaves.Infrastructure.Sync
                 string path = ToRemotePath(relativePath);
 
                 EnsureRemoteDirectories(client, GetRemoteParent(path));
-                client.WriteAllText(path, content);
+                new SftpTextFileOperations(new SftpTextFileClient(client))
+                    .CreateTextFileIfMissing(path, content, cancellationToken);
+            }, cancellationToken);
+        }
+
+        public Task<string?> ReadProviderMetadataAsync(
+            string relativePath,
+            CancellationToken cancellationToken = default)
+        {
+            string canonicalPath = RemoteProviderMetadataPath.Validate(relativePath);
+
+            return Task.Run(() =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                SftpClient client = EnsureConnected();
+                return new SftpTextFileOperations(new SftpTextFileClient(client))
+                    .ReadProviderMetadata(
+                        ToRemotePath(canonicalPath),
+                        cancellationToken);
+            }, cancellationToken);
+        }
+
+        public Task ReplaceProviderMetadataAsync(
+            string relativePath,
+            string content,
+            CancellationToken cancellationToken = default)
+        {
+            string canonicalPath = RemoteProviderMetadataPath.Validate(relativePath);
+
+            return Task.Run(() =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                SftpClient client = EnsureConnected();
+                string path = ToRemotePath(canonicalPath);
+                EnsureRemoteDirectories(client, GetRemoteParent(path));
+                new SftpTextFileOperations(new SftpTextFileClient(client))
+                    .ReplaceProviderMetadata(path, content, cancellationToken);
             }, cancellationToken);
         }
 

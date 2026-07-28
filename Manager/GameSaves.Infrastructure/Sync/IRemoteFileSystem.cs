@@ -7,8 +7,10 @@ namespace GameSaves.Infrastructure.Sync
     /// SyncEngine owns all sync logic; a backend only implements these
     /// primitives. Relative paths use '/' as separator and are relative to
     /// the remote root. Implementations must create parent directories on
-    /// write, must never overwrite existing files, and must never delete
-    /// anything. Read operations must not create the remote root.
+    /// write. Backup-run content is create-only and must never be overwritten
+    /// or deleted. Explicit provider-metadata methods may replace only
+    /// allowlisted files beneath .gamesave-sync. Read operations must not
+    /// create the remote root.
     /// </summary>
     internal interface IRemoteFileSystem
     {
@@ -37,7 +39,25 @@ namespace GameSaves.Infrastructure.Sync
             string relativePath,
             CancellationToken cancellationToken = default);
 
-        Task WriteTextFileAsync(
+        /// <summary>
+        /// Creates immutable text content and fails when the target exists.
+        /// </summary>
+        Task CreateTextFileIfMissingAsync(
+            string relativePath,
+            string content,
+            CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Reads allowlisted mutable provider metadata; null when absent.
+        /// </summary>
+        Task<string?> ReadProviderMetadataAsync(
+            string relativePath,
+            CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Creates or replaces allowlisted mutable provider metadata.
+        /// </summary>
+        Task ReplaceProviderMetadataAsync(
             string relativePath,
             string content,
             CancellationToken cancellationToken = default);

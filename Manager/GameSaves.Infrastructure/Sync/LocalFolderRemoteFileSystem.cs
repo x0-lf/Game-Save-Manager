@@ -1,5 +1,6 @@
 using GameSaves.Core.Transfers;
 using GameSaves.Infrastructure.Transfers;
+using System.Text;
 
 namespace GameSaves.Infrastructure.Sync
 {
@@ -91,20 +92,70 @@ namespace GameSaves.Infrastructure.Sync
             }, cancellationToken);
         }
 
-        public Task WriteTextFileAsync(
+        public Task CreateTextFileIfMissingAsync(
             string relativePath,
             string content,
             CancellationToken cancellationToken = default)
         {
             return Task.Run(() =>
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 string path = ToLocalPath(relativePath);
                 string? directory = Path.GetDirectoryName(path);
 
                 if (!string.IsNullOrWhiteSpace(directory))
                     Directory.CreateDirectory(directory);
 
-                File.WriteAllText(path, content);
+                WriteUtf8File(path, content, FileMode.CreateNew);
+            }, cancellationToken);
+        }
+
+        public Task<string?> ReadProviderMetadataAsync(
+            string relativePath,
+            CancellationToken cancellationToken = default)
+        {
+            string canonicalPath = RemoteProviderMetadataPath.Validate(relativePath);
+
+            return Task.Run<string?>(() =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                string path = ToLocalPath(canonicalPath);
+                return File.Exists(path) ? File.ReadAllText(path) : null;
+            }, cancellationToken);
+        }
+
+        public Task ReplaceProviderMetadataAsync(
+            string relativePath,
+            string content,
+            CancellationToken cancellationToken = default)
+        {
+            string canonicalPath = RemoteProviderMetadataPath.Validate(relativePath);
+
+            return Task.Run(() =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                string path = ToLocalPath(canonicalPath);
+                string directory = Path.GetDirectoryName(path)!;
+                Directory.CreateDirectory(directory);
+                string temporaryPath = Path.Combine(
+                    directory,
+                    $".{Path.GetFileName(path)}.tmp-{Guid.NewGuid():N}");
+
+                try
+                {
+                    WriteUtf8File(temporaryPath, content, FileMode.CreateNew);
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    // File.Move with overwrite is an atomic name replacement on
+                    // supported local filesystems. Mounted/network filesystems
+                    // may provide weaker atomicity guarantees.
+                    File.Move(temporaryPath, path, overwrite: true);
+                }
+                finally
+                {
+                    if (File.Exists(temporaryPath))
+                        File.Delete(temporaryPath);
+                }
             }, cancellationToken);
         }
 
@@ -166,6 +217,26 @@ namespace GameSaves.Infrastructure.Sync
             File.SetLastWriteTimeUtc(targetFile, File.GetLastWriteTimeUtc(sourceFile));
 
             return new FileInfo(targetFile).Length;
+        }
+
+        private static void WriteUtf8File(
+            string path,
+            string content,
+            FileMode mode)
+        {
+            using var stream = new FileStream(
+                path,
+                mode,
+                FileAccess.Write,
+                FileShare.None);
+            using var writer = new StreamWriter(
+                stream,
+                new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
+                bufferSize: 1024,
+                leaveOpen: true);
+            writer.Write(content);
+            writer.Flush();
+            stream.Flush(flushToDisk: true);
         }
 
         private string ToLocalPath(string relativePath)

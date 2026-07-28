@@ -41,6 +41,12 @@ public sealed class SyncEngineTests
         Assert.EndsWith("/manifest.json", remote.UploadedPaths[^1], StringComparison.OrdinalIgnoreCase);
         Assert.Contains("run-one/files/payload.sav", remote.UploadedPaths);
         Assert.True(remote.TextFiles.ContainsKey(".gamesave-sync/sync-log.json"));
+        Assert.Equal(
+            new[] { ".gamesave-sync/sync-log.json" },
+            remote.ProviderMetadataReplacements);
+        Assert.DoesNotContain(
+            remote.ProviderMetadataReplacements,
+            path => path.EndsWith("manifest.json", StringComparison.OrdinalIgnoreCase));
         Assert.Equal(TransferRunKind.Sync, Assert.Single(history.Records).Kind);
     }
 
@@ -80,6 +86,96 @@ public sealed class SyncEngineTests
         Assert.Equal(SyncItemAction.Conflict, conflict.Action);
         Assert.Equal(1, plan.ConflictCount);
         Assert.DoesNotContain(plan.Items, item => item.RunName == "incomplete");
+        Assert.Contains("same-name/manifest.json", remote.ImmutableTextReads);
+        Assert.Empty(remote.ProviderMetadataReads);
+    }
+
+    [Fact]
+    public async Task SyncLog_UsesMetadataReadAndReplacementAcrossExecutions()
+    {
+        using var temp = new TemporaryDirectory();
+        var pathProvider = new TestDatabasePathProvider(temp.GetPath("app", "gamesave.db"));
+        var backupHistory = new BackupHistoryService(pathProvider);
+        string runRoot = Path.Combine(backupHistory.GetBackupBasePath(), "run-one");
+        TestData.CreateBackupRun(runRoot, temp.GetPath("original.sav"), "payload");
+        var remote = new RecordingRemoteFileSystem();
+        var engine = new SyncEngine(
+            remote,
+            "Test remote",
+            "test://remote",
+            backupHistory,
+            new RecordingHistoryRepository());
+        SyncPlan plan = await engine.CreatePreviewAsync(new SyncOptions());
+        var options = new SyncOptions { DryRun = false, ConfirmExecution = true };
+
+        await engine.ExecuteAsync(plan, options);
+        await engine.ExecuteAsync(plan, options);
+        IReadOnlyList<SyncLogEntry> log = await engine.GetSyncLogAsync();
+
+        Assert.Equal(2, log.Count);
+        Assert.Equal(3, remote.ProviderMetadataReads.Count);
+        Assert.Equal(2, remote.ProviderMetadataReplacements.Count);
+        Assert.All(remote.ProviderMetadataReads,
+            path => Assert.Equal(".gamesave-sync/sync-log.json", path));
+        Assert.All(remote.ProviderMetadataReplacements,
+            path => Assert.Equal(".gamesave-sync/sync-log.json", path));
+    }
+
+    [Fact]
+    public async Task InvalidSyncLog_IsReplacedWithNewSafeHistory()
+    {
+        using var temp = new TemporaryDirectory();
+        var pathProvider = new TestDatabasePathProvider(temp.GetPath("app", "gamesave.db"));
+        var backupHistory = new BackupHistoryService(pathProvider);
+        var remote = new RecordingRemoteFileSystem();
+        remote.TextFiles[".gamesave-sync/sync-log.json"] = "not-json";
+        var engine = new SyncEngine(
+            remote,
+            "Test remote",
+            "test://remote",
+            backupHistory,
+            new RecordingHistoryRepository());
+        SyncPlan plan = await engine.CreatePreviewAsync(new SyncOptions());
+
+        SyncResult result = await engine.ExecuteAsync(
+            plan,
+            new SyncOptions { DryRun = false, ConfirmExecution = true });
+        IReadOnlyList<SyncLogEntry> log = await engine.GetSyncLogAsync();
+
+        Assert.Single(log);
+        Assert.DoesNotContain(result.Warnings,
+            warning => warning.Code == "SyncLogWriteFailed");
+    }
+
+    [Fact]
+    public async Task MetadataWriteFailure_WarnsWithoutFailingCopiedRun()
+    {
+        using var temp = new TemporaryDirectory();
+        var pathProvider = new TestDatabasePathProvider(temp.GetPath("app", "gamesave.db"));
+        var backupHistory = new BackupHistoryService(pathProvider);
+        string runRoot = Path.Combine(backupHistory.GetBackupBasePath(), "run-one");
+        TestData.CreateBackupRun(runRoot, temp.GetPath("original.sav"), "payload");
+        var remote = new RecordingRemoteFileSystem
+        {
+            FailMetadataReplacement = true
+        };
+        var engine = new SyncEngine(
+            remote,
+            "Test remote",
+            "test://remote",
+            backupHistory,
+            new RecordingHistoryRepository());
+        SyncPlan plan = await engine.CreatePreviewAsync(new SyncOptions());
+
+        SyncResult result = await engine.ExecuteAsync(
+            plan,
+            new SyncOptions { DryRun = false, ConfirmExecution = true });
+
+        Assert.Equal(1, result.Uploaded);
+        Assert.Contains(result.Warnings,
+            warning => warning.Code == "SyncLogWriteFailed");
+        Assert.EndsWith("/manifest.json", remote.UploadedPaths[^1],
+            StringComparison.OrdinalIgnoreCase);
     }
 
     private sealed class RecordingRemoteFileSystem : IRemoteFileSystem
@@ -87,6 +183,11 @@ public sealed class SyncEngineTests
         public Dictionary<string, string> TextFiles { get; } = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, byte[]> BinaryFiles { get; } = new(StringComparer.OrdinalIgnoreCase);
         public List<string> UploadedPaths { get; } = new();
+        public List<string> ImmutableTextReads { get; } = new();
+        public List<string> CreateOnlyTextWrites { get; } = new();
+        public List<string> ProviderMetadataReads { get; } = new();
+        public List<string> ProviderMetadataReplacements { get; } = new();
+        public bool FailMetadataReplacement { get; set; }
 
         public string DisplayRoot => "test://remote";
 
@@ -124,15 +225,42 @@ public sealed class SyncEngineTests
             string relativePath,
             CancellationToken cancellationToken = default)
         {
+            ImmutableTextReads.Add(relativePath);
             TextFiles.TryGetValue(relativePath, out string? value);
             return Task.FromResult(value);
         }
 
-        public Task WriteTextFileAsync(
+        public Task CreateTextFileIfMissingAsync(
             string relativePath,
             string content,
             CancellationToken cancellationToken = default)
         {
+            if (!TextFiles.TryAdd(relativePath, content))
+                throw new IOException("Remote text file already exists.");
+
+            CreateOnlyTextWrites.Add(relativePath);
+            return Task.CompletedTask;
+        }
+
+        public Task<string?> ReadProviderMetadataAsync(
+            string relativePath,
+            CancellationToken cancellationToken = default)
+        {
+            ProviderMetadataReads.Add(relativePath);
+            TextFiles.TryGetValue(relativePath, out string? value);
+            return Task.FromResult(value);
+        }
+
+        public Task ReplaceProviderMetadataAsync(
+            string relativePath,
+            string content,
+            CancellationToken cancellationToken = default)
+        {
+            ProviderMetadataReplacements.Add(relativePath);
+
+            if (FailMetadataReplacement)
+                throw new IOException("Deterministic metadata replacement failure.");
+
             TextFiles[relativePath] = content;
             return Task.CompletedTask;
         }

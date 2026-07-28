@@ -240,7 +240,11 @@ The first Drive version supports My Drive only. Shared drives, Google Picker, a 
 
 The `drive.file` scope exposes files and folders created by the App or otherwise made available to it; it does not provide an arbitrary browser over every user-created Drive item. An app-created root can therefore be rediscovered without full Drive access. If arbitrary folder selection is added later, Google Picker is the preferred mechanism while retaining `drive.file`.
 
+Sanitized live development-account verification confirmed that explicit setup reaches **Ready**, persists the app-created root identity, and reuses that root after restart without requesting a broader scope. No account value, folder ID, screenshot, or OAuth value is recorded in the repository.
+
 Development diagnostics for a failed root-folder request are intentionally sanitized. A bug report may include the operation name, HTTP status, allowlisted Google reason, stable error code, and retryable flag. Never include an account email, folder ID, Client ID, client secret, authorization URL, raw response, access token, or refresh token.
+
+The provider-neutral remote write contract now distinguishes create-only backup content from mutable `.gamesave-sync/sync-log.json` metadata. Local Folder and SFTP implement those semantics. Google Drive does not yet implement a remote filesystem, metadata writing, backup-run folders, uploads, downloads, preview, or synchronization; those remain later milestones.
 
 ## Handle downloaded credential files
 

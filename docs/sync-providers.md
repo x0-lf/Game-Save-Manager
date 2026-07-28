@@ -40,7 +40,7 @@ GameSaves.App
 
 Core and App have no Google package reference, and regression tests reject Google SDK types in their public boundaries. Google SDK source remains in `GameSaves.Infrastructure.GoogleDrive`.
 
-`SyncEngine` and `IRemoteFileSystem` remain provider-neutral and unchanged. The factory creates no Google provider; Local Folder and SFTP remain the only sync-capable choices.
+`SyncEngine` and `IRemoteFileSystem` remain provider-neutral. The factory creates no Google provider; Local Folder and SFTP remain the only sync-capable choices.
 
 OAuth token persistence adapts Google `IDataStore` to the existing `ISecretStore`; `FileDataStore` is never used. The desktop Client ID is read only from local `GAMESAVES_GOOGLE_CLIENT_ID`, preferring a process value and then the persistent Windows user value. When the generated Desktop OAuth client requires its non-confidential client secret for token exchange, the same precedence is used for developer-local `GAMESAVES_GOOGLE_CLIENT_SECRET`. Neither value is persisted or displayed, and downloaded credential JSON is not loaded.
 
@@ -155,6 +155,27 @@ Deleted, trashed, wrong-type, inaccessible, and shared-drive roots retain their 
 The folder wrapper requests only the metadata needed for each operation, constrains discovery and direct-root membership checks to the `drive` space and `user` corpus, excludes shared-drive items, and follows every page token. Discovery's exact `'root' in parents` query and creation's explicit `parents = ["root"]` establish the initial top-level location without a separate `files.get("root")` dependency. Stored IDs are checked against the paginated app-visible root listing to distinguish Ready from Moved. Sanitized diagnostics contain only the operation, HTTP status, allowlisted Google reason, stable error code, and retryability; they never contain request URLs, IDs, account values, response bodies, or OAuth data. The hidden application-data space and its OAuth scope are forbidden for user backup runs.
 
 This milestone adds no generic path resolver, child folder, backup-run hierarchy, Picker, quota call, upload, download, `GoogleDriveRemoteFileSystem`, or sync provider. A Connected account with a Ready root still cannot preview or execute sync because `GoogleDrive.IsImplemented` remains false.
+
+## Remote metadata write semantics
+
+The remote filesystem contract separates immutable backup-run content from intentionally mutable provider metadata:
+
+```text
+Create-only backup content
+    -> CreateTextFileIfMissingAsync
+    -> never truncate or replace an existing file
+
+Provider metadata
+    -> ReadProviderMetadataAsync
+    -> ReplaceProviderMetadataAsync
+    -> restricted to .gamesave-sync/sync-log.json
+```
+
+General `ReadTextFileAsync` remains the read operation for immutable run content such as `<run>/manifest.json`. `SyncEngine` uses the provider-metadata methods only for `.gamesave-sync/sync-log.json`, so log history can be replaced after appending while run manifests and backup files remain create-only. Mutable-path validation rejects absolute and drive-qualified paths, traversal, empty segments, run folders, and every path outside the exact metadata allowlist.
+
+Local Folder creates immutable text with `FileMode.CreateNew`. Metadata replacement writes and flushes a unique temporary sibling before replacing the final name; mounted or network filesystems may provide weaker atomicity than a local filesystem. SFTP also uses exclusive `FileMode.CreateNew`, writes metadata to a temporary sibling, and prefers the server's POSIX rename extension. Servers without replacement rename use an explicit non-atomic direct fallback restricted to validated provider metadata, followed by temporary-file cleanup. Neither provider deletes or replaces backup-run content.
+
+Google Drive does not implement this remote filesystem contract yet. No Drive provider, path resolver, backup-run hierarchy, upload, download, preview, or execution was added, and Milestone N has not started.
 
 ## Saved profiles and secrets
 

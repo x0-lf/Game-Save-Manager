@@ -15,9 +15,7 @@ namespace GameSaves.Infrastructure.Sync
     /// </summary>
     internal sealed class SyncEngine
     {
-        private const string SyncMetadataFolder = ".gamesave-sync";
-        private const string SyncLogFileName = "sync-log.json";
-        private const string SyncLogRelativePath = SyncMetadataFolder + "/" + SyncLogFileName;
+        private const string SyncLogRelativePath = RemoteProviderMetadataPath.SyncLog;
 
         private readonly IRemoteFileSystem _remote;
         private readonly string _providerName;
@@ -569,7 +567,9 @@ namespace GameSaves.Infrastructure.Sync
             CancellationToken cancellationToken = default)
         {
             List<SyncLogEntry> log = ParseSyncLog(
-                await _remote.ReadTextFileAsync(SyncLogRelativePath, cancellationToken));
+                await _remote.ReadProviderMetadataAsync(
+                    SyncLogRelativePath,
+                    cancellationToken));
 
             return log
                 .OrderByDescending(entry => entry.TimestampUtc)
@@ -584,7 +584,9 @@ namespace GameSaves.Infrastructure.Sync
             try
             {
                 List<SyncLogEntry> log = ParseSyncLog(
-                    await _remote.ReadTextFileAsync(SyncLogRelativePath, cancellationToken));
+                    await _remote.ReadProviderMetadataAsync(
+                        SyncLogRelativePath,
+                        cancellationToken));
 
                 log.Add(new SyncLogEntry(
                     DeviceName: Environment.MachineName,
@@ -604,7 +606,7 @@ namespace GameSaves.Infrastructure.Sync
                         .Select(r => r.Item.RunName)
                         .ToList()));
 
-                await _remote.WriteTextFileAsync(
+                await _remote.ReplaceProviderMetadataAsync(
                     SyncLogRelativePath,
                     JsonSerializer.Serialize(
                         log,
