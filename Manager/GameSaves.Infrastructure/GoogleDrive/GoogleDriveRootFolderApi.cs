@@ -1,6 +1,8 @@
+using GameSaves.Core.Sync;
 using Google;
 using Google.Apis.Drive.v3;
 using Google.Apis.Services;
+using System.Diagnostics;
 using System.Net;
 using DriveFile = Google.Apis.Drive.v3.Data.File;
 
@@ -14,32 +16,110 @@ namespace GameSaves.Infrastructure.GoogleDrive
         IReadOnlyList<string> ParentIds,
         string? DriveId);
 
+    internal enum GoogleDriveRootFolderApiOperation
+    {
+        Unknown = 0,
+        RootFolderInspection = 1,
+        RootFolderDiscovery = 2,
+        RootFolderTopLevelMembership = 3,
+        RootFolderCreation = 4
+    }
+
     internal enum GoogleDriveRootFolderApiFailure
     {
-        NotFound,
+        InvalidRequest,
+        InvalidQuery,
         AuthorizationRevoked,
+        InsufficientScope,
         AccessDenied,
+        ApiNotEnabled,
+        NotFound,
+        RateLimited,
+        QuotaExceeded,
         Unavailable,
+        PersistenceFailed,
         Failed
+    }
+
+    /// <summary>
+    /// Sanitized provider diagnostics. The reason is selected from a fixed
+    /// allowlist and never includes request URLs, response bodies, IDs, or
+    /// account and OAuth data.
+    /// </summary>
+    internal sealed record GoogleDriveApiFailureDetails(
+        GoogleDriveRootFolderApiOperation Operation,
+        HttpStatusCode? HttpStatus,
+        string? Reason,
+        GoogleDriveRootFolderApiFailure Failure,
+        string SafeErrorCode,
+        bool Retryable)
+    {
+        public override string ToString() =>
+            $"{Operation} / {(HttpStatus is null ? "none" : ((int)HttpStatus).ToString())} / " +
+            $"{Reason ?? "none"} / {SafeErrorCode} / retryable={Retryable}";
     }
 
     internal sealed class GoogleDriveRootFolderApiException : Exception
     {
         public GoogleDriveRootFolderApiException(
             GoogleDriveRootFolderApiFailure failure)
-            : base("The Google Drive root-folder request did not complete.") =>
-            Failure = failure;
+            : this(new GoogleDriveApiFailureDetails(
+                GoogleDriveRootFolderApiOperation.Unknown,
+                null,
+                null,
+                failure,
+                SafeErrorCode(failure),
+                failure is GoogleDriveRootFolderApiFailure.RateLimited or
+                    GoogleDriveRootFolderApiFailure.Unavailable))
+        {
+        }
 
-        public GoogleDriveRootFolderApiFailure Failure { get; }
+        public GoogleDriveRootFolderApiException(
+            GoogleDriveApiFailureDetails details)
+            : base("The Google Drive root-folder request did not complete.") =>
+            Details = details;
+
+        public GoogleDriveApiFailureDetails Details { get; }
+
+        public GoogleDriveRootFolderApiFailure Failure => Details.Failure;
+
+        internal static string SafeErrorCode(GoogleDriveRootFolderApiFailure failure) =>
+            failure switch
+            {
+                GoogleDriveRootFolderApiFailure.InvalidRequest =>
+                    GoogleDriveRootFolderErrorCodes.InvalidRequest,
+                GoogleDriveRootFolderApiFailure.InvalidQuery =>
+                    GoogleDriveRootFolderErrorCodes.InvalidQuery,
+                GoogleDriveRootFolderApiFailure.AuthorizationRevoked =>
+                    GoogleDriveRootFolderErrorCodes.AuthenticationRequired,
+                GoogleDriveRootFolderApiFailure.InsufficientScope =>
+                    GoogleDriveRootFolderErrorCodes.InsufficientScope,
+                GoogleDriveRootFolderApiFailure.AccessDenied =>
+                    GoogleDriveRootFolderErrorCodes.AccessDenied,
+                GoogleDriveRootFolderApiFailure.ApiNotEnabled =>
+                    GoogleDriveRootFolderErrorCodes.ApiNotEnabled,
+                GoogleDriveRootFolderApiFailure.NotFound =>
+                    GoogleDriveRootFolderErrorCodes.Missing,
+                GoogleDriveRootFolderApiFailure.RateLimited =>
+                    GoogleDriveRootFolderErrorCodes.RateLimited,
+                GoogleDriveRootFolderApiFailure.QuotaExceeded =>
+                    GoogleDriveRootFolderErrorCodes.QuotaExceeded,
+                GoogleDriveRootFolderApiFailure.Unavailable =>
+                    GoogleDriveRootFolderErrorCodes.Unavailable,
+                GoogleDriveRootFolderApiFailure.PersistenceFailed =>
+                    GoogleDriveRootFolderErrorCodes.PersistenceFailed,
+                _ => GoogleDriveRootFolderErrorCodes.Failed
+            };
     }
 
     internal interface IGoogleDriveRootFolderApi
     {
-        Task<string> GetMyDriveRootIdAsync(
+        Task<GoogleDriveFolderMetadata> GetFolderByIdAsync(
             GoogleAuthorizedCredential credential,
+            string folderId,
             CancellationToken cancellationToken);
 
-        Task<GoogleDriveFolderMetadata> GetFolderByIdAsync(
+        Task<bool> IsDirectChildOfMyDriveRootAsync(
             GoogleAuthorizedCredential credential,
             string folderId,
             CancellationToken cancellationToken);
@@ -56,35 +136,36 @@ namespace GameSaves.Infrastructure.GoogleDrive
     internal sealed class GoogleDriveRootFolderApi : IGoogleDriveRootFolderApi
     {
         internal const string MetadataFields =
-            "id,name,mimeType,trashed,parents,driveId";
+            "id,name,mimeType,trashed,driveId";
         internal const string DiscoveryFields =
-            "nextPageToken,incompleteSearch,files(id,name,mimeType,trashed,parents,driveId)";
+            "nextPageToken,incompleteSearch,files(id,name,mimeType,trashed,driveId)";
+        internal const string MembershipFields =
+            "nextPageToken,incompleteSearch,files(id)";
         internal const string DiscoveryQuery =
             "name = 'GameSave Manager Backups' and " +
             "mimeType = 'application/vnd.google-apps.folder' and " +
             "trashed = false and 'root' in parents";
+        internal const string MembershipQuery =
+            "trashed = false and 'root' in parents";
 
-        public async Task<string> GetMyDriveRootIdAsync(
-            GoogleAuthorizedCredential credential,
-            CancellationToken cancellationToken)
-        {
-            try
+        private static readonly HashSet<string> SafeReasons =
+            new(StringComparer.OrdinalIgnoreCase)
             {
-                using DriveService drive = CreateDriveService(credential);
-                FilesResource.GetRequest request = drive.Files.Get("root");
-                request.Fields = "id";
-                DriveFile root = await request.ExecuteAsync(cancellationToken);
-
-                return !string.IsNullOrWhiteSpace(root.Id)
-                    ? root.Id
-                    : throw new GoogleDriveRootFolderApiException(
-                        GoogleDriveRootFolderApiFailure.Failed);
-            }
-            catch (Exception ex)
-            {
-                throw MapException(ex);
-            }
-        }
+                "accessNotConfigured",
+                "activeItemCreationLimitExceeded",
+                "authError",
+                "backendError",
+                "forbidden",
+                "insufficientFilePermissions",
+                "insufficientPermissions",
+                "invalidCredentials",
+                "invalidQuery",
+                "quotaExceeded",
+                "rateLimitExceeded",
+                "serviceDisabled",
+                "storageQuotaExceeded",
+                "userRateLimitExceeded"
+            };
 
         public async Task<GoogleDriveFolderMetadata> GetFolderByIdAsync(
             GoogleAuthorizedCredential credential,
@@ -97,15 +178,68 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 FilesResource.GetRequest request = drive.Files.Get(folderId);
                 request.Fields = MetadataFields;
                 // A stored authoritative ID may now resolve into a shared drive.
-                // Read it so the service can reject that unsupported location
-                // explicitly; name-based discovery still excludes shared drives.
+                // Read it so the service can reject that unsupported location.
                 request.SupportsAllDrives = true;
                 DriveFile file = await request.ExecuteAsync(cancellationToken);
                 return Map(file);
             }
             catch (Exception ex)
             {
-                throw MapException(ex);
+                throw MapException(ex, GoogleDriveRootFolderApiOperation.RootFolderInspection);
+            }
+        }
+
+        public async Task<bool> IsDirectChildOfMyDriveRootAsync(
+            GoogleAuthorizedCredential credential,
+            string folderId,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                using DriveService drive = CreateDriveService(credential);
+                string? pageToken = null;
+
+                do
+                {
+                    FilesResource.ListRequest request = drive.Files.List();
+                    request.Q = MembershipQuery;
+                    request.Spaces = "drive";
+                    request.Corpora = "user";
+                    request.IncludeItemsFromAllDrives = false;
+                    request.SupportsAllDrives = false;
+                    request.Fields = MembershipFields;
+                    request.PageToken = pageToken;
+
+                    Google.Apis.Drive.v3.Data.FileList page =
+                        await request.ExecuteAsync(cancellationToken);
+
+                    if (page.IncompleteSearch == true)
+                    {
+                        throw Failure(
+                            GoogleDriveRootFolderApiOperation.RootFolderTopLevelMembership,
+                            GoogleDriveRootFolderApiFailure.Unavailable,
+                            retryable: true);
+                    }
+
+                    if (page.Files?.Any(file =>
+                            string.Equals(file.Id, folderId, StringComparison.Ordinal)) == true)
+                    {
+                        return true;
+                    }
+
+                    pageToken = string.IsNullOrWhiteSpace(page.NextPageToken)
+                        ? null
+                        : page.NextPageToken;
+                }
+                while (pageToken is not null);
+
+                return false;
+            }
+            catch (Exception ex)
+            {
+                throw MapException(
+                    ex,
+                    GoogleDriveRootFolderApiOperation.RootFolderTopLevelMembership);
             }
         }
 
@@ -136,8 +270,10 @@ namespace GameSaves.Infrastructure.GoogleDrive
 
                     if (page.IncompleteSearch == true)
                     {
-                        throw new GoogleDriveRootFolderApiException(
-                            GoogleDriveRootFolderApiFailure.Unavailable);
+                        throw Failure(
+                            GoogleDriveRootFolderApiOperation.RootFolderDiscovery,
+                            GoogleDriveRootFolderApiFailure.Unavailable,
+                            retryable: true);
                     }
 
                     if (page.Files is not null)
@@ -153,7 +289,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
             }
             catch (Exception ex)
             {
-                throw MapException(ex);
+                throw MapException(ex, GoogleDriveRootFolderApiOperation.RootFolderDiscovery);
             }
         }
 
@@ -166,8 +302,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 using DriveService drive = CreateDriveService(credential);
                 var metadata = new DriveFile
                 {
-                    Name = GameSaves.Core.Sync.GoogleDriveApplicationRoot.DisplayName,
-                    MimeType = GameSaves.Core.Sync.GoogleDriveApplicationRoot.FolderMimeType,
+                    Name = GoogleDriveApplicationRoot.DisplayName,
+                    MimeType = GoogleDriveApplicationRoot.FolderMimeType,
                     Parents = new[] { "root" }
                 };
                 FilesResource.CreateRequest request = drive.Files.Create(metadata);
@@ -177,7 +313,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
             }
             catch (Exception ex)
             {
-                throw MapException(ex);
+                throw MapException(ex, GoogleDriveRootFolderApiOperation.RootFolderCreation);
             }
         }
 
@@ -197,92 +333,133 @@ namespace GameSaves.Infrastructure.GoogleDrive
             file.Parents?.ToArray() ?? Array.Empty<string>(),
             file.DriveId);
 
-        private static Exception MapException(Exception exception)
+        internal static GoogleDriveRootFolderApiException MapException(
+            Exception exception,
+            GoogleDriveRootFolderApiOperation operation)
         {
             if (exception is OperationCanceledException)
-                return exception;
+                throw exception;
 
-            if (exception is GoogleDriveRootFolderApiException)
-                return exception;
+            if (exception is GoogleDriveRootFolderApiException known)
+                return known;
+
+            GoogleDriveApiFailureDetails details;
 
             if (exception is GoogleApiException google)
             {
-                if (google.HttpStatusCode == HttpStatusCode.NotFound)
-                {
-                    return new GoogleDriveRootFolderApiException(
-                        GoogleDriveRootFolderApiFailure.NotFound);
-                }
-
-                if (IsConfirmedAuthenticationFailure(google))
-                {
-                    return new GoogleDriveRootFolderApiException(
-                        GoogleDriveRootFolderApiFailure.AuthorizationRevoked);
-                }
-
-                if (IsTemporaryFailure(google))
-                {
-                    return new GoogleDriveRootFolderApiException(
-                        GoogleDriveRootFolderApiFailure.Unavailable);
-                }
-
-                if (google.HttpStatusCode == HttpStatusCode.Forbidden)
-                {
-                    return new GoogleDriveRootFolderApiException(
-                        GoogleDriveRootFolderApiFailure.AccessDenied);
-                }
+                HttpStatusCode? status = google.HttpStatusCode;
+                string? reason = SafeReason(google);
+                GoogleDriveRootFolderApiFailure failure = Classify(status, reason);
+                details = new GoogleDriveApiFailureDetails(
+                    operation,
+                    status,
+                    reason,
+                    failure,
+                    GoogleDriveRootFolderApiException.SafeErrorCode(failure),
+                    IsRetryable(failure));
+            }
+            else
+            {
+                GoogleDriveRootFolderApiFailure failure =
+                    exception is HttpRequestException or TimeoutException
+                        ? GoogleDriveRootFolderApiFailure.Unavailable
+                        : GoogleDriveRootFolderApiFailure.Failed;
+                details = new GoogleDriveApiFailureDetails(
+                    operation,
+                    null,
+                    null,
+                    failure,
+                    GoogleDriveRootFolderApiException.SafeErrorCode(failure),
+                    IsRetryable(failure));
             }
 
-            return exception is HttpRequestException or TimeoutException
-                ? new GoogleDriveRootFolderApiException(
-                    GoogleDriveRootFolderApiFailure.Unavailable)
-                : new GoogleDriveRootFolderApiException(
-                    GoogleDriveRootFolderApiFailure.Failed);
+            Trace.TraceWarning("Google Drive root-folder request failed: {0}", details);
+            return new GoogleDriveRootFolderApiException(details);
         }
 
-        private static bool IsConfirmedAuthenticationFailure(
-            GoogleApiException exception)
-        {
-            if (exception.HttpStatusCode == HttpStatusCode.Unauthorized)
-                return true;
+        private static GoogleDriveRootFolderApiException Failure(
+            GoogleDriveRootFolderApiOperation operation,
+            GoogleDriveRootFolderApiFailure failure,
+            bool retryable) =>
+            new(new GoogleDriveApiFailureDetails(
+                operation,
+                null,
+                null,
+                failure,
+                GoogleDriveRootFolderApiException.SafeErrorCode(failure),
+                retryable));
 
-            return exception.HttpStatusCode == HttpStatusCode.Forbidden &&
-                exception.Error?.Errors?.Any(error =>
-                    string.Equals(
-                        error.Reason,
-                        "authError",
-                        StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(
-                        error.Reason,
-                        "invalidCredentials",
-                        StringComparison.OrdinalIgnoreCase)) == true;
-        }
-
-        private static bool IsTemporaryFailure(GoogleApiException exception)
+        private static GoogleDriveRootFolderApiFailure Classify(
+            HttpStatusCode? status,
+            string? reason)
         {
-            if (exception.HttpStatusCode is
-                HttpStatusCode.RequestTimeout or
-                HttpStatusCode.TooManyRequests or
+            if (status == HttpStatusCode.Unauthorized ||
+                ReasonIs(reason, "authError", "invalidCredentials"))
+            {
+                return GoogleDriveRootFolderApiFailure.AuthorizationRevoked;
+            }
+
+            if (ReasonIs(reason, "accessNotConfigured", "serviceDisabled"))
+                return GoogleDriveRootFolderApiFailure.ApiNotEnabled;
+
+            if (status == HttpStatusCode.BadRequest)
+            {
+                return ReasonIs(reason, "invalidQuery")
+                    ? GoogleDriveRootFolderApiFailure.InvalidQuery
+                    : GoogleDriveRootFolderApiFailure.InvalidRequest;
+            }
+
+            if (status == HttpStatusCode.NotFound)
+                return GoogleDriveRootFolderApiFailure.NotFound;
+
+            if (ReasonIs(reason, "insufficientPermissions"))
+                return GoogleDriveRootFolderApiFailure.InsufficientScope;
+
+            if (ReasonIs(
+                    reason,
+                    "quotaExceeded",
+                    "storageQuotaExceeded",
+                    "activeItemCreationLimitExceeded"))
+            {
+                return GoogleDriveRootFolderApiFailure.QuotaExceeded;
+            }
+
+            if (status == HttpStatusCode.TooManyRequests ||
+                ReasonIs(reason, "rateLimitExceeded", "userRateLimitExceeded"))
+            {
+                return GoogleDriveRootFolderApiFailure.RateLimited;
+            }
+
+            if (status is HttpStatusCode.RequestTimeout or
                 HttpStatusCode.InternalServerError or
                 HttpStatusCode.BadGateway or
                 HttpStatusCode.ServiceUnavailable or
-                HttpStatusCode.GatewayTimeout)
+                HttpStatusCode.GatewayTimeout ||
+                ReasonIs(reason, "backendError"))
             {
-                return true;
+                return GoogleDriveRootFolderApiFailure.Unavailable;
             }
 
-            return exception.Error?.Errors?.Any(error =>
-                string.Equals(
-                    error.Reason,
-                    "rateLimitExceeded",
-                    StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(
-                    error.Reason,
-                    "userRateLimitExceeded",
-                    StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(
-                    error.Reason,
-                    "backendError",
-                    StringComparison.OrdinalIgnoreCase)) == true;
+            if (status == HttpStatusCode.Forbidden ||
+                ReasonIs(reason, "insufficientFilePermissions", "forbidden"))
+            {
+                return GoogleDriveRootFolderApiFailure.AccessDenied;
+            }
+
+            return GoogleDriveRootFolderApiFailure.Failed;
         }
+
+        private static string? SafeReason(GoogleApiException exception) =>
+            exception.Error?.Errors?
+                .Select(error => error.Reason)
+                .FirstOrDefault(reason =>
+                    !string.IsNullOrWhiteSpace(reason) && SafeReasons.Contains(reason));
+
+        private static bool ReasonIs(string? reason, params string[] candidates) =>
+            reason is not null && candidates.Contains(reason, StringComparer.OrdinalIgnoreCase);
+
+        private static bool IsRetryable(GoogleDriveRootFolderApiFailure failure) =>
+            failure is GoogleDriveRootFolderApiFailure.RateLimited or
+                GoogleDriveRootFolderApiFailure.Unavailable;
     }
 }

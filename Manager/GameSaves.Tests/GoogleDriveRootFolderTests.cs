@@ -3,10 +3,13 @@ using GameSaves.Core.Sync;
 using GameSaves.Infrastructure.DependencyInjection;
 using GameSaves.Infrastructure.GoogleDrive;
 using GameSaves.Infrastructure.Sync;
+using Google;
 using Google.Apis.Auth.OAuth2;
 using Google.Apis.Auth.OAuth2.Flows;
 using Google.Apis.Auth.OAuth2.Responses;
+using Google.Apis.Requests;
 using Microsoft.Extensions.DependencyInjection;
+using System.Net;
 using System.Reflection;
 
 namespace GameSaves.Tests;
@@ -83,7 +86,9 @@ public sealed class GoogleDriveRootFolderTests
 
         Assert.Equal(GoogleDriveRootFolderStatus.Ready, result.Status);
         Assert.True(result.WasValidatedById);
-        Assert.Equal(new[] { "get:authoritative-id", "root" }, api.Calls);
+        Assert.Equal(
+            new[] { "get:authoritative-id", "membership:authoritative-id" },
+            api.Calls);
         Assert.Equal(0, api.FindCalls);
         Assert.Equal(0, api.CreateCalls);
         Assert.Equal("authoritative-id", repository.GetById(profile.Id)!.RemoteFolderId);
@@ -121,10 +126,8 @@ public sealed class GoogleDriveRootFolderTests
             rootName: "Old display"));
         var api = new FakeRootFolderApi
         {
-            GetResult = Folder(
-                "moved-id",
-                "Moved display",
-                parents: new[] { "another-my-drive-folder" })
+            GetResult = Folder("moved-id", "Moved display"),
+            IsTopLevel = false
         };
         GoogleDriveRootFolderService service = CreateService(repository, api);
 
@@ -271,6 +274,7 @@ public sealed class GoogleDriveRootFolderTests
         Assert.Equal(
             GoogleDriveApplicationRoot.DisplayName,
             repository.GetById(profile.Id)!.RemoteRootDisplayName);
+        Assert.DoesNotContain("root", api.Calls);
     }
 
     [Fact]
@@ -543,6 +547,12 @@ public sealed class GoogleDriveRootFolderTests
             GoogleDriveRootFolderApi.DiscoveryQuery);
         Assert.Contains("nextPageToken", GoogleDriveRootFolderApi.DiscoveryFields);
         Assert.Contains("driveId", GoogleDriveRootFolderApi.DiscoveryFields);
+        Assert.Equal(
+            "trashed = false and 'root' in parents",
+            GoogleDriveRootFolderApi.MembershipQuery);
+        Assert.Equal(
+            "nextPageToken,incompleteSearch,files(id)",
+            GoogleDriveRootFolderApi.MembershipFields);
 
         string source = ReadRepositoryFile(
             "GameSaves.Infrastructure",
@@ -554,6 +564,201 @@ public sealed class GoogleDriveRootFolderTests
         Assert.Contains("request.Corpora = \"user\"", source, StringComparison.Ordinal);
         Assert.Contains("request.IncludeItemsFromAllDrives = false", source, StringComparison.Ordinal);
         Assert.Contains("Parents = new[] { \"root\" }", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("Files.Get(\"root\")", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task InitialDiscovery_DoesNotDependOnRootMetadataLookup()
+    {
+        var repository = new InMemorySyncRemoteProfileRepository();
+        SyncRemoteProfile profile = repository.Create(Profile());
+        var api = new FakeRootFolderApi();
+        api.DiscoveryResults.Enqueue(new[] { Folder("app-visible-id") });
+        GoogleDriveRootFolderService service = CreateService(repository, api);
+
+        GoogleDriveRootFolderResult result = await service.InspectAsync(profile.Id);
+
+        Assert.True(result.Succeeded);
+        Assert.True(result.WasDiscovered);
+        Assert.Equal(new[] { "find" }, api.Calls);
+    }
+
+    [Fact]
+    public async Task InitialCreation_PersistsImmediatelyWithoutRootMetadataLookup()
+    {
+        var repository = new InMemorySyncRemoteProfileRepository();
+        SyncRemoteProfile profile = repository.Create(Profile());
+        var api = new FakeRootFolderApi
+        {
+            CreateResult = Folder("created-id", parents: Array.Empty<string>())
+        };
+        GoogleDriveRootFolderService service = CreateService(repository, api);
+
+        GoogleDriveRootFolderResult result = await service.EnsureAsync(profile.Id);
+
+        Assert.True(result.Succeeded);
+        Assert.True(result.WasCreated);
+        Assert.Equal("created-id", repository.GetById(profile.Id)!.RemoteFolderId);
+        Assert.Equal(new[] { "find", "find", "create" }, api.Calls);
+    }
+
+    [Fact]
+    public async Task CreationPersistenceFailure_IsExplicitAndRetryReusesFolder()
+    {
+        var repository = new InMemorySyncRemoteProfileRepository();
+        SyncRemoteProfile profile = repository.Create(Profile());
+        repository.ThrowOnUpdate = true;
+        var api = new FakeRootFolderApi
+        {
+            CreateResult = Folder("created-but-not-linked")
+        };
+        GoogleDriveRootFolderService service = CreateService(repository, api);
+
+        GoogleDriveRootFolderResult failed = await service.EnsureAsync(profile.Id);
+
+        Assert.Equal(GoogleDriveRootFolderErrorCodes.PersistenceFailed, failed.ErrorCode);
+        Assert.Contains("might have been created", failed.Message!,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.Null(repository.GetById(profile.Id)!.RemoteFolderId);
+
+        repository.ThrowOnUpdate = false;
+        api.DiscoveryResults.Enqueue(new[] { Folder("created-but-not-linked") });
+        GoogleDriveRootFolderResult retried = await service.EnsureAsync(profile.Id);
+
+        Assert.True(retried.WasDiscovered);
+        Assert.Equal("created-but-not-linked",
+            repository.GetById(profile.Id)!.RemoteFolderId);
+        Assert.Equal(1, api.CreateCalls);
+    }
+
+    [Fact]
+    public async Task StoredFolderMembership_DeterminesReadyOrMoved()
+    {
+        var readyRepository = new InMemorySyncRemoteProfileRepository();
+        SyncRemoteProfile readyProfile = readyRepository.Create(Profile(rootId: "ready-id"));
+        var readyApi = new FakeRootFolderApi
+        {
+            GetResult = Folder("ready-id"),
+            IsTopLevel = true
+        };
+        var movedRepository = new InMemorySyncRemoteProfileRepository();
+        SyncRemoteProfile movedProfile = movedRepository.Create(Profile(rootId: "moved-id"));
+        var movedApi = new FakeRootFolderApi
+        {
+            GetResult = Folder("moved-id"),
+            IsTopLevel = false
+        };
+
+        GoogleDriveRootFolderResult ready = await CreateService(
+            readyRepository,
+            readyApi).InspectAsync(readyProfile.Id);
+        GoogleDriveRootFolderResult moved = await CreateService(
+            movedRepository,
+            movedApi).InspectAsync(movedProfile.Id);
+
+        Assert.Equal(GoogleDriveRootFolderStatus.Ready, ready.Status);
+        Assert.Equal(GoogleDriveRootFolderStatus.Moved, moved.Status);
+        Assert.Contains("membership:ready-id", readyApi.Calls);
+        Assert.Contains("membership:moved-id", movedApi.Calls);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.BadRequest, null,
+        (int)GoogleDriveRootFolderApiFailure.InvalidRequest,
+        GoogleDriveRootFolderErrorCodes.InvalidRequest)]
+    [InlineData(HttpStatusCode.BadRequest, "invalidQuery",
+        (int)GoogleDriveRootFolderApiFailure.InvalidQuery,
+        GoogleDriveRootFolderErrorCodes.InvalidQuery)]
+    [InlineData(HttpStatusCode.Forbidden, "insufficientPermissions",
+        (int)GoogleDriveRootFolderApiFailure.InsufficientScope,
+        GoogleDriveRootFolderErrorCodes.InsufficientScope)]
+    [InlineData(HttpStatusCode.Forbidden, "insufficientFilePermissions",
+        (int)GoogleDriveRootFolderApiFailure.AccessDenied,
+        GoogleDriveRootFolderErrorCodes.AccessDenied)]
+    [InlineData(HttpStatusCode.Forbidden, "accessNotConfigured",
+        (int)GoogleDriveRootFolderApiFailure.ApiNotEnabled,
+        GoogleDriveRootFolderErrorCodes.ApiNotEnabled)]
+    [InlineData(HttpStatusCode.TooManyRequests, "rateLimitExceeded",
+        (int)GoogleDriveRootFolderApiFailure.RateLimited,
+        GoogleDriveRootFolderErrorCodes.RateLimited)]
+    public void ProviderErrors_MapToSanitizedOperationDiagnostics(
+        HttpStatusCode status,
+        string? reason,
+        int expectedFailure,
+        string expectedCode)
+    {
+        var providerError = new GoogleApiException("Drive", "raw-private-value")
+        {
+            HttpStatusCode = status,
+            Error = reason is null
+                ? null
+                : new RequestError
+                {
+                    Errors = new List<SingleError> { new() { Reason = reason } }
+                }
+        };
+
+        GoogleDriveRootFolderApiException mapped =
+            GoogleDriveRootFolderApi.MapException(
+                providerError,
+                GoogleDriveRootFolderApiOperation.RootFolderDiscovery);
+
+        Assert.Equal((GoogleDriveRootFolderApiFailure)expectedFailure, mapped.Failure);
+        Assert.Equal(expectedCode, mapped.Details.SafeErrorCode);
+        Assert.Equal(GoogleDriveRootFolderApiOperation.RootFolderDiscovery,
+            mapped.Details.Operation);
+        Assert.DoesNotContain("raw-private-value", mapped.Details.ToString(),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Diagnostics_ExcludeUnknownReasonsAndSensitiveValues()
+    {
+        var providerError = new GoogleApiException(
+            "Drive",
+            "access_token=secret account=user@example.invalid folder-id-123")
+        {
+            HttpStatusCode = HttpStatusCode.BadRequest,
+            Error = new RequestError
+            {
+                Errors = new List<SingleError>
+                {
+                    new() { Reason = "private-folder-id-123" }
+                }
+            }
+        };
+
+        GoogleDriveRootFolderApiException mapped =
+            GoogleDriveRootFolderApi.MapException(
+                providerError,
+                GoogleDriveRootFolderApiOperation.RootFolderCreation);
+        string diagnostic = mapped.Details.ToString();
+
+        Assert.DoesNotContain("secret", diagnostic, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("example.invalid", diagnostic, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("folder-id", diagnostic, StringComparison.OrdinalIgnoreCase);
+        Assert.Null(mapped.Details.Reason);
+    }
+
+    [Fact]
+    public async Task ApiNotEnabled_HasDeveloperConfigurationMessage()
+    {
+        var repository = new InMemorySyncRemoteProfileRepository();
+        SyncRemoteProfile profile = repository.Create(Profile());
+        var api = new FakeRootFolderApi
+        {
+            FindFailure = GoogleDriveRootFolderApiFailure.ApiNotEnabled
+        };
+
+        GoogleDriveRootFolderResult result = await CreateService(
+            repository,
+            api).EnsureAsync(profile.Id);
+
+        Assert.Equal(GoogleDriveRootFolderStatus.Unavailable, result.Status);
+        Assert.Equal(GoogleDriveRootFolderErrorCodes.ApiNotEnabled, result.ErrorCode);
+        Assert.Equal(
+            "The Google Drive API is not enabled for the configured OAuth project.",
+            result.Message);
     }
 
     [Fact]
@@ -752,20 +957,27 @@ public sealed class GoogleDriveRootFolderTests
         public GoogleDriveFolderMetadata CreateResult { get; set; } =
             Folder("created-id");
         public GoogleDriveRootFolderApiFailure? GetFailure { get; set; }
+        public GoogleDriveRootFolderApiFailure? MembershipFailure { get; set; }
         public GoogleDriveRootFolderApiFailure? FindFailure { get; set; }
         public GoogleDriveRootFolderApiFailure? CreateFailure { get; set; }
+        public bool IsTopLevel { get; set; } = true;
         public TaskCompletionSource? DiscoveryEntered { get; set; }
         public Task? ReleaseDiscovery { get; set; }
         public int FindCalls { get; private set; }
         public int CreateCalls { get; private set; }
 
-        public Task<string> GetMyDriveRootIdAsync(
+        public Task<bool> IsDirectChildOfMyDriveRootAsync(
             GoogleAuthorizedCredential credential,
+            string folderId,
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            Calls.Add("root");
-            return Task.FromResult("root-id");
+            Calls.Add($"membership:{folderId}");
+
+            if (MembershipFailure is { } failure)
+                throw new GoogleDriveRootFolderApiException(failure);
+
+            return Task.FromResult(IsTopLevel);
         }
 
         public Task<GoogleDriveFolderMetadata> GetFolderByIdAsync(

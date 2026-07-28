@@ -200,7 +200,7 @@ There is no committed default Client ID or client secret. A desktop application 
 
 After authorization, Infrastructure makes one short-lived Google Drive `about.get` request and asks only for `user(displayName,emailAddress)`. The returned display name and optional email are saved as non-secret profile metadata. Access and refresh token bytes remain in `ISecretStore`; connection status and token-presence flags are runtime state and are not persisted in profile JSON.
 
-Account connection does not create a Drive folder, show quota, upload or download a backup, or enable Google Drive sync preview or execution. After a validated connection, the App performs a read-only application-root inspection: it validates a saved folder ID or discovers one unique accessible top-level `GameSave Manager Backups` folder. Creation requires the explicit **Set Up Drive Folder** action.
+Account connection does not create a Drive folder, show quota, upload or download a backup, or enable Google Drive sync preview or execution. After a validated connection, the App performs a read-only application-root inspection: it validates a saved folder ID or discovers one unique app-accessible top-level `GameSave Manager Backups` folder. Creation requires the explicit **Set Up Drive Folder** action.
 
 ## Test the Google account lifecycle
 
@@ -237,6 +237,10 @@ Use only the private development test account and keep account details, Drive fo
 12. Throughout the test, confirm no child backup-run folder, upload, download, preview, or sync operation occurs.
 
 The first Drive version supports My Drive only. Shared drives, Google Picker, a full folder browser, and custom root selection are not part of this milestone. User backup runs are never placed in hidden application storage.
+
+The `drive.file` scope exposes files and folders created by the App or otherwise made available to it; it does not provide an arbitrary browser over every user-created Drive item. An app-created root can therefore be rediscovered without full Drive access. If arbitrary folder selection is added later, Google Picker is the preferred mechanism while retaining `drive.file`.
+
+Development diagnostics for a failed root-folder request are intentionally sanitized. A bug report may include the operation name, HTTP status, allowlisted Google reason, stable error code, and retryable flag. Never include an account email, folder ID, Client ID, client secret, authorization URL, raw response, access token, or refresh token.
 
 ## Handle downloaded credential files
 

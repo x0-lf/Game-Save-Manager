@@ -252,6 +252,7 @@ internal sealed class InMemorySyncRemoteProfileRepository : ISyncRemoteProfileRe
     private readonly List<SyncRemoteProfile> _profiles = new();
 
     public int CreateCalls { get; private set; }
+    public bool ThrowOnUpdate { get; set; }
 
     public IReadOnlyList<SyncRemoteProfile> GetAll() => _profiles
         .OrderBy(profile => profile.LastUsedUtc is null)
@@ -275,6 +276,9 @@ internal sealed class InMemorySyncRemoteProfileRepository : ISyncRemoteProfileRe
 
     public SyncRemoteProfile Update(SyncRemoteProfile profile)
     {
+        if (ThrowOnUpdate)
+            throw new InvalidOperationException("Deterministic profile update failure.");
+
         int index = RequireIndex(profile.Id);
         EnsureName(profile.DisplayName, profile.Id);
         SyncRemoteProfile existing = _profiles[index];

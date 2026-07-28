@@ -124,6 +124,10 @@ public sealed class GoogleDriveRootFolderViewModelTests
             viewModel.GoogleDriveRootFolderDisplayText);
         Assert.Equal("created-id",
             repository.GetById(profile.Id)!.RemoteFolderId);
+        Assert.Equal("created-id",
+            viewModel.SelectedRemoteProfile!.RemoteFolderId);
+        Assert.Equal(GoogleDriveApplicationRoot.DisplayName,
+            viewModel.SelectedRemoteProfile.RemoteRootDisplayName);
         Assert.False(viewModel.CanUseGoogleDriveForSync);
     }
 

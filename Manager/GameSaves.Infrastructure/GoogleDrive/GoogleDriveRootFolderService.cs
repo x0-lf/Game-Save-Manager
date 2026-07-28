@@ -227,7 +227,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
             }
             catch (GoogleDriveRootFolderApiException ex)
             {
-                return await MapApiFailureAsync(profile, ex.Failure, cancellationToken);
+                return await MapApiFailureAsync(profile, ex.Details, cancellationToken);
             }
 
             TouchSuccessfulConnection(profile.Id);
@@ -271,21 +271,22 @@ namespace GameSaves.Infrastructure.GoogleDrive
                     "Google Drive returned incomplete folder metadata. Confirm replacement before continuing.");
             }
 
-            string rootId;
+            bool isTopLevel;
 
             try
             {
-                rootId = await _folderApi.GetMyDriveRootIdAsync(
+                isTopLevel = await _folderApi.IsDirectChildOfMyDriveRootAsync(
                     credential,
+                    folder.Id,
                     cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
             }
             catch (GoogleDriveRootFolderApiException ex)
             {
-                return await MapApiFailureAsync(profile, ex.Failure, cancellationToken);
+                return await MapApiFailureAsync(profile, ex.Details, cancellationToken);
             }
 
-            bool moved = !folder.ParentIds.Contains(rootId, StringComparer.Ordinal);
+            bool moved = !isTopLevel;
             string displayName = NormalizeDisplayName(folder.Name);
             GoogleDriveRootFolderResult persistence = PersistFolder(
                 profile,
@@ -371,24 +372,10 @@ namespace GameSaves.Infrastructure.GoogleDrive
             }
             catch (GoogleDriveRootFolderApiException ex)
             {
-                return await MapApiFailureAsync(profile, ex.Failure, cancellationToken);
+                return await MapApiFailureAsync(profile, ex.Details, cancellationToken);
             }
 
             TouchSuccessfulConnection(profile.Id);
-
-            string rootId;
-
-            try
-            {
-                rootId = await _folderApi.GetMyDriveRootIdAsync(
-                    credential,
-                    cancellationToken);
-                cancellationToken.ThrowIfCancellationRequested();
-            }
-            catch (GoogleDriveRootFolderApiException ex)
-            {
-                return await MapApiFailureAsync(profile, ex.Failure, cancellationToken);
-            }
 
             GoogleDriveFolderMetadata[] usable = candidates
                 .Where(folder =>
@@ -396,10 +383,9 @@ namespace GameSaves.Infrastructure.GoogleDrive
                     string.Equals(
                         folder.MimeType,
                         GoogleDriveApplicationRoot.FolderMimeType,
-                        StringComparison.Ordinal) &&
+                    StringComparison.Ordinal) &&
                     string.IsNullOrWhiteSpace(folder.DriveId) &&
-                    !string.IsNullOrWhiteSpace(folder.Id) &&
-                    folder.ParentIds.Contains(rootId, StringComparer.Ordinal))
+                    !string.IsNullOrWhiteSpace(folder.Id))
                 .GroupBy(folder => folder.Id!, StringComparer.Ordinal)
                 .Select(group => group.First())
                 .ToArray();
@@ -448,7 +434,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
             catch (GoogleDriveRootFolderApiException ex)
             {
                 GoogleDriveRootFolderResult mapped =
-                    await MapApiFailureAsync(profile, ex.Failure, cancellationToken);
+                    await MapApiFailureAsync(profile, ex.Details, cancellationToken);
                 return mapped with
                 {
                     ErrorCode = mapped.Status == GoogleDriveRootFolderStatus.Failed
@@ -462,23 +448,6 @@ namespace GameSaves.Infrastructure.GoogleDrive
 
             TouchSuccessfulConnection(profile.Id);
 
-            string rootId;
-
-            try
-            {
-                rootId = await _folderApi.GetMyDriveRootIdAsync(
-                    credential,
-                    cancellationToken);
-                cancellationToken.ThrowIfCancellationRequested();
-            }
-            catch (GoogleDriveRootFolderApiException ex)
-            {
-                return await MapApiFailureAsync(
-                    profile,
-                    ex.Failure,
-                    cancellationToken);
-            }
-
             if (string.IsNullOrWhiteSpace(folder.Id) ||
                 string.IsNullOrWhiteSpace(folder.Name) ||
                 folder.Name.Length > 255 ||
@@ -487,8 +456,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                     folder.MimeType,
                     GoogleDriveApplicationRoot.FolderMimeType,
                     StringComparison.Ordinal) ||
-                !string.IsNullOrWhiteSpace(folder.DriveId) ||
-                !folder.ParentIds.Contains(rootId, StringComparer.Ordinal))
+                !string.IsNullOrWhiteSpace(folder.DriveId))
             {
                 return new GoogleDriveRootFolderResult(
                     GoogleDriveRootFolderStatus.Failed,
@@ -505,7 +473,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 wasCreated: true,
                 wasDiscovered: false,
                 wasValidatedById: false,
-                wasMoved: false);
+                wasMoved: false,
+                createdRemoteFolder: true);
 
             return result.Succeeded
                 ? result with
@@ -523,7 +492,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
             bool wasCreated,
             bool wasDiscovered,
             bool wasValidatedById,
-            bool wasMoved)
+            bool wasMoved,
+            bool createdRemoteFolder = false)
         {
             try
             {
@@ -536,7 +506,9 @@ namespace GameSaves.Infrastructure.GoogleDrive
                         GoogleDriveRootFolderStatus.Failed,
                         previousProfile.Id,
                         ErrorCode: GoogleDriveRootFolderErrorCodes.PersistenceFailed,
-                        Message: "The Google Drive folder was found, but the saved profile no longer exists.");
+                        Message: createdRemoteFolder
+                            ? "A Google Drive folder might have been created, but it could not be linked because the saved profile no longer exists. Retry setup to search before creating another folder."
+                            : "The Google Drive folder was found, but the saved profile no longer exists.");
                 }
 
                 SyncRemoteProfile updated = _profileRepository.Update(current with
@@ -564,15 +536,19 @@ namespace GameSaves.Infrastructure.GoogleDrive
                     GoogleDriveRootFolderStatus.Failed,
                     previousProfile.Id,
                     ErrorCode: GoogleDriveRootFolderErrorCodes.PersistenceFailed,
-                    Message: "The Google Drive folder was found, but its identity could not be saved to the profile.");
+                    Message: createdRemoteFolder
+                        ? "A Google Drive folder might have been created, but its identity could not be linked locally. Retry setup to search before creating another folder."
+                        : "The Google Drive folder was found, but its identity could not be saved to the profile.");
             }
         }
 
         private async Task<GoogleDriveRootFolderResult> MapApiFailureAsync(
             SyncRemoteProfile profile,
-            GoogleDriveRootFolderApiFailure failure,
+            GoogleDriveApiFailureDetails details,
             CancellationToken cancellationToken)
         {
+            GoogleDriveRootFolderApiFailure failure = details.Failure;
+
             if (failure == GoogleDriveRootFolderApiFailure.AuthorizationRevoked)
             {
                 bool removed = await TryRemoveRevokedAuthenticationAsync(
@@ -608,6 +584,58 @@ namespace GameSaves.Infrastructure.GoogleDrive
                     Message: "Google Drive did not allow access to inspect or set up the application backup folder.");
             }
 
+            if (failure == GoogleDriveRootFolderApiFailure.InsufficientScope)
+            {
+                return new GoogleDriveRootFolderResult(
+                    GoogleDriveRootFolderStatus.ReauthenticationRequired,
+                    profile.Id,
+                    profile.RemoteFolderId,
+                    profile.RemoteRootDisplayName,
+                    ErrorCode: GoogleDriveRootFolderErrorCodes.InsufficientScope,
+                    Message: "Google Drive did not grant the required drive.file access. Reconnect the account and approve the requested access.");
+            }
+
+            if (failure == GoogleDriveRootFolderApiFailure.ApiNotEnabled)
+            {
+                return new GoogleDriveRootFolderResult(
+                    GoogleDriveRootFolderStatus.Unavailable,
+                    profile.Id,
+                    profile.RemoteFolderId,
+                    profile.RemoteRootDisplayName,
+                    ErrorCode: GoogleDriveRootFolderErrorCodes.ApiNotEnabled,
+                    Message: "The Google Drive API is not enabled for the configured OAuth project.");
+            }
+
+            if (failure is GoogleDriveRootFolderApiFailure.InvalidRequest or
+                GoogleDriveRootFolderApiFailure.InvalidQuery)
+            {
+                return new GoogleDriveRootFolderResult(
+                    GoogleDriveRootFolderStatus.Failed,
+                    profile.Id,
+                    profile.RemoteFolderId,
+                    profile.RemoteRootDisplayName,
+                    ErrorCode: failure == GoogleDriveRootFolderApiFailure.InvalidQuery
+                        ? GoogleDriveRootFolderErrorCodes.InvalidQuery
+                        : GoogleDriveRootFolderErrorCodes.InvalidRequest,
+                    Message: $"The {OperationDisplayName(details.Operation)} request was rejected by Google Drive. The saved folder identity was preserved.");
+            }
+
+            if (failure is GoogleDriveRootFolderApiFailure.RateLimited or
+                GoogleDriveRootFolderApiFailure.QuotaExceeded)
+            {
+                return new GoogleDriveRootFolderResult(
+                    GoogleDriveRootFolderStatus.Unavailable,
+                    profile.Id,
+                    profile.RemoteFolderId,
+                    profile.RemoteRootDisplayName,
+                    ErrorCode: failure == GoogleDriveRootFolderApiFailure.RateLimited
+                        ? GoogleDriveRootFolderErrorCodes.RateLimited
+                        : GoogleDriveRootFolderErrorCodes.QuotaExceeded,
+                    Message: failure == GoogleDriveRootFolderApiFailure.RateLimited
+                        ? "Google Drive temporarily rate-limited the root-folder request. Try again later; the saved folder identity was preserved."
+                        : "Google Drive quota prevented the root-folder request. The saved folder identity was preserved.");
+            }
+
             return new GoogleDriveRootFolderResult(
                 failure == GoogleDriveRootFolderApiFailure.Unavailable
                     ? GoogleDriveRootFolderStatus.Unavailable
@@ -622,6 +650,21 @@ namespace GameSaves.Infrastructure.GoogleDrive
                     ? "Google Drive is temporarily unavailable. The saved folder identity was preserved."
                     : "The Google Drive root folder could not be checked. The saved folder identity was preserved.");
         }
+
+        private static string OperationDisplayName(
+            GoogleDriveRootFolderApiOperation operation) =>
+            operation switch
+            {
+                GoogleDriveRootFolderApiOperation.RootFolderInspection =>
+                    "root-folder inspection",
+                GoogleDriveRootFolderApiOperation.RootFolderDiscovery =>
+                    "root-folder discovery",
+                GoogleDriveRootFolderApiOperation.RootFolderTopLevelMembership =>
+                    "root-folder location check",
+                GoogleDriveRootFolderApiOperation.RootFolderCreation =>
+                    "root-folder creation",
+                _ => "root-folder"
+            };
 
         private static GoogleDriveRootFolderResult InvalidStoredFolder(
             SyncRemoteProfile profile,

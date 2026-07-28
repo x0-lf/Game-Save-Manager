@@ -48,6 +48,12 @@ namespace GameSaves.Core.Sync
         public const string ConfirmationRequired = "GoogleDriveRootConfirmationRequired";
         public const string Unavailable = "GoogleDriveRootUnavailable";
         public const string AccessDenied = "GoogleDriveRootAccessDenied";
+        public const string InsufficientScope = "GoogleDriveRootInsufficientScope";
+        public const string ApiNotEnabled = "GoogleDriveRootApiNotEnabled";
+        public const string InvalidRequest = "GoogleDriveRootInvalidRequest";
+        public const string InvalidQuery = "GoogleDriveRootInvalidQuery";
+        public const string RateLimited = "GoogleDriveRootRateLimited";
+        public const string QuotaExceeded = "GoogleDriveRootQuotaExceeded";
         public const string CreationFailed = "GoogleDriveRootCreationFailed";
         public const string PersistenceFailed = "GoogleDriveRootPersistenceFailed";
         public const string OperationInProgress = "GoogleDriveRootOperationInProgress";
