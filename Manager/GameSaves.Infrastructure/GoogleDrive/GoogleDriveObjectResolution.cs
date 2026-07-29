@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using GameSaves.Core.Sync;
 
 namespace GameSaves.Infrastructure.GoogleDrive
 {
@@ -41,6 +42,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
         public const string Unavailable = "GoogleDriveObjectUnavailable";
         public const string InvalidCreateResponse =
             "GoogleDriveObjectInvalidCreateResponse";
+        public const string InvalidMetadata = "GoogleDriveObjectInvalidMetadata";
         public const string Failed = "GoogleDriveObjectFailed";
     }
 
@@ -64,6 +66,12 @@ namespace GameSaves.Infrastructure.GoogleDrive
             Id = id;
             Name = name;
             MimeType = mimeType;
+            Kind = string.Equals(
+                mimeType,
+                GoogleDriveApplicationRoot.FolderMimeType,
+                StringComparison.Ordinal)
+                ? GoogleDriveObjectKind.Folder
+                : GoogleDriveObjectKind.File;
             Trashed = trashed;
             ParentIds = new ReadOnlyCollection<string>(
                 parentIds?.ToArray() ?? Array.Empty<string>());
@@ -75,6 +83,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
         public string Name { get; }
 
         public string MimeType { get; }
+
+        public GoogleDriveObjectKind Kind { get; }
 
         public bool Trashed { get; }
 

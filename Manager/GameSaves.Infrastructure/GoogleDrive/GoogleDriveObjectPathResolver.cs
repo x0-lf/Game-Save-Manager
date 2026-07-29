@@ -24,7 +24,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
 
     /// <summary>
     /// Resolves one authenticated Google Drive session. The caller owns the
-    /// credential lifetime; the resolver does not cache IDs across calls.
+    /// credential lifetime. Cached IDs remain scoped to one saved profile and
+    /// configured application root and are revalidated before cross-call use.
     /// </summary>
     internal sealed class GoogleDriveObjectPathResolver
         : IGoogleDriveObjectPathResolver
@@ -35,11 +36,18 @@ namespace GameSaves.Infrastructure.GoogleDrive
         private readonly IGoogleDriveObjectApi _objectApi;
         private readonly GoogleAuthorizedCredential _credential;
         private readonly GoogleDriveObjectCreationCoordinator _creationCoordinator;
+        private readonly IGoogleDriveObjectIdCache _objectIdCache;
+        private readonly Guid _remoteProfileId;
 
         public GoogleDriveObjectPathResolver(
             IGoogleDriveObjectApi objectApi,
             GoogleAuthorizedCredential credential)
-            : this(objectApi, credential, SharedCreationCoordinator)
+            : this(
+                objectApi,
+                credential,
+                SharedCreationCoordinator,
+                new GoogleDriveObjectIdCache(),
+                Guid.NewGuid())
         {
         }
 
@@ -47,11 +55,31 @@ namespace GameSaves.Infrastructure.GoogleDrive
             IGoogleDriveObjectApi objectApi,
             GoogleAuthorizedCredential credential,
             GoogleDriveObjectCreationCoordinator creationCoordinator)
+            : this(
+                objectApi,
+                credential,
+                creationCoordinator,
+                new GoogleDriveObjectIdCache(),
+                Guid.NewGuid())
+        {
+        }
+
+        internal GoogleDriveObjectPathResolver(
+            IGoogleDriveObjectApi objectApi,
+            GoogleAuthorizedCredential credential,
+            GoogleDriveObjectCreationCoordinator creationCoordinator,
+            IGoogleDriveObjectIdCache objectIdCache,
+            Guid remoteProfileId)
         {
             _objectApi = objectApi ?? throw new ArgumentNullException(nameof(objectApi));
             _credential = credential ?? throw new ArgumentNullException(nameof(credential));
             _creationCoordinator = creationCoordinator ??
                 throw new ArgumentNullException(nameof(creationCoordinator));
+            _objectIdCache = objectIdCache ??
+                throw new ArgumentNullException(nameof(objectIdCache));
+            if (remoteProfileId == Guid.Empty)
+                throw new ArgumentException("A remote profile ID is required.", nameof(remoteProfileId));
+            _remoteProfileId = remoteProfileId;
         }
 
         public Task<GoogleDriveObjectResolutionResult> FindChildAsync(
@@ -67,6 +95,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 parentId,
                 exactName,
                 expectedKind,
+                cacheScope: null,
                 cancellationToken);
         }
 
@@ -97,6 +126,9 @@ namespace GameSaves.Infrastructure.GoogleDrive
             }
 
             string parentId = rootFolderId;
+            var cacheScope = new GoogleDriveObjectCacheScope(
+                _remoteProfileId,
+                rootFolderId);
 
             for (int index = 0; index < relativePath.Segments.Count; index++)
             {
@@ -111,6 +143,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                         parentId,
                         relativePath.Segments[index],
                         expectedKind,
+                        cacheScope,
                         cancellationToken);
 
                 if (segmentResult.Status != GoogleDriveObjectResolutionStatus.Found)
@@ -151,6 +184,9 @@ namespace GameSaves.Infrastructure.GoogleDrive
             }
 
             string parentId = rootFolderId;
+            var cacheScope = new GoogleDriveObjectCacheScope(
+                _remoteProfileId,
+                rootFolderId);
             GoogleDriveObjectMetadata? finalMetadata = null;
             bool createdAnyFolder = false;
 
@@ -163,6 +199,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                         parentId,
                         segment,
                         GoogleDriveObjectKind.Folder,
+                        cacheScope,
                         cancellationToken);
 
                 if (segmentResult.Status == GoogleDriveObjectResolutionStatus.NotFound)
@@ -170,6 +207,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                     segmentResult = await EnsureChildFolderAsync(
                         parentId,
                         segment,
+                        cacheScope,
                         cancellationToken);
                 }
 
@@ -202,6 +240,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
             EnsureChildFolderAsync(
                 string parentId,
                 string exactName,
+                GoogleDriveObjectCacheScope cacheScope,
                 CancellationToken cancellationToken)
         {
             using IDisposable lease = await _creationCoordinator.AcquireAsync(
@@ -216,6 +255,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                     parentId,
                     exactName,
                     GoogleDriveObjectKind.Folder,
+                    cacheScope,
                     cancellationToken);
 
             if (secondSearch.Status != GoogleDriveObjectResolutionStatus.NotFound)
@@ -233,11 +273,24 @@ namespace GameSaves.Infrastructure.GoogleDrive
                         cancellationToken);
 
                 cancellationToken.ThrowIfCancellationRequested();
-                return ValidateCreatedFolder(
+                GoogleDriveObjectResolutionResult result = ValidateCreatedFolder(
                     segmentPath,
                     parentId,
                     exactName,
                     created);
+
+                if (result.Status == GoogleDriveObjectResolutionStatus.Created &&
+                    result.Metadata is not null)
+                {
+                    _objectIdCache.TryStoreUniqueValidated(
+                        cacheScope,
+                        parentId,
+                        exactName,
+                        GoogleDriveObjectKind.Folder,
+                        result.Metadata);
+                }
+
+                return result;
             }
             catch (OperationCanceledException)
             {
@@ -271,7 +324,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 return InvalidCreateResponse(segmentPath);
             }
 
-            GoogleDriveObjectKind actualKind = KindOf(metadata);
+            GoogleDriveObjectKind actualKind = metadata.Kind;
 
             if (!string.IsNullOrWhiteSpace(metadata.DriveId))
             {
@@ -307,6 +360,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
             string parentId,
             string exactName,
             GoogleDriveObjectKind? expectedKind,
+            GoogleDriveObjectCacheScope? cacheScope,
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -320,6 +374,29 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 childPath.Segments.Count != 1)
             {
                 return InvalidPath();
+            }
+
+            if (cacheScope is not null && expectedKind is not null &&
+                _objectIdCache.TryGet(
+                    cacheScope.Value,
+                    parentId,
+                    exactName,
+                    expectedKind.Value,
+                    out GoogleDriveObjectIdCacheEntry? cachedEntry) &&
+                cachedEntry is not null)
+            {
+                GoogleDriveObjectResolutionResult? cachedResult =
+                    await ValidateCachedEntryAsync(
+                        cacheScope.Value,
+                        parentId,
+                        exactName,
+                        expectedKind.Value,
+                        childPath,
+                        cachedEntry,
+                        cancellationToken);
+
+                if (cachedResult is not null)
+                    return cachedResult;
             }
 
             try
@@ -352,7 +429,13 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 }
 
                 GoogleDriveObjectMetadata metadata = matches[0];
-                GoogleDriveObjectKind actualKind = KindOf(metadata);
+                GoogleDriveObjectKind actualKind = metadata.Kind;
+
+                if (!string.Equals(metadata.Name, exactName, StringComparison.Ordinal) ||
+                    !metadata.ParentIds.Contains(parentId, StringComparer.Ordinal))
+                {
+                    return InvalidMetadata(childPath, expectedKind);
+                }
 
                 if (!string.IsNullOrWhiteSpace(metadata.DriveId))
                 {
@@ -381,6 +464,16 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 if (expectedKind is not null && actualKind != expectedKind)
                     return TypeMismatch(childPath, actualKind, metadata.Id, metadata);
 
+                if (cacheScope is not null && expectedKind is not null)
+                {
+                    _objectIdCache.TryStoreUniqueValidated(
+                        cacheScope.Value,
+                        parentId,
+                        exactName,
+                        expectedKind.Value,
+                        metadata);
+                }
+
                 return Found(childPath, actualKind, metadata.Id, metadata);
             }
             catch (OperationCanceledException)
@@ -397,13 +490,101 @@ namespace GameSaves.Infrastructure.GoogleDrive
             }
         }
 
-        private static GoogleDriveObjectKind KindOf(GoogleDriveObjectMetadata metadata) =>
-            string.Equals(
-                metadata.MimeType,
-                GoogleDriveApplicationRoot.FolderMimeType,
-                StringComparison.Ordinal)
-                ? GoogleDriveObjectKind.Folder
-                : GoogleDriveObjectKind.File;
+        private async Task<GoogleDriveObjectResolutionResult?> ValidateCachedEntryAsync(
+            GoogleDriveObjectCacheScope cacheScope,
+            string parentId,
+            string exactName,
+            GoogleDriveObjectKind expectedKind,
+            GoogleDriveRelativePath childPath,
+            GoogleDriveObjectIdCacheEntry cachedEntry,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                GoogleDriveObjectMetadata current = await _objectApi.GetByIdAsync(
+                    _credential,
+                    cachedEntry.ObjectId,
+                    cancellationToken);
+
+                if (IsCurrentCacheMatch(
+                    cachedEntry.ObjectId,
+                    parentId,
+                    exactName,
+                    expectedKind,
+                    current))
+                {
+                    _objectIdCache.TryStoreUniqueValidated(
+                        cacheScope,
+                        parentId,
+                        exactName,
+                        expectedKind,
+                        current);
+                    return Found(childPath, expectedKind, current.Id, current);
+                }
+
+                InvalidateStaleEntry(
+                    cacheScope,
+                    parentId,
+                    exactName,
+                    expectedKind);
+                return null;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (GoogleDriveApiException ex)
+            {
+                if (ex.Failure == GoogleDriveApiFailure.NotFound)
+                {
+                    InvalidateStaleEntry(
+                        cacheScope,
+                        parentId,
+                        exactName,
+                        expectedKind);
+                    return null;
+                }
+
+                return MapApiFailure(ex, childPath, expectedKind);
+            }
+            catch
+            {
+                return Failed(childPath, expectedKind);
+            }
+        }
+
+        private void InvalidateStaleEntry(
+            GoogleDriveObjectCacheScope cacheScope,
+            string parentId,
+            string exactName,
+            GoogleDriveObjectKind expectedKind)
+        {
+            if (expectedKind == GoogleDriveObjectKind.Folder)
+            {
+                _objectIdCache.ClearScope(cacheScope);
+                return;
+            }
+
+            _objectIdCache.Remove(
+                cacheScope,
+                parentId,
+                exactName,
+                expectedKind);
+        }
+
+        private static bool IsCurrentCacheMatch(
+            string cachedObjectId,
+            string parentId,
+            string exactName,
+            GoogleDriveObjectKind expectedKind,
+            GoogleDriveObjectMetadata metadata) =>
+            string.Equals(metadata.Id, cachedObjectId, StringComparison.Ordinal) &&
+            string.Equals(metadata.Name, exactName, StringComparison.Ordinal) &&
+            metadata.ParentIds.Contains(parentId, StringComparer.Ordinal) &&
+            !metadata.Trashed &&
+            string.IsNullOrWhiteSpace(metadata.DriveId) &&
+            metadata.Kind == expectedKind;
 
         private static GoogleDriveObjectResolutionResult MapApiFailure(
             GoogleDriveApiException exception,
@@ -516,6 +697,16 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 GoogleDriveObjectKind.Folder,
                 errorCode: GoogleDriveObjectResolutionErrorCodes.InvalidCreateResponse,
                 message: "Google Drive returned invalid metadata for the created folder.");
+
+        private static GoogleDriveObjectResolutionResult InvalidMetadata(
+            GoogleDriveRelativePath path,
+            GoogleDriveObjectKind? expectedKind) =>
+            new(
+                GoogleDriveObjectResolutionStatus.Failed,
+                path,
+                expectedKind,
+                errorCode: GoogleDriveObjectResolutionErrorCodes.InvalidMetadata,
+                message: "Google Drive returned inconsistent object metadata.");
 
         private static GoogleDriveObjectResolutionResult Failed(
             GoogleDriveRelativePath? path,
