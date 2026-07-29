@@ -1,0 +1,121 @@
+name: Bug report
+description: Report reproducible incorrect or unsafe behavior
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for helping improve Game Save Manager.
+
+        **Do not post credentials, OAuth data, private save content, personal account details, Google Drive IDs, private hostnames, or unredacted paths and screenshots.** Report exploitable security, credential, or credible data-loss concerns through the private-reporting guidance in `CODE_OF_CONDUCT.md`.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight checks
+      options:
+        - label: I searched existing issues and did not find the same report.
+          required: true
+        - label: I removed credentials, personal information, private paths, save contents, and remote object IDs.
+          required: true
+        - label: This issue can be discussed publicly without exposing a security vulnerability or sensitive data-loss details.
+          required: true
+        - label: I agree to follow the repository Code of Conduct.
+          required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: Provide the release version or abbreviated commit hash where the problem occurs.
+      placeholder: "For example: main at 1a2b3c4"
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Include the operating system, architecture, and .NET runtime when relevant. Do not include a local username or private path.
+      placeholder: "For example: Windows 11 x64, .NET 8"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Desktop application
+        - Steam discovery or profiles
+        - Save-path mappings
+        - Transfer preview or execution
+        - Manual backup, restore, or cleanup
+        - Local Folder synchronization
+        - SFTP synchronization
+        - Google Drive account or root-folder configuration
+        - CLI or harvesting tools
+        - Mapping Reviewer
+        - Database, migration, or secret storage
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: Describe the problem and its user impact in a few sentences.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Provide the smallest reliable sequence using test or sanitized data.
+      placeholder: |
+        1. Open ...
+        2. Select ...
+        3. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: Explain what should have happened, including relevant safety behavior.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Explain what happened. Use only sanitized messages or stable error codes.
+    validations:
+      required: true
+
+  - type: textarea
+    id: data_impact
+    attributes:
+      label: Data and safety impact
+      description: State whether any live save, backup, profile, credential, or remote object changed. Do not attach the affected private data.
+      placeholder: "For example: No data changed; the preview failed before execution."
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Sanitized diagnostics
+      description: Optional. Include safe status codes, warning counts, or test output only after removing personal and secret values.
+
+  - type: textarea
+    id: additional_context
+    attributes:
+      label: Additional context
+      description: Add any other relevant, non-sensitive information or sanitized screenshots.
+

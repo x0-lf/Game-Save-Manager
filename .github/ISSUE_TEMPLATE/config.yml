@@ -1,0 +1,6 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Conduct and private-reporting guidance
+    url: https://github.com/x0-lf/Game-Save-Manager/blob/main/CODE_OF_CONDUCT.md
+    about: Read this before reporting conduct concerns, credentials, sensitive security issues, or credible data-loss risks.
+

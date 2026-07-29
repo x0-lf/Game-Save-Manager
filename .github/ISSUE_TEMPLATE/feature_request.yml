@@ -1,0 +1,94 @@
+name: Feature request
+description: Propose a focused, safe improvement
+title: "[Feature]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for proposing an improvement. Review the current roadmap in `README.md` before submitting. A proposal does not authorize implementation of a later milestone or weakening of a safety invariant.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight checks
+      options:
+        - label: I searched existing issues and the roadmap for the same request.
+          required: true
+        - label: I have described the user problem rather than only a preferred implementation.
+          required: true
+        - label: This proposal does not contain credentials, personal account data, private paths, or save contents.
+          required: true
+        - label: I agree to follow the repository Code of Conduct.
+          required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Desktop application
+        - Steam discovery or profiles
+        - Save-path mappings
+        - Transfer, backup, restore, or cleanup
+        - Synchronization architecture
+        - Local Folder provider
+        - SFTP provider
+        - Google Drive provider
+        - CLI or harvesting tools
+        - Mapping Reviewer
+        - Database, migration, or secret storage
+        - Documentation or contributor experience
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: User problem
+      description: Who is affected, what are they trying to do, and why is the current behavior insufficient?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed outcome
+      description: Describe the smallest user-visible outcome that would solve the problem.
+    validations:
+      required: true
+
+  - type: textarea
+    id: safety
+    attributes:
+      label: Safety and privacy considerations
+      description: Explain possible effects on save data, backups, overwrite or deletion behavior, paths, credentials, personal data, and remote providers.
+    validations:
+      required: true
+
+  - type: textarea
+    id: architecture
+    attributes:
+      label: Architecture and roadmap fit
+      description: Identify the likely project boundary and roadmap milestone, if known. State what should remain out of scope.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Optional. Describe workarounds or smaller approaches considered.
+
+  - type: textarea
+    id: verification
+    attributes:
+      label: Suggested verification
+      description: Describe automated and manual checks that would demonstrate the feature is safe and complete.
+
+  - type: textarea
+    id: additional_context
+    attributes:
+      label: Additional context
+      description: Add relevant non-sensitive examples, mockups, or links.
+
