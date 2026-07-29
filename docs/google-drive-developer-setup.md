@@ -2,7 +2,7 @@
 
 This guide is for developers working on Game Save Manager. Normal end users do not need to create a Google Cloud project. Completing these steps prepares a development project only: it does not make Google Drive sync functional. Google Drive account authorization is available for development, while backup synchronization remains a later roadmap milestone.
 
-Milestone J reads `GAMESAVES_GOOGLE_CLIENT_ID` from the local process environment or, on Windows, directly from the persistent user environment and performs installed-desktop OAuth in the system browser. A process-scoped value takes precedence. Tokens are stored only through the protected `ISecretStore`, and the only Drive API request is the minimal account lookup described below. The application never loads a downloaded credential file. Builds and automated tests require no personal Google configuration.
+Code done during Milestone J reads `GAMESAVES_GOOGLE_CLIENT_ID` from the local process environment or, on Windows, directly from the persistent user environment and performs installed-desktop OAuth in the system browser. A process-scoped value takes precedence. Tokens are stored only through the protected `ISecretStore`, and the only Drive API request is the minimal account lookup described below. The application never loads a downloaded credential file. Builds and automated tests require no personal Google configuration.
 
 Never use or commit a personal OAuth token for repository development, and never send a Google Account password to the application. Authorization uses Google's supported system-browser flow for installed desktop applications, a loopback callback, and PKCE.
 
@@ -181,7 +181,7 @@ Or set a persistent Windows user environment variable:
 
 Game Save Manager reads the persistent Windows user value directly, so an existing Explorer or terminal process does not need to inherit the newly configured value. Restart the App itself after changing the variable so its connection panel is initialized from the current configuration.
 
-> Milestone J reads this variable when Google Drive account authorization is requested. It is never copied into profile JSON, SQLite, logs, or the UI.
+> Code which was done during Milestone J reads this variable when Google Drive account authorization is requested. It is never copied into profile JSON, SQLite, logs, or the UI.
 
 Google documents `client_secret` as optional for the installed-app token exchange, but a generated Desktop OAuth client can require its generated value when used through the selected Google .NET client library. If the App reports that it could not complete the authorization exchange, configure the value from that same Desktop OAuth client locally:
 
@@ -244,7 +244,7 @@ Sanitized live development-account verification confirmed that explicit setup re
 
 Development diagnostics for a failed root-folder request are intentionally sanitized. A bug report may include the operation name, HTTP status, allowlisted Google reason, stable error code, and retryable flag. Never include an account email, folder ID, Client ID, client secret, authorization URL, raw response, access token, or refresh token.
 
-The provider-neutral remote write contract now distinguishes create-only backup content from mutable `.gamesave-sync/sync-log.json` metadata. Local Folder and SFTP implement those semantics. Google Drive does not yet implement a remote filesystem, metadata writing, backup-run folders, uploads, downloads, preview, or synchronization; those remain later milestones.
+The provider-neutral remote write contract now distinguishes create-only backup content from mutable `.gamesave-sync/sync-log.json` metadata. Local Folder and SFTP implement those semantics. Google Drive now has an Infrastructure-only `/`-relative object/path resolver for exact-name lookup, paginated discovery, safe missing-parent creation, duplicate rejection, and validated in-memory ID caching. It operates only on app-accessible My Drive objects under the existing `drive.file` grant; it does not require broader consent. Child IDs are not persisted in a new database or file. Google Drive still does not implement a remote filesystem, metadata writing, backup-run listing, uploads, downloads, preview, or synchronization; those remain later milestones.
 
 ## Handle downloaded credential files
 

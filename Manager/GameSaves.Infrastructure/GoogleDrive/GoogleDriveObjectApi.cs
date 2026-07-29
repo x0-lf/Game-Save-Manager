@@ -9,7 +9,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
     {
         public string Fields => GoogleDriveRequestContract.MetadataFields;
 
-        public bool SupportsAllDrives => false;
+        public bool SupportsAllDrives => GoogleDriveRequestContract.SupportsAllDrives;
 
         public override string ToString() => "Google Drive object metadata request";
     }
@@ -24,9 +24,10 @@ namespace GameSaves.Infrastructure.GoogleDrive
 
         public string Corpora => GoogleDriveRequestContract.UserCorpus;
 
-        public bool IncludeItemsFromAllDrives => false;
+        public bool IncludeItemsFromAllDrives =>
+            GoogleDriveRequestContract.IncludeItemsFromAllDrives;
 
-        public bool SupportsAllDrives => false;
+        public bool SupportsAllDrives => GoogleDriveRequestContract.SupportsAllDrives;
 
         public override string ToString() => "Google Drive exact-name child request";
     }
@@ -50,7 +51,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
 
         public string Fields => GoogleDriveRequestContract.MetadataFields;
 
-        public bool SupportsAllDrives => false;
+        public bool SupportsAllDrives => GoogleDriveRequestContract.SupportsAllDrives;
     }
 
     internal sealed record GoogleDriveObjectListPage(
@@ -225,7 +226,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 new BaseClientService.Initializer
                 {
                     HttpClientInitializer = credential.Credential,
-                    ApplicationName = "Game Save Manager"
+                    ApplicationName = GoogleDriveRequestContract.ApplicationName
                 }));
     }
 

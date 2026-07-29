@@ -154,7 +154,27 @@ Deleted, trashed, wrong-type, inaccessible, and shared-drive roots retain their 
 
 The folder wrapper requests only the metadata needed for each operation, constrains discovery and direct-root membership checks to the `drive` space and `user` corpus, excludes shared-drive items, and follows every page token. Discovery's exact `'root' in parents` query and creation's explicit `parents = ["root"]` establish the initial top-level location without a separate `files.get("root")` dependency. Stored IDs are checked against the paginated app-visible root listing to distinguish Ready from Moved. Sanitized diagnostics contain only the operation, HTTP status, allowlisted Google reason, stable error code, and retryability; they never contain request URLs, IDs, account values, response bodies, or OAuth data. The hidden application-data space and its OAuth scope are forbidden for user backup runs.
 
-This milestone adds no generic path resolver, child folder, backup-run hierarchy, Picker, quota call, upload, download, `GoogleDriveRemoteFileSystem`, or sync provider. A Connected account with a Ready root still cannot preview or execute sync because `GoogleDrive.IsImplemented` remains false.
+Milestone L itself added no generic path resolver, child folder, backup-run hierarchy, Picker, quota call, upload, download, `GoogleDriveRemoteFileSystem`, or sync provider. A Connected account with a Ready root still cannot preview or execute sync because `GoogleDrive.IsImplemented` remains false.
+
+## Google Drive object/path resolver
+
+Milestone N adds an Infrastructure-only resolver beneath the configured application-root ID. Game Save Manager remote paths use `/` as their only separator; an empty path means the configured root. Segment text preserves case and exact Unicode, and names containing apostrophes or backslashes remain valid Drive names. Leading or trailing separators, empty segments, `.` and `..`, NUL, and unsafe control characters are rejected without using host-filesystem normalization.
+
+```text
+configured root ID
+    -> exact-name child query under the current parent ID
+        -> zero matches: NotFound
+        -> one validated match: continue using its authoritative ID
+        -> multiple matches: Ambiguous; select nothing
+```
+
+Query construction is isolated in `GoogleDriveQueryBuilder`. It escapes backslashes before apostrophes and lets the Google client library perform URL encoding. Exact-child searches include the parent ID, exact name, and `trashed = false`, use the `drive` space and `user` corpus, exclude shared drives, request only required metadata, and follow every `nextPageToken`. The completed query is not logged because it contains object IDs and user-selected names.
+
+`EnsureFolderPathAsync` reuses unique existing folders and creates only missing parent folders. Per-parent/name asynchronous coordination repeats the lookup before creation, preventing duplicate creation races within this process. Same-name files, duplicate folders, invalid create responses, trashed objects, and shared-drive objects stop resolution; nothing is selected arbitrarily, overwritten, renamed, moved, trashed, or deleted.
+
+The object-ID cache is memory-only and scoped to the saved profile and configured root. Keys preserve case and include the parent ID, exact child name, and expected object kind. Only unique, type-checked, non-trashed My Drive objects with validated parent membership are cached. Every cross-call cache hit is checked again by authoritative ID. Missing, renamed, moved, trashed, wrong-type, or shared-drive entries are evicted; a stale folder clears the root scope because descendants may also be invalid. Reconnect, disconnect, root replacement, profile deletion, and confirmed authorization revocation have explicit Infrastructure invalidation reasons. Child IDs are never stored in SQLite, profile JSON, or a second cache file.
+
+The resolver consumes an already validated `GoogleAuthorizedCredential` through a credential-scoped Infrastructure factory. Dependency registration creates no browser flow, token read, Drive request, or singleton `DriveService`. The existing `drive.file` scope remains sufficient for app-created/app-accessible objects in My Drive. No `GoogleDriveRemoteFileSystem`, Google Drive provider-factory case, backup-run listing, upload, download, preview, or sync execution exists yet.
 
 ## Remote metadata write semantics
 
@@ -175,7 +195,7 @@ General `ReadTextFileAsync` remains the read operation for immutable run content
 
 Local Folder creates immutable text with `FileMode.CreateNew`. Metadata replacement writes and flushes a unique temporary sibling before replacing the final name; mounted or network filesystems may provide weaker atomicity than a local filesystem. SFTP also uses exclusive `FileMode.CreateNew`, writes metadata to a temporary sibling, and prefers the server's POSIX rename extension. Servers without replacement rename use an explicit non-atomic direct fallback restricted to validated provider metadata, followed by temporary-file cleanup. Neither provider deletes or replaces backup-run content.
 
-Google Drive does not implement this remote filesystem contract yet. No Drive provider, path resolver, backup-run hierarchy, upload, download, preview, or execution was added, and Milestone N has not started.
+Google Drive does not implement this remote filesystem contract yet. Its Infrastructure object/path resolver supplies future ID resolution and safe parent-folder creation only; no Drive provider, backup-run listing, metadata implementation, upload, download, preview, or execution exists.
 
 ## Saved profiles and secrets
 

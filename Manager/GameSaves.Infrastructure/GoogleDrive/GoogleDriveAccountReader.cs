@@ -42,7 +42,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
             using var drive = new DriveService(new BaseClientService.Initializer
             {
                 HttpClientInitializer = credential.Credential,
-                ApplicationName = "Game Save Manager"
+                ApplicationName = GoogleDriveRequestContract.ApplicationName
             });
 
             AboutResource.GetRequest request = drive.About.Get();

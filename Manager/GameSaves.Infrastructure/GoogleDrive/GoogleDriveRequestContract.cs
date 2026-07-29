@@ -6,6 +6,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
     /// </summary>
     internal static class GoogleDriveRequestContract
     {
+        public const string ApplicationName = "Game Save Manager";
+
         public const string MetadataFields =
             "id,name,mimeType,trashed,parents,driveId";
 
@@ -16,5 +18,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
         public const string DriveSpace = "drive";
         public const string UserCorpus = "user";
         public const string MyDriveRootId = "root";
+        public const bool IncludeItemsFromAllDrives = false;
+        public const bool SupportsAllDrives = false;
     }
 }

@@ -568,7 +568,16 @@ public sealed class GoogleDriveRootFolderTests
             "request.Corpora = GoogleDriveRequestContract.UserCorpus",
             source,
             StringComparison.Ordinal);
-        Assert.Contains("request.IncludeItemsFromAllDrives = false", source, StringComparison.Ordinal);
+        Assert.False(GoogleDriveRequestContract.IncludeItemsFromAllDrives);
+        Assert.False(GoogleDriveRequestContract.SupportsAllDrives);
+        Assert.Contains(
+            "GoogleDriveRequestContract.IncludeItemsFromAllDrives",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "GoogleDriveRequestContract.SupportsAllDrives",
+            source,
+            StringComparison.Ordinal);
         Assert.Contains(
             "Parents = new[] { GoogleDriveRequestContract.MyDriveRootId }",
             source,

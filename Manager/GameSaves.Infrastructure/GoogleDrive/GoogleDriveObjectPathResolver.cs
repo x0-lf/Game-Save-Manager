@@ -22,6 +22,48 @@ namespace GameSaves.Infrastructure.GoogleDrive
             CancellationToken cancellationToken = default);
     }
 
+    internal interface IGoogleDriveObjectPathResolverFactory
+    {
+        IGoogleDriveObjectPathResolver Create(
+            Guid remoteProfileId,
+            GoogleAuthorizedCredential credential);
+    }
+
+    /// <summary>
+    /// Creates credential-scoped resolvers while sharing only the safe
+    /// in-memory ID cache and folder-creation coordinator. It performs no
+    /// authentication or Drive request itself.
+    /// </summary>
+    internal sealed class GoogleDriveObjectPathResolverFactory
+        : IGoogleDriveObjectPathResolverFactory
+    {
+        private readonly IGoogleDriveObjectApi _objectApi;
+        private readonly IGoogleDriveObjectIdCache _objectIdCache;
+        private readonly GoogleDriveObjectCreationCoordinator _creationCoordinator;
+
+        public GoogleDriveObjectPathResolverFactory(
+            IGoogleDriveObjectApi objectApi,
+            IGoogleDriveObjectIdCache objectIdCache,
+            GoogleDriveObjectCreationCoordinator creationCoordinator)
+        {
+            _objectApi = objectApi ?? throw new ArgumentNullException(nameof(objectApi));
+            _objectIdCache = objectIdCache ??
+                throw new ArgumentNullException(nameof(objectIdCache));
+            _creationCoordinator = creationCoordinator ??
+                throw new ArgumentNullException(nameof(creationCoordinator));
+        }
+
+        public IGoogleDriveObjectPathResolver Create(
+            Guid remoteProfileId,
+            GoogleAuthorizedCredential credential) =>
+            new GoogleDriveObjectPathResolver(
+                _objectApi,
+                credential,
+                _creationCoordinator,
+                _objectIdCache,
+                remoteProfileId);
+    }
+
     /// <summary>
     /// Resolves one authenticated Google Drive session. The caller owns the
     /// credential lifetime. Cached IDs remain scoped to one saved profile and

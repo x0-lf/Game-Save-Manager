@@ -89,8 +89,10 @@ namespace GameSaves.Infrastructure.GoogleDrive
                     request.Q = MembershipQuery;
                     request.Spaces = GoogleDriveRequestContract.DriveSpace;
                     request.Corpora = GoogleDriveRequestContract.UserCorpus;
-                    request.IncludeItemsFromAllDrives = false;
-                    request.SupportsAllDrives = false;
+                    request.IncludeItemsFromAllDrives =
+                        GoogleDriveRequestContract.IncludeItemsFromAllDrives;
+                    request.SupportsAllDrives =
+                        GoogleDriveRequestContract.SupportsAllDrives;
                     request.Fields = MembershipFields;
                     request.PageToken = pageToken;
 
@@ -144,8 +146,10 @@ namespace GameSaves.Infrastructure.GoogleDrive
                     request.Q = DiscoveryQuery;
                     request.Spaces = GoogleDriveRequestContract.DriveSpace;
                     request.Corpora = GoogleDriveRequestContract.UserCorpus;
-                    request.IncludeItemsFromAllDrives = false;
-                    request.SupportsAllDrives = false;
+                    request.IncludeItemsFromAllDrives =
+                        GoogleDriveRequestContract.IncludeItemsFromAllDrives;
+                    request.SupportsAllDrives =
+                        GoogleDriveRequestContract.SupportsAllDrives;
                     request.Fields = DiscoveryFields;
                     request.PageToken = pageToken;
 
@@ -192,6 +196,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 };
                 FilesResource.CreateRequest request = drive.Files.Create(metadata);
                 request.Fields = MetadataFields;
+                request.SupportsAllDrives =
+                    GoogleDriveRequestContract.SupportsAllDrives;
                 DriveFile created = await request.ExecuteAsync(cancellationToken);
                 return Map(created);
             }
@@ -206,7 +212,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
             new(new BaseClientService.Initializer
             {
                 HttpClientInitializer = credential.Credential,
-                ApplicationName = "Game Save Manager"
+                ApplicationName = GoogleDriveRequestContract.ApplicationName
             });
 
         private static GoogleDriveFolderMetadata Map(DriveFile file) => new(
