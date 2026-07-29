@@ -186,7 +186,7 @@ public sealed class GoogleDriveRootFolderTests
             rootName: "Previous name"));
         var api = new FakeRootFolderApi
         {
-            GetFailure = GoogleDriveRootFolderApiFailure.NotFound
+            GetFailure = GoogleDriveApiFailure.NotFound
         };
         GoogleDriveRootFolderService service = CreateService(repository, api);
 
@@ -355,7 +355,7 @@ public sealed class GoogleDriveRootFolderTests
             rootName: "Old name"));
         var api = new FakeRootFolderApi
         {
-            GetFailure = GoogleDriveRootFolderApiFailure.NotFound
+            GetFailure = GoogleDriveApiFailure.NotFound
         };
         api.DiscoveryResults.Enqueue(new[] { Folder("replacement-id") });
         GoogleDriveRootFolderService service = CreateService(repository, api);
@@ -379,8 +379,8 @@ public sealed class GoogleDriveRootFolderTests
             rootName: "Old name"));
         var api = new FakeRootFolderApi
         {
-            GetFailure = GoogleDriveRootFolderApiFailure.NotFound,
-            CreateFailure = GoogleDriveRootFolderApiFailure.Failed
+            GetFailure = GoogleDriveApiFailure.NotFound,
+            CreateFailure = GoogleDriveApiFailure.Failed
         };
         GoogleDriveRootFolderService service = CreateService(repository, api);
 
@@ -465,7 +465,7 @@ public sealed class GoogleDriveRootFolderTests
             sftp);
         var api = new FakeRootFolderApi
         {
-            GetFailure = GoogleDriveRootFolderApiFailure.AuthorizationRevoked
+            GetFailure = GoogleDriveApiFailure.AuthorizationRevoked
         };
         GoogleDriveRootFolderService service = CreateService(
             repository,
@@ -493,7 +493,7 @@ public sealed class GoogleDriveRootFolderTests
             rootName: "Saved name"));
         var api = new FakeRootFolderApi
         {
-            GetFailure = GoogleDriveRootFolderApiFailure.Unavailable
+            GetFailure = GoogleDriveApiFailure.Unavailable
         };
         GoogleDriveRootFolderService service = CreateService(repository, api);
 
@@ -664,22 +664,22 @@ public sealed class GoogleDriveRootFolderTests
 
     [Theory]
     [InlineData(HttpStatusCode.BadRequest, null,
-        (int)GoogleDriveRootFolderApiFailure.InvalidRequest,
+        (int)GoogleDriveApiFailure.InvalidRequest,
         GoogleDriveRootFolderErrorCodes.InvalidRequest)]
     [InlineData(HttpStatusCode.BadRequest, "invalidQuery",
-        (int)GoogleDriveRootFolderApiFailure.InvalidQuery,
+        (int)GoogleDriveApiFailure.InvalidQuery,
         GoogleDriveRootFolderErrorCodes.InvalidQuery)]
     [InlineData(HttpStatusCode.Forbidden, "insufficientPermissions",
-        (int)GoogleDriveRootFolderApiFailure.InsufficientScope,
+        (int)GoogleDriveApiFailure.InsufficientScope,
         GoogleDriveRootFolderErrorCodes.InsufficientScope)]
     [InlineData(HttpStatusCode.Forbidden, "insufficientFilePermissions",
-        (int)GoogleDriveRootFolderApiFailure.AccessDenied,
+        (int)GoogleDriveApiFailure.AccessDenied,
         GoogleDriveRootFolderErrorCodes.AccessDenied)]
     [InlineData(HttpStatusCode.Forbidden, "accessNotConfigured",
-        (int)GoogleDriveRootFolderApiFailure.ApiNotEnabled,
+        (int)GoogleDriveApiFailure.ApiNotEnabled,
         GoogleDriveRootFolderErrorCodes.ApiNotEnabled)]
     [InlineData(HttpStatusCode.TooManyRequests, "rateLimitExceeded",
-        (int)GoogleDriveRootFolderApiFailure.RateLimited,
+        (int)GoogleDriveApiFailure.RateLimited,
         GoogleDriveRootFolderErrorCodes.RateLimited)]
     public void ProviderErrors_MapToSanitizedOperationDiagnostics(
         HttpStatusCode status,
@@ -698,14 +698,14 @@ public sealed class GoogleDriveRootFolderTests
                 }
         };
 
-        GoogleDriveRootFolderApiException mapped =
+        GoogleDriveApiException mapped =
             GoogleDriveRootFolderApi.MapException(
                 providerError,
-                GoogleDriveRootFolderApiOperation.RootFolderDiscovery);
+                GoogleDriveApiOperation.RootFolderDiscovery);
 
-        Assert.Equal((GoogleDriveRootFolderApiFailure)expectedFailure, mapped.Failure);
+        Assert.Equal((GoogleDriveApiFailure)expectedFailure, mapped.Failure);
         Assert.Equal(expectedCode, mapped.Details.SafeErrorCode);
-        Assert.Equal(GoogleDriveRootFolderApiOperation.RootFolderDiscovery,
+        Assert.Equal(GoogleDriveApiOperation.RootFolderDiscovery,
             mapped.Details.Operation);
         Assert.DoesNotContain("raw-private-value", mapped.Details.ToString(),
             StringComparison.Ordinal);
@@ -728,10 +728,10 @@ public sealed class GoogleDriveRootFolderTests
             }
         };
 
-        GoogleDriveRootFolderApiException mapped =
+        GoogleDriveApiException mapped =
             GoogleDriveRootFolderApi.MapException(
                 providerError,
-                GoogleDriveRootFolderApiOperation.RootFolderCreation);
+                GoogleDriveApiOperation.RootFolderCreation);
         string diagnostic = mapped.Details.ToString();
 
         Assert.DoesNotContain("secret", diagnostic, StringComparison.OrdinalIgnoreCase);
@@ -747,7 +747,7 @@ public sealed class GoogleDriveRootFolderTests
         SyncRemoteProfile profile = repository.Create(Profile());
         var api = new FakeRootFolderApi
         {
-            FindFailure = GoogleDriveRootFolderApiFailure.ApiNotEnabled
+            FindFailure = GoogleDriveApiFailure.ApiNotEnabled
         };
 
         GoogleDriveRootFolderResult result = await CreateService(
@@ -956,10 +956,10 @@ public sealed class GoogleDriveRootFolderTests
             Folder("stored-id");
         public GoogleDriveFolderMetadata CreateResult { get; set; } =
             Folder("created-id");
-        public GoogleDriveRootFolderApiFailure? GetFailure { get; set; }
-        public GoogleDriveRootFolderApiFailure? MembershipFailure { get; set; }
-        public GoogleDriveRootFolderApiFailure? FindFailure { get; set; }
-        public GoogleDriveRootFolderApiFailure? CreateFailure { get; set; }
+        public GoogleDriveApiFailure? GetFailure { get; set; }
+        public GoogleDriveApiFailure? MembershipFailure { get; set; }
+        public GoogleDriveApiFailure? FindFailure { get; set; }
+        public GoogleDriveApiFailure? CreateFailure { get; set; }
         public bool IsTopLevel { get; set; } = true;
         public TaskCompletionSource? DiscoveryEntered { get; set; }
         public Task? ReleaseDiscovery { get; set; }
@@ -975,7 +975,10 @@ public sealed class GoogleDriveRootFolderTests
             Calls.Add($"membership:{folderId}");
 
             if (MembershipFailure is { } failure)
-                throw new GoogleDriveRootFolderApiException(failure);
+                throw GoogleDriveApiFailureMapper.Create(
+                    GoogleDriveApiOperation.RootFolderTopLevelMembership,
+                    failure,
+                    "TestRootFailure");
 
             return Task.FromResult(IsTopLevel);
         }
@@ -989,7 +992,10 @@ public sealed class GoogleDriveRootFolderTests
             Calls.Add($"get:{folderId}");
 
             if (GetFailure is { } failure)
-                throw new GoogleDriveRootFolderApiException(failure);
+                throw GoogleDriveApiFailureMapper.Create(
+                    GoogleDriveApiOperation.RootFolderInspection,
+                    failure,
+                    "TestRootFailure");
 
             return Task.FromResult(GetResult);
         }
@@ -1007,7 +1013,10 @@ public sealed class GoogleDriveRootFolderTests
                 await ReleaseDiscovery.WaitAsync(cancellationToken);
 
             if (FindFailure is { } failure)
-                throw new GoogleDriveRootFolderApiException(failure);
+                throw GoogleDriveApiFailureMapper.Create(
+                    GoogleDriveApiOperation.RootFolderDiscovery,
+                    failure,
+                    "TestRootFailure");
 
             return DiscoveryResults.Count > 0
                 ? DiscoveryResults.Dequeue()
@@ -1023,7 +1032,10 @@ public sealed class GoogleDriveRootFolderTests
             Calls.Add("create");
 
             if (CreateFailure is { } failure)
-                throw new GoogleDriveRootFolderApiException(failure);
+                throw GoogleDriveApiFailureMapper.Create(
+                    GoogleDriveApiOperation.RootFolderCreation,
+                    failure,
+                    "TestRootFailure");
 
             return Task.FromResult(CreateResult);
         }

@@ -113,6 +113,11 @@ namespace GameSaves.Infrastructure.DependencyInjection
                 GoogleDriveAuthorizedSessionFactory>();
             services.AddSingleton<IGoogleDriveRootFolderApi,
                 GoogleDriveRootFolderApi>();
+            services.AddSingleton<GoogleDriveQueryBuilder>();
+            services.AddSingleton<IGoogleDriveObjectClientFactory,
+                GoogleDriveObjectClientFactory>();
+            services.AddSingleton<IGoogleDriveObjectApi,
+                GoogleDriveObjectApi>();
             services.AddSingleton<IGoogleDriveRootFolderService>(provider =>
                 new GoogleDriveRootFolderService(
                     provider.GetRequiredService<ISyncRemoteProfileRepository>(),

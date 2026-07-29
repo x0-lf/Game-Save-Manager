@@ -1,0 +1,397 @@
+using GameSaves.Infrastructure.DependencyInjection;
+using GameSaves.Infrastructure.GoogleDrive;
+using Google;
+using Google.Apis.Drive.v3;
+using Google.Apis.Requests;
+using Google.Apis.Services;
+using Microsoft.Extensions.DependencyInjection;
+using System.Net;
+
+namespace GameSaves.Tests;
+
+public sealed class GoogleDriveObjectApiTests
+{
+    [Theory]
+    [InlineData(
+        "parent-id",
+        "plain name",
+        "'parent-id' in parents and name = 'plain name' and trashed = false")]
+    [InlineData(
+        "parent'id",
+        "O'Brien",
+        "'parent\\'id' in parents and name = 'O\\'Brien' and trashed = false")]
+    [InlineData(
+        @"parent\id",
+        @"folder\name",
+        "'parent\\\\id' in parents and name = 'folder\\\\name' and trashed = false")]
+    [InlineData(
+        @"par'ent\id",
+        @"both'\name",
+        "'par\\'ent\\\\id' in parents and name = 'both\\'\\\\name' and trashed = false")]
+    [InlineData(
+        "親フォルダー",
+        "Pokémon 保存データ",
+        "'親フォルダー' in parents and name = 'Pokémon 保存データ' and trashed = false")]
+    public void QueryBuilder_EscapesExactParentAndNameLiterals(
+        string parentId,
+        string name,
+        string expected)
+    {
+        string query = new GoogleDriveQueryBuilder()
+            .BuildExactNameChildQuery(parentId, name);
+
+        Assert.Equal(expected, query);
+    }
+
+    [Fact]
+    public void QueryBuilder_EscapesInjectionTextInsideOneExactLiteral()
+    {
+        const string injection = "x' or trashed = true or name = 'y";
+
+        string query = new GoogleDriveQueryBuilder()
+            .BuildExactNameChildQuery("parent", injection);
+
+        Assert.Equal(
+            "'parent' in parents and " +
+            "name = 'x\\' or trashed = true or name = \\'y' and trashed = false",
+            query);
+        Assert.StartsWith("'parent' in parents and name = '", query, StringComparison.Ordinal);
+        Assert.EndsWith("' and trashed = false", query, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void QueryBuilder_EscapesBackslashesBeforeApostrophesExactlyOnce()
+    {
+        Assert.Equal(
+            "\\\\\\'",
+            GoogleDriveQueryBuilder.EscapeLiteral(@"\'"));
+    }
+
+    [Fact]
+    public void RequestFormatting_DoesNotExposeQueriesIdsOrPageTokens()
+    {
+        const string objectId = "private-object-id-marker";
+        const string query = "'private-parent-id' in parents and name = 'Private name'";
+        const string pageToken = "private-page-token-marker";
+        var get = new GoogleDriveObjectGetRequest(objectId);
+        var list = new GoogleDriveObjectListRequest(query, pageToken);
+        var page = new GoogleDriveObjectListPage(
+            Array.Empty<GoogleDriveObjectMetadata>(),
+            pageToken,
+            IncompleteSearch: false);
+
+        Assert.DoesNotContain(objectId, get.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain(query, list.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain(pageToken, list.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain(pageToken, page.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ListChildren_FollowsAllPagesWithoutSelectingOrDeduplicating()
+    {
+        var client = new RecordingObjectClient();
+        client.Pages.Enqueue(new GoogleDriveObjectListPage(
+            new[] { Object("same-id", "duplicate") },
+            "page-2",
+            IncompleteSearch: false));
+        client.Pages.Enqueue(new GoogleDriveObjectListPage(
+            new[]
+            {
+                Object("same-id", "duplicate"),
+                Object("second-id", "duplicate")
+            },
+            null,
+            IncompleteSearch: false));
+        GoogleDriveObjectApi api = CreateApi(client);
+
+        IReadOnlyList<GoogleDriveObjectMetadata> results =
+            await api.ListChildrenByExactNameAsync(
+                null!,
+                "parent-id",
+                "duplicate",
+                CancellationToken.None);
+
+        Assert.Equal(3, results.Count);
+        Assert.Equal(new[] { "same-id", "same-id", "second-id" },
+            results.Select(result => result.Id));
+        Assert.Equal(2, client.ListRequests.Count);
+        Assert.Null(client.ListRequests[0].PageToken);
+        Assert.Equal("page-2", client.ListRequests[1].PageToken);
+        Assert.All(client.ListRequests, request =>
+        {
+            Assert.Equal(
+                "'parent-id' in parents and name = 'duplicate' and trashed = false",
+                request.Query);
+            Assert.Equal("drive", request.Spaces);
+            Assert.Equal("user", request.Corpora);
+            Assert.False(request.IncludeItemsFromAllDrives);
+            Assert.False(request.SupportsAllDrives);
+            Assert.Equal(GoogleDriveObjectRequestContract.ListFields, request.Fields);
+        });
+        Assert.Equal(1, client.DisposeCalls);
+    }
+
+    [Fact]
+    public async Task ListChildren_IncompleteSearchMapsToRetryableUnavailable()
+    {
+        var client = new RecordingObjectClient();
+        client.Pages.Enqueue(new GoogleDriveObjectListPage(
+            Array.Empty<GoogleDriveObjectMetadata>(),
+            "ignored-page",
+            IncompleteSearch: true));
+        GoogleDriveObjectApi api = CreateApi(client);
+
+        GoogleDriveApiException exception = await Assert.ThrowsAsync<GoogleDriveApiException>(() =>
+            api.ListChildrenByExactNameAsync(
+                null!,
+                "private-parent-id",
+                "Private folder name",
+                CancellationToken.None));
+
+        Assert.Equal(GoogleDriveApiFailure.Unavailable, exception.Failure);
+        Assert.Equal(GoogleDriveApiOperation.ObjectChildList, exception.Details.Operation);
+        Assert.True(exception.Details.Retryable);
+        Assert.DoesNotContain("private-parent-id", exception.Details.ToString(),
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("Private folder name", exception.Details.ToString(),
+            StringComparison.Ordinal);
+        Assert.Single(client.ListRequests);
+    }
+
+    [Fact]
+    public async Task GetById_UsesNarrowMyDriveMetadataRequest()
+    {
+        var client = new RecordingObjectClient
+        {
+            GetResult = Object("object-id", "Object")
+        };
+        GoogleDriveObjectApi api = CreateApi(client);
+
+        GoogleDriveObjectMetadata result = await api.GetByIdAsync(
+            null!,
+            "object-id",
+            CancellationToken.None);
+
+        Assert.Equal("object-id", result.Id);
+        GoogleDriveObjectGetRequest request = Assert.Single(client.GetRequests);
+        Assert.Equal("object-id", request.ObjectId);
+        Assert.Equal(
+            "id,name,mimeType,trashed,parents,driveId",
+            request.Fields);
+        Assert.False(request.SupportsAllDrives);
+    }
+
+    [Fact]
+    public async Task CreateFolder_UsesExactNameOneParentAndNoContentUpload()
+    {
+        var client = new RecordingObjectClient
+        {
+            CreateResult = Object("created-id", "Exact Folder")
+        };
+        GoogleDriveObjectApi api = CreateApi(client);
+
+        GoogleDriveObjectMetadata created = await api.CreateFolderAsync(
+            null!,
+            "parent-id",
+            "Exact Folder",
+            CancellationToken.None);
+
+        Assert.Equal("created-id", created.Id);
+        GoogleDriveFolderCreateRequest request = Assert.Single(client.CreateRequests);
+        Assert.Equal("Exact Folder", request.Name);
+        Assert.Equal("application/vnd.google-apps.folder", request.MimeType);
+        Assert.Equal(new[] { "parent-id" }, request.ParentIds);
+        Assert.Equal(GoogleDriveObjectRequestContract.MetadataFields, request.Fields);
+        Assert.False(request.SupportsAllDrives);
+    }
+
+    [Fact]
+    public void SdkRequestConstruction_AppliesOnlyTheNarrowRequestContract()
+    {
+        using var drive = new DriveService(new BaseClientService.Initializer
+        {
+            ApplicationName = "Game Save Manager Tests"
+        });
+        var listContract = new GoogleDriveObjectListRequest(
+            "'parent' in parents and name = 'name' and trashed = false",
+            "next-page");
+        Google.Apis.Drive.v3.FilesResource.ListRequest list =
+            GoogleDriveObjectClient.CreateListRequest(drive, listContract);
+
+        Assert.Equal(listContract.Query, list.Q);
+        Assert.Equal("drive", list.Spaces);
+        Assert.Equal("user", list.Corpora);
+        Assert.False(list.IncludeItemsFromAllDrives);
+        Assert.False(list.SupportsAllDrives);
+        Assert.Equal("next-page", list.PageToken);
+        Assert.Equal(
+            "nextPageToken,incompleteSearch," +
+            "files(id,name,mimeType,trashed,parents,driveId)",
+            list.Fields);
+
+        var createContract = new GoogleDriveFolderCreateRequest(
+            "Exact Folder",
+            "parent-id");
+        Google.Apis.Drive.v3.Data.File metadata =
+            GoogleDriveObjectClient.CreateFolderMetadata(createContract);
+        Google.Apis.Drive.v3.FilesResource.CreateRequest create =
+            GoogleDriveObjectClient.CreateFolderRequest(
+                drive,
+                createContract,
+                metadata);
+
+        Assert.Equal("Exact Folder", metadata.Name);
+        Assert.Equal("application/vnd.google-apps.folder", metadata.MimeType);
+        Assert.Equal(new[] { "parent-id" }, metadata.Parents);
+        Assert.Equal(GoogleDriveObjectRequestContract.MetadataFields, create.Fields);
+        Assert.False(create.SupportsAllDrives);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.BadRequest, "invalidQuery", (int)GoogleDriveApiFailure.InvalidQuery)]
+    [InlineData(HttpStatusCode.Unauthorized, "authError", (int)GoogleDriveApiFailure.AuthorizationRevoked)]
+    [InlineData(HttpStatusCode.Forbidden, "insufficientFilePermissions", (int)GoogleDriveApiFailure.AccessDenied)]
+    [InlineData(HttpStatusCode.TooManyRequests, "rateLimitExceeded", (int)GoogleDriveApiFailure.RateLimited)]
+    [InlineData(HttpStatusCode.ServiceUnavailable, "backendError", (int)GoogleDriveApiFailure.Unavailable)]
+    public void ObjectAndRootApis_ReuseOneSanitizedErrorClassifier(
+        HttpStatusCode status,
+        string reason,
+        int expected)
+    {
+        var providerError = new GoogleApiException(
+            "Drive",
+            "access_token=secret account=user@example.invalid object-id-marker")
+        {
+            HttpStatusCode = status,
+            Error = new RequestError
+            {
+                Errors = new List<SingleError> { new() { Reason = reason } }
+            }
+        };
+
+        GoogleDriveApiException objectFailure = GoogleDriveObjectApi.MapException(
+            providerError,
+            GoogleDriveApiOperation.ObjectChildList);
+        GoogleDriveApiException rootFailure = GoogleDriveRootFolderApi.MapException(
+            providerError,
+            GoogleDriveApiOperation.RootFolderDiscovery);
+
+        Assert.Equal((GoogleDriveApiFailure)expected, objectFailure.Failure);
+        Assert.Equal((GoogleDriveApiFailure)expected, rootFailure.Failure);
+        Assert.Equal(reason, objectFailure.Details.Reason);
+        Assert.DoesNotContain("secret", objectFailure.Details.ToString(),
+            StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("example.invalid", objectFailure.Details.ToString(),
+            StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("object-id-marker", objectFailure.Details.ToString(),
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void UnknownGoogleReason_IsExcludedFromSanitizedDiagnostics()
+    {
+        var providerError = new GoogleApiException("Drive", "raw-private-response")
+        {
+            HttpStatusCode = HttpStatusCode.BadRequest,
+            Error = new RequestError
+            {
+                Errors = new List<SingleError>
+                {
+                    new() { Reason = "private-object-id-marker" }
+                }
+            }
+        };
+
+        GoogleDriveApiException mapped = GoogleDriveObjectApi.MapException(
+            providerError,
+            GoogleDriveApiOperation.ObjectMetadataGet);
+
+        Assert.Equal(GoogleDriveApiFailure.InvalidRequest, mapped.Failure);
+        Assert.Null(mapped.Details.Reason);
+        Assert.DoesNotContain("private", mapped.Details.ToString(),
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void InfrastructureRegistration_ProvidesObjectApiWithoutCallingGoogle()
+    {
+        var services = new ServiceCollection();
+        services.AddGameSavesInfrastructure();
+        using ServiceProvider provider = services.BuildServiceProvider();
+
+        Assert.IsType<GoogleDriveObjectApi>(
+            provider.GetRequiredService<IGoogleDriveObjectApi>());
+        Assert.IsType<GoogleDriveObjectClientFactory>(
+            provider.GetRequiredService<IGoogleDriveObjectClientFactory>());
+        Assert.IsType<GoogleDriveQueryBuilder>(
+            provider.GetRequiredService<GoogleDriveQueryBuilder>());
+    }
+
+    private static GoogleDriveObjectApi CreateApi(RecordingObjectClient client) =>
+        new(new GoogleDriveQueryBuilder(), new RecordingObjectClientFactory(client));
+
+    private static GoogleDriveObjectMetadata Object(string id, string name) =>
+        new(
+            id,
+            name,
+            "application/vnd.google-apps.folder",
+            false,
+            new[] { "parent-id" },
+            null);
+
+    private sealed class RecordingObjectClientFactory : IGoogleDriveObjectClientFactory
+    {
+        private readonly RecordingObjectClient _client;
+
+        public RecordingObjectClientFactory(RecordingObjectClient client) =>
+            _client = client;
+
+        public IGoogleDriveObjectClient Create(GoogleAuthorizedCredential credential) =>
+            _client;
+    }
+
+    private sealed class RecordingObjectClient : IGoogleDriveObjectClient
+    {
+        public Queue<GoogleDriveObjectListPage> Pages { get; } = new();
+        public List<GoogleDriveObjectGetRequest> GetRequests { get; } = new();
+        public List<GoogleDriveObjectListRequest> ListRequests { get; } = new();
+        public List<GoogleDriveFolderCreateRequest> CreateRequests { get; } = new();
+
+        public GoogleDriveObjectMetadata GetResult { get; set; } =
+            Object("default-id", "Default");
+
+        public GoogleDriveObjectMetadata CreateResult { get; set; } =
+            Object("created-id", "Created");
+
+        public int DisposeCalls { get; private set; }
+
+        public Task<GoogleDriveObjectMetadata> GetAsync(
+            GoogleDriveObjectGetRequest request,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            GetRequests.Add(request);
+            return Task.FromResult(GetResult);
+        }
+
+        public Task<GoogleDriveObjectListPage> ListAsync(
+            GoogleDriveObjectListRequest request,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ListRequests.Add(request);
+            return Task.FromResult(Pages.Dequeue());
+        }
+
+        public Task<GoogleDriveObjectMetadata> CreateFolderAsync(
+            GoogleDriveFolderCreateRequest request,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            CreateRequests.Add(request);
+            return Task.FromResult(CreateResult);
+        }
+
+        public void Dispose() => DisposeCalls++;
+    }
+}
