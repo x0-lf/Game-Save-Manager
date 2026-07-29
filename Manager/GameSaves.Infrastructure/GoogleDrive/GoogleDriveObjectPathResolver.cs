@@ -15,6 +15,11 @@ namespace GameSaves.Infrastructure.GoogleDrive
             GoogleDriveRelativePath relativePath,
             GoogleDriveObjectKind? expectedFinalKind,
             CancellationToken cancellationToken = default);
+
+        Task<GoogleDriveObjectResolutionResult> EnsureFolderPathAsync(
+            string rootFolderId,
+            GoogleDriveRelativePath relativeFolderPath,
+            CancellationToken cancellationToken = default);
     }
 
     /// <summary>
@@ -24,15 +29,29 @@ namespace GameSaves.Infrastructure.GoogleDrive
     internal sealed class GoogleDriveObjectPathResolver
         : IGoogleDriveObjectPathResolver
     {
+        private static readonly GoogleDriveObjectCreationCoordinator
+            SharedCreationCoordinator = new();
+
         private readonly IGoogleDriveObjectApi _objectApi;
         private readonly GoogleAuthorizedCredential _credential;
+        private readonly GoogleDriveObjectCreationCoordinator _creationCoordinator;
 
         public GoogleDriveObjectPathResolver(
             IGoogleDriveObjectApi objectApi,
             GoogleAuthorizedCredential credential)
+            : this(objectApi, credential, SharedCreationCoordinator)
+        {
+        }
+
+        internal GoogleDriveObjectPathResolver(
+            IGoogleDriveObjectApi objectApi,
+            GoogleAuthorizedCredential credential,
+            GoogleDriveObjectCreationCoordinator creationCoordinator)
         {
             _objectApi = objectApi ?? throw new ArgumentNullException(nameof(objectApi));
             _credential = credential ?? throw new ArgumentNullException(nameof(credential));
+            _creationCoordinator = creationCoordinator ??
+                throw new ArgumentNullException(nameof(creationCoordinator));
         }
 
         public Task<GoogleDriveObjectResolutionResult> FindChildAsync(
@@ -107,6 +126,181 @@ namespace GameSaves.Infrastructure.GoogleDrive
             }
 
             return Failed(relativePath);
+        }
+
+        public async Task<GoogleDriveObjectResolutionResult> EnsureFolderPathAsync(
+            string rootFolderId,
+            GoogleDriveRelativePath relativeFolderPath,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (string.IsNullOrWhiteSpace(rootFolderId) ||
+                relativeFolderPath is null)
+            {
+                return InvalidPath(relativeFolderPath);
+            }
+
+            if (relativeFolderPath.IsRoot)
+            {
+                return Found(
+                    relativeFolderPath,
+                    GoogleDriveObjectKind.Folder,
+                    rootFolderId,
+                    metadata: null);
+            }
+
+            string parentId = rootFolderId;
+            GoogleDriveObjectMetadata? finalMetadata = null;
+            bool createdAnyFolder = false;
+
+            foreach (string segment in relativeFolderPath.Segments)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                GoogleDriveObjectResolutionResult segmentResult =
+                    await FindChildCoreAsync(
+                        parentId,
+                        segment,
+                        GoogleDriveObjectKind.Folder,
+                        cancellationToken);
+
+                if (segmentResult.Status == GoogleDriveObjectResolutionStatus.NotFound)
+                {
+                    segmentResult = await EnsureChildFolderAsync(
+                        parentId,
+                        segment,
+                        cancellationToken);
+                }
+
+                if (segmentResult.Status is not (
+                    GoogleDriveObjectResolutionStatus.Found or
+                    GoogleDriveObjectResolutionStatus.Created))
+                {
+                    return WithPath(segmentResult, relativeFolderPath);
+                }
+
+                if (string.IsNullOrWhiteSpace(segmentResult.ObjectId))
+                    return Failed(relativeFolderPath, GoogleDriveObjectKind.Folder);
+
+                createdAnyFolder |=
+                    segmentResult.Status == GoogleDriveObjectResolutionStatus.Created;
+                parentId = segmentResult.ObjectId;
+                finalMetadata = segmentResult.Metadata;
+            }
+
+            return createdAnyFolder
+                ? Created(relativeFolderPath, parentId, finalMetadata)
+                : Found(
+                    relativeFolderPath,
+                    GoogleDriveObjectKind.Folder,
+                    parentId,
+                    finalMetadata);
+        }
+
+        private async Task<GoogleDriveObjectResolutionResult>
+            EnsureChildFolderAsync(
+                string parentId,
+                string exactName,
+                CancellationToken cancellationToken)
+        {
+            using IDisposable lease = await _creationCoordinator.AcquireAsync(
+                parentId,
+                exactName,
+                cancellationToken);
+
+            cancellationToken.ThrowIfCancellationRequested();
+
+            GoogleDriveObjectResolutionResult secondSearch =
+                await FindChildCoreAsync(
+                    parentId,
+                    exactName,
+                    GoogleDriveObjectKind.Folder,
+                    cancellationToken);
+
+            if (secondSearch.Status != GoogleDriveObjectResolutionStatus.NotFound)
+                return secondSearch;
+
+            GoogleDriveRelativePath segmentPath = GoogleDriveRelativePath.Parse(exactName);
+
+            try
+            {
+                GoogleDriveObjectMetadata created =
+                    await _objectApi.CreateFolderAsync(
+                        _credential,
+                        parentId,
+                        exactName,
+                        cancellationToken);
+
+                cancellationToken.ThrowIfCancellationRequested();
+                return ValidateCreatedFolder(
+                    segmentPath,
+                    parentId,
+                    exactName,
+                    created);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (GoogleDriveApiException ex)
+            {
+                return MapApiFailure(
+                    ex,
+                    segmentPath,
+                    GoogleDriveObjectKind.Folder,
+                    isCreation: true);
+            }
+            catch
+            {
+                return Failed(segmentPath, GoogleDriveObjectKind.Folder);
+            }
+        }
+
+        private static GoogleDriveObjectResolutionResult ValidateCreatedFolder(
+            GoogleDriveRelativePath segmentPath,
+            string expectedParentId,
+            string expectedName,
+            GoogleDriveObjectMetadata? metadata)
+        {
+            if (metadata is null ||
+                string.IsNullOrWhiteSpace(metadata.Id) ||
+                !string.Equals(metadata.Name, expectedName, StringComparison.Ordinal) ||
+                !metadata.ParentIds.Contains(expectedParentId, StringComparer.Ordinal))
+            {
+                return InvalidCreateResponse(segmentPath);
+            }
+
+            GoogleDriveObjectKind actualKind = KindOf(metadata);
+
+            if (!string.IsNullOrWhiteSpace(metadata.DriveId))
+            {
+                return new GoogleDriveObjectResolutionResult(
+                    GoogleDriveObjectResolutionStatus.UnsupportedLocation,
+                    segmentPath,
+                    actualKind,
+                    metadata,
+                    metadata.Id,
+                    GoogleDriveObjectResolutionErrorCodes.UnsupportedLocation,
+                    "The created Google Drive folder is in an unsupported location.");
+            }
+
+            if (metadata.Trashed)
+            {
+                return new GoogleDriveObjectResolutionResult(
+                    GoogleDriveObjectResolutionStatus.Trashed,
+                    segmentPath,
+                    actualKind,
+                    metadata,
+                    metadata.Id,
+                    GoogleDriveObjectResolutionErrorCodes.Trashed,
+                    "The created Google Drive folder is trashed.");
+            }
+
+            if (actualKind != GoogleDriveObjectKind.Folder)
+                return TypeMismatch(segmentPath, actualKind, metadata.Id, metadata);
+
+            return Created(segmentPath, metadata.Id, metadata);
         }
 
         private async Task<GoogleDriveObjectResolutionResult> FindChildCoreAsync(
@@ -214,7 +408,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
         private static GoogleDriveObjectResolutionResult MapApiFailure(
             GoogleDriveApiException exception,
             GoogleDriveRelativePath path,
-            GoogleDriveObjectKind? expectedKind) =>
+            GoogleDriveObjectKind? expectedKind,
+            bool isCreation = false) =>
             exception.Failure switch
             {
                 GoogleDriveApiFailure.NotFound => new GoogleDriveObjectResolutionResult(
@@ -238,25 +433,33 @@ namespace GameSaves.Infrastructure.GoogleDrive
                         path,
                         expectedKind,
                         errorCode: GoogleDriveObjectResolutionErrorCodes.AccessDenied,
-                        message: "Google Drive did not allow the object lookup."),
+                        message: isCreation
+                            ? "Google Drive did not allow folder creation."
+                            : "Google Drive did not allow the object lookup."),
                 GoogleDriveApiFailure.RateLimited => new GoogleDriveObjectResolutionResult(
                     GoogleDriveObjectResolutionStatus.RateLimited,
                     path,
                     expectedKind,
                     errorCode: GoogleDriveObjectResolutionErrorCodes.RateLimited,
-                    message: "Google Drive temporarily rate-limited the object lookup."),
+                    message: isCreation
+                        ? "Google Drive temporarily rate-limited folder creation."
+                        : "Google Drive temporarily rate-limited the object lookup."),
                 GoogleDriveApiFailure.QuotaExceeded => new GoogleDriveObjectResolutionResult(
                     GoogleDriveObjectResolutionStatus.QuotaExceeded,
                     path,
                     expectedKind,
                     errorCode: GoogleDriveObjectResolutionErrorCodes.QuotaExceeded,
-                    message: "Google Drive quota prevented the object lookup."),
+                    message: isCreation
+                        ? "Google Drive quota prevented folder creation."
+                        : "Google Drive quota prevented the object lookup."),
                 GoogleDriveApiFailure.Unavailable => new GoogleDriveObjectResolutionResult(
                     GoogleDriveObjectResolutionStatus.Unavailable,
                     path,
                     expectedKind,
                     errorCode: GoogleDriveObjectResolutionErrorCodes.Unavailable,
-                    message: "Google Drive is temporarily unavailable."),
+                    message: isCreation
+                        ? "Google Drive folder creation is temporarily unavailable."
+                        : "Google Drive is temporarily unavailable."),
                 _ => Failed(path, expectedKind)
             };
 
@@ -269,6 +472,17 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 GoogleDriveObjectResolutionStatus.Found,
                 path,
                 kind,
+                metadata,
+                objectId);
+
+        private static GoogleDriveObjectResolutionResult Created(
+            GoogleDriveRelativePath path,
+            string objectId,
+            GoogleDriveObjectMetadata? metadata) =>
+            new(
+                GoogleDriveObjectResolutionStatus.Created,
+                path,
+                GoogleDriveObjectKind.Folder,
                 metadata,
                 objectId);
 
@@ -293,6 +507,15 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 path,
                 errorCode: GoogleDriveObjectResolutionErrorCodes.InvalidPath,
                 message: "The Google Drive path or parent identity is invalid.");
+
+        private static GoogleDriveObjectResolutionResult InvalidCreateResponse(
+            GoogleDriveRelativePath path) =>
+            new(
+                GoogleDriveObjectResolutionStatus.Failed,
+                path,
+                GoogleDriveObjectKind.Folder,
+                errorCode: GoogleDriveObjectResolutionErrorCodes.InvalidCreateResponse,
+                message: "Google Drive returned invalid metadata for the created folder.");
 
         private static GoogleDriveObjectResolutionResult Failed(
             GoogleDriveRelativePath? path,

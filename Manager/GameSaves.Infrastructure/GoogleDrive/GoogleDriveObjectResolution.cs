@@ -39,6 +39,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
         public const string RateLimited = "GoogleDriveObjectRateLimited";
         public const string QuotaExceeded = "GoogleDriveObjectQuotaExceeded";
         public const string Unavailable = "GoogleDriveObjectUnavailable";
+        public const string InvalidCreateResponse =
+            "GoogleDriveObjectInvalidCreateResponse";
         public const string Failed = "GoogleDriveObjectFailed";
     }
 

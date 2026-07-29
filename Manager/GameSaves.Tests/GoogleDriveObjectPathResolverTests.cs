@@ -368,16 +368,22 @@ public sealed class GoogleDriveObjectPathResolverTests
     }
 
     [Fact]
-    public void ResolverContract_IsReadOnlyAndContainsNoCreationOrTransferOperation()
+    public void ResolverContract_ContainsOnlyLookupResolutionAndFolderEnsureOperations()
     {
         string[] methods = typeof(IGoogleDriveObjectPathResolver)
             .GetMethods()
             .Select(method => method.Name)
             .ToArray();
 
-        Assert.Equal(new[] { "FindChildAsync", "ResolveAsync" }, methods.Order());
+        Assert.Equal(
+            new[]
+            {
+                "EnsureFolderPathAsync",
+                "FindChildAsync",
+                "ResolveAsync"
+            },
+            methods.Order());
         Assert.DoesNotContain(methods, name =>
-            name.Contains("Create", StringComparison.Ordinal) ||
             name.Contains("Upload", StringComparison.Ordinal) ||
             name.Contains("Download", StringComparison.Ordinal) ||
             name.Contains("Delete", StringComparison.Ordinal));
