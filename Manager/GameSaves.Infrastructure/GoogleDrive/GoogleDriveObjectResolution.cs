@@ -11,6 +11,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
     internal enum GoogleDriveObjectResolutionStatus
     {
         Found = 0,
+        // Reserved for the later Milestone N create-missing-folders slice.
         Created = 1,
         NotFound = 2,
         InvalidPath = 3,
@@ -24,6 +25,21 @@ namespace GameSaves.Infrastructure.GoogleDrive
         QuotaExceeded = 11,
         Unavailable = 12,
         Failed = 13
+    }
+    internal static class GoogleDriveObjectResolutionErrorCodes
+    {
+        public const string InvalidPath = "GoogleDriveObjectInvalidPath";
+        public const string NotFound = "GoogleDriveObjectNotFound";
+        public const string Ambiguous = "GoogleDriveObjectAmbiguous";
+        public const string TypeMismatch = "GoogleDriveObjectTypeMismatch";
+        public const string Trashed = "GoogleDriveObjectTrashed";
+        public const string UnsupportedLocation = "GoogleDriveObjectUnsupportedLocation";
+        public const string AuthenticationRequired = "GoogleDriveObjectAuthenticationRequired";
+        public const string AccessDenied = "GoogleDriveObjectAccessDenied";
+        public const string RateLimited = "GoogleDriveObjectRateLimited";
+        public const string QuotaExceeded = "GoogleDriveObjectQuotaExceeded";
+        public const string Unavailable = "GoogleDriveObjectUnavailable";
+        public const string Failed = "GoogleDriveObjectFailed";
     }
 
     internal sealed class GoogleDriveObjectMetadata
@@ -75,6 +91,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
             GoogleDriveRelativePath? path = null,
             GoogleDriveObjectKind? objectKind = null,
             GoogleDriveObjectMetadata? metadata = null,
+            string? objectId = null,
             string? errorCode = null,
             string? message = null)
         {
@@ -87,6 +104,18 @@ namespace GameSaves.Infrastructure.GoogleDrive
             Path = path;
             ObjectKind = objectKind;
             Metadata = metadata;
+            string? normalizedObjectId = string.IsNullOrWhiteSpace(objectId)
+                ? null
+                : objectId;
+            if (metadata is not null && normalizedObjectId is not null &&
+                !string.Equals(metadata.Id, normalizedObjectId, StringComparison.Ordinal))
+            {
+                throw new ArgumentException(
+                    "The result object ID must match its metadata.",
+                    nameof(objectId));
+            }
+
+            ObjectId = normalizedObjectId ?? metadata?.Id;
             ErrorCode = string.IsNullOrWhiteSpace(errorCode) ? null : errorCode;
             Message = string.IsNullOrWhiteSpace(message) ? null : message;
         }
@@ -99,7 +128,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
 
         public GoogleDriveObjectMetadata? Metadata { get; }
 
-        public string? ObjectId => Metadata?.Id;
+        public string? ObjectId { get; }
 
         public string? ErrorCode { get; }
 

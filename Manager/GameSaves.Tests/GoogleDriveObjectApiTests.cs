@@ -126,7 +126,7 @@ public sealed class GoogleDriveObjectApiTests
             Assert.Equal("user", request.Corpora);
             Assert.False(request.IncludeItemsFromAllDrives);
             Assert.False(request.SupportsAllDrives);
-            Assert.Equal(GoogleDriveObjectRequestContract.ListFields, request.Fields);
+            Assert.Equal(GoogleDriveRequestContract.ListFields, request.Fields);
         });
         Assert.Equal(1, client.DisposeCalls);
     }
@@ -201,7 +201,7 @@ public sealed class GoogleDriveObjectApiTests
         Assert.Equal("Exact Folder", request.Name);
         Assert.Equal("application/vnd.google-apps.folder", request.MimeType);
         Assert.Equal(new[] { "parent-id" }, request.ParentIds);
-        Assert.Equal(GoogleDriveObjectRequestContract.MetadataFields, request.Fields);
+        Assert.Equal(GoogleDriveRequestContract.MetadataFields, request.Fields);
         Assert.False(request.SupportsAllDrives);
     }
 
@@ -243,7 +243,7 @@ public sealed class GoogleDriveObjectApiTests
         Assert.Equal("Exact Folder", metadata.Name);
         Assert.Equal("application/vnd.google-apps.folder", metadata.MimeType);
         Assert.Equal(new[] { "parent-id" }, metadata.Parents);
-        Assert.Equal(GoogleDriveObjectRequestContract.MetadataFields, create.Fields);
+        Assert.Equal(GoogleDriveRequestContract.MetadataFields, create.Fields);
         Assert.False(create.SupportsAllDrives);
     }
 

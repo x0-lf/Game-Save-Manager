@@ -560,10 +560,19 @@ public sealed class GoogleDriveRootFolderTests
             "GoogleDriveRootFolderApi.cs");
         Assert.Contains("request.PageToken = pageToken", source, StringComparison.Ordinal);
         Assert.Contains("while (pageToken is not null)", source, StringComparison.Ordinal);
-        Assert.Contains("request.Spaces = \"drive\"", source, StringComparison.Ordinal);
-        Assert.Contains("request.Corpora = \"user\"", source, StringComparison.Ordinal);
+        Assert.Contains(
+            "request.Spaces = GoogleDriveRequestContract.DriveSpace",
+            source,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "request.Corpora = GoogleDriveRequestContract.UserCorpus",
+            source,
+            StringComparison.Ordinal);
         Assert.Contains("request.IncludeItemsFromAllDrives = false", source, StringComparison.Ordinal);
-        Assert.Contains("Parents = new[] { \"root\" }", source, StringComparison.Ordinal);
+        Assert.Contains(
+            "Parents = new[] { GoogleDriveRequestContract.MyDriveRootId }",
+            source,
+            StringComparison.Ordinal);
         Assert.DoesNotContain("Files.Get(\"root\")", source, StringComparison.Ordinal);
     }
 

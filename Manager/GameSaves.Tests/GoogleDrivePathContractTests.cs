@@ -206,6 +206,7 @@ public sealed class GoogleDrivePathContractTests
             GoogleDriveRelativePath.Parse("Folder"),
             GoogleDriveObjectKind.Folder,
             metadata,
+            objectId,
             $"UnsafeErrorCode-{objectId}-{account}-{token}",
             $"Unsafe provider detail {objectId} {account} {token}");
 

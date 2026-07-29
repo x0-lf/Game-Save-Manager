@@ -43,11 +43,13 @@ namespace GameSaves.Infrastructure.GoogleDrive
         internal const string MembershipFields =
             "nextPageToken,incompleteSearch,files(id)";
         internal const string DiscoveryQuery =
-            "name = 'GameSave Manager Backups' and " +
-            "mimeType = 'application/vnd.google-apps.folder' and " +
-            "trashed = false and 'root' in parents";
+            "name = '" + GoogleDriveApplicationRoot.DisplayName + "' and " +
+            "mimeType = '" + GoogleDriveApplicationRoot.FolderMimeType + "' and " +
+            "trashed = false and '" + GoogleDriveRequestContract.MyDriveRootId +
+            "' in parents";
         internal const string MembershipQuery =
-            "trashed = false and 'root' in parents";
+            "trashed = false and '" + GoogleDriveRequestContract.MyDriveRootId +
+            "' in parents";
 
         public async Task<GoogleDriveFolderMetadata> GetFolderByIdAsync(
             GoogleAuthorizedCredential credential,
@@ -85,8 +87,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 {
                     FilesResource.ListRequest request = drive.Files.List();
                     request.Q = MembershipQuery;
-                    request.Spaces = "drive";
-                    request.Corpora = "user";
+                    request.Spaces = GoogleDriveRequestContract.DriveSpace;
+                    request.Corpora = GoogleDriveRequestContract.UserCorpus;
                     request.IncludeItemsFromAllDrives = false;
                     request.SupportsAllDrives = false;
                     request.Fields = MembershipFields;
@@ -140,8 +142,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 {
                     FilesResource.ListRequest request = drive.Files.List();
                     request.Q = DiscoveryQuery;
-                    request.Spaces = "drive";
-                    request.Corpora = "user";
+                    request.Spaces = GoogleDriveRequestContract.DriveSpace;
+                    request.Corpora = GoogleDriveRequestContract.UserCorpus;
                     request.IncludeItemsFromAllDrives = false;
                     request.SupportsAllDrives = false;
                     request.Fields = DiscoveryFields;
@@ -186,7 +188,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 {
                     Name = GoogleDriveApplicationRoot.DisplayName,
                     MimeType = GoogleDriveApplicationRoot.FolderMimeType,
-                    Parents = new[] { "root" }
+                    Parents = new[] { GoogleDriveRequestContract.MyDriveRootId }
                 };
                 FilesResource.CreateRequest request = drive.Files.Create(metadata);
                 request.Fields = MetadataFields;

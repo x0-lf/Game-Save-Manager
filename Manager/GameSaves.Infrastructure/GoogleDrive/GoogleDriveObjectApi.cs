@@ -5,22 +5,9 @@ using DriveFile = Google.Apis.Drive.v3.Data.File;
 
 namespace GameSaves.Infrastructure.GoogleDrive
 {
-    internal static class GoogleDriveObjectRequestContract
-    {
-        public const string MetadataFields =
-            "id,name,mimeType,trashed,parents,driveId";
-
-        public const string ListFields =
-            "nextPageToken,incompleteSearch," +
-            "files(id,name,mimeType,trashed,parents,driveId)";
-
-        public const string Spaces = "drive";
-        public const string Corpora = "user";
-    }
-
     internal sealed record GoogleDriveObjectGetRequest(string ObjectId)
     {
-        public string Fields => GoogleDriveObjectRequestContract.MetadataFields;
+        public string Fields => GoogleDriveRequestContract.MetadataFields;
 
         public bool SupportsAllDrives => false;
 
@@ -31,11 +18,11 @@ namespace GameSaves.Infrastructure.GoogleDrive
         string Query,
         string? PageToken)
     {
-        public string Fields => GoogleDriveObjectRequestContract.ListFields;
+        public string Fields => GoogleDriveRequestContract.ListFields;
 
-        public string Spaces => GoogleDriveObjectRequestContract.Spaces;
+        public string Spaces => GoogleDriveRequestContract.DriveSpace;
 
-        public string Corpora => GoogleDriveObjectRequestContract.Corpora;
+        public string Corpora => GoogleDriveRequestContract.UserCorpus;
 
         public bool IncludeItemsFromAllDrives => false;
 
@@ -61,7 +48,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
 
         public string MimeType => GoogleDriveApplicationRoot.FolderMimeType;
 
-        public string Fields => GoogleDriveObjectRequestContract.MetadataFields;
+        public string Fields => GoogleDriveRequestContract.MetadataFields;
 
         public bool SupportsAllDrives => false;
     }
