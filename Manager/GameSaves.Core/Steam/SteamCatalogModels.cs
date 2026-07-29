@@ -29,7 +29,7 @@
 
         public long? IfModifiedSinceUnix { get; init; }
 
-        public string UserAgent { get; init; } = "SaveGameManager/0.1 github.com/x0-lf andwyrdan@protonmail.com .NET/8.0";
+        public string UserAgent { get; init; } = "SaveGameManager/0.1 github.com/x0-lf user@example.invalid .NET/8.0";
     }
 
     public sealed record SteamCatalogFetchResult(
