@@ -534,16 +534,25 @@ Milestone N adds an Infrastructure-only resolver for normalized `/`-separated re
 
 ### O — GoogleDriveRemoteFileSystem validation
 
-Implement `ValidateAsync` to verify:
+Implement validation-only `GoogleDriveRemoteFileSystem` plumbing and `ValidateAsync` to verify:
 
-* [ ] Google account is connected
-* [ ] Token can be refreshed
-* [ ] Drive API is reachable
-* [ ] Configured root folder exists
-* [ ] Configured root is a folder
-* [ ] Configured root is not trashed
-* [ ] The app can read and write there
-* [ ] Return provider-specific, user-friendly errors such as `GoogleDriveNotConnected`, `GoogleDriveAuthorizationRevoked`, `GoogleDriveRootMissing`, `GoogleDriveRootInaccessible`, `GoogleDriveUnavailable`, and `GoogleDriveQuotaExceeded`
+* [ ] A saved Google Drive profile exists and requests exactly `drive.file`
+* [ ] The Google account is connected and its protected authentication is present
+* [ ] The access token is usable or can be refreshed silently without opening a browser
+* [ ] The Drive API is reachable through a short-lived authenticated Infrastructure session
+* [ ] The configured application-root ID exists and resolves directly by its authoritative ID
+* [ ] The configured root is a non-trashed folder in My Drive, not a shared drive
+* [ ] The configured root remains accessible to the application for reading and creating children
+* [ ] Validation performs no probe upload, file creation, overwrite, rename, move, trash, or deletion
+* [ ] Missing, trashed, moved, replaced, revoked, or inaccessible state invalidates relevant in-memory resolver cache entries
+* [ ] Cancellation and late results cannot update a different profile or superseded validation operation
+* [ ] Provider-specific failures map to safe, user-friendly errors such as `GoogleDriveNotConnected`, `GoogleDriveAuthorizationRevoked`, `GoogleDriveRootMissing`, `GoogleDriveRootInaccessible`, `GoogleDriveUnavailable`, and `GoogleDriveQuotaExceeded`
+* [ ] Quota-related API failures are classified without adding quota retrieval or quota display
+* [ ] Later remote-filesystem operations remain explicitly unavailable; no listing, upload, download, or metadata-write behavior starts in this milestone
+* [ ] Google Drive remains absent from `SyncProviderFactory`, and Preview Sync and Sync Now remain disabled
+* [ ] OAuth scope remains exactly `https://www.googleapis.com/auth/drive.file`
+
+Milestone O is a validation boundary only. It may introduce the Google Drive remote-filesystem type needed to host `ValidateAsync`, but it must reuse the existing OAuth lifecycle, root-folder service, object API, resolver, and cache rather than issuing Drive requests from the App or duplicating their rules. A successful validation does not make Google Drive an implemented sync provider and does not enable backup synchronization.
 
 ### P — Google Drive listing and text metadata
 
