@@ -38,19 +38,29 @@ namespace GameSaves.Infrastructure.GoogleDrive
 
         public GoogleAuthorizedCredential(
             UserCredential credential,
-            Func<CancellationToken, Task>? commitToken = null)
+            Func<CancellationToken, Task>? commitToken = null,
+            bool wasAuthenticationRefreshed = false)
         {
             Credential = credential;
             _commitToken = commitToken;
+            WasAuthenticationRefreshed = wasAuthenticationRefreshed;
         }
 
         public UserCredential Credential { get; }
+
+        public bool WasAuthenticationRefreshed { get; }
+
+        internal bool IsDisposed { get; private set; }
 
         public Task CommitTokenAsync(CancellationToken cancellationToken = default) =>
             _commitToken?.Invoke(cancellationToken) ?? Task.CompletedTask;
 
         public void Dispose()
         {
+            if (IsDisposed)
+                return;
+
+            IsDisposed = true;
             if (Credential.Flow is IDisposable disposable)
                 disposable.Dispose();
         }
@@ -198,6 +208,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 }
 
                 var credential = new UserCredential(flow, userKey, token);
+                bool wasAuthenticationRefreshed = token.IsStale;
                 string accessToken = await credential.GetAccessTokenForRequestAsync(
                     null,
                     cancellationToken);
@@ -205,7 +216,9 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 if (string.IsNullOrWhiteSpace(accessToken))
                     throw new GoogleAuthorizationException(GoogleAuthorizationFailure.RefreshFailed);
 
-                return new GoogleAuthorizedCredential(credential);
+                return new GoogleAuthorizedCredential(
+                    credential,
+                    wasAuthenticationRefreshed: wasAuthenticationRefreshed);
             }
             catch (OperationCanceledException)
             {
