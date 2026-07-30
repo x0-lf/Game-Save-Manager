@@ -15,10 +15,18 @@ namespace GameSaves.Infrastructure.GoogleDrive
             "nextPageToken,incompleteSearch," +
             "files(id,name,mimeType,trashed,parents,driveId)";
 
+        public const string RootValidationMetadataFields =
+            "id,name,mimeType,trashed,parents,driveId," +
+            "capabilities(canListChildren,canAddChildren)";
+
         public const string DriveSpace = "drive";
         public const string UserCorpus = "user";
         public const string MyDriveRootId = "root";
         public const bool IncludeItemsFromAllDrives = false;
         public const bool SupportsAllDrives = false;
+
+        // Authoritative-ID inspection must be able to identify an object that
+        // moved into a shared drive so My Drive-only callers can reject it.
+        public const bool AuthoritativeIdLookupSupportsAllDrives = true;
     }
 }

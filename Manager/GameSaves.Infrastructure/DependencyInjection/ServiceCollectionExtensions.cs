@@ -113,6 +113,10 @@ namespace GameSaves.Infrastructure.DependencyInjection
                 GoogleDriveAuthorizedSessionFactory>();
             services.AddSingleton<IGoogleDriveRootFolderApi,
                 GoogleDriveRootFolderApi>();
+            services.AddSingleton<IGoogleDriveRootValidationClientFactory,
+                GoogleDriveRootValidationClientFactory>();
+            services.AddSingleton<IGoogleDriveRootValidationApi,
+                GoogleDriveRootValidationApi>();
             services.AddSingleton<GoogleDriveQueryBuilder>();
             services.AddSingleton<IGoogleDriveObjectClientFactory,
                 GoogleDriveObjectClientFactory>();

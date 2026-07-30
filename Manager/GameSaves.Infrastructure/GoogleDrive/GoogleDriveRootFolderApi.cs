@@ -63,7 +63,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 request.Fields = MetadataFields;
                 // A stored authoritative ID may now resolve into a shared drive.
                 // Read it so the service can reject that unsupported location.
-                request.SupportsAllDrives = true;
+                request.SupportsAllDrives =
+                    GoogleDriveRequestContract.AuthoritativeIdLookupSupportsAllDrives;
                 DriveFile file = await request.ExecuteAsync(cancellationToken);
                 return Map(file);
             }

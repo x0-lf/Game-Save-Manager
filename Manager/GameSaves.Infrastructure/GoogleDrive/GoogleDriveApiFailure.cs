@@ -13,7 +13,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
         RootFolderCreation = 4,
         ObjectMetadataGet = 5,
         ObjectChildList = 6,
-        ObjectFolderCreation = 7
+        ObjectFolderCreation = 7,
+        RootValidationMetadataGet = 8
     }
 
     internal enum GoogleDriveApiFailure
@@ -74,6 +75,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 "activeItemCreationLimitExceeded",
                 "authError",
                 "backendError",
+                "dailyLimitExceeded",
                 "forbidden",
                 "insufficientFilePermissions",
                 "insufficientPermissions",
@@ -174,7 +176,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
                     reason,
                     "quotaExceeded",
                     "storageQuotaExceeded",
-                    "activeItemCreationLimitExceeded"))
+                    "activeItemCreationLimitExceeded",
+                    "dailyLimitExceeded"))
             {
                 return GoogleDriveApiFailure.QuotaExceeded;
             }

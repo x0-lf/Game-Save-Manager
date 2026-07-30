@@ -200,7 +200,21 @@ namespace GameSaves.Infrastructure.GoogleDrive
         {
             ArgumentNullException.ThrowIfNull(details);
 
-            GoogleDriveRemoteValidationStatus status = details.Failure switch
+            return FromApiFailure(
+                details.Failure,
+                rootDisplayName,
+                cacheInvalidated);
+        }
+
+        public static GoogleDriveRemoteValidationResult FromApiFailure(
+            GoogleDriveApiFailure failure,
+            string? rootDisplayName = null,
+            bool cacheInvalidated = false)
+        {
+            if (!Enum.IsDefined(failure))
+                throw new ArgumentOutOfRangeException(nameof(failure));
+
+            GoogleDriveRemoteValidationStatus status = failure switch
             {
                 GoogleDriveApiFailure.AuthorizationRevoked =>
                     GoogleDriveRemoteValidationStatus.AuthorizationRevoked,
