@@ -29,7 +29,7 @@ dependencies are added, removed, or upgraded.
 | SQLitePCLRaw.bundle_e_sqlite3 | 2.1.12 | Apache-2.0 | Explicit native SQLite bundle constraint used by the projects that directly own SQLite initialization. |
 | System.Security.Cryptography.ProtectedData | 10.0.0 | MIT | Windows DPAPI access for current-user secret protection. |
 | System.Text.Json | 10.0.9 | MIT | JSON serialization used by sync settings and regression tests. |
-| Gameloop.Vdf | 0.6.2 | MIT | Valve Data Format parser used for Steam VDF files. |
+| ValveKeyValue | 0.20.0.417 | MIT | Selected .NET 8-compatible KeyValues1 parser used for Steam VDF files; referenced only by Infrastructure. |
 | SSH.NET | 2024.2.0 | MIT | SFTP/SSH client used by the SFTP sync provider. |
 | Microsoft.NET.Test.Sdk | 17.14.1 | MIT | .NET test host and discovery support; test project only. |
 | xunit | 2.9.3 | Apache-2.0 | Regression test framework; test project only. |
@@ -110,9 +110,15 @@ System.Security.Cryptography.ProtectedData is used only by Infrastructure to
 protect sync authentication payloads with Windows DPAPI current-user scope.
 Core and App do not reference DPAPI types.
 
-### Gameloop.Vdf
+### ValveKeyValue
 
-Gameloop.Vdf is used to parse Steam VDF files, including Steam library and manifest data.
+`ValveKeyValue` 0.20.0.417 is the selected .NET 8-compatible release used to
+parse Steam KeyValues1 library and application-manifest data. The package is
+licensed under MIT according to its official package metadata and is referenced
+only by `GameSaves.Infrastructure`. The CLI consumes provider-neutral Steam
+discovery interfaces and does not directly reference a VDF parser. Replacing
+`Gameloop.Vdf` removes its obsolete `NETStandard.Library` 1.6.1 dependency
+chain.
 
 ### SSH.NET
 

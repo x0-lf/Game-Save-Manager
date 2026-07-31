@@ -270,6 +270,8 @@ An advisory match is important evidence but does not by itself establish exploit
 
 Vulnerable dependencies must be upgraded or removed. Do not suppress an advisory, add an exclusion, or add unrelated framework-package references merely to make an audit appear green. For packages that carry native runtime assets, inspect clean publish output and its `.deps.json` in addition to the restored graph. Security package updates must preserve existing database, parser, transfer, backup, authentication, and provider behavior through regression tests.
 
+Steam VDF parsing uses the selected .NET 8-compatible `ValveKeyValue` 0.20.0.417 release only through Infrastructure. The CLI, Core, and App do not directly own parser packages or expose parser-specific types. This replaces the obsolete Gameloop dependency chain rather than suppressing the vulnerable legacy framework packages it introduced.
+
 Do not submit replacement binaries, opaque generated archives, downloaded credential files, or vendored dependencies as a security fix without explicit maintainer agreement. Package and licensing changes must follow [CONTRIBUTING.md](CONTRIBUTING.md) and update [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) when required.
 
 ## Security verification for changes

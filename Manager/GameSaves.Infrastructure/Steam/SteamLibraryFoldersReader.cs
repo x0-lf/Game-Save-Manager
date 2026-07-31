@@ -1,109 +1,116 @@
-﻿using Gameloop.Vdf;
-using Gameloop.Vdf.Linq;
 using GameSaves.Core.Steam;
-using System;
-using System.Collections.Generic;
-using System.IO;
+using System.Globalization;
 using System.Security;
+using ValveKeyValue;
 
-namespace GameSaves.Infrastructure.Steam
+namespace GameSaves.Infrastructure.Steam;
+
+public sealed class SteamLibraryFoldersReader : ISteamLibraryFoldersReader
 {
-    public sealed class SteamLibraryFoldersReader : ISteamLibraryFoldersReader
+    public IEnumerable<string> ReadLibraryPaths(string steamRoot)
     {
-        public IEnumerable<string> ReadLibraryPaths(string steamRoot)
-        {
-            foreach (string vdfPath in GetPossibleLibraryFoldersFiles(steamRoot))
-            {
-                if (!File.Exists(vdfPath))
-                    continue;
+        var emittedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-                foreach (string libraryPath in ReadLibraryPathsFromFile(vdfPath))
+        foreach (string vdfPath in GetPossibleLibraryFoldersFiles(steamRoot))
+        {
+            if (!File.Exists(vdfPath))
+                continue;
+
+            foreach (string libraryPath in ReadLibraryPathsFromFile(vdfPath))
+            {
+                if (emittedPaths.Add(libraryPath))
                     yield return libraryPath;
             }
         }
+    }
 
-        private static IEnumerable<string> GetPossibleLibraryFoldersFiles(string steamRoot)
+    private static IEnumerable<string> GetPossibleLibraryFoldersFiles(string steamRoot)
+    {
+        yield return Path.Combine(steamRoot, "steamapps", "libraryfolders.vdf");
+        yield return Path.Combine(steamRoot, "config", "libraryfolders.vdf");
+    }
+
+    private static IEnumerable<string> ReadLibraryPathsFromFile(string vdfPath)
+    {
+        KVDocument libraryFolders;
+
+        try
         {
-            yield return Path.Combine(steamRoot, "steamapps", "libraryfolders.vdf");
-            yield return Path.Combine(steamRoot, "config", "libraryfolders.vdf");
+            using FileStream stream = File.OpenRead(vdfPath);
+            libraryFolders = SteamKeyValuesParser.Deserialize(stream);
+        }
+        catch (Exception ex) when (
+            ex is IOException ||
+            ex is UnauthorizedAccessException ||
+            ex is SecurityException ||
+            ex is KeyValueException)
+        {
+            yield break;
         }
 
-        private static IEnumerable<string> ReadLibraryPathsFromFile(string vdfPath)
+        if (libraryFolders.Value.ValueType != KVValueType.Collection)
+            yield break;
+
+        foreach (KVObject child in libraryFolders.Children)
         {
-            VProperty root;
-
-            try
+            if (!uint.TryParse(
+                    child.Name,
+                    NumberStyles.None,
+                    CultureInfo.InvariantCulture,
+                    out _))
             {
-                root = VdfConvert.Deserialize(File.ReadAllText(vdfPath));
-            }
-            catch (Exception ex) when (
-                ex is IOException ||
-                ex is UnauthorizedAccessException ||
-                ex is SecurityException ||
-                ex is InvalidOperationException ||
-                ex is ArgumentException)
-            {
-                yield break;
+                continue;
             }
 
-            if (root.Value is not VObject libraryFoldersObject)
-                yield break;
+            string? rawPath = ExtractLibraryPath(child);
 
-            foreach (VProperty child in libraryFoldersObject.Properties())
-            {
-                string? rawPath = ExtractLibraryPath(child.Value);
+            if (!TryNormalizePath(rawPath, out string normalizedPath))
+                continue;
 
-                if (!TryNormalizePath(rawPath, out string normalizedPath))
-                    continue;
+            if (!Directory.Exists(normalizedPath))
+                continue;
 
-                if (!Directory.Exists(normalizedPath))
-                    continue;
-
-                yield return normalizedPath;
-            }
+            yield return normalizedPath;
         }
+    }
 
-        private static string? ExtractLibraryPath(VToken token)
+    private static string? ExtractLibraryPath(KVObject child)
+    {
+        // Older Steam format:
+        // "1" "D:\\SteamLibrary"
+        if (child.Value.ValueType == KVValueType.String)
+            return (string)child.Value;
+
+        // Modern Steam format:
+        // "1"
+        // {
+        //     "path" "D:\\SteamLibrary"
+        // }
+        return child.Value.ValueType == KVValueType.Collection
+            ? SteamKeyValuesParser.GetString(child, "path")
+            : null;
+    }
+
+    private static bool TryNormalizePath(string? rawPath, out string normalizedPath)
+    {
+        normalizedPath = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(rawPath))
+            return false;
+
+        try
         {
-            // Older Steam format:
-            // "1" "D:\\SteamLibrary"
-            if (token is VValue directValue)
-                return directValue.ToString();
-
-            // Modern Steam format:
-            // "1"
-            // {
-            //     "path" "D:\\SteamLibrary"
-            // }
-            if (token is VObject objectValue &&
-                objectValue["path"] is VValue pathValue)
-            {
-                return pathValue.ToString();
-            }
-
-            return null;
+            string expandedPath = Environment.ExpandEnvironmentVariables(
+                rawPath.Trim().Trim('"'));
+            normalizedPath = Path.GetFullPath(expandedPath);
+            return true;
         }
-
-        private static bool TryNormalizePath(string? rawPath, out string normalizedPath)
+        catch (Exception ex) when (
+            ex is ArgumentException ||
+            ex is NotSupportedException ||
+            ex is PathTooLongException)
         {
-            normalizedPath = string.Empty;
-
-            if (string.IsNullOrWhiteSpace(rawPath))
-                return false;
-
-            try
-            {
-                string expandedPath = Environment.ExpandEnvironmentVariables(rawPath.Trim().Trim('"'));
-                normalizedPath = Path.GetFullPath(expandedPath);
-                return true;
-            }
-            catch (Exception ex) when (
-                ex is ArgumentException ||
-                ex is NotSupportedException ||
-                ex is PathTooLongException)
-            {
-                return false;
-            }
+            return false;
         }
     }
 }
