@@ -161,7 +161,7 @@ public sealed class GoogleDriveObjectPathResolverIntegrationTests
     }
 
     [Fact]
-    public void MilestoneNArchitecture_RemainsInfrastructureOnlyAndDoesNotActivateSync()
+    public void GoogleDriveArchitecture_RemainsInfrastructureOnlyAndDoesNotActivateSync()
     {
         Type[] infrastructureTypes = typeof(GoogleDriveObjectPathResolver).Assembly.GetTypes();
         Type[] googleDriveTypes = infrastructureTypes
@@ -172,9 +172,12 @@ public sealed class GoogleDriveObjectPathResolverIntegrationTests
             .ToArray();
 
         Assert.DoesNotContain(googleDriveTypes, type =>
-            type.Name is "GoogleDriveRemoteFileSystem" or "GoogleDriveSyncProvider");
-        Assert.DoesNotContain(googleDriveTypes, type =>
-            typeof(IRemoteFileSystem).IsAssignableFrom(type));
+            type.Name == "GoogleDriveSyncProvider");
+        Assert.Collection(
+            googleDriveTypes.Where(type =>
+                !type.IsInterface &&
+                typeof(IRemoteFileSystem).IsAssignableFrom(type)),
+            type => Assert.Equal("GoogleDriveRemoteFileSystem", type.Name));
         Assert.DoesNotContain(
             typeof(SyncProviderFactory).GetMethods(),
             method => method.Name.Contains("Google", StringComparison.Ordinal));
