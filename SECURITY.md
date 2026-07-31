@@ -259,12 +259,16 @@ Do not paste the exposed value into an issue, pull request, chat message, or fol
 Dependency reports should identify the package, resolved version, advisory, affected project, reachable code path, and practical impact. The repository checks both direct and transitive packages with:
 
 ```text
+dotnet restore Manager/Manager.sln
 dotnet list Manager/Manager.sln package
 dotnet list Manager/Manager.sln package --include-transitive
 dotnet list Manager/Manager.sln package --vulnerable --include-transitive
+dotnet list Manager/Manager.sln package --deprecated
 ```
 
-An advisory match is important evidence but does not by itself establish exploitability. Conversely, a transitive dependency is not automatically harmless. Maintainers will evaluate reachability, runtime behavior, available framework mitigations, compatible upgrades, and regression risk.
+An advisory match is important evidence but does not by itself establish exploitability. Conversely, a transitive dependency is not automatically harmless. Maintainers will evaluate reachability, runtime behavior, available framework mitigations, compatible upgrades, and regression risk. Use `dotnet nuget why <project> <package>` to identify the originating dependency before choosing a remediation.
+
+Vulnerable dependencies must be upgraded or removed. Do not suppress an advisory, add an exclusion, or add unrelated framework-package references merely to make an audit appear green. For packages that carry native runtime assets, inspect clean publish output and its `.deps.json` in addition to the restored graph. Security package updates must preserve existing database, parser, transfer, backup, authentication, and provider behavior through regression tests.
 
 Do not submit replacement binaries, opaque generated archives, downloaded credential files, or vendored dependencies as a security fix without explicit maintainer agreement. Package and licensing changes must follow [CONTRIBUTING.md](CONTRIBUTING.md) and update [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) when required.
 

@@ -25,7 +25,8 @@ dependencies are added, removed, or upgraded.
 | Microsoft.Extensions.DependencyInjection | 10.0.9 | MIT | Dependency injection container and service registration helpers. |
 | Microsoft.Extensions.DependencyInjection.Abstractions | 10.0.9 | MIT | Dependency injection abstractions. |
 | Microsoft.Extensions.Hosting | 10.0.9 | MIT | Generic hosting infrastructure. |
-| Microsoft.Data.Sqlite | 10.0.9 | MIT | SQLite ADO.NET provider. |
+| Microsoft.Data.Sqlite | 10.0.10 | MIT | SQLite ADO.NET provider. |
+| SQLitePCLRaw.bundle_e_sqlite3 | 2.1.12 | Apache-2.0 | Explicit native SQLite bundle constraint used by the projects that directly own SQLite initialization. |
 | System.Security.Cryptography.ProtectedData | 10.0.0 | MIT | Windows DPAPI access for current-user secret protection. |
 | System.Text.Json | 10.0.9 | MIT | JSON serialization used by sync settings and regression tests. |
 | Gameloop.Vdf | 0.6.2 | MIT | Valve Data Format parser used for Steam VDF files. |
@@ -91,6 +92,13 @@ Packages used:
 
 Microsoft.Data.Sqlite is used for the local SQLite database storing save-path mappings,
 verification data, catalog/harvest data, and application history.
+
+`GameSaves.Infrastructure`, `GameSaves`, and `GameSaves.Reviewer` explicitly
+reference `SQLitePCLRaw.bundle_e_sqlite3` 2.1.12. The constraint prevents NuGet
+from selecting the vulnerable 2.1.11 native library still permitted by the
+provider's minimum dependency range. The bundle package metadata declares the
+Apache-2.0 license. This package-only remediation introduces no database schema
+or persisted-format change.
 
 ### System.Text.Json
 
