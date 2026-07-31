@@ -133,8 +133,11 @@ namespace GameSaves.Infrastructure.DependencyInjection
             services.AddSingleton<GoogleDriveQueryBuilder>();
             services.AddSingleton<IGoogleDriveObjectClientFactory,
                 GoogleDriveObjectClientFactory>();
-            services.AddSingleton<IGoogleDriveObjectApi,
-                GoogleDriveObjectApi>();
+            services.AddSingleton<GoogleDriveObjectApi>();
+            services.AddSingleton<IGoogleDriveObjectApi>(provider =>
+                provider.GetRequiredService<GoogleDriveObjectApi>());
+            services.AddSingleton<IGoogleDriveObjectListingApi>(provider =>
+                provider.GetRequiredService<GoogleDriveObjectApi>());
             services.AddSingleton<IGoogleDriveObjectIdCache,
                 GoogleDriveObjectIdCache>();
             services.AddSingleton<GoogleDriveObjectCreationCoordinator>();

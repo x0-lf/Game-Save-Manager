@@ -67,6 +67,31 @@ public sealed class GoogleDriveObjectApiTests
             GoogleDriveQueryBuilder.EscapeLiteral(@"\'"));
     }
 
+    [Theory]
+    [InlineData(
+        -1,
+        "'parent\\'\\\\id' in parents and trashed = false")]
+    [InlineData(
+        (int)GoogleDriveObjectKind.Folder,
+        "'parent\\'\\\\id' in parents and trashed = false and " +
+        "mimeType = 'application/vnd.google-apps.folder'")]
+    [InlineData(
+        (int)GoogleDriveObjectKind.File,
+        "'parent\\'\\\\id' in parents and trashed = false and " +
+        "mimeType != 'application/vnd.google-apps.folder'")]
+    public void QueryBuilder_BuildsEscapedDirectChildQuery(
+        int expectedKindValue,
+        string expected)
+    {
+        GoogleDriveObjectKind? expectedKind = expectedKindValue < 0
+            ? null
+            : (GoogleDriveObjectKind)expectedKindValue;
+        string query = new GoogleDriveQueryBuilder()
+            .BuildDirectChildrenQuery(@"parent'\id", expectedKind);
+
+        Assert.Equal(expected, query);
+    }
+
     [Fact]
     public void RequestFormatting_DoesNotExposeQueriesIdsOrPageTokens()
     {
@@ -82,6 +107,7 @@ public sealed class GoogleDriveObjectApiTests
 
         Assert.DoesNotContain(objectId, get.ToString(), StringComparison.Ordinal);
         Assert.DoesNotContain(query, list.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("Private name", list.ToString(), StringComparison.Ordinal);
         Assert.DoesNotContain(pageToken, list.ToString(), StringComparison.Ordinal);
         Assert.DoesNotContain(pageToken, page.ToString(), StringComparison.Ordinal);
     }
@@ -156,6 +182,204 @@ public sealed class GoogleDriveObjectApiTests
         Assert.DoesNotContain("Private folder name", exception.Details.ToString(),
             StringComparison.Ordinal);
         Assert.Single(client.ListRequests);
+    }
+
+    [Fact]
+    public async Task ListDirectChildren_FollowsEmptyAndPopulatedPagesWithoutDeduplication()
+    {
+        var client = new RecordingObjectClient();
+        client.Pages.Enqueue(new GoogleDriveObjectListPage(
+            Array.Empty<GoogleDriveObjectMetadata>(),
+            "page-2-private",
+            IncompleteSearch: false));
+        client.Pages.Enqueue(new GoogleDriveObjectListPage(
+            new[]
+            {
+                Object("same-id", "Run-A"),
+                Object("same-id", "Run-A"),
+                Object("other-id", "run-a")
+            },
+            null,
+            IncompleteSearch: false));
+        GoogleDriveObjectApi api = CreateApi(client);
+
+        IReadOnlyList<GoogleDriveObjectMetadata> results =
+            await api.ListChildrenAsync(
+                null!,
+                "parent-id",
+                expectedKind: null,
+                CancellationToken.None);
+
+        Assert.Equal(3, results.Count);
+        Assert.Equal(new[] { "Run-A", "Run-A", "run-a" },
+            results.Select(result => result.Name));
+        Assert.Equal(new[] { "same-id", "same-id", "other-id" },
+            results.Select(result => result.Id));
+        Assert.Equal(2, client.ListRequests.Count);
+        Assert.Null(client.ListRequests[0].PageToken);
+        Assert.Equal("page-2-private", client.ListRequests[1].PageToken);
+        Assert.All(client.ListRequests, request =>
+        {
+            Assert.Equal("'parent-id' in parents and trashed = false", request.Query);
+            Assert.Equal("drive", request.Spaces);
+            Assert.Equal("user", request.Corpora);
+            Assert.False(request.IncludeItemsFromAllDrives);
+            Assert.False(request.SupportsAllDrives);
+            Assert.Equal(
+                "nextPageToken,incompleteSearch," +
+                "files(id,name,mimeType,trashed,parents,driveId)",
+                request.Fields);
+        });
+        Assert.Empty(client.GetRequests);
+        Assert.Empty(client.CreateRequests);
+        Assert.Equal(1, client.DisposeCalls);
+    }
+
+    [Fact]
+    public async Task ListDirectChildren_FolderFilterUsesFolderMimeTypeAndPreservesEmptyResult()
+    {
+        var client = new RecordingObjectClient();
+        client.Pages.Enqueue(new GoogleDriveObjectListPage(
+            Array.Empty<GoogleDriveObjectMetadata>(),
+            null,
+            IncompleteSearch: false));
+        GoogleDriveObjectApi api = CreateApi(client);
+
+        IReadOnlyList<GoogleDriveObjectMetadata> results =
+            await api.ListChildrenAsync(
+                null!,
+                "parent-id",
+                GoogleDriveObjectKind.Folder,
+                CancellationToken.None);
+
+        Assert.Empty(results);
+        GoogleDriveObjectListRequest request = Assert.Single(client.ListRequests);
+        Assert.Equal(
+            "'parent-id' in parents and trashed = false and " +
+            "mimeType = 'application/vnd.google-apps.folder'",
+            request.Query);
+    }
+
+    [Fact]
+    public async Task ListDirectChildren_IncompleteSearchFailsSafely()
+    {
+        var client = new RecordingObjectClient();
+        client.Pages.Enqueue(new GoogleDriveObjectListPage(
+            Array.Empty<GoogleDriveObjectMetadata>(),
+            "private-next-token",
+            IncompleteSearch: true));
+        GoogleDriveObjectApi api = CreateApi(client);
+
+        GoogleDriveApiException exception = await Assert.ThrowsAsync<GoogleDriveApiException>(() =>
+            api.ListChildrenAsync(
+                null!,
+                "private-parent-id",
+                expectedKind: null,
+                CancellationToken.None));
+
+        Assert.Equal(GoogleDriveApiFailure.Unavailable, exception.Failure);
+        Assert.True(exception.Details.Retryable);
+        Assert.DoesNotContain("private-parent-id", exception.ToString(),
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("private-next-token", exception.ToString(),
+            StringComparison.Ordinal);
+        Assert.Equal(1, client.DisposeCalls);
+    }
+
+    [Fact]
+    public async Task ListDirectChildren_RejectsSharedDriveResultWithoutExposingPrivateData()
+    {
+        const string objectId = "private-object-id";
+        const string objectName = "Private child name";
+        const string driveId = "private-shared-drive-id";
+        var client = new RecordingObjectClient();
+        client.Pages.Enqueue(new GoogleDriveObjectListPage(
+            new[]
+            {
+                Object(objectId, objectName, driveId: driveId)
+            },
+            null,
+            IncompleteSearch: false));
+        GoogleDriveObjectApi api = CreateApi(client);
+
+        GoogleDriveApiException exception = await Assert.ThrowsAsync<GoogleDriveApiException>(() =>
+            api.ListChildrenAsync(
+                null!,
+                "parent-id",
+                GoogleDriveObjectKind.Folder,
+                CancellationToken.None));
+
+        Assert.Equal(GoogleDriveApiFailure.AccessDenied, exception.Failure);
+        Assert.Equal("GoogleDriveObjectUnsupportedLocation", exception.Details.SafeErrorCode);
+        Assert.DoesNotContain(objectId, exception.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain(objectName, exception.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain(driveId, exception.ToString(), StringComparison.Ordinal);
+        Assert.Equal(1, client.DisposeCalls);
+    }
+
+    [Theory]
+    [InlineData(0, "GoogleDriveObjectTrashed")]
+    [InlineData(1, "GoogleDriveObjectParentMismatch")]
+    [InlineData(2, "GoogleDriveObjectTypeMismatch")]
+    public async Task ListDirectChildren_RejectsResultsThatViolateTheQueryContract(
+        int scenario,
+        string expectedErrorCode)
+    {
+        GoogleDriveObjectMetadata invalidObject = scenario switch
+        {
+            0 => Object("private-object-id", "Private name", trashed: true),
+            1 => Object(
+                "private-object-id",
+                "Private name",
+                parentIds: new[] { "different-parent-id" }),
+            2 => Object(
+                "private-object-id",
+                "Private name",
+                mimeType: "application/json"),
+            _ => throw new ArgumentOutOfRangeException(nameof(scenario))
+        };
+        var client = new RecordingObjectClient();
+        client.Pages.Enqueue(new GoogleDriveObjectListPage(
+            new[] { invalidObject },
+            null,
+            IncompleteSearch: false));
+        GoogleDriveObjectApi api = CreateApi(client);
+
+        GoogleDriveApiException exception = await Assert.ThrowsAsync<GoogleDriveApiException>(() =>
+            api.ListChildrenAsync(
+                null!,
+                "parent-id",
+                GoogleDriveObjectKind.Folder,
+                CancellationToken.None));
+
+        Assert.Equal(GoogleDriveApiFailure.Failed, exception.Failure);
+        Assert.Equal(expectedErrorCode, exception.Details.SafeErrorCode);
+        Assert.DoesNotContain("private-object-id", exception.ToString(),
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("Private name", exception.ToString(),
+            StringComparison.Ordinal);
+        Assert.Equal(1, client.DisposeCalls);
+    }
+
+    [Fact]
+    public async Task ListDirectChildren_ForwardsCancellationAndDisposesClient()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var client = new RecordingObjectClient
+        {
+            ListException = new OperationCanceledException(cancellation.Token)
+        };
+        GoogleDriveObjectApi api = CreateApi(client);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            api.ListChildrenAsync(
+                null!,
+                "parent-id",
+                expectedKind: null,
+                cancellation.Token));
+
+        Assert.Equal(cancellation.Token, client.LastListCancellationToken);
+        Assert.Equal(1, client.DisposeCalls);
     }
 
     [Fact]
@@ -321,6 +545,9 @@ public sealed class GoogleDriveObjectApiTests
 
         Assert.IsType<GoogleDriveObjectApi>(
             provider.GetRequiredService<IGoogleDriveObjectApi>());
+        Assert.Same(
+            provider.GetRequiredService<IGoogleDriveObjectApi>(),
+            provider.GetRequiredService<IGoogleDriveObjectListingApi>());
         Assert.IsType<GoogleDriveObjectClientFactory>(
             provider.GetRequiredService<IGoogleDriveObjectClientFactory>());
         Assert.IsType<GoogleDriveQueryBuilder>(
@@ -330,14 +557,20 @@ public sealed class GoogleDriveObjectApiTests
     private static GoogleDriveObjectApi CreateApi(RecordingObjectClient client) =>
         new(new GoogleDriveQueryBuilder(), new RecordingObjectClientFactory(client));
 
-    private static GoogleDriveObjectMetadata Object(string id, string name) =>
+    private static GoogleDriveObjectMetadata Object(
+        string id,
+        string name,
+        string mimeType = "application/vnd.google-apps.folder",
+        bool trashed = false,
+        IReadOnlyList<string>? parentIds = null,
+        string? driveId = null) =>
         new(
             id,
             name,
-            "application/vnd.google-apps.folder",
-            false,
-            new[] { "parent-id" },
-            null);
+            mimeType,
+            trashed,
+            parentIds ?? new[] { "parent-id" },
+            driveId);
 
     private sealed class RecordingObjectClientFactory : IGoogleDriveObjectClientFactory
     {
@@ -363,6 +596,10 @@ public sealed class GoogleDriveObjectApiTests
         public GoogleDriveObjectMetadata CreateResult { get; set; } =
             Object("created-id", "Created");
 
+        public Exception? ListException { get; set; }
+
+        public CancellationToken LastListCancellationToken { get; private set; }
+
         public int DisposeCalls { get; private set; }
 
         public Task<GoogleDriveObjectMetadata> GetAsync(
@@ -378,8 +615,13 @@ public sealed class GoogleDriveObjectApiTests
             GoogleDriveObjectListRequest request,
             CancellationToken cancellationToken)
         {
-            cancellationToken.ThrowIfCancellationRequested();
             ListRequests.Add(request);
+            LastListCancellationToken = cancellationToken;
+
+            if (ListException is not null)
+                return Task.FromException<GoogleDriveObjectListPage>(ListException);
+
+            cancellationToken.ThrowIfCancellationRequested();
             return Task.FromResult(Pages.Dequeue());
         }
 

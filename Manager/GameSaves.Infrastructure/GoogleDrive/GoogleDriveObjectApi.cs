@@ -29,7 +29,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
 
         public bool SupportsAllDrives => GoogleDriveRequestContract.SupportsAllDrives;
 
-        public override string ToString() => "Google Drive exact-name child request";
+        public override string ToString() => "Google Drive child-list request";
     }
 
     internal sealed class GoogleDriveFolderCreateRequest
@@ -103,7 +103,17 @@ namespace GameSaves.Infrastructure.GoogleDrive
             CancellationToken cancellationToken);
     }
 
-    internal sealed class GoogleDriveObjectApi : IGoogleDriveObjectApi
+    internal interface IGoogleDriveObjectListingApi
+    {
+        Task<IReadOnlyList<GoogleDriveObjectMetadata>> ListChildrenAsync(
+            GoogleAuthorizedCredential credential,
+            string parentFolderId,
+            GoogleDriveObjectKind? expectedKind,
+            CancellationToken cancellationToken);
+    }
+
+    internal sealed class GoogleDriveObjectApi
+        : IGoogleDriveObjectApi, IGoogleDriveObjectListingApi
     {
         private readonly GoogleDriveQueryBuilder _queryBuilder;
         private readonly IGoogleDriveObjectClientFactory _clientFactory;
@@ -147,6 +157,39 @@ namespace GameSaves.Infrastructure.GoogleDrive
         {
             string query = _queryBuilder.BuildExactNameChildQuery(parentId, name);
 
+            return await ListAllPagesAsync(
+                credential,
+                query,
+                validateObject: null,
+                cancellationToken);
+        }
+
+        public async Task<IReadOnlyList<GoogleDriveObjectMetadata>> ListChildrenAsync(
+            GoogleAuthorizedCredential credential,
+            string parentFolderId,
+            GoogleDriveObjectKind? expectedKind,
+            CancellationToken cancellationToken)
+        {
+            string query = _queryBuilder.BuildDirectChildrenQuery(
+                parentFolderId,
+                expectedKind);
+
+            return await ListAllPagesAsync(
+                credential,
+                query,
+                metadata => ValidateDirectChild(
+                    metadata,
+                    parentFolderId,
+                    expectedKind),
+                cancellationToken);
+        }
+
+        private async Task<IReadOnlyList<GoogleDriveObjectMetadata>> ListAllPagesAsync(
+            GoogleAuthorizedCredential credential,
+            string query,
+            Action<GoogleDriveObjectMetadata>? validateObject,
+            CancellationToken cancellationToken)
+        {
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -169,6 +212,12 @@ namespace GameSaves.Infrastructure.GoogleDrive
                             retryable: true);
                     }
 
+                    if (validateObject is not null)
+                    {
+                        foreach (GoogleDriveObjectMetadata metadata in page.Objects)
+                            validateObject(metadata);
+                    }
+
                     objects.AddRange(page.Objects);
                     pageToken = string.IsNullOrWhiteSpace(page.NextPageToken)
                         ? null
@@ -181,6 +230,48 @@ namespace GameSaves.Infrastructure.GoogleDrive
             catch (Exception ex)
             {
                 throw MapException(ex, GoogleDriveApiOperation.ObjectChildList);
+            }
+        }
+
+        private static void ValidateDirectChild(
+            GoogleDriveObjectMetadata metadata,
+            string expectedParentId,
+            GoogleDriveObjectKind? expectedKind)
+        {
+            if (metadata.DriveId is not null)
+            {
+                throw GoogleDriveApiFailureMapper.Create(
+                    GoogleDriveApiOperation.ObjectChildList,
+                    GoogleDriveApiFailure.AccessDenied,
+                    "GoogleDriveObjectUnsupportedLocation",
+                    retryable: false);
+            }
+
+            if (metadata.Trashed)
+            {
+                throw GoogleDriveApiFailureMapper.Create(
+                    GoogleDriveApiOperation.ObjectChildList,
+                    GoogleDriveApiFailure.Failed,
+                    "GoogleDriveObjectTrashed",
+                    retryable: false);
+            }
+
+            if (!metadata.ParentIds.Contains(expectedParentId, StringComparer.Ordinal))
+            {
+                throw GoogleDriveApiFailureMapper.Create(
+                    GoogleDriveApiOperation.ObjectChildList,
+                    GoogleDriveApiFailure.Failed,
+                    "GoogleDriveObjectParentMismatch",
+                    retryable: false);
+            }
+
+            if (expectedKind is not null && metadata.Kind != expectedKind.Value)
+            {
+                throw GoogleDriveApiFailureMapper.Create(
+                    GoogleDriveApiOperation.ObjectChildList,
+                    GoogleDriveApiFailure.Failed,
+                    "GoogleDriveObjectTypeMismatch",
+                    retryable: false);
             }
         }
 
