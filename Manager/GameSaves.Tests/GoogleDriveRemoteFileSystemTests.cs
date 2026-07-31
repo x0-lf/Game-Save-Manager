@@ -27,7 +27,8 @@ public sealed class GoogleDriveRemoteFileSystemTests
         var validation = new RecordingValidationService();
         var factory = new GoogleDriveRemoteFileSystemFactory(
             repository,
-            validation);
+            validation,
+            new RecordingRootExistenceService());
 
         IRemoteFileSystem first = factory.Create(ProfileId);
         IRemoteFileSystem second = factory.Create(ProfileId);
@@ -55,7 +56,8 @@ public sealed class GoogleDriveRemoteFileSystemTests
         var validation = new RecordingValidationService();
         var factory = new GoogleDriveRemoteFileSystemFactory(
             repository,
-            validation);
+            validation,
+            new RecordingRootExistenceService());
 
         await factory.Create(ProfileId).ValidateAsync();
         await factory.Create(secondProfileId).ValidateAsync();
@@ -80,7 +82,8 @@ public sealed class GoogleDriveRemoteFileSystemTests
         });
         var factory = new GoogleDriveRemoteFileSystemFactory(
             repository,
-            new RecordingValidationService());
+            new RecordingValidationService(),
+            new RecordingRootExistenceService());
 
         IRemoteFileSystem remote = factory.Create(ProfileId);
 
@@ -95,7 +98,10 @@ public sealed class GoogleDriveRemoteFileSystemTests
     {
         var repository = new InMemorySyncRemoteProfileRepository();
         var validation = new RecordingValidationService();
-        var factory = new GoogleDriveRemoteFileSystemFactory(repository, validation);
+        var factory = new GoogleDriveRemoteFileSystemFactory(
+            repository,
+            validation,
+            new RecordingRootExistenceService());
 
         IRemoteFileSystem missing = factory.Create(ProfileId);
         repository.Create(Profile() with
@@ -128,6 +134,8 @@ public sealed class GoogleDriveRemoteFileSystemTests
         using ServiceProvider provider = services.BuildServiceProvider();
         IGoogleDriveRemoteFileSystemFactory factory =
             provider.GetRequiredService<IGoogleDriveRemoteFileSystemFactory>();
+        Assert.IsType<GoogleDriveRootExistenceService>(
+            provider.GetRequiredService<IGoogleDriveRootExistenceService>());
         IRemoteFileSystem remote = factory.Create(ProfileId);
 
         Assert.IsType<GoogleDriveRemoteFileSystemFactory>(factory);
@@ -209,14 +217,28 @@ public sealed class GoogleDriveRemoteFileSystemTests
     }
 
     [Fact]
+    public async Task RootExistsAsync_DelegatesTheSelectedProfileAndCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var existence = new RecordingRootExistenceService { Result = true };
+        IRemoteFileSystem remote = Remote(
+            new RecordingValidationService(),
+            existence);
+
+        bool exists = await remote.RootExistsAsync(cancellation.Token);
+
+        Assert.True(exists);
+        Assert.Equal(new[] { ProfileId }, existence.ProfileIds);
+        Assert.Equal(cancellation.Token, existence.CancellationTokens.Single());
+    }
+
+    [Fact]
     public async Task EveryLaterOperation_FailsExplicitlyWithoutValidationOrDriveWork()
     {
         var validation = new RecordingValidationService();
         IRemoteFileSystem remote = Remote(validation);
         var operations = new (string Name, Func<Task> Invoke)[]
         {
-            (nameof(IRemoteFileSystem.RootExistsAsync),
-                async () => await remote.RootExistsAsync()),
             (nameof(IRemoteFileSystem.ListRunFolderNamesAsync),
                 async () => await remote.ListRunFolderNamesAsync()),
             (nameof(IRemoteFileSystem.FolderExistsAsync),
@@ -260,7 +282,7 @@ public sealed class GoogleDriveRemoteFileSystemTests
     }
 
     [Fact]
-    public void FileSystem_HasOnlyTheNarrowValidationDependency()
+    public void FileSystem_HasOnlyNarrowValidationAndRootExistenceDependencies()
     {
         Type[] fieldTypes = typeof(GoogleDriveRemoteFileSystem)
             .GetFields(BindingFlags.Instance |
@@ -270,6 +292,7 @@ public sealed class GoogleDriveRemoteFileSystemTests
             .ToArray();
 
         Assert.Contains(typeof(IGoogleDriveRemoteValidationService), fieldTypes);
+        Assert.Contains(typeof(IGoogleDriveRootExistenceService), fieldTypes);
         Assert.DoesNotContain(typeof(IGoogleDriveObjectPathResolver), fieldTypes);
         Assert.DoesNotContain(typeof(IGoogleDriveObjectApi), fieldTypes);
         Assert.DoesNotContain(typeof(IGoogleDriveRootFolderApi), fieldTypes);
@@ -304,11 +327,13 @@ public sealed class GoogleDriveRemoteFileSystemTests
     }
 
     private static IRemoteFileSystem Remote(
-        RecordingValidationService validation) =>
+        RecordingValidationService validation,
+        RecordingRootExistenceService? rootExistence = null) =>
         new GoogleDriveRemoteFileSystem(
             ProfileId,
             "GameSave Manager Backups",
-            validation);
+            validation,
+            rootExistence ?? new RecordingRootExistenceService());
 
     private static SyncRemoteProfile Profile() =>
         new(
@@ -354,6 +379,26 @@ public sealed class GoogleDriveRemoteFileSystemTests
             return Handler is null
                 ? Task.FromResult(Result)
                 : Handler(remoteProfileId, cancellationToken);
+        }
+    }
+
+    private sealed class RecordingRootExistenceService
+        : IGoogleDriveRootExistenceService
+    {
+        public bool Result { get; set; }
+
+        public List<Guid> ProfileIds { get; } = new();
+
+        public List<CancellationToken> CancellationTokens { get; } = new();
+
+        public Task<bool> ExistsAsync(
+            Guid remoteProfileId,
+            CancellationToken cancellationToken = default)
+        {
+            ProfileIds.Add(remoteProfileId);
+            CancellationTokens.Add(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(Result);
         }
     }
 }

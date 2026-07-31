@@ -10,7 +10,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
     }
 
     /// <summary>
-    /// Creates profile-scoped validation-only Google Drive remotes. Factory
+    /// Creates profile-scoped Google Drive remote boundaries. Factory
     /// construction and Create perform no authentication or Drive request.
     /// </summary>
     internal sealed class GoogleDriveRemoteFileSystemFactory
@@ -20,15 +20,19 @@ namespace GameSaves.Infrastructure.GoogleDrive
 
         private readonly ISyncRemoteProfileRepository _profileRepository;
         private readonly IGoogleDriveRemoteValidationService _validationService;
+        private readonly IGoogleDriveRootExistenceService _rootExistenceService;
 
         public GoogleDriveRemoteFileSystemFactory(
             ISyncRemoteProfileRepository profileRepository,
-            IGoogleDriveRemoteValidationService validationService)
+            IGoogleDriveRemoteValidationService validationService,
+            IGoogleDriveRootExistenceService rootExistenceService)
         {
             _profileRepository = profileRepository ??
                 throw new ArgumentNullException(nameof(profileRepository));
             _validationService = validationService ??
                 throw new ArgumentNullException(nameof(validationService));
+            _rootExistenceService = rootExistenceService ??
+                throw new ArgumentNullException(nameof(rootExistenceService));
         }
 
         public IRemoteFileSystem Create(Guid remoteProfileId)
@@ -44,7 +48,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
             return new GoogleDriveRemoteFileSystem(
                 remoteProfileId,
                 GetSafeDisplayRoot(profile),
-                _validationService);
+                _validationService,
+                _rootExistenceService);
         }
 
         private static string GetSafeDisplayRoot(SyncRemoteProfile? profile)
@@ -76,8 +81,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
     }
 
     /// <summary>
-    /// Validation-only Google Drive implementation of IRemoteFileSystem.
-    /// Milestone O intentionally leaves every listing and transfer primitive
+    /// Google Drive implementation boundary for the currently completed
+    /// remote primitives. Listing, text, and transfer operations remain
     /// unavailable so SyncEngine cannot treat Google Drive as a working
     /// provider.
     /// </summary>
@@ -88,11 +93,13 @@ namespace GameSaves.Infrastructure.GoogleDrive
 
         private readonly Guid _remoteProfileId;
         private readonly IGoogleDriveRemoteValidationService _validationService;
+        private readonly IGoogleDriveRootExistenceService _rootExistenceService;
 
         internal GoogleDriveRemoteFileSystem(
             Guid remoteProfileId,
             string displayRoot,
-            IGoogleDriveRemoteValidationService validationService)
+            IGoogleDriveRemoteValidationService validationService,
+            IGoogleDriveRootExistenceService rootExistenceService)
         {
             if (remoteProfileId == Guid.Empty)
             {
@@ -111,6 +118,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
             DisplayRoot = displayRoot.Trim();
             _validationService = validationService ??
                 throw new ArgumentNullException(nameof(validationService));
+            _rootExistenceService = rootExistenceService ??
+                throw new ArgumentNullException(nameof(rootExistenceService));
         }
 
         public string DisplayRoot { get; }
@@ -136,7 +145,9 @@ namespace GameSaves.Infrastructure.GoogleDrive
 
         public Task<bool> RootExistsAsync(
             CancellationToken cancellationToken = default) =>
-            Unsupported<bool>();
+            _rootExistenceService.ExistsAsync(
+                _remoteProfileId,
+                cancellationToken);
 
         public Task<IReadOnlyList<string>> ListRunFolderNamesAsync(
             CancellationToken cancellationToken = default) =>

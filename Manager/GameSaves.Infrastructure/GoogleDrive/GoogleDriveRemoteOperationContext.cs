@@ -79,15 +79,16 @@ namespace GameSaves.Infrastructure.GoogleDrive
     }
 
     /// <summary>
-    /// Safe failure boundary for creating an authenticated operation context.
+    /// Safe failure boundary for authenticated Google Drive remote operations.
     /// The embedded result uses the existing validation taxonomy and contains
     /// no profile name, account data, credential, or Drive object ID.
     /// </summary>
-    internal sealed class GoogleDriveRemoteOperationContextException : Exception
+    internal class GoogleDriveRemoteOperationException : Exception
     {
-        public GoogleDriveRemoteOperationContextException(
-            GoogleDriveRemoteValidationResult result)
-            : base("A Google Drive remote operation could not be started.")
+        public GoogleDriveRemoteOperationException(
+            GoogleDriveRemoteValidationResult result,
+            string message = "The Google Drive remote operation could not be completed.")
+            : base(message)
         {
             ArgumentNullException.ThrowIfNull(result);
             if (result.Status == GoogleDriveRemoteValidationStatus.Valid)
@@ -101,6 +102,26 @@ namespace GameSaves.Infrastructure.GoogleDrive
         }
 
         public GoogleDriveRemoteValidationResult Result { get; }
+
+        public override string ToString() =>
+            $"{GetType().Name}: {Result.ToSafeDiagnosticString()}";
+    }
+
+    /// <summary>
+    /// Identifies failures that occur before an authenticated operation
+    /// context can be returned. It remains a distinct subtype for callers
+    /// that need to distinguish context creation from later Drive requests.
+    /// </summary>
+    internal sealed class GoogleDriveRemoteOperationContextException
+        : GoogleDriveRemoteOperationException
+    {
+        public GoogleDriveRemoteOperationContextException(
+            GoogleDriveRemoteValidationResult result)
+            : base(
+                result,
+                "A Google Drive remote operation could not be started.")
+        {
+        }
     }
 
     /// <summary>
