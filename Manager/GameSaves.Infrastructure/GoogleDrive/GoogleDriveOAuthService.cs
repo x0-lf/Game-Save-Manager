@@ -17,6 +17,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
         private readonly IGoogleDriveAccountReader _accountReader;
         private readonly IGoogleDriveAuthorizedSessionFactory _authorizedSessionFactory;
         private readonly IUtcClock _clock;
+        private readonly IGoogleDriveObjectIdCache? _objectIdCache;
         private readonly ConcurrentDictionary<Guid, LifecycleOperation> _operations = new();
 
         internal GoogleDriveOAuthService(
@@ -26,7 +27,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
             IGoogleSecretDataStoreFactory dataStoreFactory,
             IGoogleInstalledAppAuthorizer authorizer,
             IGoogleDriveAccountReader accountReader,
-            IUtcClock clock)
+            IUtcClock clock,
+            IGoogleDriveObjectIdCache? objectIdCache = null)
         {
             _profileRepository = profileRepository;
             _secretStore = secretStore;
@@ -41,6 +43,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 authorizer,
                 accountReader);
             _clock = clock;
+            _objectIdCache = objectIdCache;
         }
 
         public GoogleDriveOAuthClientConfigurationState GetClientConfigurationState() =>
@@ -102,9 +105,20 @@ namespace GameSaves.Infrastructure.GoogleDrive
 
             try
             {
-                return await DisconnectCoreAsync(
+                GoogleDriveDisconnectionResult result = await DisconnectCoreAsync(
                     remoteProfileId,
                     linkedCancellation.Token);
+
+                if (result.Status is GoogleDriveDisconnectionStatus.Disconnected or
+                    GoogleDriveDisconnectionStatus.AlreadyDisconnected ||
+                    result.LocalAuthenticationRemoved)
+                {
+                    InvalidateObjectCache(
+                        remoteProfileId,
+                        GoogleDriveObjectCacheInvalidationReason.AccountDisconnect);
+                }
+
+                return result;
             }
             finally
             {
@@ -339,6 +353,14 @@ namespace GameSaves.Infrastructure.GoogleDrive
                         ? BuildReconnectSuccessMessage(profile, updated)
                         : "Google Drive account connected. Backup synchronization is not available yet.";
 
+                    if (operationKind is AuthenticationOperation.Connect or
+                        AuthenticationOperation.Reconnect)
+                    {
+                        InvalidateObjectCache(
+                            profileId,
+                            GoogleDriveObjectCacheInvalidationReason.AccountReconnect);
+                    }
+
                     return new GoogleDriveAuthenticationResult(
                         GoogleDriveAuthenticationStatus.Connected,
                         connection,
@@ -562,6 +584,9 @@ namespace GameSaves.Infrastructure.GoogleDrive
             }
 
             bool removed = cleanup.Succeeded;
+            InvalidateObjectCache(
+                profile.Id,
+                GoogleDriveObjectCacheInvalidationReason.AuthorizationRevocation);
             GoogleDriveConnectionSettings connection = CreateConnectionSettings(
                 profile,
                 GoogleDriveConnectionStatus.ReauthenticationRequired,
@@ -576,6 +601,21 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 removed
                     ? "Google Drive authorization is no longer valid. The invalid local authentication was removed; reconnect the account to continue."
                     : "Google Drive authorization is no longer valid. The invalid local authentication could not be removed; retry local disconnect, then reconnect.");
+        }
+
+        private void InvalidateObjectCache(
+            Guid profileId,
+            GoogleDriveObjectCacheInvalidationReason reason)
+        {
+            try
+            {
+                _objectIdCache?.InvalidateProfile(profileId, reason);
+            }
+            catch
+            {
+                // Authentication lifecycle truth is authoritative. Cache cleanup
+                // is best effort and must never expose or recreate Drive objects.
+            }
         }
 
         private static GoogleDriveConnectionSettings CreateConnectionSettings(

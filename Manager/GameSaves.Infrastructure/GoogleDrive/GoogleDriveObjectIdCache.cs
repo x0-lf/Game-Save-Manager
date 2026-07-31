@@ -8,7 +8,13 @@ namespace GameSaves.Infrastructure.GoogleDrive
         AccountDisconnect = 1,
         ApplicationRootReplacement = 2,
         ProfileDeletion = 3,
-        AuthorizationRevocation = 4
+        AuthorizationRevocation = 4,
+        RootMissing = 5,
+        RootTrashed = 6,
+        RootMoved = 7,
+        RootTypeChanged = 8,
+        RootUnsupportedLocation = 9,
+        RootInaccessible = 10
     }
 
     internal readonly struct GoogleDriveObjectCacheScope : IEquatable<GoogleDriveObjectCacheScope>
@@ -81,6 +87,10 @@ namespace GameSaves.Infrastructure.GoogleDrive
 
         void ClearScope(GoogleDriveObjectCacheScope scope);
 
+        void InvalidateScope(
+            GoogleDriveObjectCacheScope scope,
+            GoogleDriveObjectCacheInvalidationReason reason);
+
         void InvalidateProfile(
             Guid remoteProfileId,
             GoogleDriveObjectCacheInvalidationReason reason);
@@ -146,6 +156,16 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 if (key.Scope.Equals(scope))
                     _entries.TryRemove(key, out _);
             }
+        }
+
+        public void InvalidateScope(
+            GoogleDriveObjectCacheScope scope,
+            GoogleDriveObjectCacheInvalidationReason reason)
+        {
+            if (!Enum.IsDefined(reason))
+                throw new ArgumentOutOfRangeException(nameof(reason));
+
+            ClearScope(scope);
         }
 
         public void InvalidateProfile(

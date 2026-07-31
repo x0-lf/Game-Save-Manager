@@ -48,6 +48,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
             "GoogleDriveAuthenticationCorrupted";
         public const string AuthorizationRevoked =
             "GoogleDriveAuthorizationRevoked";
+        public const string AuthorizationRevokedCleanupFailed =
+            "GoogleDriveAuthorizationRevokedCleanupFailed";
         public const string ReauthenticationRequired =
             "GoogleDriveReauthenticationRequired";
         public const string RootNotConfigured = "GoogleDriveRootNotConfigured";
@@ -136,6 +138,18 @@ namespace GameSaves.Infrastructure.GoogleDrive
             $"authenticationRefreshed={WasAuthenticationRefreshed}; " +
             $"cacheInvalidated={CacheInvalidated}";
 
+        internal GoogleDriveRemoteValidationResult WithRuntimeState(
+            bool wasAuthenticationRefreshed,
+            bool cacheInvalidated) =>
+            new(
+                Status,
+                ErrorCode,
+                UserMessage,
+                Retryable,
+                RootDisplayName,
+                wasAuthenticationRefreshed,
+                cacheInvalidated);
+
         public override string ToString() => ToSafeDiagnosticString();
     }
 
@@ -171,6 +185,20 @@ namespace GameSaves.Infrastructure.GoogleDrive
             if (!Enum.IsDefined(failure))
                 throw new ArgumentOutOfRangeException(nameof(failure));
 
+            if (failure ==
+                GoogleDriveAuthorizedSessionFailure.RevokedTokenCleanupFailed)
+            {
+                return new GoogleDriveRemoteValidationResult(
+                    GoogleDriveRemoteValidationStatus.AuthorizationRevoked,
+                    GoogleDriveRemoteValidationErrorCodes
+                        .AuthorizationRevokedCleanupFailed,
+                    "Google Drive authorization is no longer valid. The invalid local authentication could not be removed; retry local disconnect, then reconnect.",
+                    retryable: true,
+                    rootDisplayName,
+                    wasAuthenticationRefreshed: false,
+                    cacheInvalidated);
+            }
+
             GoogleDriveRemoteValidationStatus status = failure switch
             {
                 GoogleDriveAuthorizedSessionFailure.NoStoredAuthentication =>
@@ -180,8 +208,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                     GoogleDriveRemoteValidationStatus.AuthenticationUnavailable,
                 GoogleDriveAuthorizedSessionFailure.TokenCorrupted =>
                     GoogleDriveRemoteValidationStatus.AuthenticationCorrupted,
-                GoogleDriveAuthorizedSessionFailure.AuthorizationRevoked or
-                GoogleDriveAuthorizedSessionFailure.RevokedTokenCleanupFailed =>
+                GoogleDriveAuthorizedSessionFailure.AuthorizationRevoked =>
                     GoogleDriveRemoteValidationStatus.AuthorizationRevoked,
                 GoogleDriveAuthorizedSessionFailure.ReauthenticationRequired =>
                     GoogleDriveRemoteValidationStatus.ReauthenticationRequired,

@@ -176,6 +176,52 @@ public sealed class GoogleDriveOAuthTests
     }
 
     [Fact]
+    public async Task SuccessfulReconnect_InvalidatesResolverCacheForAccountContext()
+    {
+        var repository = CreateRepository();
+        var secrets = new InMemorySecretStore();
+        var cache = new RecordingObjectIdCache();
+        GoogleDriveOAuthService service = CreateService(
+            repository,
+            secrets,
+            new FakeAuthorizer { StoreTokenOnConnect = true },
+            new FakeAccountReader(
+                new GoogleDriveAccountInfo("Example User", "user@example.invalid")),
+            cache);
+
+        GoogleDriveAuthenticationResult result =
+            await service.ReconnectAsync(ProfileId);
+
+        Assert.True(result.IsConnected);
+        Assert.Equal(
+            (ProfileId, GoogleDriveObjectCacheInvalidationReason.AccountReconnect),
+            Assert.Single(cache.ProfileInvalidations));
+    }
+
+    [Fact]
+    public async Task SuccessfulDisconnect_InvalidatesResolverCacheForAccountContext()
+    {
+        var repository = CreateRepository();
+        var secrets = new InMemorySecretStore();
+        var cache = new RecordingObjectIdCache();
+        GoogleDriveOAuthService service = CreateService(
+            repository,
+            secrets,
+            new FakeAuthorizer(),
+            new FakeAccountReader(
+                new GoogleDriveAccountInfo("Example User", "user@example.invalid")),
+            cache);
+
+        GoogleDriveDisconnectionResult result =
+            await service.DisconnectAsync(ProfileId);
+
+        Assert.Equal(GoogleDriveDisconnectionStatus.AlreadyDisconnected, result.Status);
+        Assert.Equal(
+            (ProfileId, GoogleDriveObjectCacheInvalidationReason.AccountDisconnect),
+            Assert.Single(cache.ProfileInvalidations));
+    }
+
+    [Fact]
     public async Task Connect_PersistsOperationalTimestampsThroughSqliteRepository()
     {
         using var temp = new TemporaryDirectory();
@@ -473,7 +519,8 @@ public sealed class GoogleDriveOAuthTests
         ISyncRemoteProfileRepository repository,
         InMemorySecretStore secrets,
         IGoogleInstalledAppAuthorizer authorizer,
-        IGoogleDriveAccountReader accountReader) =>
+        IGoogleDriveAccountReader accountReader,
+        IGoogleDriveObjectIdCache? objectIdCache = null) =>
         new(
             repository,
             secrets,
@@ -483,7 +530,8 @@ public sealed class GoogleDriveOAuthTests
             new GoogleSecretDataStoreFactory(secrets),
             authorizer,
             accountReader,
-            new FixedUtcClock(Now));
+            new FixedUtcClock(Now),
+            objectIdCache);
 
     private static TokenResponse CreateToken(string accessToken) => new()
     {
@@ -615,5 +663,52 @@ public sealed class GoogleDriveOAuthTests
 
             return Task.FromResult(_account!);
         }
+    }
+
+    private sealed class RecordingObjectIdCache : IGoogleDriveObjectIdCache
+    {
+        public List<(Guid ProfileId, GoogleDriveObjectCacheInvalidationReason Reason)>
+            ProfileInvalidations { get; } = new();
+
+        public bool TryGet(
+            GoogleDriveObjectCacheScope scope,
+            string parentId,
+            string exactName,
+            GoogleDriveObjectKind expectedKind,
+            out GoogleDriveObjectIdCacheEntry? entry)
+        {
+            entry = null;
+            return false;
+        }
+
+        public bool TryStoreUniqueValidated(
+            GoogleDriveObjectCacheScope scope,
+            string parentId,
+            string exactName,
+            GoogleDriveObjectKind expectedKind,
+            GoogleDriveObjectMetadata metadata) => false;
+
+        public void Remove(
+            GoogleDriveObjectCacheScope scope,
+            string parentId,
+            string exactName,
+            GoogleDriveObjectKind expectedKind)
+        {
+        }
+
+        public void ClearScope(GoogleDriveObjectCacheScope scope)
+        {
+        }
+
+        public void InvalidateScope(
+            GoogleDriveObjectCacheScope scope,
+            GoogleDriveObjectCacheInvalidationReason reason)
+        {
+        }
+
+        public void InvalidateProfile(
+            Guid remoteProfileId,
+            GoogleDriveObjectCacheInvalidationReason reason) =>
+            ProfileInvalidations.Add((remoteProfileId, reason));
     }
 }

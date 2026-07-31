@@ -184,20 +184,26 @@ public sealed class GoogleDriveRemoteValidationServiceTests
             StringComparison.OrdinalIgnoreCase);
     }
 
-    public static TheoryData<int, int> InvalidMetadata => new()
+    public static TheoryData<int, int, int> InvalidMetadata => new()
     {
-        { 0, (int)GoogleDriveRemoteValidationStatus.RootTrashed },
-        { 1, (int)GoogleDriveRemoteValidationStatus.RootWrongType },
-        { 2, (int)GoogleDriveRemoteValidationStatus.RootUnsupportedLocation },
-        { 3, (int)GoogleDriveRemoteValidationStatus.RootCannotListChildren },
-        { 4, (int)GoogleDriveRemoteValidationStatus.RootCannotAddChildren }
+        { 0, (int)GoogleDriveRemoteValidationStatus.RootTrashed,
+            (int)GoogleDriveObjectCacheInvalidationReason.RootTrashed },
+        { 1, (int)GoogleDriveRemoteValidationStatus.RootWrongType,
+            (int)GoogleDriveObjectCacheInvalidationReason.RootTypeChanged },
+        { 2, (int)GoogleDriveRemoteValidationStatus.RootUnsupportedLocation,
+            (int)GoogleDriveObjectCacheInvalidationReason.RootUnsupportedLocation },
+        { 3, (int)GoogleDriveRemoteValidationStatus.RootCannotListChildren,
+            (int)GoogleDriveObjectCacheInvalidationReason.RootInaccessible },
+        { 4, (int)GoogleDriveRemoteValidationStatus.RootCannotAddChildren,
+            (int)GoogleDriveObjectCacheInvalidationReason.RootInaccessible }
     };
 
     [Theory]
     [MemberData(nameof(InvalidMetadata))]
     public async Task InvalidRootMetadata_IsRejectedAndClearsRootCache(
         int metadataCase,
-        int expectedValue)
+        int expectedValue,
+        int reasonValue)
     {
         ValidationContext context = CreateContext();
         context.Api.Result = metadataCase switch
@@ -217,6 +223,36 @@ public sealed class GoogleDriveRemoteValidationServiceTests
         Assert.True(result.CacheInvalidated);
         Assert.Single(context.Cache.ClearedScopes);
         Assert.Equal(context.Profile.Id, context.Cache.ClearedScopes[0].RemoteProfileId);
+        Assert.Equal(
+            (GoogleDriveObjectCacheInvalidationReason)reasonValue,
+            Assert.Single(context.Cache.ScopeInvalidations).Reason);
+    }
+
+    [Theory]
+    [InlineData(
+        (int)GoogleDriveApiFailure.NotFound,
+        (int)GoogleDriveRemoteValidationStatus.RootMissing,
+        (int)GoogleDriveObjectCacheInvalidationReason.RootMissing)]
+    [InlineData(
+        (int)GoogleDriveApiFailure.AccessDenied,
+        (int)GoogleDriveRemoteValidationStatus.RootInaccessible,
+        (int)GoogleDriveObjectCacheInvalidationReason.RootInaccessible)]
+    public async Task ConfirmedRootFailure_InvalidatesWithExplicitReason(
+        int failureValue,
+        int statusValue,
+        int reasonValue)
+    {
+        ValidationContext context = CreateContext();
+        context.Api.Failure = (GoogleDriveApiFailure)failureValue;
+
+        GoogleDriveRemoteValidationResult result =
+            await context.Service.ValidateAsync(context.Profile.Id);
+
+        Assert.Equal((GoogleDriveRemoteValidationStatus)statusValue, result.Status);
+        Assert.True(result.CacheInvalidated);
+        Assert.Equal(
+            (GoogleDriveObjectCacheInvalidationReason)reasonValue,
+            Assert.Single(context.Cache.ScopeInvalidations).Reason);
     }
 
     [Fact]
@@ -236,17 +272,20 @@ public sealed class GoogleDriveRemoteValidationServiceTests
     }
 
     [Fact]
-    public async Task MovedMyDriveRoot_RemainsValidByItsAuthoritativeId()
+    public async Task MovedMyDriveRoot_RemainsLinkedAndInvalidatesDescendantCache()
     {
         ValidationContext context = CreateContext();
-        context.Api.Result = Metadata(parentIds: new[] { "moved-parent-id" });
+        context.Membership.IsDirectChild = false;
 
         GoogleDriveRemoteValidationResult result =
             await context.Service.ValidateAsync(context.Profile.Id);
 
-        Assert.Equal(GoogleDriveRemoteValidationStatus.Valid, result.Status);
+        Assert.Equal(GoogleDriveRemoteValidationStatus.RootMoved, result.Status);
         Assert.Equal(new[] { context.Profile.RemoteFolderId! }, context.Api.RootIds);
-        Assert.False(result.CacheInvalidated);
+        Assert.True(result.CacheInvalidated);
+        Assert.Equal(
+            GoogleDriveObjectCacheInvalidationReason.RootMoved,
+            Assert.Single(context.Cache.ScopeInvalidations).Reason);
     }
 
     [Fact]
@@ -268,6 +307,69 @@ public sealed class GoogleDriveRemoteValidationServiceTests
     }
 
     [Fact]
+    public async Task RevokedTokenCleanupFailure_StillInvalidatesAndWarnsSafely()
+    {
+        ValidationContext context = CreateContext();
+        context.SessionFactory.Failure =
+            GoogleDriveAuthorizedSessionFailure.RevokedTokenCleanupFailed;
+
+        GoogleDriveRemoteValidationResult result =
+            await context.Service.ValidateAsync(context.Profile.Id);
+
+        Assert.Equal(GoogleDriveRemoteValidationStatus.AuthorizationRevoked, result.Status);
+        Assert.Equal(
+            GoogleDriveRemoteValidationErrorCodes.AuthorizationRevokedCleanupFailed,
+            result.ErrorCode);
+        Assert.Contains("could not be removed", result.UserMessage,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.True(result.CacheInvalidated);
+        Assert.DoesNotContain(context.Profile.RemoteFolderId!, result.ToString(),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ChangedRootId_InvalidatesTheWholeProfileBeforeValidatingNewId()
+    {
+        ValidationContext context = CreateContext();
+        await context.Service.ValidateAsync(context.Profile.Id);
+        context.Cache.ResetRecordings();
+        SyncRemoteProfile changed = context.Repository.Update(
+            context.Repository.Profile! with
+            {
+                RemoteFolderId = "replacement-root-id"
+            });
+
+        GoogleDriveRemoteValidationResult result =
+            await context.Service.ValidateAsync(changed.Id);
+
+        Assert.Equal(GoogleDriveRemoteValidationStatus.Valid, result.Status);
+        Assert.True(result.CacheInvalidated);
+        Assert.Equal("replacement-root-id", context.Api.RootIds[^1]);
+        Assert.Equal(
+            (changed.Id,
+                GoogleDriveObjectCacheInvalidationReason.ApplicationRootReplacement),
+            Assert.Single(context.Cache.ProfileInvalidations));
+    }
+
+    [Theory]
+    [InlineData((int)GoogleDriveApiFailure.Unavailable)]
+    [InlineData((int)GoogleDriveApiFailure.RateLimited)]
+    [InlineData((int)GoogleDriveApiFailure.QuotaExceeded)]
+    public async Task TransientAndQuotaFailures_PreserveValidatedCache(
+        int failureValue)
+    {
+        ValidationContext context = CreateContext();
+        context.Api.Failure = (GoogleDriveApiFailure)failureValue;
+
+        GoogleDriveRemoteValidationResult result =
+            await context.Service.ValidateAsync(context.Profile.Id);
+
+        Assert.False(result.CacheInvalidated);
+        Assert.Empty(context.Cache.ScopeInvalidations);
+        Assert.Empty(context.Cache.ProfileInvalidations);
+    }
+
+    [Fact]
     public async Task Cancellation_ReturnsCancelledAndDisposesCredential()
     {
         ValidationContext context = CreateContext();
@@ -279,6 +381,99 @@ public sealed class GoogleDriveRemoteValidationServiceTests
         Assert.Equal(GoogleDriveRemoteValidationStatus.Cancelled, result.Status);
         Assert.True(context.SessionFactory.LastCredential!.IsDisposed);
         Assert.Equal(0, context.Repository.TimestampUpdates);
+        Assert.False(result.CacheInvalidated);
+        Assert.Empty(context.Cache.ScopeInvalidations);
+        Assert.Empty(context.Cache.ProfileInvalidations);
+    }
+
+    [Fact]
+    public async Task SupersededValidation_DoesNotInvalidateFromItsLateFailure()
+    {
+        ValidationContext context = CreateContext();
+        var firstEntered = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseFirst = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        context.Api.Handler = async (call, cancellationToken) =>
+        {
+            if (call == 1)
+            {
+                firstEntered.SetResult();
+                await releaseFirst.Task.WaitAsync(cancellationToken);
+                throw GoogleDriveApiFailureMapper.Create(
+                    GoogleDriveApiOperation.RootValidationMetadataGet,
+                    GoogleDriveApiFailure.NotFound,
+                    "GoogleDriveTestLateMissing");
+            }
+
+            return Metadata();
+        };
+
+        Task<GoogleDriveRemoteValidationResult> first =
+            context.Service.ValidateAsync(context.Profile.Id);
+        await firstEntered.Task;
+        GoogleDriveRemoteValidationResult second =
+            await context.Service.ValidateAsync(context.Profile.Id);
+        releaseFirst.SetResult();
+        GoogleDriveRemoteValidationResult late = await first;
+
+        Assert.Equal(GoogleDriveRemoteValidationStatus.Valid, second.Status);
+        Assert.Equal(GoogleDriveRemoteValidationStatus.Superseded, late.Status);
+        Assert.False(late.CacheInvalidated);
+        Assert.Empty(context.Cache.ScopeInvalidations);
+        Assert.Empty(context.Cache.ProfileInvalidations);
+    }
+
+    [Fact]
+    public async Task InvalidatingOneProfile_LeavesAnotherProfileCacheIntact()
+    {
+        SyncRemoteProfile profile = Profile();
+        var repository = new RecordingProfileRepository(profile);
+        var cache = new GoogleDriveObjectIdCache();
+        var firstScope = new GoogleDriveObjectCacheScope(
+            profile.Id,
+            profile.RemoteFolderId!);
+        var otherScope = new GoogleDriveObjectCacheScope(
+            Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"),
+            "other-root-id");
+        Assert.True(cache.TryStoreUniqueValidated(
+            firstScope,
+            "parent-id",
+            "First",
+            GoogleDriveObjectKind.Folder,
+            CachedFolder("first-object-id", "First", "parent-id")));
+        Assert.True(cache.TryStoreUniqueValidated(
+            otherScope,
+            "other-parent-id",
+            "Other",
+            GoogleDriveObjectKind.Folder,
+            CachedFolder("other-object-id", "Other", "other-parent-id")));
+        var api = new RecordingRootValidationApi
+        {
+            Failure = GoogleDriveApiFailure.NotFound
+        };
+        var service = new GoogleDriveRemoteValidationService(
+            repository,
+            new RecordingSessionFactory(),
+            api,
+            new RecordingRootMembershipApi(),
+            cache,
+            new FixedUtcClock(Now));
+
+        await service.ValidateAsync(profile.Id);
+
+        Assert.False(cache.TryGet(
+            firstScope,
+            "parent-id",
+            "First",
+            GoogleDriveObjectKind.Folder,
+            out _));
+        Assert.True(cache.TryGet(
+            otherScope,
+            "other-parent-id",
+            "Other",
+            GoogleDriveObjectKind.Folder,
+            out _));
     }
 
     [Fact]
@@ -322,6 +517,12 @@ public sealed class GoogleDriveRemoteValidationServiceTests
         Assert.DoesNotContain(typeof(IGoogleDriveObjectPathResolver), fieldTypes);
         Assert.DoesNotContain(typeof(IGoogleDriveRootFolderApi), fieldTypes);
         Assert.DoesNotContain(typeof(GoogleDriveObjectCreationCoordinator), fieldTypes);
+        Assert.Equal(
+            new[] { "IsDirectChildOfMyDriveRootAsync" },
+            typeof(IGoogleDriveRootMembershipApi)
+                .GetMethods()
+                .Select(method => method.Name)
+                .ToArray());
 
         string[] coreReferences = typeof(SyncProviderKind).Assembly
             .GetReferencedAssemblies()
@@ -357,11 +558,13 @@ public sealed class GoogleDriveRemoteValidationServiceTests
             addProfile ? profile : null);
         var sessionFactory = new RecordingSessionFactory();
         var api = new RecordingRootValidationApi();
+        var membership = new RecordingRootMembershipApi();
         var cache = new RecordingObjectIdCache();
         var service = new GoogleDriveRemoteValidationService(
             repository,
             sessionFactory,
             api,
+            membership,
             cache,
             new FixedUtcClock(Now));
         return new ValidationContext(
@@ -369,6 +572,7 @@ public sealed class GoogleDriveRemoteValidationServiceTests
             repository,
             sessionFactory,
             api,
+            membership,
             cache,
             service);
     }
@@ -406,6 +610,18 @@ public sealed class GoogleDriveRemoteValidationServiceTests
             canListChildren,
             canAddChildren);
 
+    private static GoogleDriveObjectMetadata CachedFolder(
+        string id,
+        string name,
+        string parentId) =>
+        new(
+            id,
+            name,
+            GoogleDriveApplicationRoot.FolderMimeType,
+            trashed: false,
+            new[] { parentId },
+            driveId: null);
+
     private sealed record UnsupportedGoogleDriveSettings(int Version)
         : SyncRemoteProfileSettings(Version);
 
@@ -414,6 +630,7 @@ public sealed class GoogleDriveRemoteValidationServiceTests
         RecordingProfileRepository Repository,
         RecordingSessionFactory SessionFactory,
         RecordingRootValidationApi Api,
+        RecordingRootMembershipApi Membership,
         RecordingObjectIdCache Cache,
         GoogleDriveRemoteValidationService Service);
 
@@ -472,11 +689,14 @@ public sealed class GoogleDriveRemoteValidationServiceTests
 
         public bool Cancel { get; set; }
 
+        public Func<int, CancellationToken,
+            Task<GoogleDriveRootValidationMetadata>>? Handler { get; set; }
+
         public int GetCalls { get; private set; }
 
         public List<string> RootIds { get; } = new();
 
-        public Task<GoogleDriveRootValidationMetadata> GetByIdAsync(
+        public async Task<GoogleDriveRootValidationMetadata> GetByIdAsync(
             GoogleAuthorizedCredential credential,
             string rootFolderId,
             CancellationToken cancellationToken)
@@ -487,6 +707,8 @@ public sealed class GoogleDriveRemoteValidationServiceTests
             if (Cancel)
                 throw new OperationCanceledException(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
+            if (Handler is not null)
+                return await Handler(GetCalls, cancellationToken);
             if (Failure is { } failure)
             {
                 throw GoogleDriveApiFailureMapper.Create(
@@ -495,13 +717,46 @@ public sealed class GoogleDriveRemoteValidationServiceTests
                     "GoogleDriveTestValidationFailure");
             }
 
-            return Task.FromResult(Result);
+            return Result;
+        }
+    }
+
+    private sealed class RecordingRootMembershipApi
+        : IGoogleDriveRootMembershipApi
+    {
+        public bool IsDirectChild { get; set; } = true;
+
+        public GoogleDriveApiFailure? Failure { get; set; }
+
+        public int Calls { get; private set; }
+
+        public Task<bool> IsDirectChildOfMyDriveRootAsync(
+            GoogleAuthorizedCredential credential,
+            string folderId,
+            CancellationToken cancellationToken)
+        {
+            Calls++;
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (Failure is { } failure)
+            {
+                throw GoogleDriveApiFailureMapper.Create(
+                    GoogleDriveApiOperation.RootFolderTopLevelMembership,
+                    failure,
+                    "GoogleDriveTestMembershipFailure");
+            }
+
+            return Task.FromResult(IsDirectChild);
         }
     }
 
     private sealed class RecordingObjectIdCache : IGoogleDriveObjectIdCache
     {
         public List<GoogleDriveObjectCacheScope> ClearedScopes { get; } = new();
+
+        public List<(GoogleDriveObjectCacheScope Scope,
+            GoogleDriveObjectCacheInvalidationReason Reason)> ScopeInvalidations
+            { get; } = new();
 
         public List<(Guid ProfileId, GoogleDriveObjectCacheInvalidationReason Reason)>
             ProfileInvalidations { get; } = new();
@@ -535,10 +790,25 @@ public sealed class GoogleDriveRemoteValidationServiceTests
         public void ClearScope(GoogleDriveObjectCacheScope scope) =>
             ClearedScopes.Add(scope);
 
+        public void InvalidateScope(
+            GoogleDriveObjectCacheScope scope,
+            GoogleDriveObjectCacheInvalidationReason reason)
+        {
+            ScopeInvalidations.Add((scope, reason));
+            ClearedScopes.Add(scope);
+        }
+
         public void InvalidateProfile(
             Guid remoteProfileId,
             GoogleDriveObjectCacheInvalidationReason reason) =>
             ProfileInvalidations.Add((remoteProfileId, reason));
+
+        public void ResetRecordings()
+        {
+            ClearedScopes.Clear();
+            ScopeInvalidations.Clear();
+            ProfileInvalidations.Clear();
+        }
     }
 
     private sealed class RecordingProfileRepository : ISyncRemoteProfileRepository

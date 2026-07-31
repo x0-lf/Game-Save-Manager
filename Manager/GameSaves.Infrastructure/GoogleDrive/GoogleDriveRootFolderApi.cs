@@ -34,7 +34,20 @@ namespace GameSaves.Infrastructure.GoogleDrive
             CancellationToken cancellationToken);
     }
 
-    internal sealed class GoogleDriveRootFolderApi : IGoogleDriveRootFolderApi
+    /// <summary>
+    /// Read-only top-level membership boundary shared with remote validation.
+    /// It deliberately exposes no root discovery or creation operation.
+    /// </summary>
+    internal interface IGoogleDriveRootMembershipApi
+    {
+        Task<bool> IsDirectChildOfMyDriveRootAsync(
+            GoogleAuthorizedCredential credential,
+            string folderId,
+            CancellationToken cancellationToken);
+    }
+
+    internal sealed class GoogleDriveRootFolderApi
+        : IGoogleDriveRootFolderApi, IGoogleDriveRootMembershipApi
     {
         internal const string MetadataFields =
             "id,name,mimeType,trashed,driveId";

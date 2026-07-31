@@ -13,6 +13,22 @@ public sealed class GoogleDriveObjectIdCacheTests
         Guid.Parse("11111111-2222-3333-4444-555555555555");
 
     [Fact]
+    public void CacheInvalidationReasonValues_AreStable()
+    {
+        Assert.Equal(0, (int)GoogleDriveObjectCacheInvalidationReason.AccountReconnect);
+        Assert.Equal(1, (int)GoogleDriveObjectCacheInvalidationReason.AccountDisconnect);
+        Assert.Equal(2, (int)GoogleDriveObjectCacheInvalidationReason.ApplicationRootReplacement);
+        Assert.Equal(3, (int)GoogleDriveObjectCacheInvalidationReason.ProfileDeletion);
+        Assert.Equal(4, (int)GoogleDriveObjectCacheInvalidationReason.AuthorizationRevocation);
+        Assert.Equal(5, (int)GoogleDriveObjectCacheInvalidationReason.RootMissing);
+        Assert.Equal(6, (int)GoogleDriveObjectCacheInvalidationReason.RootTrashed);
+        Assert.Equal(7, (int)GoogleDriveObjectCacheInvalidationReason.RootMoved);
+        Assert.Equal(8, (int)GoogleDriveObjectCacheInvalidationReason.RootTypeChanged);
+        Assert.Equal(9, (int)GoogleDriveObjectCacheInvalidationReason.RootUnsupportedLocation);
+        Assert.Equal(10, (int)GoogleDriveObjectCacheInvalidationReason.RootInaccessible);
+    }
+
+    [Fact]
     public async Task UniqueEntry_IsValidatedByIdBeforeCrossCallReuse()
     {
         var api = new CacheObjectApi();

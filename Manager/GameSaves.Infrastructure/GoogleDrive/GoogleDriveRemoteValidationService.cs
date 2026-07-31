@@ -1,4 +1,5 @@
 using GameSaves.Core.Sync;
+using System.Collections.Concurrent;
 
 namespace GameSaves.Infrastructure.GoogleDrive
 {
@@ -20,19 +21,27 @@ namespace GameSaves.Infrastructure.GoogleDrive
         private readonly ISyncRemoteProfileRepository _profileRepository;
         private readonly IGoogleDriveAuthorizedSessionFactory _sessionFactory;
         private readonly IGoogleDriveRootValidationApi _rootValidationApi;
+        private readonly IGoogleDriveRootMembershipApi _rootMembershipApi;
         private readonly IGoogleDriveObjectIdCache _objectIdCache;
         private readonly IUtcClock _clock;
+        private readonly ConcurrentDictionary<Guid, long> _validationGenerations =
+            new();
+        private readonly Dictionary<Guid, string> _observedRootIds = new();
+        private readonly object _rootObservationGate = new();
+        private long _nextValidationGeneration;
 
         public GoogleDriveRemoteValidationService(
             ISyncRemoteProfileRepository profileRepository,
             IGoogleDriveAuthorizedSessionFactory sessionFactory,
             IGoogleDriveRootValidationApi rootValidationApi,
+            IGoogleDriveRootMembershipApi rootMembershipApi,
             IGoogleDriveObjectIdCache objectIdCache,
             IUtcClock clock)
         {
             _profileRepository = profileRepository;
             _sessionFactory = sessionFactory;
             _rootValidationApi = rootValidationApi;
+            _rootMembershipApi = rootMembershipApi;
             _objectIdCache = objectIdCache;
             _clock = clock;
         }
@@ -47,6 +56,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
                     GoogleDriveRemoteValidationStatus.ProfileNotFound);
             }
 
+            long generation = BeginValidation(remoteProfileId);
+
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -54,16 +65,41 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 SyncRemoteProfile? profile = _profileRepository.GetById(remoteProfileId);
                 if (profile is null)
                 {
+                    ForgetObservedRoot(remoteProfileId);
+                    bool invalidated = TryInvalidateProfile(
+                        remoteProfileId,
+                        GoogleDriveObjectCacheInvalidationReason.ProfileDeletion);
                     return GoogleDriveRemoteValidationMapper.FromStatus(
-                        GoogleDriveRemoteValidationStatus.ProfileNotFound);
+                        GoogleDriveRemoteValidationStatus.ProfileNotFound,
+                        cacheInvalidated: invalidated);
                 }
 
                 GoogleDriveRemoteValidationResult? profileFailure =
                     ValidateProfile(profile);
                 if (profileFailure is not null)
+                {
+                    if (profileFailure.Status ==
+                        GoogleDriveRemoteValidationStatus.RootNotConfigured)
+                    {
+                        ForgetObservedRoot(profile.Id);
+                        bool invalidated = TryInvalidateProfile(
+                            profile.Id,
+                            GoogleDriveObjectCacheInvalidationReason
+                                .ApplicationRootReplacement);
+                        return GoogleDriveRemoteValidationMapper.FromStatus(
+                            profileFailure.Status,
+                            cacheInvalidated: invalidated);
+                    }
+
                     return profileFailure;
+                }
 
                 string rootFolderId = profile.RemoteFolderId!;
+                bool rootChanged = ObserveRoot(profile.Id, rootFolderId);
+                bool cacheAlreadyInvalidated = rootChanged && TryInvalidateProfile(
+                    profile.Id,
+                    GoogleDriveObjectCacheInvalidationReason
+                        .ApplicationRootReplacement);
                 GoogleDriveAuthorizedSession session;
 
                 try
@@ -74,15 +110,22 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 }
                 catch (GoogleDriveAuthorizedSessionException ex)
                 {
+                    if (IsSuperseded(profile.Id, generation))
+                        return Superseded();
+
                     GoogleDriveRemoteValidationResult result =
                         GoogleDriveRemoteValidationMapper.FromSessionFailure(ex.Failure);
                     return ApplyCacheInvalidation(
                         result,
                         profile.Id,
-                        rootFolderId);
+                        rootFolderId,
+                        cacheAlreadyInvalidated: cacheAlreadyInvalidated);
                 }
 
                 using GoogleAuthorizedCredential credential = session.Credential;
+
+                if (IsSuperseded(profile.Id, generation))
+                    return Superseded();
 
                 GoogleDriveRootValidationMetadata metadata;
                 try
@@ -94,14 +137,21 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 }
                 catch (GoogleDriveApiException ex)
                 {
+                    if (IsSuperseded(profile.Id, generation))
+                        return Superseded();
+
                     GoogleDriveRemoteValidationResult result =
                         GoogleDriveRemoteValidationMapper.FromApiFailure(ex.Details);
                     return ApplyCacheInvalidation(
                         result,
                         profile.Id,
                         rootFolderId,
-                        credential.WasAuthenticationRefreshed);
+                        credential.WasAuthenticationRefreshed,
+                        cacheAlreadyInvalidated);
                 }
+
+                if (IsSuperseded(profile.Id, generation))
+                    return Superseded();
 
                 GoogleDriveRemoteValidationStatus metadataStatus =
                     ValidateRootMetadata(metadata);
@@ -117,21 +167,78 @@ namespace GameSaves.Infrastructure.GoogleDrive
                         validationResult,
                         profile.Id,
                         rootFolderId,
-                        credential.WasAuthenticationRefreshed);
+                        credential.WasAuthenticationRefreshed,
+                        cacheAlreadyInvalidated);
+                }
+
+                bool isDirectChildOfMyDriveRoot;
+                try
+                {
+                    isDirectChildOfMyDriveRoot =
+                        await _rootMembershipApi.IsDirectChildOfMyDriveRootAsync(
+                            credential,
+                            rootFolderId,
+                            cancellationToken);
+                }
+                catch (GoogleDriveApiException ex)
+                {
+                    if (IsSuperseded(profile.Id, generation))
+                        return Superseded();
+
+                    GoogleDriveRemoteValidationResult result =
+                        GoogleDriveRemoteValidationMapper.FromApiFailure(ex.Details);
+                    return ApplyCacheInvalidation(
+                        result,
+                        profile.Id,
+                        rootFolderId,
+                        credential.WasAuthenticationRefreshed,
+                        cacheAlreadyInvalidated);
+                }
+
+                if (IsSuperseded(profile.Id, generation))
+                    return Superseded();
+
+                if (!isDirectChildOfMyDriveRoot)
+                {
+                    GoogleDriveRemoteValidationResult moved =
+                        GoogleDriveRemoteValidationMapper.FromStatus(
+                            GoogleDriveRemoteValidationStatus.RootMoved,
+                            metadata.Name,
+                            credential.WasAuthenticationRefreshed);
+                    GoogleDriveRemoteValidationResult result = ApplyCacheInvalidation(
+                        moved,
+                        profile.Id,
+                        rootFolderId,
+                        credential.WasAuthenticationRefreshed,
+                        cacheAlreadyInvalidated);
+                    UpdateSuccessfulTimestamps(profile.Id);
+                    return result;
                 }
 
                 UpdateSuccessfulTimestamps(profile.Id);
-                return validationResult;
+                return GoogleDriveRemoteValidationMapper.FromStatus(
+                    validationResult.Status,
+                    validationResult.RootDisplayName,
+                    credential.WasAuthenticationRefreshed,
+                    cacheAlreadyInvalidated);
             }
             catch (OperationCanceledException)
             {
-                return GoogleDriveRemoteValidationMapper.FromStatus(
-                    GoogleDriveRemoteValidationStatus.Cancelled);
+                return IsSuperseded(remoteProfileId, generation)
+                    ? Superseded()
+                    : GoogleDriveRemoteValidationMapper.FromStatus(
+                        GoogleDriveRemoteValidationStatus.Cancelled);
             }
             catch
             {
-                return GoogleDriveRemoteValidationMapper.FromStatus(
-                    GoogleDriveRemoteValidationStatus.Failed);
+                return IsSuperseded(remoteProfileId, generation)
+                    ? Superseded()
+                    : GoogleDriveRemoteValidationMapper.FromStatus(
+                        GoogleDriveRemoteValidationStatus.Failed);
+            }
+            finally
+            {
+                CompleteValidation(remoteProfileId, generation);
             }
         }
 
@@ -194,9 +301,10 @@ namespace GameSaves.Infrastructure.GoogleDrive
             GoogleDriveRemoteValidationResult result,
             Guid profileId,
             string rootFolderId,
-            bool wasAuthenticationRefreshed = false)
+            bool wasAuthenticationRefreshed = false,
+            bool cacheAlreadyInvalidated = false)
         {
-            bool invalidated = false;
+            bool invalidated = cacheAlreadyInvalidated;
 
             try
             {
@@ -207,10 +315,11 @@ namespace GameSaves.Infrastructure.GoogleDrive
                         GoogleDriveObjectCacheInvalidationReason.AuthorizationRevocation);
                     invalidated = true;
                 }
-                else if (ShouldClearRootScope(result.Status))
+                else if (InvalidationReason(result.Status) is { } reason)
                 {
-                    _objectIdCache.ClearScope(
-                        new GoogleDriveObjectCacheScope(profileId, rootFolderId));
+                    _objectIdCache.InvalidateScope(
+                        new GoogleDriveObjectCacheScope(profileId, rootFolderId),
+                        reason);
                     invalidated = true;
                 }
             }
@@ -220,23 +329,89 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 // validation outcome or trigger remote reconstruction.
             }
 
-            return GoogleDriveRemoteValidationMapper.FromStatus(
-                result.Status,
-                result.RootDisplayName,
+            return result.WithRuntimeState(
                 wasAuthenticationRefreshed || result.WasAuthenticationRefreshed,
                 invalidated);
         }
 
-        private static bool ShouldClearRootScope(
+        private static GoogleDriveObjectCacheInvalidationReason? InvalidationReason(
             GoogleDriveRemoteValidationStatus status) =>
-            status is GoogleDriveRemoteValidationStatus.RootMissing or
-                GoogleDriveRemoteValidationStatus.RootTrashed or
-                GoogleDriveRemoteValidationStatus.RootWrongType or
-                GoogleDriveRemoteValidationStatus.RootUnsupportedLocation or
+            status switch
+            {
+                GoogleDriveRemoteValidationStatus.RootMissing =>
+                    GoogleDriveObjectCacheInvalidationReason.RootMissing,
+                GoogleDriveRemoteValidationStatus.RootTrashed =>
+                    GoogleDriveObjectCacheInvalidationReason.RootTrashed,
+                GoogleDriveRemoteValidationStatus.RootMoved =>
+                    GoogleDriveObjectCacheInvalidationReason.RootMoved,
+                GoogleDriveRemoteValidationStatus.RootWrongType =>
+                    GoogleDriveObjectCacheInvalidationReason.RootTypeChanged,
+                GoogleDriveRemoteValidationStatus.RootUnsupportedLocation =>
+                    GoogleDriveObjectCacheInvalidationReason.RootUnsupportedLocation,
                 GoogleDriveRemoteValidationStatus.RootInaccessible or
-                GoogleDriveRemoteValidationStatus.RootCannotListChildren or
-                GoogleDriveRemoteValidationStatus.RootCannotAddChildren or
-                GoogleDriveRemoteValidationStatus.Failed;
+                    GoogleDriveRemoteValidationStatus.RootCannotListChildren or
+                    GoogleDriveRemoteValidationStatus.RootCannotAddChildren =>
+                    GoogleDriveObjectCacheInvalidationReason.RootInaccessible,
+                _ => null
+            };
+
+        private bool TryInvalidateProfile(
+            Guid profileId,
+            GoogleDriveObjectCacheInvalidationReason reason)
+        {
+            try
+            {
+                _objectIdCache.InvalidateProfile(profileId, reason);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private bool ObserveRoot(Guid profileId, string rootFolderId)
+        {
+            lock (_rootObservationGate)
+            {
+                if (!_observedRootIds.TryGetValue(profileId, out string? previous))
+                {
+                    _observedRootIds[profileId] = rootFolderId;
+                    return false;
+                }
+
+                if (string.Equals(previous, rootFolderId, StringComparison.Ordinal))
+                    return false;
+
+                _observedRootIds[profileId] = rootFolderId;
+                return true;
+            }
+        }
+
+        private void ForgetObservedRoot(Guid profileId)
+        {
+            lock (_rootObservationGate)
+                _observedRootIds.Remove(profileId);
+        }
+
+        private long BeginValidation(Guid profileId)
+        {
+            long generation = Interlocked.Increment(ref _nextValidationGeneration);
+            _validationGenerations[profileId] = generation;
+            return generation;
+        }
+
+        private bool IsSuperseded(Guid profileId, long generation) =>
+            !_validationGenerations.TryGetValue(profileId, out long current) ||
+            current != generation;
+
+        private void CompleteValidation(Guid profileId, long generation) =>
+            _validationGenerations.TryRemove(
+                new KeyValuePair<Guid, long>(profileId, generation));
+
+        private static GoogleDriveRemoteValidationResult Superseded() =>
+            GoogleDriveRemoteValidationMapper.FromStatus(
+                GoogleDriveRemoteValidationStatus.Superseded);
 
         private void UpdateSuccessfulTimestamps(Guid profileId)
         {
