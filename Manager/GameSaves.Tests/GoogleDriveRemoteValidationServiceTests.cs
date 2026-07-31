@@ -97,6 +97,20 @@ public sealed class GoogleDriveRemoteValidationServiceTests
         Assert.Equal(0, context.SessionFactory.RestoreCalls);
     }
 
+    [Fact]
+    public void AnyScopeOtherThanExactDriveFile_IsRejectedByTheSavedSettingsContract()
+    {
+        ArgumentException exception = Assert.Throws<ArgumentException>(() =>
+            new GoogleDriveSyncRemoteSettings(
+                null,
+                "https://www.googleapis.com/auth/drive"));
+
+        Assert.Equal("requestedScope", exception.ParamName);
+        Assert.Equal(
+            GoogleDriveAuthorizationScopes.DriveFile,
+            Assert.Single(GoogleDriveOAuthService.RequestedScopes));
+    }
+
     public static TheoryData<int, int> SessionFailures => new()
     {
         { (int)GoogleDriveAuthorizedSessionFailure.NoStoredAuthentication,
@@ -272,6 +286,28 @@ public sealed class GoogleDriveRemoteValidationServiceTests
     }
 
     [Fact]
+    public async Task SavedDisplayName_IsNeverUsedAsRootIdentity()
+    {
+        SyncRemoteProfile profile = Profile() with
+        {
+            RemoteRootDisplayName = "Stale display-only name"
+        };
+        ValidationContext context = CreateContext(profile);
+        context.Api.Result = Metadata(name: "Current Drive name");
+
+        GoogleDriveRemoteValidationResult result =
+            await context.Service.ValidateAsync(profile.Id);
+
+        Assert.Equal(GoogleDriveRemoteValidationStatus.Valid, result.Status);
+        Assert.Equal("Current Drive name", result.RootDisplayName);
+        Assert.Equal(new[] { profile.RemoteFolderId! }, context.Api.RootIds);
+        Assert.DoesNotContain(
+            "Stale display-only name",
+            context.Api.RootIds,
+            StringComparer.Ordinal);
+    }
+
+    [Fact]
     public async Task MovedMyDriveRoot_RemainsLinkedAndInvalidatesDescendantCache()
     {
         ValidationContext context = CreateContext();
@@ -367,6 +403,7 @@ public sealed class GoogleDriveRemoteValidationServiceTests
         Assert.False(result.CacheInvalidated);
         Assert.Empty(context.Cache.ScopeInvalidations);
         Assert.Empty(context.Cache.ProfileInvalidations);
+        Assert.False(context.Coordinator.IsActive(context.Profile.Id));
     }
 
     [Fact]
@@ -420,6 +457,34 @@ public sealed class GoogleDriveRemoteValidationServiceTests
         Assert.Equal(GoogleDriveRemoteValidationStatus.Valid, second.Status);
         Assert.Equal(GoogleDriveRemoteValidationStatus.Superseded, late.Status);
         Assert.False(late.CacheInvalidated);
+        Assert.Empty(context.Cache.ScopeInvalidations);
+        Assert.Empty(context.Cache.ProfileInvalidations);
+        Assert.False(context.Coordinator.IsActive(context.Profile.Id));
+    }
+
+    [Fact]
+    public async Task LifecycleCancellation_SupersedesValidationWithoutCacheMutation()
+    {
+        ValidationContext context = CreateContext();
+        var entered = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        context.Api.Handler = async (_, cancellationToken) =>
+        {
+            entered.SetResult();
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            return Metadata();
+        };
+
+        Task<GoogleDriveRemoteValidationResult> validation =
+            context.Service.ValidateAsync(context.Profile.Id);
+        await entered.Task;
+
+        context.Coordinator.Cancel(context.Profile.Id);
+        GoogleDriveRemoteValidationResult result = await validation;
+
+        Assert.Equal(GoogleDriveRemoteValidationStatus.Superseded, result.Status);
+        Assert.True(context.SessionFactory.LastCredential!.IsDisposed);
+        Assert.False(context.Coordinator.IsActive(context.Profile.Id));
         Assert.Empty(context.Cache.ScopeInvalidations);
         Assert.Empty(context.Cache.ProfileInvalidations);
     }
@@ -560,13 +625,15 @@ public sealed class GoogleDriveRemoteValidationServiceTests
         var api = new RecordingRootValidationApi();
         var membership = new RecordingRootMembershipApi();
         var cache = new RecordingObjectIdCache();
+        var coordinator = new GoogleDriveValidationCoordinator();
         var service = new GoogleDriveRemoteValidationService(
             repository,
             sessionFactory,
             api,
             membership,
             cache,
-            new FixedUtcClock(Now));
+            new FixedUtcClock(Now),
+            coordinator);
         return new ValidationContext(
             profile,
             repository,
@@ -574,6 +641,7 @@ public sealed class GoogleDriveRemoteValidationServiceTests
             api,
             membership,
             cache,
+            coordinator,
             service);
     }
 
@@ -632,6 +700,7 @@ public sealed class GoogleDriveRemoteValidationServiceTests
         RecordingRootValidationApi Api,
         RecordingRootMembershipApi Membership,
         RecordingObjectIdCache Cache,
+        GoogleDriveValidationCoordinator Coordinator,
         GoogleDriveRemoteValidationService Service);
 
     private sealed class RecordingSessionFactory

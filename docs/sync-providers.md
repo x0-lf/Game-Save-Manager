@@ -174,7 +174,19 @@ Query construction is isolated in `GoogleDriveQueryBuilder`. It escapes backslas
 
 The object-ID cache is memory-only and scoped to the saved profile and configured root. Keys preserve case and include the parent ID, exact child name, and expected object kind. Only unique, type-checked, non-trashed My Drive objects with validated parent membership are cached. Every cross-call cache hit is checked again by authoritative ID. Missing, renamed, moved, trashed, wrong-type, or shared-drive entries are evicted; a stale folder clears the root scope because descendants may also be invalid. Reconnect, disconnect, root replacement, profile deletion, and confirmed authorization revocation have explicit Infrastructure invalidation reasons. Child IDs are never stored in SQLite, profile JSON, or a second cache file.
 
-The resolver consumes an already validated `GoogleAuthorizedCredential` through a credential-scoped Infrastructure factory. Dependency registration creates no browser flow, token read, Drive request, or singleton `DriveService`. The existing `drive.file` scope remains sufficient for app-created/app-accessible objects in My Drive. No `GoogleDriveRemoteFileSystem`, Google Drive provider-factory case, backup-run listing, upload, download, preview, or sync execution exists yet.
+The resolver consumes an already validated `GoogleAuthorizedCredential` through a credential-scoped Infrastructure factory. Dependency registration creates no browser flow, token read, Drive request, or singleton `DriveService`. The existing `drive.file` scope remains sufficient for app-created/app-accessible objects in My Drive. The validation-only `GoogleDriveRemoteFileSystem` described below does not expose the resolver or activate synchronization.
+
+## Google Drive remote validation boundary
+
+`GoogleDriveRemoteFileSystem` exists as a narrow Infrastructure validation boundary. Its `ValidateAsync` method requires a saved Google Drive profile with exactly `drive.file`, silently restores or refreshes the protected authentication, and creates a short-lived authenticated session. It retrieves the configured application root directly by its authoritative Drive ID; the display name is never used to rediscover or replace it.
+
+Validation requests only root metadata and `capabilities.canListChildren` / `capabilities.canAddChildren`. The root must be a non-trashed folder in My Drive, and both child capabilities must be true. This proves the intended future read and child-folder-creation access without creating a probe file or folder. Validation performs no list traversal, metadata replacement, upload, download, rename, move, trash, deletion, permission change, quota request, or other remote mutation.
+
+Per-profile validation generations actively cancel superseded work. Disconnect, reconnect, confirmed revocation, and profile deletion invalidate a pending generation, so a late result cannot report a stale valid state. Missing, trashed, moved, replaced, wrong-type, shared-drive, inaccessible, or revoked roots invalidate the relevant in-memory resolver cache. Cancellation, rate limiting, quota errors, and temporary provider failures preserve otherwise safe cache entries. Child IDs remain memory-only.
+
+Provider failures map to stable, sanitized warning categories including not connected, authorization revoked, missing or inaccessible root, rate limiting, quota exceeded, cancellation, supersession, and temporary unavailability. Quota categories come from the failed Drive request; validation does not retrieve account quota totals. Warnings never contain tokens, account email, Drive IDs, request URLs, queries, or raw Google responses.
+
+Every later remote-filesystem operation throws an explicit unavailable error. There is no Google Drive provider-factory case, backup-run listing, metadata implementation, upload, download, preview, or sync execution. The provider catalog therefore continues to report Google Drive as `IsImplemented = false`.
 
 ## Remote metadata write semantics
 
@@ -195,7 +207,7 @@ General `ReadTextFileAsync` remains the read operation for immutable run content
 
 Local Folder creates immutable text with `FileMode.CreateNew`. Metadata replacement writes and flushes a unique temporary sibling before replacing the final name; mounted or network filesystems may provide weaker atomicity than a local filesystem. SFTP also uses exclusive `FileMode.CreateNew`, writes metadata to a temporary sibling, and prefers the server's POSIX rename extension. Servers without replacement rename use an explicit non-atomic direct fallback restricted to validated provider metadata, followed by temporary-file cleanup. Neither provider deletes or replaces backup-run content.
 
-Google Drive does not implement this remote filesystem contract yet. Its Infrastructure object/path resolver supplies future ID resolution and safe parent-folder creation only; no Drive provider, backup-run listing, metadata implementation, upload, download, preview, or execution exists.
+Google Drive implements only the read-only `ValidateAsync` boundary of this remote filesystem contract. Its Infrastructure object/path resolver supplies future ID resolution and safe parent-folder creation, but backup-run listing, metadata implementation, upload, download, preview, and execution remain unavailable.
 
 ## Saved profiles and secrets
 

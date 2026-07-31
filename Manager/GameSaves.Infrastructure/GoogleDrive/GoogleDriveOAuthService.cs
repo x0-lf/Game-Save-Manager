@@ -18,6 +18,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
         private readonly IGoogleDriveAuthorizedSessionFactory _authorizedSessionFactory;
         private readonly IUtcClock _clock;
         private readonly IGoogleDriveObjectIdCache? _objectIdCache;
+        private readonly IGoogleDriveValidationCoordinator? _validationCoordinator;
         private readonly ConcurrentDictionary<Guid, LifecycleOperation> _operations = new();
 
         internal GoogleDriveOAuthService(
@@ -28,7 +29,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
             IGoogleInstalledAppAuthorizer authorizer,
             IGoogleDriveAccountReader accountReader,
             IUtcClock clock,
-            IGoogleDriveObjectIdCache? objectIdCache = null)
+            IGoogleDriveObjectIdCache? objectIdCache = null,
+            IGoogleDriveValidationCoordinator? validationCoordinator = null)
         {
             _profileRepository = profileRepository;
             _secretStore = secretStore;
@@ -44,6 +46,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 accountReader);
             _clock = clock;
             _objectIdCache = objectIdCache;
+            _validationCoordinator = validationCoordinator;
         }
 
         public GoogleDriveOAuthClientConfigurationState GetClientConfigurationState() =>
@@ -83,6 +86,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
             if (remoteProfileId == Guid.Empty)
                 return DisconnectProfileFailure();
 
+            _validationCoordinator?.Cancel(remoteProfileId);
             await CancelActiveOperationAsync(remoteProfileId, cancellationToken);
 
             var operation = new LifecycleOperation();
@@ -134,6 +138,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
             if (profileId == Guid.Empty)
                 return ProfileFailure(GoogleDriveAuthenticationStatus.ProfileNotFound);
 
+            _validationCoordinator?.Cancel(profileId);
             var operation = new LifecycleOperation();
 
             if (!_operations.TryAdd(profileId, operation))
@@ -569,6 +574,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
             SyncRemoteProfile profile,
             CancellationToken cancellationToken)
         {
+            _validationCoordinator?.Cancel(profile.Id);
             SecretOperationResult cleanup;
 
             try

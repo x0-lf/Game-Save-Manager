@@ -244,7 +244,23 @@ Sanitized live development-account verification confirmed that explicit setup re
 
 Development diagnostics for a failed root-folder request are intentionally sanitized. A bug report may include the operation name, HTTP status, allowlisted Google reason, stable error code, and retryable flag. Never include an account email, folder ID, Client ID, client secret, authorization URL, raw response, access token, or refresh token.
 
-The provider-neutral remote write contract now distinguishes create-only backup content from mutable `.gamesave-sync/sync-log.json` metadata. Local Folder and SFTP implement those semantics. Google Drive now has an Infrastructure-only `/`-relative object/path resolver for exact-name lookup, paginated discovery, safe missing-parent creation, duplicate rejection, and validated in-memory ID caching. It operates only on app-accessible My Drive objects under the existing `drive.file` grant; it does not require broader consent. Child IDs are not persisted in a new database or file. Google Drive still does not implement a remote filesystem, metadata writing, backup-run listing, uploads, downloads, preview, or synchronization; those remain later milestones.
+## Test the validation-only remote boundary
+
+The Milestone O boundary is read-only. Use an explicitly authorized development account and inspect My Drive before and after each check so that any unexpected mutation is visible.
+
+1. Restore or connect a saved Google Drive profile and confirm its application root is **Ready**.
+2. Invoke the validation boundary from a focused development harness or debugger using the selected profile ID. Validation must complete without opening a browser.
+3. Confirm the configured root is resolved by its saved ID and that no probe folder, probe file, metadata file, upload, permission change, or other Drive object appears.
+4. Rename the root and validate again. The same saved identity must remain valid and only its display name may change through the separate root-folder inspection flow.
+5. Move the root beneath another My Drive folder and validate again. The root remains authoritative by ID, while the result reports the established moved state and clears dependent in-memory path entries.
+6. Trash the root and validate again. Validation must fail safely, clear the relevant in-memory cache, and must not create a replacement. Restore the root and confirm a later validation succeeds.
+7. Revoke the application's authorization through Google Account settings and validate again. Reauthentication must be required without opening a browser automatically; the saved profile and root metadata remain.
+8. Confirm later filesystem operations, Preview Sync, and Sync Now remain unavailable throughout.
+9. Review only sanitized status and warning output. No account value, token, client configuration, folder ID, request URL, query, or raw provider response may appear.
+
+Quota and rate-limit statuses are classified from ordinary failed Drive requests. Validation does not call Drive quota fields or display quota totals.
+
+The provider-neutral remote write contract distinguishes create-only backup content from mutable `.gamesave-sync/sync-log.json` metadata. Local Folder and SFTP implement those semantics. Google Drive has an Infrastructure-only `/`-relative object/path resolver for exact-name lookup, paginated discovery, safe missing-parent creation, duplicate rejection, and validated in-memory ID caching. Its validation-only `GoogleDriveRemoteFileSystem` checks protected authentication and root capabilities but leaves listing, metadata writing, backup-run operations, uploads, downloads, preview, and synchronization unavailable. It operates only on app-accessible My Drive objects under the existing `drive.file` grant; it does not require broader consent. Child IDs are not persisted in a new database or file.
 
 ## Handle downloaded credential files
 

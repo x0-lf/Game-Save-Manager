@@ -1,5 +1,6 @@
 using GameSaves.Core.Secrets;
 using GameSaves.Core.Sync;
+using GameSaves.Infrastructure.GoogleDrive;
 
 namespace GameSaves.Infrastructure.Sync
 {
@@ -7,19 +8,31 @@ namespace GameSaves.Infrastructure.Sync
     {
         private readonly ISyncRemoteProfileRepository _profileRepository;
         private readonly ISecretStore _secretStore;
+        private readonly IGoogleDriveValidationCoordinator? _validationCoordinator;
 
         public SyncRemoteProfileService(
             ISyncRemoteProfileRepository profileRepository,
             ISecretStore secretStore)
+            : this(profileRepository, secretStore, validationCoordinator: null)
+        {
+        }
+
+        internal SyncRemoteProfileService(
+            ISyncRemoteProfileRepository profileRepository,
+            ISecretStore secretStore,
+            IGoogleDriveValidationCoordinator? validationCoordinator)
         {
             _profileRepository = profileRepository;
             _secretStore = secretStore;
+            _validationCoordinator = validationCoordinator;
         }
 
         public async Task<SyncRemoteProfileDeleteResult> DeleteAsync(
             Guid profileId,
             CancellationToken cancellationToken = default)
         {
+            _validationCoordinator?.Cancel(profileId);
+
             if (_profileRepository.GetById(profileId) is null)
             {
                 return new SyncRemoteProfileDeleteResult(
@@ -59,6 +72,8 @@ namespace GameSaves.Infrastructure.Sync
             Guid profileId,
             CancellationToken cancellationToken = default)
         {
+            _validationCoordinator?.Cancel(profileId);
+
             if (_profileRepository.GetById(profileId) is null)
             {
                 return new SyncRemoteProfileAuthenticationResult(

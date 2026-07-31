@@ -97,7 +97,13 @@ namespace GameSaves.Infrastructure.DependencyInjection
                     pathProvider.GetDatabasePath(),
                     clock);
             });
-            services.AddSingleton<ISyncRemoteProfileService, SyncRemoteProfileService>();
+            services.AddSingleton<IGoogleDriveValidationCoordinator,
+                GoogleDriveValidationCoordinator>();
+            services.AddSingleton<ISyncRemoteProfileService>(provider =>
+                new SyncRemoteProfileService(
+                    provider.GetRequiredService<ISyncRemoteProfileRepository>(),
+                    provider.GetRequiredService<ISecretStore>(),
+                    provider.GetRequiredService<IGoogleDriveValidationCoordinator>()));
             services.AddSingleton<
                 IGoogleDriveConnectionSettingsService,
                 GoogleDriveConnectionSettingsService>();
@@ -140,7 +146,9 @@ namespace GameSaves.Infrastructure.DependencyInjection
                     provider.GetRequiredService<ISecretStore>(),
                     provider.GetRequiredService<IGoogleDriveAuthorizedSessionFactory>(),
                     provider.GetRequiredService<IGoogleDriveRootFolderApi>(),
-                    provider.GetRequiredService<IUtcClock>()));
+                    provider.GetRequiredService<IUtcClock>(),
+                    provider.GetRequiredService<IGoogleDriveObjectIdCache>(),
+                    provider.GetRequiredService<IGoogleDriveValidationCoordinator>()));
             services.AddSingleton<IGoogleDriveOAuthService>(provider =>
                 new GoogleDriveOAuthService(
                     provider.GetRequiredService<ISyncRemoteProfileRepository>(),
@@ -150,7 +158,8 @@ namespace GameSaves.Infrastructure.DependencyInjection
                     provider.GetRequiredService<IGoogleInstalledAppAuthorizer>(),
                     provider.GetRequiredService<IGoogleDriveAccountReader>(),
                     provider.GetRequiredService<IUtcClock>(),
-                    provider.GetRequiredService<IGoogleDriveObjectIdCache>()));
+                    provider.GetRequiredService<IGoogleDriveObjectIdCache>(),
+                    provider.GetRequiredService<IGoogleDriveValidationCoordinator>()));
 
             return services;
         }

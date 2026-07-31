@@ -465,6 +465,29 @@ public sealed class GoogleDriveOAuthTests
     }
 
     [Fact]
+    public async Task Disconnect_CancelsPendingValidationGeneration()
+    {
+        var coordinator = new GoogleDriveValidationCoordinator();
+        using GoogleDriveValidationOperation validation =
+            coordinator.Begin(ProfileId);
+        GoogleDriveOAuthService service = CreateService(
+            CreateRepository(),
+            new InMemorySecretStore(),
+            new FakeAuthorizer(),
+            new FakeAccountReader(new GoogleDriveAccountInfo("Example User", null)),
+            validationCoordinator: coordinator);
+
+        GoogleDriveDisconnectionResult result =
+            await service.DisconnectAsync(ProfileId);
+
+        Assert.True(result.Status is GoogleDriveDisconnectionStatus.Disconnected or
+            GoogleDriveDisconnectionStatus.AlreadyDisconnected);
+        Assert.True(validation.CancellationToken.IsCancellationRequested);
+        Assert.False(validation.IsCurrent);
+        Assert.False(coordinator.IsActive(ProfileId));
+    }
+
+    [Fact]
     public void AccountLookup_IsLimitedToDriveUserIdentityFields()
     {
         Assert.Equal("user(displayName,emailAddress)", GoogleDriveAccountReader.RequestedFields);
@@ -520,7 +543,8 @@ public sealed class GoogleDriveOAuthTests
         InMemorySecretStore secrets,
         IGoogleInstalledAppAuthorizer authorizer,
         IGoogleDriveAccountReader accountReader,
-        IGoogleDriveObjectIdCache? objectIdCache = null) =>
+        IGoogleDriveObjectIdCache? objectIdCache = null,
+        IGoogleDriveValidationCoordinator? validationCoordinator = null) =>
         new(
             repository,
             secrets,
@@ -531,7 +555,8 @@ public sealed class GoogleDriveOAuthTests
             authorizer,
             accountReader,
             new FixedUtcClock(Now),
-            objectIdCache);
+            objectIdCache,
+            validationCoordinator);
 
     private static TokenResponse CreateToken(string accessToken) => new()
     {

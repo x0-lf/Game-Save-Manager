@@ -49,7 +49,7 @@ The long-term goal is a cross-platform Steam save manager with backup profiles, 
 * Google Drive authorization runs in the system browser with PKCE and a loopback callback, requests only `drive.file`, stores tokens through the protected secret store, restores them after restart, refreshes access when possible, and displays non-secret account metadata.
 * Google account lifecycle supports Connect, Reconnect, and explicit local Disconnect. Disconnect removes only the selected profile's protected OAuth token and clears its saved account identity; the profile, root-folder metadata, backups, history, and Drive files remain. External revocation is detected, its invalid local token is cleaned up when possible, and reconnect remains an explicit user action.
 * A connected Google Drive profile can explicitly set up or discover one visible `My Drive/GameSave Manager Backups` folder. Its Drive ID is authoritative; renames and moves within My Drive remain linked, while missing, trashed, invalid, or unsupported roots require confirmed replacement and duplicate matches are never chosen automatically.
-* An Infrastructure-only Google Drive object/path resolver normalizes `/`-separated relative paths, resolves exact-name children to authoritative IDs, safely creates only missing parent folders, rejects duplicate or trashed objects, follows pagination, and revalidates its in-memory cache before reuse. It is not a remote filesystem and does not enable synchronization.
+* An Infrastructure-only Google Drive object/path resolver normalizes `/`-separated relative paths, resolves exact-name children to authoritative IDs, safely creates only missing parent folders, rejects duplicate or trashed objects, follows pagination, and revalidates its in-memory cache before reuse. A validation-only remote-filesystem boundary now checks the saved account and authoritative root without enabling synchronization.
 * Google Drive backup synchronization is not implemented. The [Google Drive developer setup guide](docs/google-drive-developer-setup.md) explains private development configuration; normal users do not create a Cloud project, and personal credentials or tokens must never be committed.
   * Type-safe provider selection exposes `LocalFolder`, `Sftp`, and configuration-only `GoogleDrive`. Only Local Folder and SFTP can preview or execute sync; WebDAV and OneDrive remain unavailable.
   * `ISyncProvider` abstraction with `LocalFolderSyncProvider` and `SftpSyncProvider` (SSH.NET); WebDAV and cloud providers come later.
@@ -536,23 +536,23 @@ Milestone N adds an Infrastructure-only resolver for normalized `/`-separated re
 
 Implement validation-only `GoogleDriveRemoteFileSystem` plumbing and `ValidateAsync` to verify:
 
-* [ ] A saved Google Drive profile exists and requests exactly `drive.file`
-* [ ] The Google account is connected and its protected authentication is present
-* [ ] The access token is usable or can be refreshed silently without opening a browser
-* [ ] The Drive API is reachable through a short-lived authenticated Infrastructure session
-* [ ] The configured application-root ID exists and resolves directly by its authoritative ID
-* [ ] The configured root is a non-trashed folder in My Drive, not a shared drive
-* [ ] The configured root remains accessible to the application for reading and creating children
-* [ ] Validation performs no probe upload, file creation, overwrite, rename, move, trash, or deletion
-* [ ] Missing, trashed, moved, replaced, revoked, or inaccessible state invalidates relevant in-memory resolver cache entries
-* [ ] Cancellation and late results cannot update a different profile or superseded validation operation
-* [ ] Provider-specific failures map to safe, user-friendly errors such as `GoogleDriveNotConnected`, `GoogleDriveAuthorizationRevoked`, `GoogleDriveRootMissing`, `GoogleDriveRootInaccessible`, `GoogleDriveUnavailable`, and `GoogleDriveQuotaExceeded`
-* [ ] Quota-related API failures are classified without adding quota retrieval or quota display
-* [ ] Later remote-filesystem operations remain explicitly unavailable; no listing, upload, download, or metadata-write behavior starts in this milestone
-* [ ] Google Drive remains absent from `SyncProviderFactory`, and Preview Sync and Sync Now remain disabled
-* [ ] OAuth scope remains exactly `https://www.googleapis.com/auth/drive.file`
+* [x] A saved Google Drive profile exists and requests exactly `drive.file`
+* [x] The Google account is connected and its protected authentication is present
+* [x] The access token is usable or can be refreshed silently without opening a browser
+* [x] The Drive API is reachable through a short-lived authenticated Infrastructure session
+* [x] The configured application-root ID exists and resolves directly by its authoritative ID
+* [x] The configured root is a non-trashed folder in My Drive, not a shared drive
+* [x] The configured root remains accessible to the application for reading and creating children
+* [x] Validation performs no probe upload, file creation, overwrite, rename, move, trash, or deletion
+* [x] Missing, trashed, moved, replaced, revoked, or inaccessible state invalidates relevant in-memory resolver cache entries
+* [x] Cancellation and late results cannot update a different profile or superseded validation operation
+* [x] Provider-specific failures map to safe, user-friendly errors such as `GoogleDriveNotConnected`, `GoogleDriveAuthorizationRevoked`, `GoogleDriveRootMissing`, `GoogleDriveRootInaccessible`, `GoogleDriveUnavailable`, and `GoogleDriveQuotaExceeded`
+* [x] Quota-related API failures are classified without adding quota retrieval or quota display
+* [x] Later remote-filesystem operations remain explicitly unavailable; no listing, upload, download, or metadata-write behavior starts in this milestone
+* [x] Google Drive remains absent from `SyncProviderFactory`, and Preview Sync and Sync Now remain disabled
+* [x] OAuth scope remains exactly `https://www.googleapis.com/auth/drive.file`
 
-Milestone O is a validation boundary only. It may introduce the Google Drive remote-filesystem type needed to host `ValidateAsync`, but it must reuse the existing OAuth lifecycle, root-folder service, object API, resolver, and cache rather than issuing Drive requests from the App or duplicating their rules. A successful validation does not make Google Drive an implemented sync provider and does not enable backup synchronization.
+`GoogleDriveRemoteFileSystem` now exists only as a validation boundary, and only `ValidateAsync` performs remote work. Validation restores protected authentication silently, resolves the configured root directly by its authoritative ID, checks My Drive folder and child capabilities, and never creates a probe or mutates Drive. Listing, provider-metadata operations, upload, and download remain explicitly unavailable; provider creation remains disabled, Google Drive stays configuration-only for synchronization, and Milestone P has not started.
 
 ### P — Google Drive listing and text metadata
 

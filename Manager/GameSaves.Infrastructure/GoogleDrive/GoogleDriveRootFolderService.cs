@@ -11,6 +11,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
         private readonly IGoogleDriveAuthorizedSessionFactory _sessionFactory;
         private readonly IGoogleDriveRootFolderApi _folderApi;
         private readonly IUtcClock _clock;
+        private readonly IGoogleDriveObjectIdCache? _objectIdCache;
+        private readonly IGoogleDriveValidationCoordinator? _validationCoordinator;
         private readonly ConcurrentDictionary<Guid, byte> _activeOperations = new();
 
         internal GoogleDriveRootFolderService(
@@ -18,13 +20,17 @@ namespace GameSaves.Infrastructure.GoogleDrive
             ISecretStore secretStore,
             IGoogleDriveAuthorizedSessionFactory sessionFactory,
             IGoogleDriveRootFolderApi folderApi,
-            IUtcClock clock)
+            IUtcClock clock,
+            IGoogleDriveObjectIdCache? objectIdCache = null,
+            IGoogleDriveValidationCoordinator? validationCoordinator = null)
         {
             _profileRepository = profileRepository;
             _secretStore = secretStore;
             _sessionFactory = sessionFactory;
             _folderApi = folderApi;
             _clock = clock;
+            _objectIdCache = objectIdCache;
+            _validationCoordinator = validationCoordinator;
         }
 
         public Task<GoogleDriveRootFolderResult> InspectAsync(
@@ -86,6 +92,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
 
             try
             {
+                _validationCoordinator?.Cancel(profileId);
                 cancellationToken.ThrowIfCancellationRequested();
                 SyncRemoteProfile? profile = SafeGetProfile(profileId);
 
@@ -511,12 +518,20 @@ namespace GameSaves.Infrastructure.GoogleDrive
                             : "The Google Drive folder was found, but the saved profile no longer exists.");
                 }
 
+                bool rootWasReplaced =
+                    !string.Equals(
+                        current.RemoteFolderId,
+                        folderId,
+                        StringComparison.Ordinal);
                 SyncRemoteProfile updated = _profileRepository.Update(current with
                 {
                     RemoteFolderId = folderId,
                     RemoteRootDisplayName = displayName,
                     UpdatedUtc = _clock.UtcNow
                 });
+
+                if (rootWasReplaced)
+                    InvalidateObjectCache(updated.Id);
 
                 TouchSuccessfulConnection(updated.Id);
 
@@ -539,6 +554,21 @@ namespace GameSaves.Infrastructure.GoogleDrive
                     Message: createdRemoteFolder
                         ? "A Google Drive folder might have been created, but its identity could not be linked locally. Retry setup to search before creating another folder."
                         : "The Google Drive folder was found, but its identity could not be saved to the profile.");
+            }
+        }
+
+        private void InvalidateObjectCache(Guid profileId)
+        {
+            try
+            {
+                _objectIdCache?.InvalidateProfile(
+                    profileId,
+                    GoogleDriveObjectCacheInvalidationReason.ApplicationRootReplacement);
+            }
+            catch
+            {
+                // Persisted root identity is authoritative. Cache invalidation is
+                // best effort and must not turn a successful link into failure.
             }
         }
 

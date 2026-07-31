@@ -371,6 +371,56 @@ public sealed class GoogleDriveRootFolderTests
     }
 
     [Fact]
+    public async Task ConfirmedRootReplacement_InvalidatesCacheAndPendingValidation()
+    {
+        var repository = new InMemorySyncRemoteProfileRepository();
+        SyncRemoteProfile profile = repository.Create(Profile(
+            rootId: "stale-id",
+            rootName: "Old name"));
+        var api = new FakeRootFolderApi
+        {
+            GetFailure = GoogleDriveApiFailure.NotFound
+        };
+        api.DiscoveryResults.Enqueue(new[] { Folder("replacement-id") });
+        var cache = new GoogleDriveObjectIdCache();
+        var oldScope = new GoogleDriveObjectCacheScope(profile.Id, "stale-id");
+        Assert.True(cache.TryStoreUniqueValidated(
+            oldScope,
+            "stale-id",
+            "child",
+            GoogleDriveObjectKind.Folder,
+            new GoogleDriveObjectMetadata(
+                "child-id",
+                "child",
+                GoogleDriveApplicationRoot.FolderMimeType,
+                trashed: false,
+                new[] { "stale-id" },
+                driveId: null)));
+        var coordinator = new GoogleDriveValidationCoordinator();
+        using GoogleDriveValidationOperation validation =
+            coordinator.Begin(profile.Id);
+        GoogleDriveRootFolderService service = CreateService(
+            repository,
+            api,
+            objectIdCache: cache,
+            validationCoordinator: coordinator);
+
+        GoogleDriveRootFolderResult result = await service.RecreateAsync(
+            profile.Id,
+            GoogleDriveRootFolderRecreationConfirmation.Confirmed);
+
+        Assert.Equal(GoogleDriveRootFolderStatus.Ready, result.Status);
+        Assert.True(validation.CancellationToken.IsCancellationRequested);
+        Assert.False(validation.IsCurrent);
+        Assert.False(cache.TryGet(
+            oldScope,
+            "stale-id",
+            "child",
+            GoogleDriveObjectKind.Folder,
+            out _));
+    }
+
+    [Fact]
     public async Task FailedRecreation_PreservesStaleIdentity()
     {
         var repository = new InMemorySyncRemoteProfileRepository();
@@ -841,13 +891,17 @@ public sealed class GoogleDriveRootFolderTests
         FakeRootFolderApi api,
         FakeAuthorizedSessionFactory? sessionFactory = null,
         InMemorySecretStore? secretStore = null,
-        FixedUtcClock? clock = null) =>
+        FixedUtcClock? clock = null,
+        IGoogleDriveObjectIdCache? objectIdCache = null,
+        IGoogleDriveValidationCoordinator? validationCoordinator = null) =>
         new(
             repository,
             secretStore ?? new InMemorySecretStore(),
             sessionFactory ?? new FakeAuthorizedSessionFactory(),
             api,
-            clock ?? new FixedUtcClock(Now));
+            clock ?? new FixedUtcClock(Now),
+            objectIdCache,
+            validationCoordinator);
 
     private static SyncRemoteProfile Profile(
         string? rootId = null,
