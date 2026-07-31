@@ -77,7 +77,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 }
 
                 GoogleDriveRemoteValidationResult? profileFailure =
-                    ValidateProfile(profile);
+                    GoogleDriveRemoteProfileValidator.Validate(profile);
                 if (profileFailure is not null)
                 {
                     if (profileFailure.Status ==
@@ -238,36 +238,6 @@ namespace GameSaves.Infrastructure.GoogleDrive
                     : GoogleDriveRemoteValidationMapper.FromStatus(
                         GoogleDriveRemoteValidationStatus.Failed);
             }
-        }
-
-        private static GoogleDriveRemoteValidationResult? ValidateProfile(
-            SyncRemoteProfile profile)
-        {
-            if (profile.ProviderKind != SyncProviderKind.GoogleDrive)
-            {
-                return GoogleDriveRemoteValidationMapper.FromStatus(
-                    GoogleDriveRemoteValidationStatus.WrongProviderKind);
-            }
-
-            if (profile.SettingsError is not null ||
-                profile.ProviderSettings is not GoogleDriveSyncRemoteSettings settings ||
-                settings.SchemaVersion != GoogleDriveSyncRemoteSettings.CurrentSchemaVersion ||
-                !string.Equals(
-                    settings.RequestedScope,
-                    GoogleDriveAuthorizationScopes.DriveFile,
-                    StringComparison.Ordinal))
-            {
-                return GoogleDriveRemoteValidationMapper.FromStatus(
-                    GoogleDriveRemoteValidationStatus.UnsupportedScope);
-            }
-
-            if (string.IsNullOrWhiteSpace(profile.RemoteFolderId))
-            {
-                return GoogleDriveRemoteValidationMapper.FromStatus(
-                    GoogleDriveRemoteValidationStatus.RootNotConfigured);
-            }
-
-            return null;
         }
 
         private static GoogleDriveRemoteValidationStatus ValidateRootMetadata(
