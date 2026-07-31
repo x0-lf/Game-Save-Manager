@@ -219,7 +219,9 @@ Remote writes now make mutability explicit. Backup-run text content uses create-
 * Windows (registry-based Steam discovery; other platforms are planned)
 * Internet access only for Steam catalog / PCGamingWiki harvesting commands
 
-Main packages: `Avalonia` 12, `CommunityToolkit.Mvvm`, `Microsoft.Extensions.DependencyInjection`, `Microsoft.Data.Sqlite`, `System.Security.Cryptography.ProtectedData`, `Gameloop.Vdf`, `SSH.NET`, `Google.Apis.Auth` 1.75.0, and `Google.Apis.Drive.v3` 1.75.0.4210.
+Main packages: `Avalonia` 12, `CommunityToolkit.Mvvm`, `Microsoft.Extensions.DependencyInjection`, `Microsoft.Data.Sqlite` 10.0.10, `SQLitePCLRaw.bundle_e_sqlite3` 2.1.12, `System.Security.Cryptography.ProtectedData`, `Gameloop.Vdf`, `SSH.NET`, `Google.Apis.Auth` 1.75.0, and `Google.Apis.Drive.v3` 1.75.0.4210.
+
+The executable projects that directly use SQLite explicitly constrain `SQLitePCLRaw.bundle_e_sqlite3` to 2.1.12 so NuGet cannot resolve the vulnerable 2.1.11 native asset permitted by the broader `Microsoft.Data.Sqlite` dependency range. This security-only dependency update changes no database path, connection string, schema, migration, or persisted data format.
 
 The official Google client-library packages are referenced only by `GameSaves.Infrastructure`. Developer-local client configuration drives installed-app OAuth with PKCE, tokens persist only through `ISecretStore`, and short-lived Infrastructure services perform the minimal account, application-root, and internal object-resolution metadata requests. The resolver is not a remote filesystem: no backup-run listing, upload, download, or sync implementation exists.
 

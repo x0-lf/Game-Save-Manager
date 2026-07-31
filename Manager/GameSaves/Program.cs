@@ -15,12 +15,39 @@ using GameSaves.Core.Backup;
 using GameSaves.Infrastructure.Save;
 using GameSaves.Infrastructure.Backup;
 using GameSaves.Infrastructure.Steam;
+using Microsoft.Data.Sqlite;
+using System.Security;
 
 namespace GameSaves
 {
     public class Program
     {
         public static async Task Main(string[] args)
+        {
+            try
+            {
+                await RunAsync(args);
+            }
+            catch (Exception ex) when (
+                ex is SqliteException ||
+                ex is IOException ||
+                ex is UnauthorizedAccessException ||
+                ex is SecurityException)
+            {
+                string reason = ex switch
+                {
+                    SqliteException => "SQLite could not open or update the application database.",
+                    UnauthorizedAccessException or SecurityException =>
+                        "The command does not have permission to access a required file or directory.",
+                    _ => "A required file or directory could not be accessed."
+                };
+
+                Console.Error.WriteLine($"Command failed: {reason}");
+                Environment.ExitCode = 1;
+            }
+        }
+
+        private static async Task RunAsync(string[] args)
         {
             string appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             string dbPath = Path.Combine(appData, "GameSave", "gamesave.db");
