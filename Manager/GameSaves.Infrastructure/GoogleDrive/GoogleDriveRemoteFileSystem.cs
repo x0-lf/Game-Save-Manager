@@ -22,12 +22,14 @@ namespace GameSaves.Infrastructure.GoogleDrive
         private readonly IGoogleDriveRemoteValidationService _validationService;
         private readonly IGoogleDriveRootExistenceService _rootExistenceService;
         private readonly IGoogleDriveFolderExistenceService _folderExistenceService;
+        private readonly IGoogleDriveRunFolderNameService _runFolderNameService;
 
         public GoogleDriveRemoteFileSystemFactory(
             ISyncRemoteProfileRepository profileRepository,
             IGoogleDriveRemoteValidationService validationService,
             IGoogleDriveRootExistenceService rootExistenceService,
-            IGoogleDriveFolderExistenceService folderExistenceService)
+            IGoogleDriveFolderExistenceService folderExistenceService,
+            IGoogleDriveRunFolderNameService runFolderNameService)
         {
             _profileRepository = profileRepository ??
                 throw new ArgumentNullException(nameof(profileRepository));
@@ -37,6 +39,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 throw new ArgumentNullException(nameof(rootExistenceService));
             _folderExistenceService = folderExistenceService ??
                 throw new ArgumentNullException(nameof(folderExistenceService));
+            _runFolderNameService = runFolderNameService ??
+                throw new ArgumentNullException(nameof(runFolderNameService));
         }
 
         public IRemoteFileSystem Create(Guid remoteProfileId)
@@ -54,7 +58,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 GetSafeDisplayRoot(profile),
                 _validationService,
                 _rootExistenceService,
-                _folderExistenceService);
+                _folderExistenceService,
+                _runFolderNameService);
         }
 
         private static string GetSafeDisplayRoot(SyncRemoteProfile? profile)
@@ -87,9 +92,9 @@ namespace GameSaves.Infrastructure.GoogleDrive
 
     /// <summary>
     /// Google Drive implementation boundary for the currently completed
-    /// remote primitives. Listing, text, and transfer operations remain
-    /// unavailable so SyncEngine cannot treat Google Drive as a working
-    /// provider.
+    /// remote primitives. Text, recursive listing, and transfer operations
+    /// remain unavailable so SyncEngine cannot treat Google Drive as a
+    /// working provider.
     /// </summary>
     internal sealed class GoogleDriveRemoteFileSystem : IRemoteFileSystem
     {
@@ -100,13 +105,15 @@ namespace GameSaves.Infrastructure.GoogleDrive
         private readonly IGoogleDriveRemoteValidationService _validationService;
         private readonly IGoogleDriveRootExistenceService _rootExistenceService;
         private readonly IGoogleDriveFolderExistenceService _folderExistenceService;
+        private readonly IGoogleDriveRunFolderNameService _runFolderNameService;
 
         internal GoogleDriveRemoteFileSystem(
             Guid remoteProfileId,
             string displayRoot,
             IGoogleDriveRemoteValidationService validationService,
             IGoogleDriveRootExistenceService rootExistenceService,
-            IGoogleDriveFolderExistenceService folderExistenceService)
+            IGoogleDriveFolderExistenceService folderExistenceService,
+            IGoogleDriveRunFolderNameService runFolderNameService)
         {
             if (remoteProfileId == Guid.Empty)
             {
@@ -129,6 +136,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 throw new ArgumentNullException(nameof(rootExistenceService));
             _folderExistenceService = folderExistenceService ??
                 throw new ArgumentNullException(nameof(folderExistenceService));
+            _runFolderNameService = runFolderNameService ??
+                throw new ArgumentNullException(nameof(runFolderNameService));
         }
 
         public string DisplayRoot { get; }
@@ -160,7 +169,9 @@ namespace GameSaves.Infrastructure.GoogleDrive
 
         public Task<IReadOnlyList<string>> ListRunFolderNamesAsync(
             CancellationToken cancellationToken = default) =>
-            Unsupported<IReadOnlyList<string>>();
+            _runFolderNameService.ListAsync(
+                _remoteProfileId,
+                cancellationToken);
 
         public Task<bool> FolderExistsAsync(
             string relativeFolder,

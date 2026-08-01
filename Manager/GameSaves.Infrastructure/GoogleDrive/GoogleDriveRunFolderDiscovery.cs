@@ -8,6 +8,10 @@ namespace GameSaves.Infrastructure.GoogleDrive
         Task<GoogleDriveRunFolderDiscoveryResult> DiscoverAsync(
             Guid remoteProfileId,
             CancellationToken cancellationToken = default);
+
+        Task<GoogleDriveRunFolderDiscoveryResult> DiscoverAsync(
+            GoogleDriveRemoteOperationContext context,
+            CancellationToken cancellationToken = default);
     }
 
     /// <summary>
@@ -118,6 +122,16 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 await _contextFactory.CreateAsync(
                     remoteProfileId,
                     cancellationToken).ConfigureAwait(false);
+
+            return await DiscoverAsync(context, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        public async Task<GoogleDriveRunFolderDiscoveryResult> DiscoverAsync(
+            GoogleDriveRemoteOperationContext context,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(context);
 
             IReadOnlyList<GoogleDriveObjectMetadata> folders;
             try
