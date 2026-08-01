@@ -19,6 +19,9 @@ namespace GameSaves.Infrastructure.GoogleDrive
             "id,name,mimeType,trashed,parents,driveId," +
             "capabilities(canListChildren,canAddChildren)";
 
+        public const string TextContentMetadataFields =
+            "id,mimeType,trashed,driveId,size,capabilities(canDownload)";
+
         public const string DriveSpace = "drive";
         public const string UserCorpus = "user";
         public const string MyDriveRootId = "root";
