@@ -21,11 +21,13 @@ namespace GameSaves.Infrastructure.GoogleDrive
         private readonly ISyncRemoteProfileRepository _profileRepository;
         private readonly IGoogleDriveRemoteValidationService _validationService;
         private readonly IGoogleDriveRootExistenceService _rootExistenceService;
+        private readonly IGoogleDriveFolderExistenceService _folderExistenceService;
 
         public GoogleDriveRemoteFileSystemFactory(
             ISyncRemoteProfileRepository profileRepository,
             IGoogleDriveRemoteValidationService validationService,
-            IGoogleDriveRootExistenceService rootExistenceService)
+            IGoogleDriveRootExistenceService rootExistenceService,
+            IGoogleDriveFolderExistenceService folderExistenceService)
         {
             _profileRepository = profileRepository ??
                 throw new ArgumentNullException(nameof(profileRepository));
@@ -33,6 +35,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 throw new ArgumentNullException(nameof(validationService));
             _rootExistenceService = rootExistenceService ??
                 throw new ArgumentNullException(nameof(rootExistenceService));
+            _folderExistenceService = folderExistenceService ??
+                throw new ArgumentNullException(nameof(folderExistenceService));
         }
 
         public IRemoteFileSystem Create(Guid remoteProfileId)
@@ -49,7 +53,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 remoteProfileId,
                 GetSafeDisplayRoot(profile),
                 _validationService,
-                _rootExistenceService);
+                _rootExistenceService,
+                _folderExistenceService);
         }
 
         private static string GetSafeDisplayRoot(SyncRemoteProfile? profile)
@@ -94,12 +99,14 @@ namespace GameSaves.Infrastructure.GoogleDrive
         private readonly Guid _remoteProfileId;
         private readonly IGoogleDriveRemoteValidationService _validationService;
         private readonly IGoogleDriveRootExistenceService _rootExistenceService;
+        private readonly IGoogleDriveFolderExistenceService _folderExistenceService;
 
         internal GoogleDriveRemoteFileSystem(
             Guid remoteProfileId,
             string displayRoot,
             IGoogleDriveRemoteValidationService validationService,
-            IGoogleDriveRootExistenceService rootExistenceService)
+            IGoogleDriveRootExistenceService rootExistenceService,
+            IGoogleDriveFolderExistenceService folderExistenceService)
         {
             if (remoteProfileId == Guid.Empty)
             {
@@ -120,6 +127,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 throw new ArgumentNullException(nameof(validationService));
             _rootExistenceService = rootExistenceService ??
                 throw new ArgumentNullException(nameof(rootExistenceService));
+            _folderExistenceService = folderExistenceService ??
+                throw new ArgumentNullException(nameof(folderExistenceService));
         }
 
         public string DisplayRoot { get; }
@@ -156,7 +165,10 @@ namespace GameSaves.Infrastructure.GoogleDrive
         public Task<bool> FolderExistsAsync(
             string relativeFolder,
             CancellationToken cancellationToken = default) =>
-            Unsupported<bool>();
+            _folderExistenceService.ExistsAsync(
+                _remoteProfileId,
+                relativeFolder,
+                cancellationToken);
 
         public Task<string?> ReadTextFileAsync(
             string relativePath,

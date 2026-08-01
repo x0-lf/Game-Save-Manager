@@ -147,6 +147,8 @@ namespace GameSaves.Infrastructure.DependencyInjection
                 GoogleDriveRemoteOperationContextFactory>();
             services.AddSingleton<IGoogleDriveRootExistenceService,
                 GoogleDriveRootExistenceService>();
+            services.AddSingleton<IGoogleDriveFolderExistenceService,
+                GoogleDriveFolderExistenceService>();
             services.AddSingleton<IGoogleDriveRootFolderService>(provider =>
                 new GoogleDriveRootFolderService(
                     provider.GetRequiredService<ISyncRemoteProfileRepository>(),
