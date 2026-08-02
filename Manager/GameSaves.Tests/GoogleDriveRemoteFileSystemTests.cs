@@ -30,7 +30,8 @@ public sealed class GoogleDriveRemoteFileSystemTests
             validation,
             new RecordingRootExistenceService(),
             new RecordingFolderExistenceService(),
-            new RecordingRunFolderNameService());
+            new RecordingRunFolderNameService(),
+            new RecordingTextFileReadService());
 
         IRemoteFileSystem first = factory.Create(ProfileId);
         IRemoteFileSystem second = factory.Create(ProfileId);
@@ -61,7 +62,8 @@ public sealed class GoogleDriveRemoteFileSystemTests
             validation,
             new RecordingRootExistenceService(),
             new RecordingFolderExistenceService(),
-            new RecordingRunFolderNameService());
+            new RecordingRunFolderNameService(),
+            new RecordingTextFileReadService());
 
         await factory.Create(ProfileId).ValidateAsync();
         await factory.Create(secondProfileId).ValidateAsync();
@@ -89,7 +91,8 @@ public sealed class GoogleDriveRemoteFileSystemTests
             new RecordingValidationService(),
             new RecordingRootExistenceService(),
             new RecordingFolderExistenceService(),
-            new RecordingRunFolderNameService());
+            new RecordingRunFolderNameService(),
+            new RecordingTextFileReadService());
 
         IRemoteFileSystem remote = factory.Create(ProfileId);
 
@@ -109,7 +112,8 @@ public sealed class GoogleDriveRemoteFileSystemTests
             validation,
             new RecordingRootExistenceService(),
             new RecordingFolderExistenceService(),
-            new RecordingRunFolderNameService());
+            new RecordingRunFolderNameService(),
+            new RecordingTextFileReadService());
 
         IRemoteFileSystem missing = factory.Create(ProfileId);
         repository.Create(Profile() with
@@ -148,6 +152,8 @@ public sealed class GoogleDriveRemoteFileSystemTests
             provider.GetRequiredService<IGoogleDriveFolderExistenceService>());
         Assert.IsType<GoogleDriveRunFolderNameService>(
             provider.GetRequiredService<IGoogleDriveRunFolderNameService>());
+        Assert.IsType<GoogleDriveTextFileReadService>(
+            provider.GetRequiredService<IGoogleDriveTextFileReadService>());
         IRemoteFileSystem remote = factory.Create(ProfileId);
 
         Assert.IsType<GoogleDriveRemoteFileSystemFactory>(factory);
@@ -284,14 +290,31 @@ public sealed class GoogleDriveRemoteFileSystemTests
     }
 
     [Fact]
+    public async Task ReadTextFileAsync_DelegatesPathProfileAndCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var reader = new RecordingTextFileReadService { Result = "{}" };
+        IRemoteFileSystem remote = Remote(
+            new RecordingValidationService(),
+            textFileReads: reader);
+
+        string? content = await remote.ReadTextFileAsync(
+            "run/manifest.json",
+            cancellation.Token);
+
+        Assert.Equal("{}", content);
+        Assert.Equal(new[] { ProfileId }, reader.ProfileIds);
+        Assert.Equal(new[] { "run/manifest.json" }, reader.RelativePaths);
+        Assert.Equal(cancellation.Token, reader.CancellationTokens.Single());
+    }
+
+    [Fact]
     public async Task EveryLaterOperation_FailsExplicitlyWithoutValidationOrDriveWork()
     {
         var validation = new RecordingValidationService();
         IRemoteFileSystem remote = Remote(validation);
         var operations = new (string Name, Func<Task> Invoke)[]
         {
-            (nameof(IRemoteFileSystem.ReadTextFileAsync),
-                async () => await remote.ReadTextFileAsync("run/manifest.json")),
             (nameof(IRemoteFileSystem.CreateTextFileIfMissingAsync),
                 () => remote.CreateTextFileIfMissingAsync(
                     "run/manifest.json",
@@ -342,6 +365,7 @@ public sealed class GoogleDriveRemoteFileSystemTests
         Assert.Contains(typeof(IGoogleDriveRootExistenceService), fieldTypes);
         Assert.Contains(typeof(IGoogleDriveFolderExistenceService), fieldTypes);
         Assert.Contains(typeof(IGoogleDriveRunFolderNameService), fieldTypes);
+        Assert.Contains(typeof(IGoogleDriveTextFileReadService), fieldTypes);
         Assert.DoesNotContain(typeof(IGoogleDriveObjectPathResolver), fieldTypes);
         Assert.DoesNotContain(typeof(IGoogleDriveObjectApi), fieldTypes);
         Assert.DoesNotContain(typeof(IGoogleDriveRootFolderApi), fieldTypes);
@@ -379,14 +403,16 @@ public sealed class GoogleDriveRemoteFileSystemTests
         RecordingValidationService validation,
         RecordingRootExistenceService? rootExistence = null,
         RecordingFolderExistenceService? folderExistence = null,
-        RecordingRunFolderNameService? runFolderNames = null) =>
+        RecordingRunFolderNameService? runFolderNames = null,
+        RecordingTextFileReadService? textFileReads = null) =>
         new GoogleDriveRemoteFileSystem(
             ProfileId,
             "GameSave Manager Backups",
             validation,
             rootExistence ?? new RecordingRootExistenceService(),
             folderExistence ?? new RecordingFolderExistenceService(),
-            runFolderNames ?? new RecordingRunFolderNameService());
+            runFolderNames ?? new RecordingRunFolderNameService(),
+            textFileReads ?? new RecordingTextFileReadService());
 
     private static SyncRemoteProfile Profile() =>
         new(
@@ -494,6 +520,30 @@ public sealed class GoogleDriveRemoteFileSystemTests
             CancellationToken cancellationToken = default)
         {
             ProfileIds.Add(remoteProfileId);
+            CancellationTokens.Add(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(Result);
+        }
+    }
+
+    private sealed class RecordingTextFileReadService
+        : IGoogleDriveTextFileReadService
+    {
+        public string? Result { get; set; }
+
+        public List<Guid> ProfileIds { get; } = new();
+
+        public List<string> RelativePaths { get; } = new();
+
+        public List<CancellationToken> CancellationTokens { get; } = new();
+
+        public Task<string?> ReadAsync(
+            Guid remoteProfileId,
+            string relativePath,
+            CancellationToken cancellationToken = default)
+        {
+            ProfileIds.Add(remoteProfileId);
+            RelativePaths.Add(relativePath);
             CancellationTokens.Add(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             return Task.FromResult(Result);
