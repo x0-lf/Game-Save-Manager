@@ -17,7 +17,9 @@ namespace GameSaves.Infrastructure.GoogleDrive
         RootValidationMetadataGet = 8,
         TextContentMetadataGet = 9,
         TextContentDownload = 10,
-        TextContentCreate = 11
+        TextContentCreate = 11,
+        TextContentReplacementMetadataGet = 12,
+        TextContentReplace = 13
     }
 
     internal enum GoogleDriveApiFailure
