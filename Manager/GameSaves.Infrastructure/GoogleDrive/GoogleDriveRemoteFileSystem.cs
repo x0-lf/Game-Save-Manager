@@ -24,6 +24,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
         private readonly IGoogleDriveFolderExistenceService _folderExistenceService;
         private readonly IGoogleDriveRunFolderNameService _runFolderNameService;
         private readonly IGoogleDriveTextFileReadService _textFileReadService;
+        private readonly IGoogleDriveProviderMetadataReadService
+            _providerMetadataReadService;
 
         public GoogleDriveRemoteFileSystemFactory(
             ISyncRemoteProfileRepository profileRepository,
@@ -31,7 +33,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
             IGoogleDriveRootExistenceService rootExistenceService,
             IGoogleDriveFolderExistenceService folderExistenceService,
             IGoogleDriveRunFolderNameService runFolderNameService,
-            IGoogleDriveTextFileReadService textFileReadService)
+            IGoogleDriveTextFileReadService textFileReadService,
+            IGoogleDriveProviderMetadataReadService providerMetadataReadService)
         {
             _profileRepository = profileRepository ??
                 throw new ArgumentNullException(nameof(profileRepository));
@@ -45,6 +48,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 throw new ArgumentNullException(nameof(runFolderNameService));
             _textFileReadService = textFileReadService ??
                 throw new ArgumentNullException(nameof(textFileReadService));
+            _providerMetadataReadService = providerMetadataReadService ??
+                throw new ArgumentNullException(nameof(providerMetadataReadService));
         }
 
         public IRemoteFileSystem Create(Guid remoteProfileId)
@@ -64,7 +69,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 _rootExistenceService,
                 _folderExistenceService,
                 _runFolderNameService,
-                _textFileReadService);
+                _textFileReadService,
+                _providerMetadataReadService);
         }
 
         private static string GetSafeDisplayRoot(SyncRemoteProfile? profile)
@@ -112,6 +118,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
         private readonly IGoogleDriveFolderExistenceService _folderExistenceService;
         private readonly IGoogleDriveRunFolderNameService _runFolderNameService;
         private readonly IGoogleDriveTextFileReadService _textFileReadService;
+        private readonly IGoogleDriveProviderMetadataReadService
+            _providerMetadataReadService;
 
         internal GoogleDriveRemoteFileSystem(
             Guid remoteProfileId,
@@ -120,7 +128,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
             IGoogleDriveRootExistenceService rootExistenceService,
             IGoogleDriveFolderExistenceService folderExistenceService,
             IGoogleDriveRunFolderNameService runFolderNameService,
-            IGoogleDriveTextFileReadService textFileReadService)
+            IGoogleDriveTextFileReadService textFileReadService,
+            IGoogleDriveProviderMetadataReadService providerMetadataReadService)
         {
             if (remoteProfileId == Guid.Empty)
             {
@@ -147,6 +156,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 throw new ArgumentNullException(nameof(runFolderNameService));
             _textFileReadService = textFileReadService ??
                 throw new ArgumentNullException(nameof(textFileReadService));
+            _providerMetadataReadService = providerMetadataReadService ??
+                throw new ArgumentNullException(nameof(providerMetadataReadService));
         }
 
         public string DisplayRoot { get; }
@@ -207,7 +218,10 @@ namespace GameSaves.Infrastructure.GoogleDrive
         public Task<string?> ReadProviderMetadataAsync(
             string relativePath,
             CancellationToken cancellationToken = default) =>
-            Unsupported<string?>();
+            _providerMetadataReadService.ReadAsync(
+                _remoteProfileId,
+                relativePath,
+                cancellationToken);
 
         public Task ReplaceProviderMetadataAsync(
             string relativePath,
