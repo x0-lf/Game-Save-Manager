@@ -26,6 +26,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
         private readonly IGoogleDriveTextFileReadService _textFileReadService;
         private readonly IGoogleDriveProviderMetadataReadService
             _providerMetadataReadService;
+        private readonly IGoogleDriveCreateOnlyTextFileService
+            _createOnlyTextFileService;
 
         public GoogleDriveRemoteFileSystemFactory(
             ISyncRemoteProfileRepository profileRepository,
@@ -34,7 +36,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
             IGoogleDriveFolderExistenceService folderExistenceService,
             IGoogleDriveRunFolderNameService runFolderNameService,
             IGoogleDriveTextFileReadService textFileReadService,
-            IGoogleDriveProviderMetadataReadService providerMetadataReadService)
+            IGoogleDriveProviderMetadataReadService providerMetadataReadService,
+            IGoogleDriveCreateOnlyTextFileService createOnlyTextFileService)
         {
             _profileRepository = profileRepository ??
                 throw new ArgumentNullException(nameof(profileRepository));
@@ -50,6 +53,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 throw new ArgumentNullException(nameof(textFileReadService));
             _providerMetadataReadService = providerMetadataReadService ??
                 throw new ArgumentNullException(nameof(providerMetadataReadService));
+            _createOnlyTextFileService = createOnlyTextFileService ??
+                throw new ArgumentNullException(nameof(createOnlyTextFileService));
         }
 
         public IRemoteFileSystem Create(Guid remoteProfileId)
@@ -70,7 +75,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 _folderExistenceService,
                 _runFolderNameService,
                 _textFileReadService,
-                _providerMetadataReadService);
+                _providerMetadataReadService,
+                _createOnlyTextFileService);
         }
 
         private static string GetSafeDisplayRoot(SyncRemoteProfile? profile)
@@ -103,9 +109,9 @@ namespace GameSaves.Infrastructure.GoogleDrive
 
     /// <summary>
     /// Google Drive implementation boundary for the currently completed
-    /// remote primitives. Text writes, recursive listing, and transfer
-    /// operations remain unavailable so SyncEngine cannot treat Google Drive
-    /// as a working provider.
+    /// remote primitives. Mutable metadata writes, recursive listing, and
+    /// transfer operations remain unavailable so SyncEngine cannot treat
+    /// Google Drive as a working provider.
     /// </summary>
     internal sealed class GoogleDriveRemoteFileSystem : IRemoteFileSystem
     {
@@ -120,6 +126,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
         private readonly IGoogleDriveTextFileReadService _textFileReadService;
         private readonly IGoogleDriveProviderMetadataReadService
             _providerMetadataReadService;
+        private readonly IGoogleDriveCreateOnlyTextFileService
+            _createOnlyTextFileService;
 
         internal GoogleDriveRemoteFileSystem(
             Guid remoteProfileId,
@@ -129,7 +137,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
             IGoogleDriveFolderExistenceService folderExistenceService,
             IGoogleDriveRunFolderNameService runFolderNameService,
             IGoogleDriveTextFileReadService textFileReadService,
-            IGoogleDriveProviderMetadataReadService providerMetadataReadService)
+            IGoogleDriveProviderMetadataReadService providerMetadataReadService,
+            IGoogleDriveCreateOnlyTextFileService createOnlyTextFileService)
         {
             if (remoteProfileId == Guid.Empty)
             {
@@ -158,6 +167,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 throw new ArgumentNullException(nameof(textFileReadService));
             _providerMetadataReadService = providerMetadataReadService ??
                 throw new ArgumentNullException(nameof(providerMetadataReadService));
+            _createOnlyTextFileService = createOnlyTextFileService ??
+                throw new ArgumentNullException(nameof(createOnlyTextFileService));
         }
 
         public string DisplayRoot { get; }
@@ -213,7 +224,11 @@ namespace GameSaves.Infrastructure.GoogleDrive
             string relativePath,
             string content,
             CancellationToken cancellationToken = default) =>
-            Unsupported();
+            _createOnlyTextFileService.CreateAsync(
+                _remoteProfileId,
+                relativePath,
+                content,
+                cancellationToken);
 
         public Task<string?> ReadProviderMetadataAsync(
             string relativePath,

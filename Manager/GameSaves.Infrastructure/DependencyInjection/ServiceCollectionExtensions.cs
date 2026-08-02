@@ -150,6 +150,8 @@ namespace GameSaves.Infrastructure.DependencyInjection
                 GoogleDriveTextFileReadService>();
             services.AddSingleton<IGoogleDriveProviderMetadataReadService,
                 GoogleDriveProviderMetadataReadService>();
+            services.AddSingleton<IGoogleDriveCreateOnlyTextFileService,
+                GoogleDriveCreateOnlyTextFileService>();
             services.AddSingleton<IGoogleDriveObjectIdCache,
                 GoogleDriveObjectIdCache>();
             services.AddSingleton<GoogleDriveObjectCreationCoordinator>();

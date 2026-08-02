@@ -32,7 +32,8 @@ public sealed class GoogleDriveRemoteFileSystemTests
             new RecordingFolderExistenceService(),
             new RecordingRunFolderNameService(),
             new RecordingTextFileReadService(),
-            new RecordingProviderMetadataReadService());
+            new RecordingProviderMetadataReadService(),
+            new RecordingCreateOnlyTextFileService());
 
         IRemoteFileSystem first = factory.Create(ProfileId);
         IRemoteFileSystem second = factory.Create(ProfileId);
@@ -65,7 +66,8 @@ public sealed class GoogleDriveRemoteFileSystemTests
             new RecordingFolderExistenceService(),
             new RecordingRunFolderNameService(),
             new RecordingTextFileReadService(),
-            new RecordingProviderMetadataReadService());
+            new RecordingProviderMetadataReadService(),
+            new RecordingCreateOnlyTextFileService());
 
         await factory.Create(ProfileId).ValidateAsync();
         await factory.Create(secondProfileId).ValidateAsync();
@@ -95,7 +97,8 @@ public sealed class GoogleDriveRemoteFileSystemTests
             new RecordingFolderExistenceService(),
             new RecordingRunFolderNameService(),
             new RecordingTextFileReadService(),
-            new RecordingProviderMetadataReadService());
+            new RecordingProviderMetadataReadService(),
+            new RecordingCreateOnlyTextFileService());
 
         IRemoteFileSystem remote = factory.Create(ProfileId);
 
@@ -117,7 +120,8 @@ public sealed class GoogleDriveRemoteFileSystemTests
             new RecordingFolderExistenceService(),
             new RecordingRunFolderNameService(),
             new RecordingTextFileReadService(),
-            new RecordingProviderMetadataReadService());
+            new RecordingProviderMetadataReadService(),
+            new RecordingCreateOnlyTextFileService());
 
         IRemoteFileSystem missing = factory.Create(ProfileId);
         repository.Create(Profile() with
@@ -160,6 +164,8 @@ public sealed class GoogleDriveRemoteFileSystemTests
             provider.GetRequiredService<IGoogleDriveTextFileReadService>());
         Assert.IsType<GoogleDriveProviderMetadataReadService>(
             provider.GetRequiredService<IGoogleDriveProviderMetadataReadService>());
+        Assert.IsType<GoogleDriveCreateOnlyTextFileService>(
+            provider.GetRequiredService<IGoogleDriveCreateOnlyTextFileService>());
         IRemoteFileSystem remote = factory.Create(ProfileId);
 
         Assert.IsType<GoogleDriveRemoteFileSystemFactory>(factory);
@@ -336,16 +342,32 @@ public sealed class GoogleDriveRemoteFileSystemTests
     }
 
     [Fact]
+    public async Task CreateTextFileIfMissingAsync_DelegatesPathContentProfileAndCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var creator = new RecordingCreateOnlyTextFileService();
+        IRemoteFileSystem remote = Remote(
+            new RecordingValidationService(),
+            createOnlyTextFiles: creator);
+
+        await remote.CreateTextFileIfMissingAsync(
+            "run/manifest.json",
+            "{\"version\":1}",
+            cancellation.Token);
+
+        Assert.Equal(new[] { ProfileId }, creator.ProfileIds);
+        Assert.Equal(new[] { "run/manifest.json" }, creator.RelativePaths);
+        Assert.Equal(new[] { "{\"version\":1}" }, creator.Contents);
+        Assert.Equal(cancellation.Token, creator.CancellationTokens.Single());
+    }
+
+    [Fact]
     public async Task EveryLaterOperation_FailsExplicitlyWithoutValidationOrDriveWork()
     {
         var validation = new RecordingValidationService();
         IRemoteFileSystem remote = Remote(validation);
         var operations = new (string Name, Func<Task> Invoke)[]
         {
-            (nameof(IRemoteFileSystem.CreateTextFileIfMissingAsync),
-                () => remote.CreateTextFileIfMissingAsync(
-                    "run/manifest.json",
-                    "{}")),
             (nameof(IRemoteFileSystem.ReplaceProviderMetadataAsync),
                 () => remote.ReplaceProviderMetadataAsync(
                     ".gamesave-sync/sync-log.json",
@@ -393,6 +415,9 @@ public sealed class GoogleDriveRemoteFileSystemTests
         Assert.Contains(
             typeof(IGoogleDriveProviderMetadataReadService),
             fieldTypes);
+        Assert.Contains(
+            typeof(IGoogleDriveCreateOnlyTextFileService),
+            fieldTypes);
         Assert.DoesNotContain(typeof(IGoogleDriveObjectPathResolver), fieldTypes);
         Assert.DoesNotContain(typeof(IGoogleDriveObjectApi), fieldTypes);
         Assert.DoesNotContain(typeof(IGoogleDriveRootFolderApi), fieldTypes);
@@ -432,7 +457,8 @@ public sealed class GoogleDriveRemoteFileSystemTests
         RecordingFolderExistenceService? folderExistence = null,
         RecordingRunFolderNameService? runFolderNames = null,
         RecordingTextFileReadService? textFileReads = null,
-        RecordingProviderMetadataReadService? providerMetadataReads = null) =>
+        RecordingProviderMetadataReadService? providerMetadataReads = null,
+        RecordingCreateOnlyTextFileService? createOnlyTextFiles = null) =>
         new GoogleDriveRemoteFileSystem(
             ProfileId,
             "GameSave Manager Backups",
@@ -441,7 +467,8 @@ public sealed class GoogleDriveRemoteFileSystemTests
             folderExistence ?? new RecordingFolderExistenceService(),
             runFolderNames ?? new RecordingRunFolderNameService(),
             textFileReads ?? new RecordingTextFileReadService(),
-            providerMetadataReads ?? new RecordingProviderMetadataReadService());
+            providerMetadataReads ?? new RecordingProviderMetadataReadService(),
+            createOnlyTextFiles ?? new RecordingCreateOnlyTextFileService());
 
     private static SyncRemoteProfile Profile() =>
         new(
@@ -600,6 +627,32 @@ public sealed class GoogleDriveRemoteFileSystemTests
             CancellationTokens.Add(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             return Task.FromResult(Result);
+        }
+    }
+
+    private sealed class RecordingCreateOnlyTextFileService
+        : IGoogleDriveCreateOnlyTextFileService
+    {
+        public List<Guid> ProfileIds { get; } = new();
+
+        public List<string> RelativePaths { get; } = new();
+
+        public List<string> Contents { get; } = new();
+
+        public List<CancellationToken> CancellationTokens { get; } = new();
+
+        public Task CreateAsync(
+            Guid remoteProfileId,
+            string relativePath,
+            string content,
+            CancellationToken cancellationToken = default)
+        {
+            ProfileIds.Add(remoteProfileId);
+            RelativePaths.Add(relativePath);
+            Contents.Add(content);
+            CancellationTokens.Add(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
         }
     }
 }
