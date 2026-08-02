@@ -142,6 +142,10 @@ namespace GameSaves.Infrastructure.DependencyInjection
                 GoogleDriveTextContentClientFactory>();
             services.AddSingleton<IGoogleDriveTextContentApi,
                 GoogleDriveTextContentApi>();
+            services.AddSingleton<IGoogleDriveTextCreationClientFactory,
+                GoogleDriveTextCreationClientFactory>();
+            services.AddSingleton<IGoogleDriveTextCreationApi,
+                GoogleDriveTextCreationApi>();
             services.AddSingleton<IGoogleDriveTextFileReadService,
                 GoogleDriveTextFileReadService>();
             services.AddSingleton<IGoogleDriveProviderMetadataReadService,
