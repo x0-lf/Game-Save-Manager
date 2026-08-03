@@ -578,13 +578,24 @@ namespace GameSaves.Infrastructure.GoogleDrive
             }
             catch (GoogleDriveApiException ex)
             {
-                if (ex.Failure == GoogleDriveApiFailure.NotFound)
+                if (ex.Failure == GoogleDriveApiFailure.AuthorizationRevoked)
                 {
-                    InvalidateStaleEntry(
+                    TryInvalidateProfileForRevocation();
+                }
+                else if (ex.Failure is GoogleDriveApiFailure.NotFound or
+                    GoogleDriveApiFailure.AccessDenied or
+                    GoogleDriveApiFailure.InsufficientScope or
+                    GoogleDriveApiFailure.ApiNotEnabled)
+                {
+                    TryInvalidateStaleEntry(
                         cacheScope,
                         parentId,
                         exactName,
                         expectedKind);
+                }
+
+                if (ex.Failure == GoogleDriveApiFailure.NotFound)
+                {
                     return null;
                 }
 
@@ -613,6 +624,42 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 parentId,
                 exactName,
                 expectedKind);
+        }
+
+        private void TryInvalidateStaleEntry(
+            GoogleDriveObjectCacheScope cacheScope,
+            string parentId,
+            string exactName,
+            GoogleDriveObjectKind expectedKind)
+        {
+            try
+            {
+                InvalidateStaleEntry(
+                    cacheScope,
+                    parentId,
+                    exactName,
+                    expectedKind);
+            }
+            catch
+            {
+                // Cache maintenance must not replace the sanitized provider
+                // failure or cause a retry against an uncertain identity.
+            }
+        }
+
+        private void TryInvalidateProfileForRevocation()
+        {
+            try
+            {
+                _objectIdCache.InvalidateProfile(
+                    _remoteProfileId,
+                    GoogleDriveObjectCacheInvalidationReason
+                        .AuthorizationRevocation);
+            }
+            catch
+            {
+                // The confirmed authentication failure remains authoritative.
+            }
         }
 
         private static bool IsCurrentCacheMatch(

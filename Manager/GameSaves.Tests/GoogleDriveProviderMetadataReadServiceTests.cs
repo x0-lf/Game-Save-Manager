@@ -286,7 +286,10 @@ public sealed class GoogleDriveProviderMetadataReadServiceTests
     private static GoogleDriveProviderMetadataReadService Service(
         RecordingContextFactory contexts,
         RecordingTextContentApi content) =>
-        new(new GoogleDriveTextFileReadService(contexts, content));
+        new(new GoogleDriveTextFileReadService(
+            contexts,
+            content,
+            new GoogleDriveObjectIdCache()));
 
     private static GoogleDriveObjectResolutionResult Resolution(
         GoogleDriveObjectResolutionStatus status) =>

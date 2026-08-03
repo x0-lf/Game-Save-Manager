@@ -255,6 +255,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                         request,
                         content,
                         cancellationToken).ConfigureAwait(false);
+                    cancellationToken.ThrowIfCancellationRequested();
                 }
                 catch (Exception ex)
                 {

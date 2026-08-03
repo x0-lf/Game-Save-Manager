@@ -25,7 +25,10 @@ public sealed class GoogleDriveTextFileReadServiceTests
         {
             DefaultContent = Encoding.UTF8.GetBytes(json)
         };
-        var service = new GoogleDriveTextFileReadService(contexts, content);
+        var service = new GoogleDriveTextFileReadService(
+            contexts,
+            content,
+            new GoogleDriveObjectIdCache());
 
         string? result = await service.ReadAsync(
             ProfileId,
@@ -53,7 +56,8 @@ public sealed class GoogleDriveTextFileReadServiceTests
         var content = new RecordingTextContentApi();
         var service = new GoogleDriveTextFileReadService(
             new RecordingContextFactory(_ => resolver),
-            content);
+            content,
+            new GoogleDriveObjectIdCache());
 
         string? result = await service.ReadAsync(
             ProfileId,
@@ -74,7 +78,8 @@ public sealed class GoogleDriveTextFileReadServiceTests
         var resolver = new RecordingResolver();
         var service = new GoogleDriveTextFileReadService(
             new RecordingContextFactory(_ => resolver),
-            new RecordingTextContentApi());
+            new RecordingTextContentApi(),
+            new GoogleDriveObjectIdCache());
 
         await service.ReadAsync(ProfileId, relativePath);
 
@@ -138,7 +143,8 @@ public sealed class GoogleDriveTextFileReadServiceTests
         };
         var service = new GoogleDriveTextFileReadService(
             new RecordingContextFactory(_ => resolver),
-            content);
+            content,
+            new GoogleDriveObjectIdCache());
 
         GoogleDriveRemoteOperationException exception =
             await Assert.ThrowsAsync<GoogleDriveRemoteOperationException>(
@@ -151,6 +157,92 @@ public sealed class GoogleDriveTextFileReadServiceTests
         Assert.DoesNotContain("resolved-file-id", exception.ToString(),
             StringComparison.Ordinal);
         Assert.Equal(0, resolver.EnsureCalls);
+    }
+
+    [Fact]
+    public async Task ConfirmedStaleContentFailure_RemovesOnlyTheAffectedFileEntry()
+    {
+        var cache = SeedSafeFileCache();
+        GoogleDriveObjectCacheScope scope = new(
+            ProfileId,
+            RecordingContextFactory.RootId);
+        Assert.True(cache.TryStoreUniqueValidated(
+            scope,
+            "other-run-id",
+            "manifest.json",
+            GoogleDriveObjectKind.File,
+            File("other-file-id", "manifest.json", "other-run-id")));
+        var content = new RecordingTextContentApi
+        {
+            Failure = GoogleDriveApiFailureMapper.Create(
+                GoogleDriveApiOperation.TextContentMetadataGet,
+                GoogleDriveApiFailure.NotFound,
+                "GoogleDriveTextContentNotFound")
+        };
+        var resolver = new RecordingResolver
+        {
+            ResultFactory = path => new GoogleDriveObjectResolutionResult(
+                GoogleDriveObjectResolutionStatus.Found,
+                path,
+                GoogleDriveObjectKind.File,
+                File("resolved-file-id", "manifest.json", "run-id"))
+        };
+        var service = new GoogleDriveTextFileReadService(
+            new RecordingContextFactory(_ => resolver),
+            content,
+            cache);
+
+        GoogleDriveRemoteOperationException exception =
+            await Assert.ThrowsAsync<GoogleDriveRemoteOperationException>(() =>
+                service.ReadAsync(ProfileId, "run/manifest.json"));
+
+        Assert.True(exception.Result.CacheInvalidated);
+        Assert.False(cache.TryGet(
+            scope,
+            "run-id",
+            "manifest.json",
+            GoogleDriveObjectKind.File,
+            out _));
+        Assert.True(cache.TryGet(
+            scope,
+            "other-run-id",
+            "manifest.json",
+            GoogleDriveObjectKind.File,
+            out _));
+    }
+
+    [Theory]
+    [InlineData((int)GoogleDriveApiFailure.RateLimited)]
+    [InlineData((int)GoogleDriveApiFailure.QuotaExceeded)]
+    [InlineData((int)GoogleDriveApiFailure.Unavailable)]
+    public async Task TemporaryContentFailure_PreservesValidatedCache(
+        int failureValue)
+    {
+        var cache = SeedSafeFileCache();
+        var content = new RecordingTextContentApi
+        {
+            Failure = GoogleDriveApiFailureMapper.Create(
+                GoogleDriveApiOperation.TextContentDownload,
+                (GoogleDriveApiFailure)failureValue,
+                "GoogleDriveTemporaryFailure",
+                retryable: true)
+        };
+        var service = new GoogleDriveTextFileReadService(
+            new RecordingContextFactory(_ => new RecordingResolver()),
+            content,
+            cache);
+
+        GoogleDriveRemoteOperationException exception =
+            await Assert.ThrowsAsync<GoogleDriveRemoteOperationException>(() =>
+                service.ReadAsync(ProfileId, "run/manifest.json"));
+
+        Assert.False(exception.Result.CacheInvalidated);
+        Assert.True(cache.TryGet(
+            new GoogleDriveObjectCacheScope(ProfileId, RecordingContextFactory.RootId),
+            "run-id",
+            "manifest.json",
+            GoogleDriveObjectKind.File,
+            out _));
     }
 
     [Fact]
@@ -168,7 +260,8 @@ public sealed class GoogleDriveTextFileReadServiceTests
         var content = new RecordingTextContentApi();
         var service = new GoogleDriveTextFileReadService(
             new RecordingContextFactory(_ => resolver),
-            content);
+            content,
+            new GoogleDriveObjectIdCache());
 
         GoogleDriveRemoteOperationException exception =
             await Assert.ThrowsAsync<GoogleDriveRemoteOperationException>(
@@ -197,7 +290,8 @@ public sealed class GoogleDriveTextFileReadServiceTests
         var content = new RecordingTextContentApi();
         var service = new GoogleDriveTextFileReadService(
             new RecordingContextFactory(_ => resolver),
-            content);
+            content,
+            new GoogleDriveObjectIdCache());
 
         GoogleDriveRemoteOperationException exception =
             await Assert.ThrowsAsync<GoogleDriveRemoteOperationException>(
@@ -235,7 +329,7 @@ public sealed class GoogleDriveTextFileReadServiceTests
         var content = new RecordingTextContentApi();
         content.Contents["old-file-id"] = Encoding.UTF8.GetBytes("old");
         content.Contents["new-file-id"] = Encoding.UTF8.GetBytes("new");
-        var service = new GoogleDriveTextFileReadService(contexts, content);
+        var service = new GoogleDriveTextFileReadService(contexts, content, cache);
 
         Assert.Equal("old", await service.ReadAsync(
             ProfileId,
@@ -272,7 +366,10 @@ public sealed class GoogleDriveTextFileReadServiceTests
         var resolver = new RecordingResolver { Cancel = true };
         var contexts = new RecordingContextFactory(_ => resolver);
         var content = new RecordingTextContentApi();
-        var service = new GoogleDriveTextFileReadService(contexts, content);
+        var service = new GoogleDriveTextFileReadService(
+            contexts,
+            content,
+            new GoogleDriveObjectIdCache());
         using var cancellation = new CancellationTokenSource();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
@@ -290,6 +387,35 @@ public sealed class GoogleDriveTextFileReadServiceTests
     }
 
     [Fact]
+    public async Task LateResolutionAfterCancellationCannotStartContentDownload()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var resolver = new RecordingResolver
+        {
+            ResultFactory = path =>
+            {
+                cancellation.Cancel();
+                return Resolution(GoogleDriveObjectResolutionStatus.Found, path);
+            }
+        };
+        var contexts = new RecordingContextFactory(_ => resolver);
+        var content = new RecordingTextContentApi();
+        var service = new GoogleDriveTextFileReadService(
+            contexts,
+            content,
+            new GoogleDriveObjectIdCache());
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            service.ReadAsync(
+                ProfileId,
+                "run/manifest.json",
+                cancellation.Token));
+
+        Assert.Empty(content.FileIds);
+        Assert.True(contexts.Credentials.Single().IsDisposed);
+    }
+
+    [Fact]
     public async Task SyncEngine_ConvertsUnreadableGoogleManifestIntoExistingWarning()
     {
         using var temp = new TemporaryDirectory();
@@ -299,7 +425,10 @@ public sealed class GoogleDriveTextFileReadServiceTests
         {
             DefaultContent = [0xC3, 0x28]
         };
-        var reader = new GoogleDriveTextFileReadService(contexts, content);
+        var reader = new GoogleDriveTextFileReadService(
+            contexts,
+            content,
+            new GoogleDriveObjectIdCache());
         var remote = new GoogleDriveRemoteFileSystem(
             ProfileId,
             "Google Drive",
@@ -335,7 +464,20 @@ public sealed class GoogleDriveTextFileReadServiceTests
     private static GoogleDriveTextFileReadService Service(byte[] content) =>
         new(
             new RecordingContextFactory(_ => new RecordingResolver()),
-            new RecordingTextContentApi { DefaultContent = content });
+            new RecordingTextContentApi { DefaultContent = content },
+            new GoogleDriveObjectIdCache());
+
+    private static GoogleDriveObjectIdCache SeedSafeFileCache()
+    {
+        var cache = new GoogleDriveObjectIdCache();
+        Assert.True(cache.TryStoreUniqueValidated(
+            new GoogleDriveObjectCacheScope(ProfileId, RecordingContextFactory.RootId),
+            "run-id",
+            "manifest.json",
+            GoogleDriveObjectKind.File,
+            File("resolved-file-id", "manifest.json", "run-id")));
+        return cache;
+    }
 
     private static GoogleDriveObjectResolutionResult Resolution(
         GoogleDriveObjectResolutionStatus status,

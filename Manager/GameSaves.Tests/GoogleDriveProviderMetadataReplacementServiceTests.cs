@@ -408,6 +408,82 @@ public sealed class GoogleDriveProviderMetadataReplacementServiceTests
             StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData((int)GoogleDriveObjectResolutionStatus.RateLimited)]
+    [InlineData((int)GoogleDriveObjectResolutionStatus.QuotaExceeded)]
+    [InlineData((int)GoogleDriveObjectResolutionStatus.Unavailable)]
+    public async Task TemporaryNameLookupFailure_PreservesValidatedCache(
+        int statusValue)
+    {
+        var cache = new GoogleDriveObjectIdCache();
+        Assert.True(cache.TryStoreUniqueValidated(
+            new GoogleDriveObjectCacheScope(ProfileId, RootId),
+            ParentId,
+            ExactFileName,
+            GoogleDriveObjectKind.File,
+            Metadata()));
+        var resolver = new RecordingResolver
+        {
+            FindResult = new GoogleDriveObjectResolutionResult(
+                (GoogleDriveObjectResolutionStatus)statusValue,
+                GoogleDriveRelativePath.Parse(ExactFileName),
+                GoogleDriveObjectKind.File,
+                errorCode: "GoogleDriveTemporaryFailure",
+                message: "Google Drive is temporarily unavailable.")
+        };
+        var creation = new RecordingTextCreationApi();
+        var replacement = new RecordingTextReplacementApi();
+        var service = Service(
+            new RecordingContextFactory(resolver),
+            creation,
+            replacement,
+            cache);
+
+        await Assert.ThrowsAsync<GoogleDriveRemoteOperationException>(() =>
+            service.ReplaceAsync(
+                ProfileId,
+                RemoteProviderMetadataPath.SyncLog,
+                "{}",
+                CancellationToken.None));
+
+        AssertCached(cache, FileId);
+        Assert.Equal(0, creation.Calls);
+        Assert.Equal(0, replacement.Calls);
+    }
+
+    [Fact]
+    public async Task LateTargetResultAfterCancellationCannotMutateOrCache()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var resolver = new RecordingResolver
+        {
+            FindHandler = (_, _, _, _) =>
+            {
+                cancellation.Cancel();
+                return Task.FromResult(Found());
+            }
+        };
+        var creation = new RecordingTextCreationApi();
+        var replacement = new RecordingTextReplacementApi();
+        var cache = new GoogleDriveObjectIdCache();
+        var service = Service(
+            new RecordingContextFactory(resolver),
+            creation,
+            replacement,
+            cache);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            service.ReplaceAsync(
+                ProfileId,
+                RemoteProviderMetadataPath.SyncLog,
+                "{}",
+                cancellation.Token));
+
+        Assert.Equal(0, creation.Calls);
+        Assert.Equal(0, replacement.Calls);
+        AssertNotCached(cache);
+    }
+
     [Fact]
     public async Task OversizedContent_IsRejectedBeforeAuthentication()
     {

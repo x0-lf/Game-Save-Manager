@@ -9,7 +9,11 @@ namespace GameSaves.Infrastructure.GoogleDrive
     {
         public string Fields => GoogleDriveRequestContract.MetadataFields;
 
-        public bool SupportsAllDrives => GoogleDriveRequestContract.SupportsAllDrives;
+        // Authoritative-ID inspection must see an object that moved into a
+        // shared drive so the caller can reject it explicitly. This does not
+        // enable shared-drive listing or mutation.
+        public bool SupportsAllDrives =>
+            GoogleDriveRequestContract.AuthoritativeIdLookupSupportsAllDrives;
 
         public override string ToString() => "Google Drive object metadata request";
     }
@@ -138,9 +142,11 @@ namespace GameSaves.Infrastructure.GoogleDrive
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 using IGoogleDriveObjectClient client = _clientFactory.Create(credential);
-                return await client.GetAsync(
+                GoogleDriveObjectMetadata metadata = await client.GetAsync(
                     new GoogleDriveObjectGetRequest(objectId),
                     cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+                return metadata;
             }
             catch (Exception ex)
             {
@@ -202,6 +208,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                     GoogleDriveObjectListPage page = await client.ListAsync(
                         new GoogleDriveObjectListRequest(query, pageToken),
                         cancellationToken);
+                    cancellationToken.ThrowIfCancellationRequested();
 
                     if (page.IncompleteSearch)
                     {
@@ -290,9 +297,11 @@ namespace GameSaves.Infrastructure.GoogleDrive
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 using IGoogleDriveObjectClient client = _clientFactory.Create(credential);
-                return await client.CreateFolderAsync(
+                GoogleDriveObjectMetadata created = await client.CreateFolderAsync(
                     new GoogleDriveFolderCreateRequest(name, parentId),
                     cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+                return created;
             }
             catch (Exception ex)
             {

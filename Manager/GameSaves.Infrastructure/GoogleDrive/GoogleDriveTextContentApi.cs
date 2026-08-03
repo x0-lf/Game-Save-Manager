@@ -227,6 +227,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 metadata = await client.GetMetadataAsync(
                     metadataRequest,
                     cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
             }
             catch (Exception ex)
             {
@@ -245,6 +246,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                     new GoogleDriveTextContentMediaRequest(fileId),
                     destination,
                     cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
             }
             catch (GoogleDriveTextContentLimitExceededException)
             {

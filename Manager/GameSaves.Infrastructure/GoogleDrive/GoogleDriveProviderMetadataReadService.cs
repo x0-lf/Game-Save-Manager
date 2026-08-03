@@ -25,17 +25,19 @@ namespace GameSaves.Infrastructure.GoogleDrive
             _textFileReadService = textFileReadService ??
                 throw new ArgumentNullException(nameof(textFileReadService));
 
-        public Task<string?> ReadAsync(
+        public async Task<string?> ReadAsync(
             Guid remoteProfileId,
             string relativePath,
             CancellationToken cancellationToken = default)
         {
             string validatedPath = RemoteProviderMetadataPath.Validate(relativePath);
 
-            return _textFileReadService.ReadAsync(
+            string? content = await _textFileReadService.ReadAsync(
                 remoteProfileId,
                 validatedPath,
-                cancellationToken);
+                cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            return content;
         }
     }
 }

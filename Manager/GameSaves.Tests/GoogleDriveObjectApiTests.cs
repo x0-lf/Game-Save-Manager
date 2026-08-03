@@ -383,7 +383,7 @@ public sealed class GoogleDriveObjectApiTests
     }
 
     [Fact]
-    public async Task GetById_UsesNarrowMyDriveMetadataRequest()
+    public async Task GetById_UsesNarrowMetadataAndCanDetectSharedDriveMoves()
     {
         var client = new RecordingObjectClient
         {
@@ -402,7 +402,82 @@ public sealed class GoogleDriveObjectApiTests
         Assert.Equal(
             "id,name,mimeType,trashed,parents,driveId",
             request.Fields);
-        Assert.False(request.SupportsAllDrives);
+        Assert.True(request.SupportsAllDrives);
+    }
+
+    [Fact]
+    public async Task LateGetResultAfterCancellation_IsRejectedAndDisposesClient()
+    {
+        var completion = new TaskCompletionSource<GoogleDriveObjectMetadata>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var client = new RecordingObjectClient
+        {
+            GetHandler = _ => completion.Task
+        };
+        GoogleDriveObjectApi api = CreateApi(client);
+        using var cancellation = new CancellationTokenSource();
+
+        Task<GoogleDriveObjectMetadata> operation = api.GetByIdAsync(
+            null!,
+            "object-id",
+            cancellation.Token);
+        cancellation.Cancel();
+        completion.SetResult(Object("object-id", "Object"));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => operation);
+        Assert.Equal(1, client.DisposeCalls);
+    }
+
+    [Fact]
+    public async Task LateListResultAfterCancellation_IsNotAccumulatedAndDisposesClient()
+    {
+        var completion = new TaskCompletionSource<GoogleDriveObjectListPage>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var client = new RecordingObjectClient
+        {
+            ListHandler = _ => completion.Task
+        };
+        GoogleDriveObjectApi api = CreateApi(client);
+        using var cancellation = new CancellationTokenSource();
+
+        Task<IReadOnlyList<GoogleDriveObjectMetadata>> operation =
+            api.ListChildrenByExactNameAsync(
+                null!,
+                "parent-id",
+                "manifest.json",
+                cancellation.Token);
+        cancellation.Cancel();
+        completion.SetResult(new GoogleDriveObjectListPage(
+            [Object("late-id", "manifest.json")],
+            NextPageToken: null,
+            IncompleteSearch: false));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => operation);
+        Assert.Equal(1, client.DisposeCalls);
+    }
+
+    [Fact]
+    public async Task LateFolderCreateResultAfterCancellation_IsRejectedAndDisposesClient()
+    {
+        var completion = new TaskCompletionSource<GoogleDriveObjectMetadata>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var client = new RecordingObjectClient
+        {
+            CreateHandler = _ => completion.Task
+        };
+        GoogleDriveObjectApi api = CreateApi(client);
+        using var cancellation = new CancellationTokenSource();
+
+        Task<GoogleDriveObjectMetadata> operation = api.CreateFolderAsync(
+            null!,
+            "parent-id",
+            "Folder",
+            cancellation.Token);
+        cancellation.Cancel();
+        completion.SetResult(Object("late-id", "Folder"));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => operation);
+        Assert.Equal(1, client.DisposeCalls);
     }
 
     [Fact]
@@ -452,6 +527,13 @@ public sealed class GoogleDriveObjectApiTests
             "nextPageToken,incompleteSearch," +
             "files(id,name,mimeType,trashed,parents,driveId)",
             list.Fields);
+
+        var getContract = new GoogleDriveObjectGetRequest("object-id");
+        Google.Apis.Drive.v3.FilesResource.GetRequest get =
+            GoogleDriveObjectClient.CreateGetRequest(drive, getContract);
+
+        Assert.Equal(GoogleDriveRequestContract.MetadataFields, get.Fields);
+        Assert.True(get.SupportsAllDrives);
 
         var createContract = new GoogleDriveFolderCreateRequest(
             "Exact Folder",
@@ -598,6 +680,15 @@ public sealed class GoogleDriveObjectApiTests
 
         public Exception? ListException { get; set; }
 
+        public Func<CancellationToken, Task<GoogleDriveObjectMetadata>>?
+            GetHandler { get; set; }
+
+        public Func<CancellationToken, Task<GoogleDriveObjectListPage>>?
+            ListHandler { get; set; }
+
+        public Func<CancellationToken, Task<GoogleDriveObjectMetadata>>?
+            CreateHandler { get; set; }
+
         public CancellationToken LastListCancellationToken { get; private set; }
 
         public int DisposeCalls { get; private set; }
@@ -608,6 +699,8 @@ public sealed class GoogleDriveObjectApiTests
         {
             cancellationToken.ThrowIfCancellationRequested();
             GetRequests.Add(request);
+            if (GetHandler is not null)
+                return GetHandler(cancellationToken);
             return Task.FromResult(GetResult);
         }
 
@@ -621,6 +714,9 @@ public sealed class GoogleDriveObjectApiTests
             if (ListException is not null)
                 return Task.FromException<GoogleDriveObjectListPage>(ListException);
 
+            if (ListHandler is not null)
+                return ListHandler(cancellationToken);
+
             cancellationToken.ThrowIfCancellationRequested();
             return Task.FromResult(Pages.Dequeue());
         }
@@ -631,6 +727,8 @@ public sealed class GoogleDriveObjectApiTests
         {
             cancellationToken.ThrowIfCancellationRequested();
             CreateRequests.Add(request);
+            if (CreateHandler is not null)
+                return CreateHandler(cancellationToken);
             return Task.FromResult(CreateResult);
         }
 

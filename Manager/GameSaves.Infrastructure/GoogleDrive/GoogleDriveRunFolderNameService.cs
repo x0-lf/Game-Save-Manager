@@ -49,11 +49,13 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 await _contextFactory.CreateAsync(
                     remoteProfileId,
                     cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
 
             GoogleDriveRunFolderDiscoveryResult discovery =
                 await _discoveryService.DiscoverAsync(
                     context,
                     cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
 
             var includedCandidates = new List<GoogleDriveRunFolderCandidate>();
             foreach (GoogleDriveRunFolderCandidate candidate in discovery.Candidates)
@@ -68,6 +70,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                         candidate.FolderId,
                         TransferBackupLocations.ManifestFileName,
                         cancellationToken).ConfigureAwait(false);
+                    cancellationToken.ThrowIfCancellationRequested();
                 }
                 catch (OperationCanceledException)
                 {

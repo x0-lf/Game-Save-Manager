@@ -274,6 +274,34 @@ public sealed class GoogleDriveTextCreationApiTests
     }
 
     [Fact]
+    public async Task LateCreateResultAfterCancellation_IsRejectedAndDisposesResources()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var client = new RecordingTextCreationClient
+        {
+            Handler = (_, _, _) =>
+            {
+                cancellation.Cancel();
+                return Task.FromResult(Response());
+            }
+        };
+        var api = Api(client);
+        using GoogleAuthorizedCredential credential = Credential();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            api.CreateTextFileAsync(
+                credential,
+                ParentId,
+                FileName,
+                Encoding.UTF8.GetBytes("{}"),
+                GoogleDriveTextCreationMediaTypes.Json,
+                cancellation.Token));
+
+        Assert.Equal(1, client.DisposeCalls);
+        AssertCapturedStreamDisposed(client);
+    }
+
+    [Fact]
     public async Task QuotaFailure_UsesTheSharedClassifierWithoutPrivateDiagnostics()
     {
         const string privateMarker = "token-response-and-object-marker";

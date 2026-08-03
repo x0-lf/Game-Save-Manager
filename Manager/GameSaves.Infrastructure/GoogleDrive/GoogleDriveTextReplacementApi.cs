@@ -291,6 +291,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                     metadata = await client.GetMetadataAsync(
                         metadataRequest,
                         cancellationToken).ConfigureAwait(false);
+                    cancellationToken.ThrowIfCancellationRequested();
                 }
                 catch (Exception ex)
                 {
@@ -312,6 +313,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                         replacementRequest,
                         content,
                         cancellationToken).ConfigureAwait(false);
+                    cancellationToken.ThrowIfCancellationRequested();
                 }
                 catch (Exception ex)
                 {

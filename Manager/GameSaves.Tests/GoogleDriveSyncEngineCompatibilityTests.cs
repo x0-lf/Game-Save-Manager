@@ -85,7 +85,7 @@ public sealed class GoogleDriveSyncEngineCompatibilityTests
         GoogleDriveObjectGetRequest rootRequest =
             Assert.Single(fixture.ObjectClients.GetRequests);
         Assert.Equal(GoogleDriveRequestContract.MetadataFields, rootRequest.Fields);
-        Assert.False(rootRequest.SupportsAllDrives);
+        Assert.True(rootRequest.SupportsAllDrives);
         Assert.Equal(Fixture.RootId, rootRequest.ObjectId);
         Assert.Equal(
             ["unreadable-manifest-id", "valid-manifest-id"],
@@ -348,7 +348,8 @@ public sealed class GoogleDriveSyncEngineCompatibilityTests
                 objectApi);
             var textReader = new GoogleDriveTextFileReadService(
                 ContextFactory,
-                ContentApi);
+                ContentApi,
+                cache);
             var providerReader = new GoogleDriveProviderMetadataReadService(
                 textReader);
             var createOnly = new GoogleDriveCreateOnlyTextFileService(

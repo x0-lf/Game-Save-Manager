@@ -62,6 +62,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
 
             using (context)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 GoogleDriveObjectMetadata metadata;
                 try
                 {
@@ -69,6 +70,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                         context.Credential,
                         context.RootFolderId,
                         cancellationToken).ConfigureAwait(false);
+                    cancellationToken.ThrowIfCancellationRequested();
                 }
                 catch (OperationCanceledException)
                 {

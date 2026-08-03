@@ -31,15 +31,19 @@ namespace GameSaves.Infrastructure.GoogleDrive
 
         private readonly IGoogleDriveRemoteOperationContextFactory _contextFactory;
         private readonly IGoogleDriveTextContentApi _textContentApi;
+        private readonly IGoogleDriveObjectIdCache _objectIdCache;
 
         public GoogleDriveTextFileReadService(
             IGoogleDriveRemoteOperationContextFactory contextFactory,
-            IGoogleDriveTextContentApi textContentApi)
+            IGoogleDriveTextContentApi textContentApi,
+            IGoogleDriveObjectIdCache objectIdCache)
         {
             _contextFactory = contextFactory ??
                 throw new ArgumentNullException(nameof(contextFactory));
             _textContentApi = textContentApi ??
                 throw new ArgumentNullException(nameof(textContentApi));
+            _objectIdCache = objectIdCache ??
+                throw new ArgumentNullException(nameof(objectIdCache));
         }
 
         public async Task<string?> ReadAsync(
@@ -54,6 +58,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 await _contextFactory.CreateAsync(
                     remoteProfileId,
                     cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
 
             GoogleDriveObjectResolutionResult resolution;
             try
@@ -63,6 +68,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                     path,
                     GoogleDriveObjectKind.File,
                     cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
             }
             catch (OperationCanceledException)
             {
@@ -99,6 +105,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                     context.Credential,
                     resolution.ObjectId,
                     cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
             }
             catch (OperationCanceledException)
             {
@@ -106,7 +113,11 @@ namespace GameSaves.Infrastructure.GoogleDrive
             }
             catch (GoogleDriveApiException ex)
             {
-                throw ApiFailure(ex);
+                bool invalidated = TryInvalidateConfirmedStale(
+                    context,
+                    resolution,
+                    ex);
+                throw ApiFailure(ex, invalidated);
             }
             catch (GoogleDriveRemoteOperationException)
             {
@@ -145,8 +156,74 @@ namespace GameSaves.Infrastructure.GoogleDrive
             bytes[1] == 0xBB &&
             bytes[2] == 0xBF;
 
-        private static GoogleDriveRemoteOperationException ApiFailure(
+        private bool TryInvalidateConfirmedStale(
+            GoogleDriveRemoteOperationContext context,
+            GoogleDriveObjectResolutionResult resolution,
             GoogleDriveApiException exception)
+        {
+            bool profileInvalidation =
+                exception.Failure == GoogleDriveApiFailure.AuthorizationRevoked;
+            bool scopeInvalidation =
+                exception.Failure is GoogleDriveApiFailure.NotFound or
+                    GoogleDriveApiFailure.AccessDenied or
+                    GoogleDriveApiFailure.InsufficientScope or
+                    GoogleDriveApiFailure.ApiNotEnabled ||
+                exception.Details.SafeErrorCode is
+                    GoogleDriveTextContentErrorCodes.InvalidMetadata or
+                    GoogleDriveTextContentErrorCodes.Folder or
+                    GoogleDriveTextContentErrorCodes.Trashed or
+                    GoogleDriveTextContentErrorCodes.WorkspaceDocument or
+                    GoogleDriveTextContentErrorCodes.UnsupportedLocation or
+                    GoogleDriveTextContentErrorCodes.DownloadNotAllowed;
+
+            if (!profileInvalidation && !scopeInvalidation)
+                return false;
+
+            try
+            {
+                if (profileInvalidation)
+                {
+                    _objectIdCache.InvalidateProfile(
+                        context.RemoteProfileId,
+                        GoogleDriveObjectCacheInvalidationReason
+                            .AuthorizationRevocation);
+                }
+                else
+                {
+                    GoogleDriveObjectCacheScope scope = new(
+                        context.RemoteProfileId,
+                        context.RootFolderId);
+                    string? parentId = resolution.Metadata?.ParentIds.Count == 1
+                        ? resolution.Metadata.ParentIds[0]
+                        : null;
+                    string? exactName = resolution.Path?.Segments.Count > 0
+                        ? resolution.Path.Segments[^1]
+                        : null;
+                    if (parentId is not null && exactName is not null)
+                    {
+                        _objectIdCache.Remove(
+                            scope,
+                            parentId,
+                            exactName,
+                            GoogleDriveObjectKind.File);
+                    }
+                    else
+                    {
+                        _objectIdCache.ClearScope(scope);
+                    }
+                }
+
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static GoogleDriveRemoteOperationException ApiFailure(
+            GoogleDriveApiException exception,
+            bool cacheInvalidated)
         {
             GoogleDriveRemoteValidationResult mapped =
                 GoogleDriveRemoteValidationMapper.FromApiFailure(
@@ -160,7 +237,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                     mapped.Retryable,
                     rootDisplayName: null,
                     wasAuthenticationRefreshed: false,
-                    cacheInvalidated: false));
+                    cacheInvalidated));
         }
 
         private static GoogleDriveRemoteOperationException ResolutionFailure(

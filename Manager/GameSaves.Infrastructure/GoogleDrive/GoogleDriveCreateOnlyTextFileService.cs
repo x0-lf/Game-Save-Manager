@@ -82,6 +82,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 await _contextFactory.CreateAsync(
                     remoteProfileId,
                     cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
 
             string exactFileName = path.Segments[^1];
             GoogleDriveRelativePath parentPath = ParentPath(path);
@@ -102,6 +103,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 parentId,
                 exactFileName,
                 cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
 
             using IDisposable lease = await _creationCoordinator.AcquireAsync(
                 parentId,
@@ -115,6 +117,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 parentId,
                 exactFileName,
                 cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
 
             GoogleDriveTextCreationResult created;
             try
@@ -199,6 +202,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                     context.RootFolderId,
                     parentPath,
                     cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
             }
             catch (OperationCanceledException)
             {
@@ -249,6 +253,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                     exactFileName,
                     GoogleDriveObjectKind.File,
                     cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
             }
             catch (OperationCanceledException)
             {
@@ -274,11 +279,11 @@ namespace GameSaves.Infrastructure.GoogleDrive
 
             if (resolution.Status == GoogleDriveObjectResolutionStatus.NotFound)
             {
-                _objectIdCache.Remove(
+                TryInvalidateConfirmedStale(
+                    resolution,
                     cacheScope,
                     parentId,
-                    exactFileName,
-                    GoogleDriveObjectKind.File);
+                    exactFileName);
                 return;
             }
 
@@ -307,13 +312,53 @@ namespace GameSaves.Infrastructure.GoogleDrive
                     "A Google Drive object already exists at the immutable text-file path.");
             }
 
-            _objectIdCache.Remove(
+            TryInvalidateConfirmedStale(
+                resolution,
                 cacheScope,
                 parentId,
-                exactFileName,
-                GoogleDriveObjectKind.File);
+                exactFileName);
 
             throw ResolutionFailure(resolution);
+        }
+
+        private void TryInvalidateConfirmedStale(
+            GoogleDriveObjectResolutionResult resolution,
+            GoogleDriveObjectCacheScope cacheScope,
+            string parentId,
+            string exactFileName)
+        {
+            try
+            {
+                if (resolution.Status ==
+                    GoogleDriveObjectResolutionStatus.ReauthenticationRequired)
+                {
+                    _objectIdCache.InvalidateProfile(
+                        cacheScope.RemoteProfileId,
+                        GoogleDriveObjectCacheInvalidationReason
+                            .AuthorizationRevocation);
+                    return;
+                }
+
+                if (resolution.Status is
+                    GoogleDriveObjectResolutionStatus.NotFound or
+                    GoogleDriveObjectResolutionStatus.Ambiguous or
+                    GoogleDriveObjectResolutionStatus.TypeMismatch or
+                    GoogleDriveObjectResolutionStatus.Trashed or
+                    GoogleDriveObjectResolutionStatus.UnsupportedLocation or
+                    GoogleDriveObjectResolutionStatus.AccessDenied)
+                {
+                    _objectIdCache.Remove(
+                        cacheScope,
+                        parentId,
+                        exactFileName,
+                        GoogleDriveObjectKind.File);
+                }
+            }
+            catch
+            {
+                // Remote state remains authoritative. Cache maintenance must
+                // neither permit creation nor replace the sanitized failure.
+            }
         }
 
         private static byte[] EncodeContent(string content)

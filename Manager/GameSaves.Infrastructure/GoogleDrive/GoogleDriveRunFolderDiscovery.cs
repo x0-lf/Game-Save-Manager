@@ -122,9 +122,13 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 await _contextFactory.CreateAsync(
                     remoteProfileId,
                     cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
 
-            return await DiscoverAsync(context, cancellationToken)
+            GoogleDriveRunFolderDiscoveryResult result =
+                await DiscoverAsync(context, cancellationToken)
                 .ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            return result;
         }
 
         public async Task<GoogleDriveRunFolderDiscoveryResult> DiscoverAsync(
@@ -141,6 +145,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                     context.RootFolderId,
                     GoogleDriveObjectKind.Folder,
                     cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
             }
             catch (OperationCanceledException)
             {

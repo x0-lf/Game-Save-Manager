@@ -205,6 +205,46 @@ public sealed class GoogleDriveTextContentApiTests
     }
 
     [Fact]
+    public async Task LateMetadataResultAfterCancellation_IsRejectedAndDisposesClient()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var client = Client(Metadata(declaredSize: 0));
+        client.MetadataAction = _ =>
+        {
+            cancellation.Cancel();
+            return Task.FromResult(Metadata(declaredSize: 0));
+        };
+        var api = Api(client);
+        using GoogleAuthorizedCredential credential = Credential();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            api.DownloadTextContentAsync(credential, FileId, cancellation.Token));
+
+        Assert.Empty(client.MediaRequests);
+        Assert.Equal(1, client.DisposeCalls);
+    }
+
+    [Fact]
+    public async Task LateDownloadResultAfterCancellation_IsRejectedAndDisposesResources()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var client = Client(Metadata(declaredSize: 0));
+        client.DownloadAction = (_, _) =>
+        {
+            cancellation.Cancel();
+            return Task.CompletedTask;
+        };
+        var api = Api(client);
+        using GoogleAuthorizedCredential credential = Credential();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            api.DownloadTextContentAsync(credential, FileId, cancellation.Token));
+
+        Assert.Equal(1, client.DisposeCalls);
+        AssertDestinationDisposed(client);
+    }
+
+    [Fact]
     public async Task ProviderFailure_IsMappedWithoutPrivateDiagnostics()
     {
         const string rawSecret = "token-and-response-body-marker";
@@ -402,6 +442,9 @@ public sealed class GoogleDriveTextContentApiTests
 
         public Exception? DownloadException { get; set; }
 
+        public Func<CancellationToken, Task<GoogleDriveTextContentMetadata>>?
+            MetadataAction { get; set; }
+
         public Func<Stream, CancellationToken, Task>? DownloadAction { get; set; }
 
         public List<GoogleDriveTextContentMetadataRequest> MetadataRequests { get; } = [];
@@ -420,6 +463,8 @@ public sealed class GoogleDriveTextContentApiTests
             cancellationToken.ThrowIfCancellationRequested();
             if (MetadataException is not null)
                 throw MetadataException;
+            if (MetadataAction is not null)
+                return MetadataAction(cancellationToken);
 
             return Task.FromResult(Metadata);
         }

@@ -1,5 +1,6 @@
 using GameSaves.App.ViewModels;
 using GameSaves.Core.Sync;
+using GameSaves.Infrastructure.GoogleDrive;
 using GameSaves.Infrastructure.Sync;
 using System.Reflection;
 using System.Xml.Linq;
@@ -127,6 +128,52 @@ public sealed class GoogleSdkBoundaryTests
     }
 
     [Fact]
+    public void MilestonePContentContracts_RemainInternalAndNarrow()
+    {
+        Type[] contracts =
+        [
+            typeof(IGoogleDriveTextContentApi),
+            typeof(IGoogleDriveTextCreationApi),
+            typeof(IGoogleDriveTextReplacementApi),
+            typeof(IGoogleDriveObjectIdCache)
+        ];
+
+        Assert.All(contracts, contract =>
+        {
+            Assert.True(contract.IsInterface);
+            Assert.False(contract.IsPublic || contract.IsNestedPublic);
+        });
+        Assert.Equal(
+            ["DownloadTextContentAsync"],
+            DeclaredMethodNames(typeof(IGoogleDriveTextContentApi)));
+        Assert.Equal(
+            ["CreateTextFileAsync"],
+            DeclaredMethodNames(typeof(IGoogleDriveTextCreationApi)));
+        Assert.Equal(
+            ["ReplaceTextContentAsync"],
+            DeclaredMethodNames(typeof(IGoogleDriveTextReplacementApi)));
+
+        string[] forbiddenMutations =
+            ["Delete", "Trash", "Move", "Rename", "Permission"];
+        Assert.DoesNotContain(
+            contracts.SelectMany(contract => contract.GetMethods()),
+            method => forbiddenMutations.Any(fragment =>
+                method.Name.Contains(fragment, StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public void MilestonePTextOperations_ShareOneConservativeBoundedSizePolicy()
+    {
+        Assert.Equal(1024 * 1024, GoogleDriveTextContentApi.MaxTextContentBytes);
+        Assert.Equal(
+            GoogleDriveTextContentApi.MaxTextContentBytes,
+            GoogleDriveTextCreationApi.MaxTextContentBytes);
+        Assert.Equal(
+            GoogleDriveTextContentApi.MaxTextContentBytes,
+            GoogleDriveTextReplacementApi.MaxTextContentBytes);
+    }
+
+    [Fact]
     public void OAuthImplementation_UsesPkceLoopbackAndNoFileDataStore()
     {
         string managerRoot = FindManagerRoot();
@@ -172,8 +219,14 @@ public sealed class GoogleSdkBoundaryTests
             .ToDictionary(
                 reference => reference.Name!,
                 reference => reference.Version ?? string.Empty,
-                StringComparer.OrdinalIgnoreCase);
+            StringComparer.OrdinalIgnoreCase);
     }
+
+    private static string[] DeclaredMethodNames(Type contract) =>
+        contract.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+            .Select(method => method.Name)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToArray();
 
     private static void AssertSourceFilesDoNotContain(
         string projectRoot,

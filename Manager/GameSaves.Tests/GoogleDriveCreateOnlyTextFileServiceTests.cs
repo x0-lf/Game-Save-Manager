@@ -324,6 +324,53 @@ public sealed class GoogleDriveCreateOnlyTextFileServiceTests
         Assert.Equal(FileId, entry!.ObjectId);
     }
 
+    [Theory]
+    [InlineData((int)GoogleDriveObjectResolutionStatus.RateLimited)]
+    [InlineData((int)GoogleDriveObjectResolutionStatus.QuotaExceeded)]
+    [InlineData((int)GoogleDriveObjectResolutionStatus.Unavailable)]
+    public async Task CreateAsync_TemporaryLookupFailurePreservesValidatedCache(
+        int statusValue)
+    {
+        var cache = new GoogleDriveObjectIdCache();
+        var scope = new GoogleDriveObjectCacheScope(ProfileId, RootId);
+        Assert.True(cache.TryStoreUniqueValidated(
+            scope,
+            ParentId,
+            FileName,
+            GoogleDriveObjectKind.File,
+            Metadata("safe-cached-file-id", ParentId, FileName)));
+        GoogleDriveObjectResolutionStatus status =
+            (GoogleDriveObjectResolutionStatus)statusValue;
+        var resolver = new RecordingResolver
+        {
+            FindHandler = (_, _, name, _) => Task.FromResult(
+                new GoogleDriveObjectResolutionResult(
+                    status,
+                    GoogleDriveRelativePath.Parse(name),
+                    GoogleDriveObjectKind.File,
+                    errorCode: "GoogleDriveTemporaryFailure",
+                    message: "Google Drive is temporarily unavailable."))
+        };
+        var api = new RecordingTextCreationApi();
+        var service = Service(resolver, api, cache);
+
+        await Assert.ThrowsAsync<GoogleDriveRemoteOperationException>(() =>
+            service.CreateAsync(
+                ProfileId,
+                "run/manifest.json",
+                "{}",
+                CancellationToken.None));
+
+        Assert.True(cache.TryGet(
+            scope,
+            ParentId,
+            FileName,
+            GoogleDriveObjectKind.File,
+            out GoogleDriveObjectIdCacheEntry? entry));
+        Assert.Equal("safe-cached-file-id", entry!.ObjectId);
+        Assert.Equal(0, api.Calls);
+    }
+
     [Fact]
     public async Task CreateAsync_CancellationWhileWaitingForLockReleasesCoordination()
     {
@@ -367,6 +414,38 @@ public sealed class GoogleDriveCreateOnlyTextFileServiceTests
             "{}",
             CancellationToken.None);
         Assert.Equal(1, api.Calls);
+    }
+
+    [Fact]
+    public async Task CreateAsync_LateMissingResultAfterCancellationCannotCreateOrCache()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var resolver = new RecordingResolver
+        {
+            FindHandler = (_, _, name, _) =>
+            {
+                cancellation.Cancel();
+                return Task.FromResult(NotFound(name));
+            }
+        };
+        var api = new RecordingTextCreationApi();
+        var cache = new GoogleDriveObjectIdCache();
+        var service = Service(resolver, api, cache);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            service.CreateAsync(
+                ProfileId,
+                "run/manifest.json",
+                "{}",
+                cancellation.Token));
+
+        Assert.Equal(0, api.Calls);
+        Assert.False(cache.TryGet(
+            new GoogleDriveObjectCacheScope(ProfileId, RootId),
+            ParentId,
+            FileName,
+            GoogleDriveObjectKind.File,
+            out _));
     }
 
     [Fact]

@@ -295,6 +295,58 @@ public sealed class GoogleDriveTextReplacementApiTests
         AssertCapturedStreamDisposed(client);
     }
 
+    [Fact]
+    public async Task LateMetadataResultAfterCancellation_IsRejectedBeforeUpdate()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var client = new RecordingTextReplacementClient
+        {
+            MetadataHandler = _ =>
+            {
+                cancellation.Cancel();
+                return Task.FromResult(Metadata());
+            }
+        };
+        using GoogleAuthorizedCredential credential = Credential();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            Api(client).ReplaceTextContentAsync(
+                credential,
+                FileId,
+                Encoding.UTF8.GetBytes("{}"),
+                GoogleDriveTextCreationMediaTypes.Json,
+                cancellation.Token));
+
+        Assert.Empty(client.UpdateRequests);
+        Assert.Equal(1, client.DisposeCalls);
+    }
+
+    [Fact]
+    public async Task LateUpdateResultAfterCancellation_IsRejectedAndDisposesResources()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var client = new RecordingTextReplacementClient
+        {
+            UpdateHandler = (_, _, _) =>
+            {
+                cancellation.Cancel();
+                return Task.FromResult(Response());
+            }
+        };
+        using GoogleAuthorizedCredential credential = Credential();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            Api(client).ReplaceTextContentAsync(
+                credential,
+                FileId,
+                Encoding.UTF8.GetBytes("{}"),
+                GoogleDriveTextCreationMediaTypes.Json,
+                cancellation.Token));
+
+        Assert.Equal(1, client.DisposeCalls);
+        AssertCapturedStreamDisposed(client);
+    }
+
     [Theory]
     [MemberData(nameof(ProviderFailures))]
     public async Task ProviderFailures_UseSharedSafeClassification(
@@ -591,6 +643,9 @@ public sealed class GoogleDriveTextReplacementApiTests
 
         public Exception? UpdateFailure { get; set; }
 
+        public Func<CancellationToken, Task<GoogleDriveTextReplacementMetadata>>?
+            MetadataHandler { get; set; }
+
         public Func<GoogleDriveTextReplacementRequest, Stream, CancellationToken,
             Task<GoogleDriveTextReplacementResponse>>? UpdateHandler { get; set; }
 
@@ -616,6 +671,8 @@ public sealed class GoogleDriveTextReplacementApiTests
             cancellationToken.ThrowIfCancellationRequested();
             if (MetadataFailure is not null)
                 throw MetadataFailure;
+            if (MetadataHandler is not null)
+                return MetadataHandler(cancellationToken);
             return Task.FromResult(Metadata);
         }
 

@@ -297,6 +297,91 @@ public sealed class GoogleDriveObjectIdCacheTests
     }
 
     [Fact]
+    public async Task InaccessibleCachedFolder_ClearsItsRootScope()
+    {
+        var api = new CacheObjectApi();
+        api.SetChildren("root-id", "Saves", Folder("saves-id", "Saves", "root-id"));
+        using GoogleAuthorizedCredential credential = Credential();
+        var cache = new GoogleDriveObjectIdCache();
+        GoogleDriveObjectPathResolver resolver = Resolver(api, credential, cache);
+        GoogleDriveRelativePath path = GoogleDriveRelativePath.Parse("Saves");
+        await resolver.ResolveAsync("root-id", path, GoogleDriveObjectKind.Folder);
+        api.GetFailure = GoogleDriveApiFailureMapper.Create(
+            GoogleDriveApiOperation.ObjectMetadataGet,
+            GoogleDriveApiFailure.AccessDenied,
+            "GoogleDriveObjectAccessDenied");
+
+        GoogleDriveObjectResolutionResult result = await resolver.ResolveAsync(
+            "root-id", path, GoogleDriveObjectKind.Folder);
+
+        Assert.Equal(GoogleDriveObjectResolutionStatus.AccessDenied, result.Status);
+        Assert.False(cache.TryGet(
+            Scope("root-id"), "root-id", "Saves", GoogleDriveObjectKind.Folder, out _));
+    }
+
+    [Fact]
+    public async Task RevokedAuthorization_ClearsEveryRootForOnlyTheAffectedProfile()
+    {
+        var api = new CacheObjectApi();
+        api.SetChildren("root-id", "Saves", Folder("saves-id", "Saves", "root-id"));
+        using GoogleAuthorizedCredential credential = Credential();
+        var cache = new GoogleDriveObjectIdCache();
+        GoogleDriveObjectPathResolver resolver = Resolver(api, credential, cache);
+        GoogleDriveRelativePath path = GoogleDriveRelativePath.Parse("Saves");
+        await resolver.ResolveAsync("root-id", path, GoogleDriveObjectKind.Folder);
+        GoogleDriveObjectCacheScope otherProfile = new(
+            Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"),
+            "root-id");
+        Assert.True(cache.TryStoreUniqueValidated(
+            otherProfile,
+            "root-id",
+            "Other",
+            GoogleDriveObjectKind.Folder,
+            Folder("other-id", "Other", "root-id")));
+        api.GetFailure = GoogleDriveApiFailureMapper.Create(
+            GoogleDriveApiOperation.ObjectMetadataGet,
+            GoogleDriveApiFailure.AuthorizationRevoked,
+            "GoogleDriveAuthorizationRevoked");
+
+        GoogleDriveObjectResolutionResult result = await resolver.ResolveAsync(
+            "root-id", path, GoogleDriveObjectKind.Folder);
+
+        Assert.Equal(
+            GoogleDriveObjectResolutionStatus.ReauthenticationRequired,
+            result.Status);
+        Assert.False(cache.TryGet(
+            Scope("root-id"), "root-id", "Saves", GoogleDriveObjectKind.Folder, out _));
+        Assert.True(cache.TryGet(
+            otherProfile, "root-id", "Other", GoogleDriveObjectKind.Folder, out _));
+    }
+
+    [Theory]
+    [InlineData((int)GoogleDriveApiFailure.RateLimited)]
+    [InlineData((int)GoogleDriveApiFailure.QuotaExceeded)]
+    [InlineData((int)GoogleDriveApiFailure.Unavailable)]
+    public async Task TemporaryCachedValidationFailure_PreservesSafeEntry(
+        int failureValue)
+    {
+        var api = new CacheObjectApi();
+        api.SetChildren("root-id", "Saves", Folder("saves-id", "Saves", "root-id"));
+        using GoogleAuthorizedCredential credential = Credential();
+        var cache = new GoogleDriveObjectIdCache();
+        GoogleDriveObjectPathResolver resolver = Resolver(api, credential, cache);
+        GoogleDriveRelativePath path = GoogleDriveRelativePath.Parse("Saves");
+        await resolver.ResolveAsync("root-id", path, GoogleDriveObjectKind.Folder);
+        api.GetFailure = GoogleDriveApiFailureMapper.Create(
+            GoogleDriveApiOperation.ObjectMetadataGet,
+            (GoogleDriveApiFailure)failureValue,
+            "GoogleDriveTemporaryFailure",
+            retryable: true);
+
+        await resolver.ResolveAsync("root-id", path, GoogleDriveObjectKind.Folder);
+
+        Assert.True(cache.TryGet(
+            Scope("root-id"), "root-id", "Saves", GoogleDriveObjectKind.Folder, out _));
+    }
+
+    [Fact]
     public async Task Cache_IsThreadSafeUnderConcurrentStoreReadAndInvalidation()
     {
         var cache = new GoogleDriveObjectIdCache();
@@ -438,6 +523,7 @@ public sealed class GoogleDriveObjectIdCacheTests
 
         public List<(string ParentId, string Name)> ListCalls { get; } = new();
         public List<string> GetCalls { get; } = new();
+        public GoogleDriveApiException? GetFailure { get; set; }
         public GoogleDriveApiException? ListFailure { get; set; }
 
         public void SetChildren(
@@ -462,6 +548,9 @@ public sealed class GoogleDriveObjectIdCacheTests
         {
             cancellationToken.ThrowIfCancellationRequested();
             GetCalls.Add(objectId);
+            if (GetFailure is not null)
+                throw GetFailure;
+
             if (_byId.TryGetValue(objectId, out GoogleDriveObjectMetadata? metadata))
                 return Task.FromResult(metadata);
 

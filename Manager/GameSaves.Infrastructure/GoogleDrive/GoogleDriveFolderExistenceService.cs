@@ -37,6 +37,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 await _contextFactory.CreateAsync(
                     remoteProfileId,
                     cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
 
             GoogleDriveObjectResolutionResult resolution;
             try
@@ -46,6 +47,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                     path,
                     GoogleDriveObjectKind.Folder,
                     cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
             }
             catch (OperationCanceledException)
             {
