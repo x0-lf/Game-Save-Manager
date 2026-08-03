@@ -309,6 +309,7 @@ public sealed class GoogleDriveTextFileReadServiceTests
             new FixedRunFolderNameService("Unreadable Run"),
             reader,
             new UnusedProviderMetadataReadService(),
+            new UnusedProviderMetadataReplacementService(),
             new UnusedCreateOnlyTextFileService());
         var backupHistory = new BackupHistoryService(
             new TestDatabasePathProvider(temp.GetPath("app", "gamesave.db")));
@@ -614,6 +615,18 @@ public sealed class GoogleDriveTextFileReadServiceTests
             CancellationToken cancellationToken = default) =>
             throw new InvalidOperationException(
                 "Manifest preview must not read provider metadata.");
+    }
+
+    private sealed class UnusedProviderMetadataReplacementService
+        : IGoogleDriveProviderMetadataReplacementService
+    {
+        public Task ReplaceAsync(
+            Guid remoteProfileId,
+            string relativePath,
+            string content,
+            CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException(
+                "Manifest preview must not replace provider metadata.");
     }
 
     private sealed class UnusedCreateOnlyTextFileService
