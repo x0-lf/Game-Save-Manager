@@ -255,12 +255,30 @@ The Milestone O boundary is read-only. Use an explicitly authorized development 
 5. Move the root beneath another My Drive folder and validate again. The root remains authoritative by ID, while the result reports the established moved state and clears dependent in-memory path entries.
 6. Trash the root and validate again. Validation must fail safely, clear the relevant in-memory cache, and must not create a replacement. Restore the root and confirm a later validation succeeds.
 7. Revoke the application's authorization through Google Account settings and validate again. Reauthentication must be required without opening a browser automatically; the saved profile and root metadata remain.
-8. Confirm later filesystem operations, Preview Sync, and Sync Now remain unavailable throughout.
+8. Confirm operations beyond the Milestone O validation boundary remain unavailable throughout that milestone's checks.
 9. Review only sanitized status and warning output. No account value, token, client configuration, folder ID, request URL, query, or raw provider response may appear.
 
 Quota and rate-limit statuses are classified from ordinary failed Drive requests. Validation does not call Drive quota fields or display quota totals.
 
-The provider-neutral remote write contract distinguishes create-only backup content from mutable `.gamesave-sync/sync-log.json` metadata. Local Folder and SFTP implement those semantics. Google Drive has an Infrastructure-only `/`-relative object/path resolver for exact-name lookup, paginated discovery, safe missing-parent creation, duplicate rejection, and validated in-memory ID caching. Its in-progress Milestone P remote boundary now supports root and folder checks, top-level run discovery, bounded text reads, create-only text, and allowlisted provider-metadata reads and exact-ID replacement. Recursive backup-file listing, backup upload/download, preview, and synchronization remain unavailable. It operates only on app-accessible My Drive objects under the existing `drive.file` grant; it does not require broader consent. Child IDs are not persisted in a new database or file.
+The provider-neutral remote write contract distinguishes create-only backup content from mutable `.gamesave-sync/sync-log.json` metadata. Local Folder and SFTP implement those semantics. Google Drive has an Infrastructure-only `/`-relative object/path resolver for exact-name lookup, paginated discovery, safe missing-parent creation, duplicate rejection, and validated in-memory ID caching. Its completed Milestone P remote boundary supports root and folder checks, top-level run discovery, bounded text reads, create-only text, and allowlisted provider-metadata reads and exact-ID replacement. It operates only on app-accessible My Drive objects under the existing `drive.file` grant; it does not require broader consent. Child IDs are not persisted in a new database or file.
+
+## Verify Milestone P listing and text metadata
+
+Use only a development account and controlled objects beneath an isolated child folder of the configured application root. Do not place personal backup data in the acceptance area.
+
+1. Restore a connected profile silently and confirm `RootExistsAsync` succeeds without opening a browser.
+2. Confirm `FolderExistsAsync` resolves a controlled nested folder beneath the authoritative root.
+3. Add one controlled run folder with valid UTF-8 `manifest.json`, one without a manifest, and one with malformed manifest text.
+4. Confirm `ListRunFolderNamesAsync` returns the manifest-bearing folders, follows every page, and ignores the folder without a manifest.
+5. Confirm `ReadTextFileAsync` returns the valid manifest exactly and the existing `SyncEngine` converts the malformed manifest into `RemoteRunUnreadable` without hiding the valid run.
+6. Confirm creating the valid manifest again fails and leaves its existing bytes unchanged.
+7. Confirm missing `.gamesave-sync/sync-log.json` metadata reads as absent, the first replacement creates it, and the second replacement updates the same authoritative file ID.
+8. Confirm no recursive `ListFilesAsync`, backup upload, backup download, delete, move, rename, trash, or permission operation occurs.
+9. Confirm the requested OAuth scope remains exactly `https://www.googleapis.com/auth/drive.file` and inspect sanitized output for the absence of personal account values, object IDs, tokens, queries, or raw responses.
+
+This acceptance was completed with a development account on 2026-08-03. The controlled verification passed, including unchanged metadata identity across replacement and no forbidden Drive mutation. Automated remote cleanup was intentionally not added because deletion and trash operations are outside Milestone P; remove controlled acceptance objects manually in the Drive UI after inspection if desired.
+
+Milestone P does not activate synchronization. `ListFilesAsync`, `UploadFileAsync`, and `DownloadFileAsync` remain explicitly unavailable; `GoogleDriveSyncProvider` does not exist; Google Drive remains configuration-only with `IsImplemented = false`; Preview Sync and Sync Now remain disabled; and Milestone Q has not started.
 
 ## Handle downloaded credential files
 
