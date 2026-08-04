@@ -258,4 +258,31 @@ namespace GameSaves.Infrastructure.GoogleDrive
 
         public override string ToString() => ToSafeDiagnosticString();
     }
+
+    /// <summary>
+    /// Safe Infrastructure-only failure boundary for recursive listing helpers.
+    /// The embedded result contains no partial entries or Drive object data.
+    /// </summary>
+    internal sealed class GoogleDriveRecursiveFileListingException : Exception
+    {
+        public GoogleDriveRecursiveFileListingException(
+            GoogleDriveRecursiveFileListingResult result)
+            : base("The Google Drive file listing could not be completed.")
+        {
+            ArgumentNullException.ThrowIfNull(result);
+            if (result.Status == GoogleDriveRecursiveFileListingStatus.Completed)
+            {
+                throw new ArgumentException(
+                    "A listing failure cannot contain a completed result.",
+                    nameof(result));
+            }
+
+            Result = result;
+        }
+
+        public GoogleDriveRecursiveFileListingResult Result { get; }
+
+        public override string ToString() =>
+            $"{GetType().Name}: {Result.ToSafeDiagnosticString()}";
+    }
 }
