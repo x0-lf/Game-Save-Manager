@@ -120,13 +120,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
             }
             if (string.IsNullOrWhiteSpace(mimeType))
                 throw new ArgumentException("A MIME type is required.", nameof(mimeType));
-            if (string.Equals(
-                    mimeType,
-                    GoogleDriveApplicationRoot.FolderMimeType,
-                    StringComparison.Ordinal) ||
-                mimeType.StartsWith(
-                    "application/vnd.google-apps.",
-                    StringComparison.Ordinal))
+            if (GoogleDriveRecursiveObjectClassificationPolicy.Classify(mimeType) !=
+                GoogleDriveRecursiveObjectKind.BlobFile)
             {
                 throw new ArgumentException(
                     "A recursive file entry must describe an ordinary blob file.",
