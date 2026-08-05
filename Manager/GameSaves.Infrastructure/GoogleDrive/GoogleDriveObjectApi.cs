@@ -205,6 +205,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
 
                 do
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     GoogleDriveObjectListPage page = await client.ListAsync(
                         new GoogleDriveObjectListRequest(query, pageToken),
                         cancellationToken);

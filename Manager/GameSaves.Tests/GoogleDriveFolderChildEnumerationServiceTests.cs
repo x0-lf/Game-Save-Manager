@@ -389,6 +389,193 @@ public sealed class GoogleDriveFolderChildEnumerationServiceTests
     }
 
     [Fact]
+    public async Task Pagination_AccumulatesSeveralPagesIncludingAnEmptyIntermediatePage()
+    {
+        var client = new RecordingObjectClient();
+        client.Pages.Enqueue(Page(
+            new[] { Object("first-id", "first.dat", "application/octet-stream") },
+            "page-2"));
+        client.Pages.Enqueue(Page(
+            new[]
+            {
+                Object("second-id", "second.dat", "application/octet-stream"),
+                Object("third-id", "third.dat", "application/octet-stream")
+            },
+            "page-3"));
+        client.Pages.Enqueue(Page(
+            Array.Empty<GoogleDriveObjectMetadata>(),
+            "page-4"));
+        client.Pages.Enqueue(Page(
+            new[] { Object("fourth-id", "fourth.dat", "application/octet-stream") },
+            nextPageToken: null));
+        var service = Service(client);
+        using GoogleDriveRemoteOperationContext context = Context();
+
+        IReadOnlyList<GoogleDriveFolderChildEntry> children =
+            await service.EnumerateAsync(context, ParentId);
+
+        Assert.Equal(
+            new[] { "first.dat", "second.dat", "third.dat", "fourth.dat" },
+            children.Select(child => child.ExactName));
+        Assert.Equal(
+            new[] { null, "page-2", "page-3", "page-4" },
+            client.ListRequests.Select(request => request.PageToken));
+        Assert.All(client.ListRequests, AssertRequiredDirectChildRequest);
+        Assert.Equal(1, client.DisposeCalls);
+        Assert.Equal(0, client.GetCalls);
+        Assert.Equal(0, client.CreateCalls);
+    }
+
+    [Fact]
+    public async Task Pagination_PreservesDuplicateObjectsSplitAcrossPages()
+    {
+        var client = new RecordingObjectClient();
+        client.Pages.Enqueue(Page(
+            new[] { Object("same-id", "same.dat", "application/octet-stream") },
+            "page-2"));
+        client.Pages.Enqueue(Page(
+            new[] { Object("same-id", "same.dat", "application/octet-stream") },
+            nextPageToken: null));
+        var service = Service(client);
+        using GoogleDriveRemoteOperationContext context = Context();
+
+        IReadOnlyList<GoogleDriveFolderChildEntry> children =
+            await service.EnumerateAsync(context, ParentId);
+
+        Assert.Equal(2, children.Count);
+        Assert.All(children, child =>
+        {
+            Assert.Equal("same-id", child.ObjectId);
+            Assert.Equal("same.dat", child.ExactName);
+        });
+        Assert.Equal(2, client.ListRequests.Count);
+        Assert.All(client.ListRequests, AssertRequiredDirectChildRequest);
+    }
+
+    [Fact]
+    public async Task Pagination_ParentMismatchOnLaterPageFailsWithoutPartialResult()
+    {
+        var client = new RecordingObjectClient();
+        client.Pages.Enqueue(Page(
+            new[] { Object("valid-id", "valid.dat", "application/octet-stream") },
+            "page-2"));
+        client.Pages.Enqueue(Page(
+            new[]
+            {
+                Object(
+                    "wrong-parent-id",
+                    "wrong-parent.dat",
+                    "application/octet-stream",
+                    new[] { "different-parent-id" })
+            },
+            nextPageToken: null));
+        var service = Service(client);
+        using GoogleDriveRemoteOperationContext context = Context();
+
+        GoogleDriveRecursiveFileListingException exception =
+            await Assert.ThrowsAsync<GoogleDriveRecursiveFileListingException>(() =>
+                service.EnumerateAsync(context, ParentId));
+
+        AssertFailure(
+            exception,
+            GoogleDriveRecursiveFileListingStatus.InvalidMetadata,
+            "valid-id",
+            "valid.dat",
+            "wrong-parent-id",
+            "wrong-parent.dat",
+            "different-parent-id");
+        Assert.Equal(2, client.ListRequests.Count);
+        Assert.All(client.ListRequests, AssertRequiredDirectChildRequest);
+        Assert.Equal(1, client.DisposeCalls);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Pagination_IncompleteSearchOnAnyPageFailsRetryably(
+        bool failOnLaterPage)
+    {
+        var client = new RecordingObjectClient();
+        if (failOnLaterPage)
+        {
+            client.Pages.Enqueue(Page(
+                new[] { Object("valid-id", "valid.dat", "application/octet-stream") },
+                "page-2"));
+        }
+        client.Pages.Enqueue(new GoogleDriveObjectListPage(
+            Array.Empty<GoogleDriveObjectMetadata>(),
+            "private-ignored-token",
+            IncompleteSearch: true));
+        var service = Service(client);
+        using GoogleDriveRemoteOperationContext context = Context();
+
+        GoogleDriveRecursiveFileListingException exception =
+            await Assert.ThrowsAsync<GoogleDriveRecursiveFileListingException>(() =>
+                service.EnumerateAsync(context, ParentId));
+
+        AssertFailure(
+            exception,
+            GoogleDriveRecursiveFileListingStatus.Unavailable,
+            "valid-id",
+            "valid.dat",
+            "private-ignored-token");
+        Assert.True(exception.Result.Retryable);
+        Assert.Equal(failOnLaterPage ? 2 : 1, client.ListRequests.Count);
+        Assert.All(client.ListRequests, AssertRequiredDirectChildRequest);
+        Assert.Equal(1, client.DisposeCalls);
+    }
+
+    [Fact]
+    public async Task Pagination_CancellationAfterProviderReturnsAPageRejectsThePage()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var client = new RecordingObjectClient
+        {
+            BeforePageReturn = (_, _) => cancellation.Cancel()
+        };
+        client.Pages.Enqueue(Page(
+            new[] { Object("late-id", "late.dat", "application/octet-stream") },
+            "page-2"));
+        var service = Service(client);
+        using GoogleDriveRemoteOperationContext context = Context();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            service.EnumerateAsync(context, ParentId, cancellation.Token));
+
+        Assert.Single(client.ListRequests);
+        AssertRequiredDirectChildRequest(client.ListRequests[0]);
+        Assert.Equal(1, client.DisposeCalls);
+    }
+
+    [Fact]
+    public async Task Pagination_CancellationBetweenPagesStopsBeforeAnotherRequest()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var client = new RecordingObjectClient
+        {
+            RespectCancellation = false
+        };
+        var cancellingObjects = new CancelOnSecondEnumerationList<GoogleDriveObjectMetadata>(
+            new[] { Object("first-id", "first.dat", "application/octet-stream") },
+            cancellation);
+        client.Pages.Enqueue(Page(cancellingObjects, "page-2"));
+        client.Pages.Enqueue(Page(
+            new[] { Object("late-id", "late.dat", "application/octet-stream") },
+            nextPageToken: null));
+        var service = Service(client);
+        using GoogleDriveRemoteOperationContext context = Context();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            service.EnumerateAsync(context, ParentId, cancellation.Token));
+
+        Assert.True(cancellation.IsCancellationRequested);
+        Assert.Single(client.ListRequests);
+        Assert.Null(client.ListRequests[0].PageToken);
+        AssertRequiredDirectChildRequest(client.ListRequests[0]);
+        Assert.Equal(1, client.DisposeCalls);
+    }
+
+    [Fact]
     public void ChildEntry_IsImmutableAndSafeToFormat()
     {
         var parents = new List<string> { ParentId };
@@ -474,6 +661,33 @@ public sealed class GoogleDriveFolderChildEnumerationServiceTests
             new[] { ParentId },
             trashed: false,
             driveId: null);
+
+    private static GoogleDriveObjectListPage Page(
+        IReadOnlyList<GoogleDriveObjectMetadata> objects,
+        string? nextPageToken) =>
+        new(objects, nextPageToken, IncompleteSearch: false);
+
+    private static GoogleDriveFolderChildEnumerationService Service(
+        RecordingObjectClient client) =>
+        new(new GoogleDriveObjectApi(
+            new GoogleDriveQueryBuilder(),
+            new RecordingObjectClientFactory(client)));
+
+    private static void AssertRequiredDirectChildRequest(
+        GoogleDriveObjectListRequest request)
+    {
+        Assert.Equal(
+            "'authoritative-parent-id' in parents and trashed = false",
+            request.Query);
+        Assert.Equal(
+            "nextPageToken,incompleteSearch," +
+            "files(id,name,mimeType,trashed,parents,driveId)",
+            request.Fields);
+        Assert.Equal("drive", request.Spaces);
+        Assert.Equal("user", request.Corpora);
+        Assert.False(request.IncludeItemsFromAllDrives);
+        Assert.False(request.SupportsAllDrives);
+    }
 
     private static void AssertFailure(
         GoogleDriveRecursiveFileListingException exception,
@@ -581,6 +795,10 @@ public sealed class GoogleDriveFolderChildEnumerationServiceTests
 
         public int DisposeCalls { get; private set; }
 
+        public bool RespectCancellation { get; set; } = true;
+
+        public Action<int, CancellationToken>? BeforePageReturn { get; set; }
+
         public Task<GoogleDriveObjectMetadata> GetAsync(
             GoogleDriveObjectGetRequest request,
             CancellationToken cancellationToken)
@@ -593,9 +811,12 @@ public sealed class GoogleDriveFolderChildEnumerationServiceTests
             GoogleDriveObjectListRequest request,
             CancellationToken cancellationToken)
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            if (RespectCancellation)
+                cancellationToken.ThrowIfCancellationRequested();
             ListRequests.Add(request);
-            return Task.FromResult(Pages.Dequeue());
+            GoogleDriveObjectListPage page = Pages.Dequeue();
+            BeforePageReturn?.Invoke(ListRequests.Count, cancellationToken);
+            return Task.FromResult(page);
         }
 
         public Task<GoogleDriveObjectMetadata> CreateFolderAsync(
@@ -607,6 +828,38 @@ public sealed class GoogleDriveFolderChildEnumerationServiceTests
         }
 
         public void Dispose() => DisposeCalls++;
+    }
+
+    private sealed class CancelOnSecondEnumerationList<T> : IReadOnlyList<T>
+    {
+        private readonly IReadOnlyList<T> _items;
+        private readonly CancellationTokenSource _cancellation;
+        private int _enumerationCount;
+
+        public CancelOnSecondEnumerationList(
+            IReadOnlyList<T> items,
+            CancellationTokenSource cancellation)
+        {
+            _items = items;
+            _cancellation = cancellation;
+        }
+
+        public int Count => _items.Count;
+
+        public T this[int index] => _items[index];
+
+        public IEnumerator<T> GetEnumerator()
+        {
+            int enumeration = Interlocked.Increment(ref _enumerationCount);
+            foreach (T item in _items)
+                yield return item;
+
+            if (enumeration == 2)
+                _cancellation.Cancel();
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() =>
+            GetEnumerator();
     }
 
     private sealed class UnusedResolver : IGoogleDriveObjectPathResolver
