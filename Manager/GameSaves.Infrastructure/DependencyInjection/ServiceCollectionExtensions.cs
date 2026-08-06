@@ -176,6 +176,8 @@ namespace GameSaves.Infrastructure.DependencyInjection
                 GoogleDriveRunFolderNameService>();
             services.AddSingleton<IGoogleDriveFolderChildEnumerationService,
                 GoogleDriveFolderChildEnumerationService>();
+            services.AddSingleton<IGoogleDriveRunFolderResolver,
+                GoogleDriveRunFolderResolver>();
             services.AddSingleton<IGoogleDriveRootFolderService>(provider =>
                 new GoogleDriveRootFolderService(
                     provider.GetRequiredService<ISyncRemoteProfileRepository>(),
