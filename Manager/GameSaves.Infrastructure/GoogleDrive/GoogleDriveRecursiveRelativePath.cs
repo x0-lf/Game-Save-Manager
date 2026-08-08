@@ -29,6 +29,16 @@ namespace GameSaves.Infrastructure.GoogleDrive
             GoogleDriveRecursiveFileListingRequest request)
         {
             ArgumentNullException.ThrowIfNull(request);
+            return StartAtRunFolder();
+        }
+
+        /// <summary>
+        /// Creates the empty prefix beneath an already resolved run folder.
+        /// The authoritative run-folder name and path are deliberately absent
+        /// from every recursively composed result.
+        /// </summary>
+        public static GoogleDriveRecursiveRelativePath StartAtRunFolder()
+        {
             return new GoogleDriveRecursiveRelativePath(
                 GoogleDriveRelativePath.Root);
         }
