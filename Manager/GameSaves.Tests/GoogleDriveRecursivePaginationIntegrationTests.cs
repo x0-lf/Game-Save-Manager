@@ -1,8 +1,12 @@
 using GameSaves.Core.Sync;
+using GameSaves.Infrastructure.DependencyInjection;
 using GameSaves.Infrastructure.GoogleDrive;
+using GameSaves.Infrastructure.Sync;
 using Google.Apis.Auth.OAuth2;
 using Google.Apis.Auth.OAuth2.Flows;
 using Google.Apis.Auth.OAuth2.Responses;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace GameSaves.Tests;
 
@@ -132,7 +136,73 @@ public sealed class GoogleDriveRecursivePaginationIntegrationTests
             "private-b-page-2",
             "private-nested-page-2",
             "private-nested-page-3");
-        Assert.False(resolved.IsDisposed);
+        Assert.True(resolved.IsDisposed);
+    }
+
+    [Fact]
+    public async Task RemoteFileSystem_ListsCanonicalPathsThroughFakeApi()
+    {
+        var factory = new PagedTreeClientFactory();
+        factory.AddPages(
+            RunFolderId,
+            Page(
+                new[]
+                {
+                    Blob("root-z-id", "z.dat", RunFolderId),
+                    Folder("nested-folder-id", "nested", RunFolderId)
+                },
+                "private-run-page-2"),
+            Page(
+                new[] { Blob("root-a-id", "a.dat", RunFolderId) },
+                nextPageToken: null));
+        factory.AddPages(
+            "nested-folder-id",
+            Page(
+                new[]
+                {
+                    Blob(
+                        "nested-file-id",
+                        "save.dat",
+                        "nested-folder-id")
+                },
+                nextPageToken: null));
+        var resolver = new FixedRunFolderResolver();
+        var recursiveListing = new GoogleDriveRecursiveFileListingService(
+            resolver,
+            Service(factory));
+        var services = new ServiceCollection();
+        services.AddGameSavesInfrastructure();
+        services.RemoveAll<ISyncRemoteProfileRepository>();
+        services.RemoveAll<IGoogleDriveRecursiveFileListingService>();
+        services.AddSingleton<ISyncRemoteProfileRepository>(
+            new InMemorySyncRemoteProfileRepository());
+        services.AddSingleton<IGoogleDriveRecursiveFileListingService>(
+            recursiveListing);
+
+        using ServiceProvider provider = services.BuildServiceProvider();
+        IRemoteFileSystem remote = provider
+            .GetRequiredService<IGoogleDriveRemoteFileSystemFactory>()
+            .Create(ProfileId);
+        IReadOnlyList<string> paths =
+            await remote.ListFilesAsync("Run 42");
+
+        Assert.Equal(
+            new[] { "a.dat", "nested/save.dat", "z.dat" },
+            paths);
+        Assert.Equal(ProfileId, resolver.Requests.Single().RemoteProfileId);
+        Assert.Equal(
+            "Run 42",
+            resolver.Requests.Single().CanonicalFolderPath);
+        AssertClient(
+            factory.ClientFor(RunFolderId),
+            RunFolderId,
+            null,
+            "private-run-page-2");
+        AssertClient(
+            factory.ClientFor("nested-folder-id"),
+            "nested-folder-id",
+            new string?[] { null });
+        AssertNoMutation(factory);
     }
 
     [Fact]
@@ -200,7 +270,7 @@ public sealed class GoogleDriveRecursivePaginationIntegrationTests
             "private-untraversed-folder-id",
             "private-duplicate.dat",
             "private-duplicate-page-2");
-        Assert.False(resolved.IsDisposed);
+        Assert.True(resolved.IsDisposed);
     }
 
     [Fact]
@@ -245,7 +315,80 @@ public sealed class GoogleDriveRecursivePaginationIntegrationTests
             "private-repeated-id",
             "private-repeated.dat",
             "private-repeated-page-2");
-        Assert.False(resolved.IsDisposed);
+        Assert.True(resolved.IsDisposed);
+    }
+
+    [Fact]
+    public async Task RepeatedIdentityWithDifferentNamesAcrossPages_FailsClosed()
+    {
+        const string repeatedId = "private-repeated-id";
+        var factory = new PagedTreeClientFactory();
+        factory.AddPages(
+            RunFolderId,
+            Page(
+                new[]
+                {
+                    Blob(repeatedId, "private-first.dat", RunFolderId),
+                    Folder(
+                        "private-untraversed-folder-id",
+                        "private-untraversed",
+                        RunFolderId)
+                },
+                "private-repeated-page-2"),
+            Page(
+                new[]
+                {
+                    Blob(repeatedId, "private-second.dat", RunFolderId)
+                },
+                nextPageToken: null));
+        factory.AddPages(
+            "private-untraversed-folder-id",
+            Page(
+                new[]
+                {
+                    Blob(
+                        "private-untraversed-file-id",
+                        "private-untraversed.dat",
+                        "private-untraversed-folder-id")
+                },
+                nextPageToken: null));
+        GoogleDriveOneLevelFileListingService service = Service(factory);
+        using GoogleDriveResolvedRunFolder resolved = ResolvedRunFolder();
+
+        GoogleDriveRecursiveFileListingException exception =
+            await Assert.ThrowsAsync<GoogleDriveRecursiveFileListingException>(() =>
+                service.ListAsync(resolved));
+
+        Assert.Equal(
+            GoogleDriveRecursiveFileListingStatus.InvalidMetadata,
+            exception.Result.Status);
+        Assert.Equal(
+            GoogleDriveRecursiveFileListingErrorCodes.InvalidMetadata,
+            exception.Result.SafeErrorCode);
+        Assert.False(exception.Result.Retryable);
+        Assert.Empty(exception.Result.Entries);
+        Assert.Single(factory.Clients);
+        AssertClient(
+            factory.ClientFor(RunFolderId),
+            RunFolderId,
+            null,
+            "private-repeated-page-2");
+        AssertNoMutation(factory);
+        AssertPrivateValuesAbsent(
+            exception,
+            repeatedId,
+            "private-first.dat",
+            "private-second.dat",
+            "private-untraversed-folder-id",
+            "private-repeated-page-2");
+        AssertPrivateValuesAbsent(
+            exception.Result,
+            repeatedId,
+            "private-first.dat",
+            "private-second.dat",
+            "private-untraversed-folder-id",
+            "private-repeated-page-2");
+        Assert.True(resolved.IsDisposed);
     }
 
     [Fact]
@@ -318,7 +461,7 @@ public sealed class GoogleDriveRecursivePaginationIntegrationTests
             "private-save.dat",
             "PRIVATE-SAVE.DAT",
             "private-collision-page-2");
-        Assert.False(resolved.IsDisposed);
+        Assert.True(resolved.IsDisposed);
     }
 
     [Fact]
@@ -388,7 +531,106 @@ public sealed class GoogleDriveRecursivePaginationIntegrationTests
             "private-partial.dat",
             "private-incomplete-page-token",
             "private-ignored-page-token");
-        Assert.False(resolved.IsDisposed);
+        Assert.True(resolved.IsDisposed);
+    }
+
+    [Fact]
+    public async Task MalformedParentMetadataOnNestedLaterPage_FailsWithoutPartialResult()
+    {
+        const string nestedFolderId = "private-nested-folder-id";
+        const string unexpectedParentId = "private-unexpected-parent-id";
+        var factory = new PagedTreeClientFactory();
+        factory.AddPages(
+            RunFolderId,
+            Page(
+                new[]
+                {
+                    Blob("private-root-file-id", "root.dat", RunFolderId),
+                    Folder(nestedFolderId, "nested", RunFolderId),
+                    Folder(
+                        "private-untraversed-folder-id",
+                        "untraversed",
+                        RunFolderId)
+                },
+                nextPageToken: null));
+        factory.AddPages(
+            nestedFolderId,
+            Page(
+                new[]
+                {
+                    Blob("private-nested-file-id", "nested.dat", nestedFolderId)
+                },
+                "private-nested-page-2"),
+            Page(
+                new[]
+                {
+                    Object(
+                        "private-invalid-id",
+                        "invalid.dat",
+                        "application/octet-stream",
+                        nestedFolderId,
+                        new[] { nestedFolderId, unexpectedParentId })
+                },
+                nextPageToken: null));
+        factory.AddPages(
+            "private-untraversed-folder-id",
+            Page(
+                new[]
+                {
+                    Blob(
+                        "private-untraversed-file-id",
+                        "untraversed.dat",
+                        "private-untraversed-folder-id")
+                },
+                nextPageToken: null));
+        GoogleDriveOneLevelFileListingService service = Service(factory);
+        using GoogleDriveResolvedRunFolder resolved = ResolvedRunFolder();
+
+        GoogleDriveRecursiveFileListingException exception =
+            await Assert.ThrowsAsync<GoogleDriveRecursiveFileListingException>(() =>
+                service.ListAsync(resolved));
+
+        Assert.Equal(
+            GoogleDriveRecursiveFileListingStatus.InvalidMetadata,
+            exception.Result.Status);
+        Assert.Equal(
+            GoogleDriveRecursiveFileListingErrorCodes.InvalidMetadata,
+            exception.Result.SafeErrorCode);
+        Assert.False(exception.Result.Retryable);
+        Assert.Empty(exception.Result.Entries);
+        Assert.Equal(2, factory.Clients.Count);
+        AssertClient(
+            factory.ClientFor(RunFolderId),
+            RunFolderId,
+            new string?[] { null });
+        AssertClient(
+            factory.ClientFor(nestedFolderId),
+            nestedFolderId,
+            null,
+            "private-nested-page-2");
+        Assert.All(
+            factory.Clients,
+            client => Assert.Equal(0, client.RemainingPageCount));
+        AssertNoMutation(factory);
+        AssertPrivateValuesAbsent(
+            exception,
+            nestedFolderId,
+            unexpectedParentId,
+            "private-root-file-id",
+            "private-nested-file-id",
+            "private-invalid-id",
+            "private-untraversed-folder-id",
+            "private-nested-page-2");
+        AssertPrivateValuesAbsent(
+            exception.Result,
+            nestedFolderId,
+            unexpectedParentId,
+            "private-root-file-id",
+            "private-nested-file-id",
+            "private-invalid-id",
+            "private-untraversed-folder-id",
+            "private-nested-page-2");
+        Assert.True(resolved.IsDisposed);
     }
 
     [Fact]
@@ -461,7 +703,7 @@ public sealed class GoogleDriveRecursivePaginationIntegrationTests
             exception,
             "private-nested-page-2",
             "private-never-requested-page-3");
-        Assert.False(resolved.IsDisposed);
+        Assert.True(resolved.IsDisposed);
     }
 
     private static GoogleDriveOneLevelFileListingService Service(
@@ -504,13 +746,14 @@ public sealed class GoogleDriveRecursivePaginationIntegrationTests
         string objectId,
         string exactName,
         string mimeType,
-        string parentFolderId) =>
+        string parentFolderId,
+        IReadOnlyList<string>? parentIds = null) =>
         new(
             objectId,
             exactName,
             mimeType,
             trashed: false,
-            new[] { parentFolderId },
+            parentIds ?? new[] { parentFolderId },
             driveId: null);
 
     private static GoogleDriveResolvedRunFolder ResolvedRunFolder()
@@ -758,5 +1001,21 @@ public sealed class GoogleDriveRecursivePaginationIntegrationTests
             CancellationToken cancellationToken = default) =>
             throw new InvalidOperationException(
                 "Recursive pagination must not create paths.");
+    }
+
+    private sealed class FixedRunFolderResolver
+        : IGoogleDriveRunFolderResolver
+    {
+        public List<GoogleDriveRecursiveFileListingRequest> Requests { get; } =
+            new();
+
+        public Task<GoogleDriveResolvedRunFolder> ResolveAsync(
+            GoogleDriveRecursiveFileListingRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Requests.Add(request);
+            return Task.FromResult(ResolvedRunFolder());
+        }
     }
 }

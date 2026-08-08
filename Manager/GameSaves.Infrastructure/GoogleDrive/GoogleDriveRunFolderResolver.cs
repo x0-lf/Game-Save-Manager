@@ -98,6 +98,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                         GoogleDriveRecursiveFileListingStatus.Failed);
                 }
 
+                cancellationToken.ThrowIfCancellationRequested();
                 GoogleDriveObjectResolutionResult resolution =
                     await context.Resolver.ResolveAsync(
                         context.RootFolderId,
@@ -110,6 +111,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                     resolution,
                     request,
                     context);
+                cancellationToken.ThrowIfCancellationRequested();
                 context = null;
                 return resolved;
             }
@@ -127,9 +129,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
             }
             catch (GoogleDriveApiException exception)
             {
-                throw Failure(
-                    GoogleDriveRemoteValidationMapper.FromApiFailure(
-                        exception.Details));
+                throw Failure(exception);
             }
             catch
             {
@@ -214,128 +214,25 @@ namespace GameSaves.Infrastructure.GoogleDrive
         }
 
         private static GoogleDriveRecursiveFileListingException Failure(
-            GoogleDriveObjectResolutionResult resolution)
-        {
-            GoogleDriveRecursiveFileListingStatus status =
-                resolution.Status switch
-                {
-                    GoogleDriveObjectResolutionStatus.NotFound =>
-                        GoogleDriveRecursiveFileListingStatus.FolderNotFound,
-                    GoogleDriveObjectResolutionStatus.InvalidPath =>
-                        GoogleDriveRecursiveFileListingStatus.InvalidPath,
-                    GoogleDriveObjectResolutionStatus.Ambiguous =>
-                        GoogleDriveRecursiveFileListingStatus.Ambiguous,
-                    GoogleDriveObjectResolutionStatus.TypeMismatch =>
-                        GoogleDriveRecursiveFileListingStatus.TypeCollision,
-                    GoogleDriveObjectResolutionStatus.Trashed =>
-                        GoogleDriveRecursiveFileListingStatus.TrashedObject,
-                    GoogleDriveObjectResolutionStatus.UnsupportedLocation =>
-                        GoogleDriveRecursiveFileListingStatus.UnsupportedLocation,
-                    GoogleDriveObjectResolutionStatus.ReauthenticationRequired =>
-                        GoogleDriveRecursiveFileListingStatus.ReauthenticationRequired,
-                    GoogleDriveObjectResolutionStatus.AccessDenied =>
-                        GoogleDriveRecursiveFileListingStatus.AccessDenied,
-                    GoogleDriveObjectResolutionStatus.RateLimited =>
-                        GoogleDriveRecursiveFileListingStatus.RateLimited,
-                    GoogleDriveObjectResolutionStatus.QuotaExceeded =>
-                        GoogleDriveRecursiveFileListingStatus.QuotaExceeded,
-                    GoogleDriveObjectResolutionStatus.Unavailable =>
-                        GoogleDriveRecursiveFileListingStatus.Unavailable,
-                    GoogleDriveObjectResolutionStatus.Failed
-                        when string.Equals(
-                            resolution.ErrorCode,
-                            GoogleDriveObjectResolutionErrorCodes.InvalidMetadata,
-                            StringComparison.Ordinal) =>
-                        GoogleDriveRecursiveFileListingStatus.InvalidMetadata,
-                    _ => GoogleDriveRecursiveFileListingStatus.Failed
-                };
-
-            bool retryable = resolution.Status is
-                GoogleDriveObjectResolutionStatus.RateLimited or
-                GoogleDriveObjectResolutionStatus.Unavailable;
-            return Failure(status, retryable);
-        }
+            GoogleDriveObjectResolutionResult resolution) =>
+            GoogleDriveRecursiveFileListingFailureMapper.FromResolution(
+                resolution);
 
         private static GoogleDriveRecursiveFileListingException Failure(
-            GoogleDriveRemoteValidationResult validation)
-        {
-            GoogleDriveRecursiveFileListingStatus status =
-                validation.Status switch
-                {
-                    GoogleDriveRemoteValidationStatus.UnsupportedScope or
-                    GoogleDriveRemoteValidationStatus.NotConnected or
-                    GoogleDriveRemoteValidationStatus.AuthenticationCorrupted or
-                    GoogleDriveRemoteValidationStatus.AuthorizationRevoked or
-                    GoogleDriveRemoteValidationStatus.ReauthenticationRequired =>
-                        GoogleDriveRecursiveFileListingStatus.ReauthenticationRequired,
-                    GoogleDriveRemoteValidationStatus.RootMissing =>
-                        GoogleDriveRecursiveFileListingStatus.FolderNotFound,
-                    GoogleDriveRemoteValidationStatus.RootTrashed =>
-                        GoogleDriveRecursiveFileListingStatus.TrashedObject,
-                    GoogleDriveRemoteValidationStatus.RootWrongType =>
-                        GoogleDriveRecursiveFileListingStatus.TypeCollision,
-                    GoogleDriveRemoteValidationStatus.RootUnsupportedLocation =>
-                        GoogleDriveRecursiveFileListingStatus.UnsupportedLocation,
-                    GoogleDriveRemoteValidationStatus.RootInaccessible or
-                    GoogleDriveRemoteValidationStatus.RootCannotListChildren or
-                    GoogleDriveRemoteValidationStatus.RootCannotAddChildren =>
-                        GoogleDriveRecursiveFileListingStatus.AccessDenied,
-                    GoogleDriveRemoteValidationStatus.RateLimited =>
-                        GoogleDriveRecursiveFileListingStatus.RateLimited,
-                    GoogleDriveRemoteValidationStatus.QuotaExceeded =>
-                        GoogleDriveRecursiveFileListingStatus.QuotaExceeded,
-                    GoogleDriveRemoteValidationStatus.AuthenticationUnavailable or
-                    GoogleDriveRemoteValidationStatus.Unavailable =>
-                        GoogleDriveRecursiveFileListingStatus.Unavailable,
-                    GoogleDriveRemoteValidationStatus.Cancelled =>
-                        GoogleDriveRecursiveFileListingStatus.Cancelled,
-                    _ => GoogleDriveRecursiveFileListingStatus.Failed
-                };
+            GoogleDriveRemoteValidationResult validation) =>
+            GoogleDriveRecursiveFileListingFailureMapper.FromRemoteValidation(
+                validation);
 
-            return Failure(status, validation.Retryable);
-        }
+        private static GoogleDriveRecursiveFileListingException Failure(
+            GoogleDriveApiException exception) =>
+            GoogleDriveRecursiveFileListingFailureMapper.FromApiFailure(
+                exception);
 
         private static GoogleDriveRecursiveFileListingException Failure(
             GoogleDriveRecursiveFileListingStatus status,
             bool retryable = false) =>
-            new(new GoogleDriveRecursiveFileListingResult(
+            GoogleDriveRecursiveFileListingFailureMapper.FromStatus(
                 status,
-                Array.Empty<GoogleDriveRecursiveFileEntry>(),
-                retryable,
-                GoogleDriveRecursiveFileListingErrorCodes.ForStatus(status),
-                SafeUserMessage(status)));
-
-        private static string SafeUserMessage(
-            GoogleDriveRecursiveFileListingStatus status) =>
-            status switch
-            {
-                GoogleDriveRecursiveFileListingStatus.InvalidPath =>
-                    "The Google Drive backup-folder path is invalid.",
-                GoogleDriveRecursiveFileListingStatus.FolderNotFound =>
-                    "The Google Drive backup folder could not be found.",
-                GoogleDriveRecursiveFileListingStatus.Ambiguous =>
-                    "The Google Drive backup folder is ambiguous.",
-                GoogleDriveRecursiveFileListingStatus.TypeCollision =>
-                    "The requested Google Drive object is not a folder.",
-                GoogleDriveRecursiveFileListingStatus.TrashedObject =>
-                    "The Google Drive backup folder is in the trash.",
-                GoogleDriveRecursiveFileListingStatus.UnsupportedLocation =>
-                    "This Google Drive location is not supported.",
-                GoogleDriveRecursiveFileListingStatus.InvalidMetadata =>
-                    "Google Drive returned invalid folder metadata.",
-                GoogleDriveRecursiveFileListingStatus.ReauthenticationRequired =>
-                    "Google Drive must be connected again.",
-                GoogleDriveRecursiveFileListingStatus.AccessDenied =>
-                    "Google Drive did not allow access to the backup folder.",
-                GoogleDriveRecursiveFileListingStatus.RateLimited =>
-                    "Google Drive is receiving too many requests. Try again later.",
-                GoogleDriveRecursiveFileListingStatus.QuotaExceeded =>
-                    "Google Drive quota prevents listing the backup folder.",
-                GoogleDriveRecursiveFileListingStatus.Unavailable =>
-                    "Google Drive is temporarily unavailable.",
-                GoogleDriveRecursiveFileListingStatus.Cancelled =>
-                    "Google Drive file listing was cancelled.",
-                _ => "The Google Drive backup folder could not be resolved."
-            };
+                retryable);
     }
 }

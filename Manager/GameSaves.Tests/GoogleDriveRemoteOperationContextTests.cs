@@ -166,6 +166,23 @@ public sealed class GoogleDriveRemoteOperationContextTests
     }
 
     [Fact]
+    public async Task CancellationAfterProfileRead_StopsBeforeAuthentication()
+    {
+        Context context = CreateContext();
+        using var cancellation = new CancellationTokenSource();
+        context.Repository.AfterGet = cancellation.Cancel;
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            context.Factory.CreateAsync(
+                context.Profile.Id,
+                cancellation.Token));
+
+        Assert.Equal(1, context.Repository.GetCalls);
+        Assert.Equal(0, context.SessionFactory.RestoreCalls);
+        Assert.Equal(0, context.ResolverFactory.CreateCalls);
+    }
+
+    [Fact]
     public async Task CancellationAfterRestore_DisposesCredentialAndSkipsResolver()
     {
         Context context = CreateContext();
@@ -179,6 +196,22 @@ public sealed class GoogleDriveRemoteOperationContextTests
 
         Assert.True(context.SessionFactory.LastCredential!.IsDisposed);
         Assert.Equal(0, context.ResolverFactory.CreateCalls);
+    }
+
+    [Fact]
+    public async Task CancellationAfterResolverCreation_DisposesCredential()
+    {
+        Context context = CreateContext();
+        using var cancellation = new CancellationTokenSource();
+        context.ResolverFactory.AfterCreate = cancellation.Cancel;
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            context.Factory.CreateAsync(
+                context.Profile.Id,
+                cancellation.Token));
+
+        Assert.Equal(1, context.ResolverFactory.CreateCalls);
+        Assert.True(context.SessionFactory.LastCredential!.IsDisposed);
     }
 
     [Fact]
@@ -307,6 +340,7 @@ public sealed class GoogleDriveRemoteOperationContextTests
             _profile = profile;
 
         public int GetCalls { get; private set; }
+        public Action? AfterGet { get; set; }
 
         public IReadOnlyList<SyncRemoteProfile> GetAll() =>
             _profile is null ? Array.Empty<SyncRemoteProfile>() : new[] { _profile };
@@ -314,7 +348,9 @@ public sealed class GoogleDriveRemoteOperationContextTests
         public SyncRemoteProfile? GetById(Guid id)
         {
             GetCalls++;
-            return _profile?.Id == id ? _profile : null;
+            SyncRemoteProfile? result = _profile?.Id == id ? _profile : null;
+            AfterGet?.Invoke();
+            return result;
         }
 
         public SyncRemoteProfile Create(SyncRemoteProfile profile) =>
@@ -389,6 +425,7 @@ public sealed class GoogleDriveRemoteOperationContextTests
     {
         public RecordingResolver Resolver { get; } = new();
         public bool ThrowOnCreate { get; set; }
+        public Action? AfterCreate { get; set; }
         public int CreateCalls { get; private set; }
         public List<Guid> ProfileIds { get; } = new();
         public List<GoogleAuthorizedCredential> Credentials { get; } = new();
@@ -402,6 +439,7 @@ public sealed class GoogleDriveRemoteOperationContextTests
             Credentials.Add(credential);
             if (ThrowOnCreate)
                 throw new InvalidOperationException("Deterministic resolver failure.");
+            AfterCreate?.Invoke();
             return Resolver;
         }
     }

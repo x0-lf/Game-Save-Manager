@@ -34,7 +34,8 @@ public sealed class GoogleDriveRemoteFileSystemTests
             new RecordingTextFileReadService(),
             new RecordingProviderMetadataReadService(),
             new RecordingProviderMetadataReplacementService(),
-            new RecordingCreateOnlyTextFileService());
+            new RecordingCreateOnlyTextFileService(),
+            new RecordingRecursiveFileListingService());
 
         IRemoteFileSystem first = factory.Create(ProfileId);
         IRemoteFileSystem second = factory.Create(ProfileId);
@@ -69,7 +70,8 @@ public sealed class GoogleDriveRemoteFileSystemTests
             new RecordingTextFileReadService(),
             new RecordingProviderMetadataReadService(),
             new RecordingProviderMetadataReplacementService(),
-            new RecordingCreateOnlyTextFileService());
+            new RecordingCreateOnlyTextFileService(),
+            new RecordingRecursiveFileListingService());
 
         await factory.Create(ProfileId).ValidateAsync();
         await factory.Create(secondProfileId).ValidateAsync();
@@ -101,7 +103,8 @@ public sealed class GoogleDriveRemoteFileSystemTests
             new RecordingTextFileReadService(),
             new RecordingProviderMetadataReadService(),
             new RecordingProviderMetadataReplacementService(),
-            new RecordingCreateOnlyTextFileService());
+            new RecordingCreateOnlyTextFileService(),
+            new RecordingRecursiveFileListingService());
 
         IRemoteFileSystem remote = factory.Create(ProfileId);
 
@@ -125,7 +128,8 @@ public sealed class GoogleDriveRemoteFileSystemTests
             new RecordingTextFileReadService(),
             new RecordingProviderMetadataReadService(),
             new RecordingProviderMetadataReplacementService(),
-            new RecordingCreateOnlyTextFileService());
+            new RecordingCreateOnlyTextFileService(),
+            new RecordingRecursiveFileListingService());
 
         IRemoteFileSystem missing = factory.Create(ProfileId);
         repository.Create(Profile() with
@@ -173,6 +177,9 @@ public sealed class GoogleDriveRemoteFileSystemTests
                 IGoogleDriveProviderMetadataReplacementService>());
         Assert.IsType<GoogleDriveCreateOnlyTextFileService>(
             provider.GetRequiredService<IGoogleDriveCreateOnlyTextFileService>());
+        Assert.IsType<GoogleDriveRecursiveFileListingService>(
+            provider.GetRequiredService<
+                IGoogleDriveRecursiveFileListingService>());
         IRemoteFileSystem remote = factory.Create(ProfileId);
 
         Assert.IsType<GoogleDriveRemoteFileSystemFactory>(factory);
@@ -393,14 +400,34 @@ public sealed class GoogleDriveRemoteFileSystemTests
     }
 
     [Fact]
-    public async Task EveryLaterOperation_FailsExplicitlyWithoutValidationOrDriveWork()
+    public async Task ListFilesAsync_DelegatesPathProfileAndCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var listing = new RecordingRecursiveFileListingService
+        {
+            Result = new[] { "nested/a.dat", "z.dat" }
+        };
+        IRemoteFileSystem remote = Remote(
+            new RecordingValidationService(),
+            recursiveFileListing: listing);
+
+        IReadOnlyList<string> paths = await remote.ListFilesAsync(
+            "Run 42",
+            cancellation.Token);
+
+        Assert.Equal(listing.Result, paths);
+        Assert.Equal(new[] { ProfileId }, listing.ProfileIds);
+        Assert.Equal(new[] { "Run 42" }, listing.RelativeFolders);
+        Assert.Equal(cancellation.Token, listing.CancellationTokens.Single());
+    }
+
+    [Fact]
+    public async Task TransferOperations_FailExplicitlyWithoutValidationOrDriveWork()
     {
         var validation = new RecordingValidationService();
         IRemoteFileSystem remote = Remote(validation);
         var operations = new (string Name, Func<Task> Invoke)[]
         {
-            (nameof(IRemoteFileSystem.ListFilesAsync),
-                async () => await remote.ListFilesAsync("run")),
             (nameof(IRemoteFileSystem.UploadFileAsync),
                 async () => await remote.UploadFileAsync(
                     "local.sav",
@@ -448,6 +475,9 @@ public sealed class GoogleDriveRemoteFileSystemTests
         Assert.Contains(
             typeof(IGoogleDriveCreateOnlyTextFileService),
             fieldTypes);
+        Assert.Contains(
+            typeof(IGoogleDriveRecursiveFileListingService),
+            fieldTypes);
         Assert.DoesNotContain(typeof(IGoogleDriveObjectPathResolver), fieldTypes);
         Assert.DoesNotContain(typeof(IGoogleDriveObjectApi), fieldTypes);
         Assert.DoesNotContain(typeof(IGoogleDriveRootFolderApi), fieldTypes);
@@ -490,7 +520,8 @@ public sealed class GoogleDriveRemoteFileSystemTests
         RecordingProviderMetadataReadService? providerMetadataReads = null,
         RecordingProviderMetadataReplacementService?
             providerMetadataReplacements = null,
-        RecordingCreateOnlyTextFileService? createOnlyTextFiles = null) =>
+        RecordingCreateOnlyTextFileService? createOnlyTextFiles = null,
+        RecordingRecursiveFileListingService? recursiveFileListing = null) =>
         new GoogleDriveRemoteFileSystem(
             ProfileId,
             "GameSave Manager Backups",
@@ -502,7 +533,9 @@ public sealed class GoogleDriveRemoteFileSystemTests
             providerMetadataReads ?? new RecordingProviderMetadataReadService(),
             providerMetadataReplacements ??
                 new RecordingProviderMetadataReplacementService(),
-            createOnlyTextFiles ?? new RecordingCreateOnlyTextFileService());
+            createOnlyTextFiles ?? new RecordingCreateOnlyTextFileService(),
+            recursiveFileListing ??
+                new RecordingRecursiveFileListingService());
 
     private static SyncRemoteProfile Profile() =>
         new(
@@ -713,6 +746,31 @@ public sealed class GoogleDriveRemoteFileSystemTests
             CancellationTokens.Add(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class RecordingRecursiveFileListingService
+        : IGoogleDriveRecursiveFileListingService
+    {
+        public IReadOnlyList<string> Result { get; set; } =
+            Array.Empty<string>();
+
+        public List<Guid> ProfileIds { get; } = new();
+
+        public List<string> RelativeFolders { get; } = new();
+
+        public List<CancellationToken> CancellationTokens { get; } = new();
+
+        public Task<IReadOnlyList<string>> ListAsync(
+            Guid remoteProfileId,
+            string relativeFolder,
+            CancellationToken cancellationToken = default)
+        {
+            ProfileIds.Add(remoteProfileId);
+            RelativeFolders.Add(relativeFolder);
+            CancellationTokens.Add(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(Result);
         }
     }
 }

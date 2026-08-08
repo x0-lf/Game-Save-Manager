@@ -321,6 +321,9 @@ public sealed class GoogleDriveObjectApiTests
     [InlineData(0, "GoogleDriveObjectTrashed")]
     [InlineData(1, "GoogleDriveObjectParentMismatch")]
     [InlineData(2, "GoogleDriveObjectTypeMismatch")]
+    [InlineData(3, "GoogleDriveObjectParentMismatch")]
+    [InlineData(4, "GoogleDriveObjectParentMismatch")]
+    [InlineData(5, "GoogleDriveObjectParentMismatch")]
     public async Task ListDirectChildren_RejectsResultsThatViolateTheQueryContract(
         int scenario,
         string expectedErrorCode)
@@ -336,6 +339,22 @@ public sealed class GoogleDriveObjectApiTests
                 "private-object-id",
                 "Private name",
                 mimeType: "application/json"),
+            3 => Object(
+                "private-object-id",
+                "Private name",
+                parentIds: new[]
+                {
+                    "parent-id",
+                    "private-unexpected-parent-id"
+                }),
+            4 => Object(
+                "private-object-id",
+                "Private name",
+                parentIds: new[] { "parent-id", "parent-id" }),
+            5 => Object(
+                "private-object-id",
+                "Private name",
+                parentIds: new[] { "parent-id", string.Empty }),
             _ => throw new ArgumentOutOfRangeException(nameof(scenario))
         };
         var client = new RecordingObjectClient();
@@ -357,6 +376,10 @@ public sealed class GoogleDriveObjectApiTests
         Assert.DoesNotContain("private-object-id", exception.ToString(),
             StringComparison.Ordinal);
         Assert.DoesNotContain("Private name", exception.ToString(),
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "private-unexpected-parent-id",
+            exception.ToString(),
             StringComparison.Ordinal);
         Assert.Equal(1, client.DisposeCalls);
     }

@@ -16,6 +16,19 @@ public sealed class GoogleDriveOneLevelFileListingServiceTests
         Guid.Parse("621832c6-7ec0-46de-8a5b-d62f5a9856e8");
 
     private const string RunFolderId = "authoritative-run-folder-id";
+    private const string RootFolderId = "authoritative-application-root-id";
+
+    public static TheoryData<string> UnsupportedDriveMimeTypes => new()
+    {
+        "application/vnd.google-apps.shortcut",
+        "application/vnd.google-apps.document",
+        "application/vnd.google-apps.spreadsheet",
+        "application/vnd.google-apps.presentation",
+        "application/vnd.google-apps.form",
+        "application/vnd.google-apps.drawing",
+        "application/vnd.google-apps.site",
+        "application/vnd.google-apps.future-object"
+    };
 
     [Fact]
     public async Task EmptyFolder_ReturnsCompletedImmutableEmptyFileList()
@@ -23,6 +36,8 @@ public sealed class GoogleDriveOneLevelFileListingServiceTests
         var enumeration = new RecordingChildEnumerationService();
         var service = new GoogleDriveOneLevelFileListingService(enumeration);
         using GoogleDriveResolvedRunFolder resolved = ResolvedRunFolder();
+        GoogleDriveRemoteOperationContext operationContext =
+            resolved.OperationContext;
 
         GoogleDriveRecursiveFileListingResult result =
             await service.ListAsync(resolved);
@@ -34,8 +49,8 @@ public sealed class GoogleDriveOneLevelFileListingServiceTests
         Assert.Null(result.SafeUserMessage);
         Assert.Equal(1, enumeration.CallCount);
         Assert.Equal(RunFolderId, enumeration.ParentFolderId);
-        Assert.Same(resolved.OperationContext, enumeration.OperationContext);
-        Assert.False(resolved.IsDisposed);
+        Assert.Same(operationContext, enumeration.OperationContext);
+        Assert.True(resolved.IsDisposed);
         IList entries = Assert.IsAssignableFrom<IList>(result.Entries);
         Assert.True(entries.IsReadOnly);
         Assert.Throws<NotSupportedException>(() => entries.Clear());
@@ -190,6 +205,8 @@ public sealed class GoogleDriveOneLevelFileListingServiceTests
         };
         var service = new GoogleDriveOneLevelFileListingService(enumeration);
         using GoogleDriveResolvedRunFolder resolved = ResolvedRunFolder();
+        var resolver = Assert.IsType<NeverCalledResolver>(
+            resolved.OperationContext.Resolver);
 
         GoogleDriveRecursiveFileListingResult result =
             await service.ListAsync(resolved);
@@ -197,9 +214,7 @@ public sealed class GoogleDriveOneLevelFileListingServiceTests
         GoogleDriveRecursiveFileEntry file = Assert.Single(result.Entries);
         Assert.Equal("save.dat", file.CanonicalRelativePath);
         Assert.Equal(3, enumeration.CallCount);
-        Assert.Equal(0, resolved.OperationContext.Resolver is NeverCalledResolver resolver
-            ? resolver.CallCount
-            : -1);
+        Assert.Equal(0, resolver.CallCount);
     }
 
     [Fact]
@@ -223,21 +238,15 @@ public sealed class GoogleDriveOneLevelFileListingServiceTests
     }
 
     [Theory]
-    [InlineData(GoogleDriveRecursiveObjectKind.GoogleWorkspaceDocument)]
-    [InlineData(GoogleDriveRecursiveObjectKind.Shortcut)]
-    public async Task UnsupportedDriveObject_FailsClosedWithoutPartialFiles(
-        object kindValue)
+    [MemberData(nameof(UnsupportedDriveMimeTypes))]
+    public async Task UnsupportedObjectAtRunRoot_FailsClosedWithoutPartialFiles(
+        string mimeType)
     {
         GoogleDriveRecursiveObjectKind kind =
-            Assert.IsType<GoogleDriveRecursiveObjectKind>(kindValue);
-        string mimeType = kind switch
-        {
-            GoogleDriveRecursiveObjectKind.GoogleWorkspaceDocument =>
-                "application/vnd.google-apps.document",
-            GoogleDriveRecursiveObjectKind.Shortcut =>
-                "application/vnd.google-apps.shortcut",
-            _ => throw new ArgumentOutOfRangeException(nameof(kindValue))
-        };
+            GoogleDriveRecursiveObjectClassificationPolicy.Classify(mimeType);
+        Assert.True(kind is
+            GoogleDriveRecursiveObjectKind.GoogleWorkspaceDocument or
+            GoogleDriveRecursiveObjectKind.Shortcut);
         var enumeration = new RecordingChildEnumerationService
         {
             Children = new[]
@@ -253,27 +262,71 @@ public sealed class GoogleDriveOneLevelFileListingServiceTests
             await Assert.ThrowsAsync<GoogleDriveRecursiveFileListingException>(() =>
                 service.ListAsync(resolved));
 
-        Assert.Equal(
-            GoogleDriveRecursiveFileListingStatus.UnsupportedObject,
-            exception.Result.Status);
-        Assert.Equal(
-            GoogleDriveRecursiveFileListingErrorCodes.UnsupportedObject,
-            exception.Result.SafeErrorCode);
-        Assert.Empty(exception.Result.Entries);
-        Assert.False(exception.Result.Retryable);
-        foreach (string privateValue in new[]
-                 {
-                     "partial-file-id",
-                     "partial.dat",
-                     "unsupported-object-id",
-                     "unsupported-object"
-                 })
+        AssertUnsupportedObject(
+            exception,
+            mimeType,
+            "partial-file-id",
+            "partial.dat",
+            "unsupported-object-id",
+            "unsupported-object");
+        Assert.Equal(new[] { RunFolderId }, enumeration.ParentFolderIds);
+        Assert.DoesNotContain(
+            mimeType,
+            GoogleDriveRecursiveObjectClassificationPolicy
+                .ToSafeDiagnosticString(kind),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task UnsupportedObjectDeepInTree_FailsWithoutPartialListing()
+    {
+        const string unsupportedMimeType =
+            "application/vnd.google-apps.future-object";
+        var enumeration = new RecordingChildEnumerationService
         {
-            Assert.DoesNotContain(
-                privateValue,
-                exception.ToString(),
-                StringComparison.Ordinal);
-        }
+            Children = new[]
+            {
+                Blob("root-file-id", "root.dat"),
+                Folder("nested-folder-id", "nested"),
+                Folder("untouched-folder-id", "untouched")
+            }
+        };
+        enumeration.SetChildren(
+            "nested-folder-id",
+            Blob("nested-file-id", "nested.dat", "nested-folder-id"),
+            Child(
+                "unsupported-object-id",
+                "unsupported-object",
+                unsupportedMimeType,
+                GoogleDriveRecursiveObjectKind.GoogleWorkspaceDocument,
+                "nested-folder-id"));
+        enumeration.SetChildren(
+            "untouched-folder-id",
+            Blob("untouched-file-id", "untouched.dat", "untouched-folder-id"));
+        var service = new GoogleDriveOneLevelFileListingService(enumeration);
+        using GoogleDriveResolvedRunFolder resolved = ResolvedRunFolder();
+
+        GoogleDriveRecursiveFileListingException exception =
+            await Assert.ThrowsAsync<GoogleDriveRecursiveFileListingException>(() =>
+                service.ListAsync(resolved));
+
+        AssertUnsupportedObject(
+            exception,
+            unsupportedMimeType,
+            "root-file-id",
+            "root.dat",
+            "nested-file-id",
+            "nested.dat",
+            "unsupported-object-id",
+            "unsupported-object",
+            "nested-folder-id");
+        Assert.Equal(
+            new[] { RunFolderId, "nested-folder-id" },
+            enumeration.ParentFolderIds);
+        Assert.DoesNotContain(
+            "untouched-folder-id",
+            enumeration.ParentFolderIds,
+            StringComparer.Ordinal);
     }
 
     [Fact]
@@ -476,7 +529,7 @@ public sealed class GoogleDriveOneLevelFileListingServiceTests
             service.ListAsync(resolved, cancellation.Token));
 
         Assert.Equal(0, enumeration.CallCount);
-        Assert.False(resolved.IsDisposed);
+        Assert.True(resolved.IsDisposed);
     }
 
     [Fact]
@@ -495,7 +548,36 @@ public sealed class GoogleDriveOneLevelFileListingServiceTests
             service.ListAsync(resolved, cancellation.Token));
 
         Assert.Equal(1, enumeration.CallCount);
-        Assert.False(resolved.IsDisposed);
+        Assert.True(resolved.IsDisposed);
+    }
+
+    [Fact]
+    public async Task CancellationBeforeChildQueueing_StopsWithoutNestedWorkOrCache()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var enumeration = new RecordingChildEnumerationService
+        {
+            Children = new CancelAfterEnumerationCountList<
+                GoogleDriveFolderChildEntry>(
+                    new[] { Folder("late-folder-id", "late") },
+                    cancellation,
+                    cancelAfterEnumerationCount: 2)
+        };
+        var cache = new GoogleDriveObjectIdCache();
+        var service = new GoogleDriveOneLevelFileListingService(enumeration, cache);
+        using GoogleDriveResolvedRunFolder resolved = ResolvedRunFolder();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            service.ListAsync(resolved, cancellation.Token));
+
+        Assert.Equal(new[] { RunFolderId }, enumeration.ParentFolderIds);
+        Assert.False(cache.TryGet(
+            new GoogleDriveObjectCacheScope(ProfileId, RootFolderId),
+            RunFolderId,
+            "late",
+            GoogleDriveObjectKind.Folder,
+            out _));
+        Assert.True(resolved.IsDisposed);
     }
 
     [Fact]
@@ -555,6 +637,145 @@ public sealed class GoogleDriveOneLevelFileListingServiceTests
             entry.CanonicalRelativePath);
         Assert.Equal("player-folder-id", entry.ParentFolderId);
         Assert.Equal(5, enumeration.CallCount);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public async Task RepeatedIdentityAtRunRoot_FailsBeforeFurtherTraversal(
+        int scenario)
+    {
+        const string repeatedId = "private-repeated-id";
+        var enumeration = new RecordingChildEnumerationService
+        {
+            Children = scenario switch
+            {
+                0 => new[] { Folder(RunFolderId, "private-cycle") },
+                1 => new[]
+                {
+                    Folder(repeatedId, "private-first-folder"),
+                    Folder(repeatedId, "private-second-folder")
+                },
+                2 => new[]
+                {
+                    Blob(repeatedId, "private-first.dat"),
+                    Blob(repeatedId, "private-second.dat")
+                },
+                3 => new[]
+                {
+                    Folder(repeatedId, "private-folder"),
+                    Blob(repeatedId, "private-file.dat")
+                },
+                _ => throw new ArgumentOutOfRangeException(nameof(scenario))
+            }
+        };
+        var service = new GoogleDriveOneLevelFileListingService(enumeration);
+        using GoogleDriveResolvedRunFolder resolved = ResolvedRunFolder();
+
+        GoogleDriveRecursiveFileListingException exception =
+            await Assert.ThrowsAsync<GoogleDriveRecursiveFileListingException>(() =>
+                service.ListAsync(resolved));
+
+        AssertInvalidMetadata(
+            exception,
+            RunFolderId,
+            repeatedId,
+            "private-cycle",
+            "private-first-folder",
+            "private-second-folder",
+            "private-first.dat",
+            "private-second.dat",
+            "private-folder",
+            "private-file.dat");
+        Assert.Equal(new[] { RunFolderId }, enumeration.ParentFolderIds);
+    }
+
+    [Fact]
+    public async Task DeepFolderCycle_FailsWithoutRepeatingTraversal()
+    {
+        const string firstFolderId = "private-first-folder-id";
+        const string secondFolderId = "private-second-folder-id";
+        var enumeration = new RecordingChildEnumerationService
+        {
+            Children = new[] { Folder(firstFolderId, "private-first") }
+        };
+        enumeration.SetChildren(
+            firstFolderId,
+            Folder(secondFolderId, "private-second", firstFolderId));
+        enumeration.SetChildren(
+            secondFolderId,
+            Folder(firstFolderId, "private-cycle", secondFolderId));
+        var service = new GoogleDriveOneLevelFileListingService(enumeration);
+        using GoogleDriveResolvedRunFolder resolved = ResolvedRunFolder();
+
+        GoogleDriveRecursiveFileListingException exception =
+            await Assert.ThrowsAsync<GoogleDriveRecursiveFileListingException>(() =>
+                service.ListAsync(resolved));
+
+        AssertInvalidMetadata(
+            exception,
+            firstFolderId,
+            secondFolderId,
+            "private-first",
+            "private-second",
+            "private-cycle");
+        Assert.Equal(
+            new[] { RunFolderId, firstFolderId, secondFolderId },
+            enumeration.ParentFolderIds);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RepeatedIdentityAcrossBranches_FailsWithoutPartialListing(
+        bool repeatedObjectIsFolder)
+    {
+        const string leftFolderId = "private-left-folder-id";
+        const string rightFolderId = "private-right-folder-id";
+        const string repeatedId = "private-repeated-child-id";
+        var enumeration = new RecordingChildEnumerationService
+        {
+            Children = new[]
+            {
+                Folder(leftFolderId, "left"),
+                Folder(rightFolderId, "right")
+            }
+        };
+        enumeration.SetChildren(
+            leftFolderId,
+            repeatedObjectIsFolder
+                ? Folder(repeatedId, "private-first-folder", leftFolderId)
+                : Blob(repeatedId, "private-first.dat", leftFolderId));
+        enumeration.SetChildren(
+            rightFolderId,
+            repeatedObjectIsFolder
+                ? Folder(repeatedId, "private-second-folder", rightFolderId)
+                : Blob(repeatedId, "private-second.dat", rightFolderId));
+        var service = new GoogleDriveOneLevelFileListingService(enumeration);
+        using GoogleDriveResolvedRunFolder resolved = ResolvedRunFolder();
+
+        GoogleDriveRecursiveFileListingException exception =
+            await Assert.ThrowsAsync<GoogleDriveRecursiveFileListingException>(() =>
+                service.ListAsync(resolved));
+
+        AssertInvalidMetadata(
+            exception,
+            leftFolderId,
+            rightFolderId,
+            repeatedId,
+            "private-first-folder",
+            "private-second-folder",
+            "private-first.dat",
+            "private-second.dat");
+        Assert.Equal(
+            new[] { RunFolderId, leftFolderId, rightFolderId },
+            enumeration.ParentFolderIds);
+        Assert.DoesNotContain(
+            repeatedId,
+            enumeration.ParentFolderIds,
+            StringComparer.Ordinal);
     }
 
     [Fact]
@@ -788,6 +1009,10 @@ public sealed class GoogleDriveOneLevelFileListingServiceTests
             Blob("save-id", "save.dat", "second-folder-id"));
         var service = new GoogleDriveOneLevelFileListingService(enumeration);
         using GoogleDriveResolvedRunFolder resolved = ResolvedRunFolder();
+        GoogleDriveRemoteOperationContext operationContext =
+            resolved.OperationContext;
+        var resolver = Assert.IsType<NeverCalledResolver>(
+            operationContext.Resolver);
 
         GoogleDriveRecursiveFileListingResult result =
             await service.ListAsync(resolved);
@@ -796,11 +1021,251 @@ public sealed class GoogleDriveOneLevelFileListingServiceTests
         Assert.Equal(3, enumeration.OperationContexts.Count);
         Assert.All(
             enumeration.OperationContexts,
-            context => Assert.Same(resolved.OperationContext, context));
-        Assert.Equal(0, resolved.OperationContext.Resolver is NeverCalledResolver resolver
-            ? resolver.CallCount
-            : -1);
-        Assert.False(resolved.IsDisposed);
+            context => Assert.Same(operationContext, context));
+        Assert.Equal(0, resolver.CallCount);
+        Assert.True(resolved.IsDisposed);
+    }
+
+    [Fact]
+    public async Task SuccessfulTraversal_CachesOnlyValidatedFolderAndFileIdentities()
+    {
+        var enumeration = new RecordingChildEnumerationService
+        {
+            Children = new[] { Folder("files-folder-id", "files") }
+        };
+        enumeration.SetChildren(
+            "files-folder-id",
+            Blob("save-id", "save.dat", "files-folder-id"));
+        var cache = new GoogleDriveObjectIdCache();
+        var service = new GoogleDriveOneLevelFileListingService(enumeration, cache);
+        using GoogleDriveResolvedRunFolder resolved = ResolvedRunFolder();
+
+        GoogleDriveRecursiveFileListingResult result =
+            await service.ListAsync(resolved);
+
+        Assert.Single(result.Entries);
+        var scope = new GoogleDriveObjectCacheScope(ProfileId, RootFolderId);
+        Assert.True(cache.TryGet(
+            scope,
+            RunFolderId,
+            "files",
+            GoogleDriveObjectKind.Folder,
+            out GoogleDriveObjectIdCacheEntry? folder));
+        Assert.Equal("files-folder-id", folder!.ObjectId);
+        Assert.True(cache.TryGet(
+            scope,
+            "files-folder-id",
+            "save.dat",
+            GoogleDriveObjectKind.File,
+            out GoogleDriveObjectIdCacheEntry? file));
+        Assert.Equal("save-id", file!.ObjectId);
+        Assert.False(cache.TryGet(
+            new GoogleDriveObjectCacheScope(Guid.NewGuid(), RootFolderId),
+            RunFolderId,
+            "files",
+            GoogleDriveObjectKind.Folder,
+            out _));
+        Assert.False(cache.TryGet(
+            new GoogleDriveObjectCacheScope(ProfileId, "different-root-id"),
+            RunFolderId,
+            "files",
+            GoogleDriveObjectKind.Folder,
+            out _));
+    }
+
+    [Fact]
+    public async Task FailedTraversal_DoesNotCommitStagedCacheEntries()
+    {
+        var enumeration = new RecordingChildEnumerationService
+        {
+            Children = new[]
+            {
+                Blob("valid-id", "valid.dat"),
+                Child(
+                    "workspace-id",
+                    "notes",
+                    "application/vnd.google-apps.document",
+                    GoogleDriveRecursiveObjectKind.GoogleWorkspaceDocument)
+            }
+        };
+        var cache = new GoogleDriveObjectIdCache();
+        var service = new GoogleDriveOneLevelFileListingService(enumeration, cache);
+        using GoogleDriveResolvedRunFolder resolved = ResolvedRunFolder();
+
+        await Assert.ThrowsAsync<GoogleDriveRecursiveFileListingException>(() =>
+            service.ListAsync(resolved));
+
+        Assert.False(cache.TryGet(
+            new GoogleDriveObjectCacheScope(ProfileId, RootFolderId),
+            RunFolderId,
+            "valid.dat",
+            GoogleDriveObjectKind.File,
+            out _));
+    }
+
+    [Fact]
+    public async Task ConfirmedMissingNestedFolder_EvictsOnlyItsPreciseCacheEntry()
+    {
+        var enumeration = new RecordingChildEnumerationService
+        {
+            Children = new[] { Folder("missing-folder-id", "missing") }
+        };
+        enumeration.SetFailure(
+            "missing-folder-id",
+            ListingFailure(GoogleDriveRecursiveFileListingStatus.FolderNotFound));
+        var cache = new GoogleDriveObjectIdCache();
+        var scope = new GoogleDriveObjectCacheScope(ProfileId, RootFolderId);
+        Assert.True(cache.TryStoreUniqueValidated(
+            scope,
+            RunFolderId,
+            "missing",
+            GoogleDriveObjectKind.Folder,
+            Metadata(
+                "missing-folder-id",
+                "missing",
+                GoogleDriveApplicationRoot.FolderMimeType,
+                RunFolderId)));
+        Assert.True(cache.TryStoreUniqueValidated(
+            scope,
+            RunFolderId,
+            "keep.dat",
+            GoogleDriveObjectKind.File,
+            Metadata("keep-id", "keep.dat", "application/octet-stream", RunFolderId)));
+        var service = new GoogleDriveOneLevelFileListingService(enumeration, cache);
+        using GoogleDriveResolvedRunFolder resolved = ResolvedRunFolder();
+
+        await Assert.ThrowsAsync<GoogleDriveRecursiveFileListingException>(() =>
+            service.ListAsync(resolved));
+
+        Assert.False(cache.TryGet(
+            scope,
+            RunFolderId,
+            "missing",
+            GoogleDriveObjectKind.Folder,
+            out _));
+        Assert.True(cache.TryGet(
+            scope,
+            RunFolderId,
+            "keep.dat",
+            GoogleDriveObjectKind.File,
+            out _));
+    }
+
+    [Fact]
+    public async Task ReauthenticationFailure_InvalidatesOnlyAffectedProfile()
+    {
+        var enumeration = new RecordingChildEnumerationService();
+        enumeration.SetFailure(
+            RunFolderId,
+            ListingFailure(
+                GoogleDriveRecursiveFileListingStatus.ReauthenticationRequired));
+        var cache = new GoogleDriveObjectIdCache();
+        var affectedScope = new GoogleDriveObjectCacheScope(ProfileId, RootFolderId);
+        Guid otherProfileId = Guid.NewGuid();
+        var otherScope = new GoogleDriveObjectCacheScope(
+            otherProfileId,
+            RootFolderId);
+        Assert.True(cache.TryStoreUniqueValidated(
+            affectedScope,
+            RunFolderId,
+            "affected.dat",
+            GoogleDriveObjectKind.File,
+            Metadata(
+                "affected-id",
+                "affected.dat",
+                "application/octet-stream",
+                RunFolderId)));
+        Assert.True(cache.TryStoreUniqueValidated(
+            otherScope,
+            RunFolderId,
+            "other.dat",
+            GoogleDriveObjectKind.File,
+            Metadata(
+                "other-id",
+                "other.dat",
+                "application/octet-stream",
+                RunFolderId)));
+        var service = new GoogleDriveOneLevelFileListingService(enumeration, cache);
+        using GoogleDriveResolvedRunFolder resolved = ResolvedRunFolder();
+
+        await Assert.ThrowsAsync<GoogleDriveRecursiveFileListingException>(() =>
+            service.ListAsync(resolved));
+
+        Assert.False(cache.TryGet(
+            affectedScope,
+            RunFolderId,
+            "affected.dat",
+            GoogleDriveObjectKind.File,
+            out _));
+        Assert.True(cache.TryGet(
+            otherScope,
+            RunFolderId,
+            "other.dat",
+            GoogleDriveObjectKind.File,
+            out _));
+    }
+
+    [Theory]
+    [InlineData(nameof(GoogleDriveRecursiveFileListingStatus.RateLimited))]
+    [InlineData(nameof(GoogleDriveRecursiveFileListingStatus.Unavailable))]
+    public async Task TemporaryFailure_PreservesSafeCacheState(
+        string statusName)
+    {
+        GoogleDriveRecursiveFileListingStatus status =
+            Enum.Parse<GoogleDriveRecursiveFileListingStatus>(statusName);
+        var enumeration = new RecordingChildEnumerationService();
+        enumeration.SetFailure(RunFolderId, ListingFailure(status, retryable: true));
+        var cache = new GoogleDriveObjectIdCache();
+        var scope = new GoogleDriveObjectCacheScope(ProfileId, RootFolderId);
+        Assert.True(cache.TryStoreUniqueValidated(
+            scope,
+            RunFolderId,
+            "safe.dat",
+            GoogleDriveObjectKind.File,
+            Metadata(
+                "safe-id",
+                "safe.dat",
+                "application/octet-stream",
+                RunFolderId)));
+        var service = new GoogleDriveOneLevelFileListingService(enumeration, cache);
+        using GoogleDriveResolvedRunFolder resolved = ResolvedRunFolder();
+
+        await Assert.ThrowsAsync<GoogleDriveRecursiveFileListingException>(() =>
+            service.ListAsync(resolved));
+
+        Assert.True(cache.TryGet(
+            scope,
+            RunFolderId,
+            "safe.dat",
+            GoogleDriveObjectKind.File,
+            out _));
+    }
+
+    [Fact]
+    public async Task CancellationBeforeCacheCommit_WritesNoCacheState()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var enumeration = new RecordingChildEnumerationService
+        {
+            Children = new CancelAfterEnumerationCountList<
+                GoogleDriveFolderChildEntry>(
+                    new[] { Blob("late-id", "late.dat") },
+                    cancellation,
+                    cancelAfterEnumerationCount: 3)
+        };
+        var cache = new GoogleDriveObjectIdCache();
+        var service = new GoogleDriveOneLevelFileListingService(enumeration, cache);
+        using GoogleDriveResolvedRunFolder resolved = ResolvedRunFolder();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            service.ListAsync(resolved, cancellation.Token));
+
+        Assert.False(cache.TryGet(
+            new GoogleDriveObjectCacheScope(ProfileId, RootFolderId),
+            RunFolderId,
+            "late.dat",
+            GoogleDriveObjectKind.File,
+            out _));
     }
 
     [Fact]
@@ -812,7 +1277,11 @@ public sealed class GoogleDriveOneLevelFileListingServiceTests
         ConstructorInfo constructor = Assert.Single(
             typeof(GoogleDriveOneLevelFileListingService).GetConstructors());
         Assert.Equal(
-            new[] { typeof(IGoogleDriveFolderChildEnumerationService) },
+            new[]
+            {
+                typeof(IGoogleDriveFolderChildEnumerationService),
+                typeof(IGoogleDriveObjectIdCache)
+            },
             constructor.GetParameters().Select(parameter => parameter.ParameterType));
         Assert.Equal(
             new[] { "EnumerateAsync" },
@@ -898,6 +1367,72 @@ public sealed class GoogleDriveOneLevelFileListingServiceTests
         }
     }
 
+    private static void AssertUnsupportedObject(
+        GoogleDriveRecursiveFileListingException exception,
+        params string[] privateValues)
+    {
+        Assert.Equal(
+            GoogleDriveRecursiveFileListingStatus.UnsupportedObject,
+            exception.Result.Status);
+        Assert.Equal(
+            GoogleDriveRecursiveFileListingErrorCodes.UnsupportedObject,
+            exception.Result.SafeErrorCode);
+        Assert.False(exception.Result.Retryable);
+        Assert.Empty(exception.Result.Entries);
+        Assert.Equal(
+            "The Google Drive backup folder contains an unsupported object.",
+            exception.Result.SafeUserMessage);
+
+        foreach (string privateValue in privateValues)
+        {
+            Assert.DoesNotContain(
+                privateValue,
+                exception.ToString(),
+                StringComparison.Ordinal);
+            Assert.DoesNotContain(
+                privateValue,
+                exception.Result.ToString(),
+                StringComparison.Ordinal);
+            Assert.DoesNotContain(
+                privateValue,
+                exception.Result.SafeUserMessage,
+                StringComparison.Ordinal);
+        }
+    }
+
+    private static void AssertInvalidMetadata(
+        GoogleDriveRecursiveFileListingException exception,
+        params string[] privateValues)
+    {
+        Assert.Equal(
+            GoogleDriveRecursiveFileListingStatus.InvalidMetadata,
+            exception.Result.Status);
+        Assert.Equal(
+            GoogleDriveRecursiveFileListingErrorCodes.InvalidMetadata,
+            exception.Result.SafeErrorCode);
+        Assert.False(exception.Result.Retryable);
+        Assert.Empty(exception.Result.Entries);
+        Assert.Equal(
+            "Google Drive returned invalid file metadata.",
+            exception.Result.SafeUserMessage);
+
+        foreach (string privateValue in privateValues)
+        {
+            Assert.DoesNotContain(
+                privateValue,
+                exception.ToString(),
+                StringComparison.Ordinal);
+            Assert.DoesNotContain(
+                privateValue,
+                exception.Result.ToString(),
+                StringComparison.Ordinal);
+            Assert.DoesNotContain(
+                privateValue,
+                exception.Result.SafeUserMessage,
+                StringComparison.Ordinal);
+        }
+    }
+
     private static RecordingChildEnumerationService NestedOrderingTree(
         bool reverseProviderOrder)
     {
@@ -940,6 +1475,29 @@ public sealed class GoogleDriveOneLevelFileListingServiceTests
             exactName,
             canonicalPath,
             "application/octet-stream");
+
+    private static GoogleDriveObjectMetadata Metadata(
+        string objectId,
+        string exactName,
+        string mimeType,
+        string parentFolderId) =>
+        new(
+            objectId,
+            exactName,
+            mimeType,
+            trashed: false,
+            new[] { parentFolderId },
+            driveId: null);
+
+    private static GoogleDriveRecursiveFileListingException ListingFailure(
+        GoogleDriveRecursiveFileListingStatus status,
+        bool retryable = false) =>
+        new(new GoogleDriveRecursiveFileListingResult(
+            status,
+            Array.Empty<GoogleDriveRecursiveFileEntry>(),
+            retryable,
+            GoogleDriveRecursiveFileListingErrorCodes.ForStatus(status),
+            "The Google Drive backup folder could not be listed."));
 
     private static GoogleDriveFolderChildEntry Folder(
         string objectId,
@@ -990,7 +1548,7 @@ public sealed class GoogleDriveOneLevelFileListingServiceTests
             wasAuthenticationRefreshed: false);
         var context = new GoogleDriveRemoteOperationContext(
             ProfileId,
-            "authoritative-application-root-id",
+            RootFolderId,
             credential,
             new NeverCalledResolver());
         return new GoogleDriveResolvedRunFolder(RunFolderId, context);
@@ -1001,6 +1559,8 @@ public sealed class GoogleDriveOneLevelFileListingServiceTests
     {
         private readonly Dictionary<string, IReadOnlyList<GoogleDriveFolderChildEntry>>
             _childrenByParent = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, Exception> _failuresByParent =
+            new(StringComparer.Ordinal);
 
         public IReadOnlyList<GoogleDriveFolderChildEntry> Children { get; set; } =
             Array.Empty<GoogleDriveFolderChildEntry>();
@@ -1023,6 +1583,9 @@ public sealed class GoogleDriveOneLevelFileListingServiceTests
             params GoogleDriveFolderChildEntry[] children) =>
             _childrenByParent[parentFolderId] = children;
 
+        public void SetFailure(string parentFolderId, Exception exception) =>
+            _failuresByParent[parentFolderId] = exception;
+
         public Task<IReadOnlyList<GoogleDriveFolderChildEntry>> EnumerateAsync(
             GoogleDriveRemoteOperationContext context,
             string parentFolderId,
@@ -1035,6 +1598,12 @@ public sealed class GoogleDriveOneLevelFileListingServiceTests
             OperationContexts.Add(context);
             ParentFolderIds.Add(parentFolderId);
             AfterEnumeration?.Invoke();
+            if (_failuresByParent.TryGetValue(
+                    parentFolderId,
+                    out Exception? exception))
+            {
+                throw exception;
+            }
             IReadOnlyList<GoogleDriveFolderChildEntry> result = _childrenByParent
                 .TryGetValue(parentFolderId, out IReadOnlyList<
                     GoogleDriveFolderChildEntry>? configured)
@@ -1044,6 +1613,40 @@ public sealed class GoogleDriveOneLevelFileListingServiceTests
                     : Array.Empty<GoogleDriveFolderChildEntry>();
             return Task.FromResult(result);
         }
+    }
+
+    private sealed class CancelAfterEnumerationCountList<T> : IReadOnlyList<T>
+    {
+        private readonly IReadOnlyList<T> _items;
+        private readonly CancellationTokenSource _cancellation;
+        private readonly int _cancelAfterEnumerationCount;
+        private int _enumerationCount;
+
+        public CancelAfterEnumerationCountList(
+            IReadOnlyList<T> items,
+            CancellationTokenSource cancellation,
+            int cancelAfterEnumerationCount)
+        {
+            _items = items;
+            _cancellation = cancellation;
+            _cancelAfterEnumerationCount = cancelAfterEnumerationCount;
+        }
+
+        public int Count => _items.Count;
+
+        public T this[int index] => _items[index];
+
+        public IEnumerator<T> GetEnumerator()
+        {
+            int enumeration = Interlocked.Increment(ref _enumerationCount);
+            foreach (T item in _items)
+                yield return item;
+
+            if (enumeration == _cancelAfterEnumerationCount)
+                _cancellation.Cancel();
+        }
+
+        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
     }
 
     private sealed class NeverCalledResolver : IGoogleDriveObjectPathResolver

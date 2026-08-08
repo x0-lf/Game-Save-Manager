@@ -173,6 +173,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 throw Failure(GoogleDriveRemoteValidationStatus.Failed);
             }
 
+            cancellationToken.ThrowIfCancellationRequested();
             if (profile is null)
                 throw Failure(GoogleDriveRemoteValidationStatus.ProfileNotFound);
 
@@ -209,6 +210,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 IGoogleDriveObjectPathResolver resolver = _resolverFactory.Create(
                     profile.Id,
                     credential);
+                cancellationToken.ThrowIfCancellationRequested();
 
                 return new GoogleDriveRemoteOperationContext(
                     profile.Id,

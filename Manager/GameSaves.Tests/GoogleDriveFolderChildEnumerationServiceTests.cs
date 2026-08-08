@@ -25,6 +25,14 @@ public sealed class GoogleDriveFolderChildEnumerationServiceTests
         "control\u0001name"
     };
 
+    public static TheoryData<string[]> MalformedParentMetadata => new()
+    {
+        Array.Empty<string>(),
+        new[] { ParentId, "private-unexpected-parent-id" },
+        new[] { ParentId, ParentId },
+        new[] { ParentId, string.Empty }
+    };
+
     [Fact]
     public async Task FilesAndFolders_AreReturnedWithExactValidatedMetadata()
     {
@@ -214,6 +222,64 @@ public sealed class GoogleDriveFolderChildEnumerationServiceTests
             "private-id",
             "save.dat",
             "different-private-parent");
+    }
+
+    [Theory]
+    [MemberData(nameof(MalformedParentMetadata))]
+    public async Task MalformedParentMetadata_FailsAsInvalidMetadata(
+        string[] parentIds)
+    {
+        var listing = new RecordingListingApi
+        {
+            Result = new[]
+            {
+                Object(
+                    "private-id",
+                    "save.dat",
+                    "application/octet-stream",
+                    parentIds)
+            }
+        };
+        var service = new GoogleDriveFolderChildEnumerationService(listing);
+        using GoogleDriveRemoteOperationContext context = Context();
+
+        GoogleDriveRecursiveFileListingException exception =
+            await Assert.ThrowsAsync<GoogleDriveRecursiveFileListingException>(() =>
+                service.EnumerateAsync(context, ParentId));
+
+        AssertFailure(
+            exception,
+            GoogleDriveRecursiveFileListingStatus.InvalidMetadata,
+            "private-id",
+            "save.dat",
+            "private-unexpected-parent-id");
+    }
+
+    [Fact]
+    public async Task RecursiveKindMismatch_FailsAsTypeCollision()
+    {
+        const string mismatchedMimeType =
+            "APPLICATION/VND.GOOGLE-APPS.FOLDER";
+        var listing = new RecordingListingApi
+        {
+            Result = new[]
+            {
+                Object("private-id", "folder", mismatchedMimeType)
+            }
+        };
+        var service = new GoogleDriveFolderChildEnumerationService(listing);
+        using GoogleDriveRemoteOperationContext context = Context();
+
+        GoogleDriveRecursiveFileListingException exception =
+            await Assert.ThrowsAsync<GoogleDriveRecursiveFileListingException>(() =>
+                service.EnumerateAsync(context, ParentId));
+
+        AssertFailure(
+            exception,
+            GoogleDriveRecursiveFileListingStatus.TypeCollision,
+            "private-id",
+            "folder",
+            mismatchedMimeType);
     }
 
     [Fact]
@@ -555,7 +621,7 @@ public sealed class GoogleDriveFolderChildEnumerationServiceTests
         {
             RespectCancellation = false
         };
-        var cancellingObjects = new CancelOnSecondEnumerationList<GoogleDriveObjectMetadata>(
+        var cancellingObjects = new CancelAfterEnumerationList<GoogleDriveObjectMetadata>(
             new[] { Object("first-id", "first.dat", "application/octet-stream") },
             cancellation);
         client.Pages.Enqueue(Page(cancellingObjects, "page-2"));
@@ -619,6 +685,48 @@ public sealed class GoogleDriveFolderChildEnumerationServiceTests
             new[] { string.Empty },
             trashed: false,
             driveId: null));
+        Assert.Throws<ArgumentException>(() => new GoogleDriveFolderChildEntry(
+            "file-id",
+            "save.dat",
+            "application/octet-stream",
+            GoogleDriveRecursiveObjectKind.BlobFile,
+            Array.Empty<string>(),
+            trashed: false,
+            driveId: null));
+        Assert.Throws<ArgumentException>(() => new GoogleDriveFolderChildEntry(
+            "file-id",
+            "save.dat",
+            "application/octet-stream",
+            GoogleDriveRecursiveObjectKind.BlobFile,
+            new[] { ParentId, "different-parent-id" },
+            trashed: false,
+            driveId: null));
+    }
+
+    [Fact]
+    public void MetadataContract_RejectsMissingIdentityNameOrMimeType()
+    {
+        Assert.Throws<ArgumentException>(() => new GoogleDriveObjectMetadata(
+            string.Empty,
+            "save.dat",
+            "application/octet-stream",
+            false,
+            new[] { ParentId },
+            null));
+        Assert.Throws<ArgumentNullException>(() => new GoogleDriveObjectMetadata(
+            "file-id",
+            null!,
+            "application/octet-stream",
+            false,
+            new[] { ParentId },
+            null));
+        Assert.Throws<ArgumentException>(() => new GoogleDriveObjectMetadata(
+            "file-id",
+            "save.dat",
+            string.Empty,
+            false,
+            new[] { ParentId },
+            null));
     }
 
     [Fact]
@@ -830,13 +938,12 @@ public sealed class GoogleDriveFolderChildEnumerationServiceTests
         public void Dispose() => DisposeCalls++;
     }
 
-    private sealed class CancelOnSecondEnumerationList<T> : IReadOnlyList<T>
+    private sealed class CancelAfterEnumerationList<T> : IReadOnlyList<T>
     {
         private readonly IReadOnlyList<T> _items;
         private readonly CancellationTokenSource _cancellation;
-        private int _enumerationCount;
 
-        public CancelOnSecondEnumerationList(
+        public CancelAfterEnumerationList(
             IReadOnlyList<T> items,
             CancellationTokenSource cancellation)
         {
@@ -850,12 +957,10 @@ public sealed class GoogleDriveFolderChildEnumerationServiceTests
 
         public IEnumerator<T> GetEnumerator()
         {
-            int enumeration = Interlocked.Increment(ref _enumerationCount);
             foreach (T item in _items)
                 yield return item;
 
-            if (enumeration == 2)
-                _cancellation.Cancel();
+            _cancellation.Cancel();
         }
 
         System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() =>

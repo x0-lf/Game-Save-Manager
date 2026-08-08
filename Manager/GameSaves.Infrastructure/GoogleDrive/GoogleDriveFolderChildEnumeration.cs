@@ -44,10 +44,11 @@ namespace GameSaves.Infrastructure.GoogleDrive
             ArgumentNullException.ThrowIfNull(parentIds);
 
             string[] parentSnapshot = parentIds.ToArray();
-            if (parentSnapshot.Any(string.IsNullOrWhiteSpace))
+            if (parentSnapshot.Length != 1 ||
+                parentSnapshot.Any(string.IsNullOrWhiteSpace))
             {
                 throw new ArgumentException(
-                    "Parent IDs cannot contain empty values.",
+                    "Exactly one non-empty parent ID is required.",
                     nameof(parentIds));
             }
 
@@ -93,9 +94,6 @@ namespace GameSaves.Infrastructure.GoogleDrive
     internal sealed class GoogleDriveFolderChildEnumerationService
         : IGoogleDriveFolderChildEnumerationService
     {
-        private const string ParentMismatchErrorCode =
-            "GoogleDriveObjectParentMismatch";
-
         private readonly IGoogleDriveObjectListingApi _listingApi;
 
         public GoogleDriveFolderChildEnumerationService(
@@ -166,7 +164,11 @@ namespace GameSaves.Infrastructure.GoogleDrive
             if (metadata is null ||
                 string.IsNullOrWhiteSpace(metadata.Id) ||
                 !GoogleDriveFolderChildEntry.IsValidPathSegment(metadata.Name) ||
-                !metadata.ParentIds.Contains(expectedParentId, StringComparer.Ordinal))
+                metadata.ParentIds.Count != 1 ||
+                !string.Equals(
+                    metadata.ParentIds[0],
+                    expectedParentId,
+                    StringComparison.Ordinal))
             {
                 throw Failure(GoogleDriveRecursiveFileListingStatus.InvalidMetadata);
             }
@@ -189,6 +191,16 @@ namespace GameSaves.Infrastructure.GoogleDrive
                     GoogleDriveRecursiveFileListingStatus.InvalidMetadata);
             }
 
+            GoogleDriveObjectKind expectedKind =
+                kind == GoogleDriveRecursiveObjectKind.Folder
+                    ? GoogleDriveObjectKind.Folder
+                    : GoogleDriveObjectKind.File;
+            if (metadata.Kind != expectedKind)
+            {
+                throw Failure(
+                    GoogleDriveRecursiveFileListingStatus.TypeCollision);
+            }
+
             return new GoogleDriveFolderChildEntry(
                 metadata.Id,
                 metadata.Name,
@@ -200,77 +212,15 @@ namespace GameSaves.Infrastructure.GoogleDrive
         }
 
         private static GoogleDriveRecursiveFileListingException Failure(
-            GoogleDriveApiException exception)
-        {
-            GoogleDriveRecursiveFileListingStatus status =
-                exception.Details.SafeErrorCode switch
-                {
-                    GoogleDriveObjectResolutionErrorCodes.UnsupportedLocation =>
-                        GoogleDriveRecursiveFileListingStatus.UnsupportedLocation,
-                    GoogleDriveObjectResolutionErrorCodes.Trashed =>
-                        GoogleDriveRecursiveFileListingStatus.TrashedObject,
-                    ParentMismatchErrorCode =>
-                        GoogleDriveRecursiveFileListingStatus.InvalidMetadata,
-                    GoogleDriveObjectResolutionErrorCodes.TypeMismatch =>
-                        GoogleDriveRecursiveFileListingStatus.TypeCollision,
-                    _ => exception.Failure switch
-                    {
-                        GoogleDriveApiFailure.AuthorizationRevoked or
-                            GoogleDriveApiFailure.InsufficientScope =>
-                            GoogleDriveRecursiveFileListingStatus.ReauthenticationRequired,
-                        GoogleDriveApiFailure.AccessDenied =>
-                            GoogleDriveRecursiveFileListingStatus.AccessDenied,
-                        GoogleDriveApiFailure.NotFound =>
-                            GoogleDriveRecursiveFileListingStatus.FolderNotFound,
-                        GoogleDriveApiFailure.RateLimited =>
-                            GoogleDriveRecursiveFileListingStatus.RateLimited,
-                        GoogleDriveApiFailure.QuotaExceeded =>
-                            GoogleDriveRecursiveFileListingStatus.QuotaExceeded,
-                        GoogleDriveApiFailure.Unavailable or
-                            GoogleDriveApiFailure.ApiNotEnabled =>
-                            GoogleDriveRecursiveFileListingStatus.Unavailable,
-                        _ => GoogleDriveRecursiveFileListingStatus.Failed
-                    }
-                };
-
-            return Failure(status, exception.Details.Retryable);
-        }
+            GoogleDriveApiException exception) =>
+            GoogleDriveRecursiveFileListingFailureMapper.FromApiFailure(
+                exception);
 
         private static GoogleDriveRecursiveFileListingException Failure(
             GoogleDriveRecursiveFileListingStatus status,
             bool retryable = false) =>
-            new(new GoogleDriveRecursiveFileListingResult(
+            GoogleDriveRecursiveFileListingFailureMapper.FromStatus(
                 status,
-                Array.Empty<GoogleDriveRecursiveFileEntry>(),
-                retryable,
-                GoogleDriveRecursiveFileListingErrorCodes.ForStatus(status),
-                SafeUserMessage(status)));
-
-        private static string SafeUserMessage(
-            GoogleDriveRecursiveFileListingStatus status) =>
-            status switch
-            {
-                GoogleDriveRecursiveFileListingStatus.FolderNotFound =>
-                    "The Google Drive backup folder could not be found.",
-                GoogleDriveRecursiveFileListingStatus.TrashedObject =>
-                    "A trashed Google Drive object blocked file listing.",
-                GoogleDriveRecursiveFileListingStatus.UnsupportedLocation =>
-                    "This Google Drive location is not supported.",
-                GoogleDriveRecursiveFileListingStatus.InvalidMetadata =>
-                    "Google Drive returned invalid file metadata.",
-                GoogleDriveRecursiveFileListingStatus.TypeCollision =>
-                    "A Google Drive object has an unexpected type.",
-                GoogleDriveRecursiveFileListingStatus.ReauthenticationRequired =>
-                    "Google Drive must be connected again.",
-                GoogleDriveRecursiveFileListingStatus.AccessDenied =>
-                    "Google Drive did not allow access to the backup folder.",
-                GoogleDriveRecursiveFileListingStatus.RateLimited =>
-                    "Google Drive is receiving too many requests. Try again later.",
-                GoogleDriveRecursiveFileListingStatus.QuotaExceeded =>
-                    "Google Drive quota prevents listing the backup folder.",
-                GoogleDriveRecursiveFileListingStatus.Unavailable =>
-                    "Google Drive is temporarily unavailable.",
-                _ => "The Google Drive backup folder could not be listed."
-            };
+                retryable);
     }
 }

@@ -180,6 +180,8 @@ namespace GameSaves.Infrastructure.DependencyInjection
                 GoogleDriveOneLevelFileListingService>();
             services.AddSingleton<IGoogleDriveRunFolderResolver,
                 GoogleDriveRunFolderResolver>();
+            services.AddSingleton<IGoogleDriveRecursiveFileListingService,
+                GoogleDriveRecursiveFileListingService>();
             services.AddSingleton<IGoogleDriveRootFolderService>(provider =>
                 new GoogleDriveRootFolderService(
                     provider.GetRequiredService<ISyncRemoteProfileRepository>(),

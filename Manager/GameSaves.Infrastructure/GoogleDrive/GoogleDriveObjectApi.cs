@@ -220,19 +220,22 @@ namespace GameSaves.Infrastructure.GoogleDrive
                             retryable: true);
                     }
 
-                    if (validateObject is not null)
+                    foreach (GoogleDriveObjectMetadata metadata in page.Objects)
                     {
-                        foreach (GoogleDriveObjectMetadata metadata in page.Objects)
+                        cancellationToken.ThrowIfCancellationRequested();
+                        if (validateObject is not null)
                             validateObject(metadata);
+                        objects.Add(metadata);
                     }
 
-                    objects.AddRange(page.Objects);
+                    cancellationToken.ThrowIfCancellationRequested();
                     pageToken = string.IsNullOrWhiteSpace(page.NextPageToken)
                         ? null
                         : page.NextPageToken;
                 }
                 while (pageToken is not null);
 
+                cancellationToken.ThrowIfCancellationRequested();
                 return objects;
             }
             catch (Exception ex)
@@ -264,7 +267,11 @@ namespace GameSaves.Infrastructure.GoogleDrive
                     retryable: false);
             }
 
-            if (!metadata.ParentIds.Contains(expectedParentId, StringComparer.Ordinal))
+            if (metadata.ParentIds.Count != 1 ||
+                !string.Equals(
+                    metadata.ParentIds[0],
+                    expectedParentId,
+                    StringComparison.Ordinal))
             {
                 throw GoogleDriveApiFailureMapper.Create(
                     GoogleDriveApiOperation.ObjectChildList,
@@ -355,11 +362,20 @@ namespace GameSaves.Infrastructure.GoogleDrive
 
             Google.Apis.Drive.v3.Data.FileList page =
                 await sdkRequest.ExecuteAsync(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
 
-            IReadOnlyList<GoogleDriveObjectMetadata> objects =
-                page.Files?.Select(Map).ToArray() ??
-                Array.Empty<GoogleDriveObjectMetadata>();
+            var objects = new List<GoogleDriveObjectMetadata>(
+                page.Files?.Count ?? 0);
+            if (page.Files is not null)
+            {
+                foreach (DriveFile file in page.Files)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    objects.Add(Map(file));
+                }
+            }
 
+            cancellationToken.ThrowIfCancellationRequested();
             return new GoogleDriveObjectListPage(
                 objects,
                 page.NextPageToken,

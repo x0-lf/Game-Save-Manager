@@ -301,6 +301,29 @@ public sealed class GoogleDriveRunFolderResolverTests
     }
 
     [Fact]
+    public async Task LateContextCreation_IsRejectedAndDisposesCredential()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var resolver = new RecordingResolver();
+        GoogleDriveRemoteOperationContext context = Context(resolver);
+        GoogleAuthorizedCredential credential = context.Credential;
+        var factory = new RecordingContextFactory
+        {
+            Context = context,
+            BeforeReturn = cancellation.Cancel
+        };
+        var service = new GoogleDriveRunFolderResolver(factory);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            service.ResolveAsync(Request("run-001"), cancellation.Token));
+
+        Assert.Equal(1, factory.CreateCalls);
+        Assert.Equal(0, resolver.ResolveCalls);
+        Assert.True(context.IsDisposed);
+        Assert.True(credential.IsDisposed);
+    }
+
+    [Fact]
     public async Task CancellationBeforeContextCreation_PerformsNoRemoteWork()
     {
         using var cancellation = new CancellationTokenSource();
@@ -487,6 +510,7 @@ public sealed class GoogleDriveRunFolderResolverTests
     {
         public GoogleDriveRemoteOperationContext? Context { get; set; }
         public Exception? Exception { get; set; }
+        public Action? BeforeReturn { get; set; }
         public int CreateCalls { get; private set; }
         public List<Guid> ProfileIds { get; } = new();
 
@@ -499,8 +523,10 @@ public sealed class GoogleDriveRunFolderResolverTests
             cancellationToken.ThrowIfCancellationRequested();
             if (Exception is not null)
                 throw Exception;
-            return Task.FromResult(Context ??
-                throw new InvalidOperationException("No context was configured."));
+            GoogleDriveRemoteOperationContext context = Context ??
+                throw new InvalidOperationException("No context was configured.");
+            BeforeReturn?.Invoke();
+            return Task.FromResult(context);
         }
     }
 

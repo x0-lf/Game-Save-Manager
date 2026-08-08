@@ -364,6 +364,11 @@ public sealed class GoogleDriveSyncEngineCompatibilityTests
                     ReplacementApi,
                     new GoogleDriveProviderMetadataReplacementCoordinator(),
                     cache);
+            var recursiveListing = new GoogleDriveRecursiveFileListingService(
+                new GoogleDriveRunFolderResolver(ContextFactory),
+                new GoogleDriveOneLevelFileListingService(
+                    new GoogleDriveFolderChildEnumerationService(objectApi),
+                    cache));
             var inner = new GoogleDriveRemoteFileSystem(
                 ProfileId,
                 "Google Drive",
@@ -377,7 +382,8 @@ public sealed class GoogleDriveSyncEngineCompatibilityTests
                 textReader,
                 providerReader,
                 providerReplacement,
-                createOnly);
+                createOnly,
+                recursiveListing);
             Remote = new RecordingRemoteFileSystem(inner);
         }
 

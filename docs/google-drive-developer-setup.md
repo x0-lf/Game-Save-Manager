@@ -1,8 +1,8 @@
 # Google Drive Developer Setup
 
-This guide is for developers working on Game Save Manager. Normal end users do not need to create a Google Cloud project. Completing these steps prepares a development project only: it does not make Google Drive sync functional. Google Drive account authorization is available for development, while backup synchronization remains a later roadmap milestone.
+This guide is for developers working on Game Save Manager. Normal end users do not need to create a Google Cloud project. Completing these steps prepares a development project only: it does not make Google Drive sync functional. Google Drive account authorization and an Infrastructure-only read-only recursive file-listing primitive are available for development, while upload, download, preview, and synchronization remain later roadmap milestones.
 
-Code done during Milestone J reads `GAMESAVES_GOOGLE_CLIENT_ID` from the local process environment or, on Windows, directly from the persistent user environment and performs installed-desktop OAuth in the system browser. A process-scoped value takes precedence. Tokens are stored only through the protected `ISecretStore`, and the only Drive API request is the minimal account lookup described below. The application never loads a downloaded credential file. Builds and automated tests require no personal Google configuration.
+Code done during Milestone J reads `GAMESAVES_GOOGLE_CLIENT_ID` from the local process environment or, on Windows, directly from the persistent user environment and performs installed-desktop OAuth in the system browser. A process-scoped value takes precedence. Tokens are stored only through the protected `ISecretStore`, and account validation uses the minimal account lookup described below. Later root, text-metadata, and recursive-listing operations remain short-lived and narrowly scoped. The application never loads a downloaded credential file. Builds and automated tests require no personal Google configuration.
 
 Never use or commit a personal OAuth token for repository development, and never send a Google Account password to the application. Authorization uses Google's supported system-browser flow for installed desktop applications, a loopback callback, and PKCE.
 
@@ -276,9 +276,41 @@ Use only a development account and controlled objects beneath an isolated child 
 8. Confirm no recursive `ListFilesAsync`, backup upload, backup download, delete, move, rename, trash, or permission operation occurs.
 9. Confirm the requested OAuth scope remains exactly `https://www.googleapis.com/auth/drive.file` and inspect sanitized output for the absence of personal account values, object IDs, tokens, queries, or raw responses.
 
-This acceptance was completed with a development account on 2026-08-03. The controlled verification passed, including unchanged metadata identity across replacement and no forbidden Drive mutation. Automated remote cleanup was intentionally not added because deletion and trash operations are outside Milestone P; remove controlled acceptance objects manually in the Drive UI after inspection if desired.
+This acceptance was completed with a development account on 2026-08-03. The controlled verification passed, including unchanged metadata identity across replacement and no forbidden Drive mutation. Clean was intentionally not added because deletion and trash operations are outside Milestone P; remove controlled acceptance objects manually in the Drive UI after inspection if desired.
 
-Milestone P does not activate synchronization. `ListFilesAsync`, `UploadFileAsync`, and `DownloadFileAsync` remain explicitly unavailable; `GoogleDriveSyncProvider` does not exist; Google Drive remains configuration-only with `IsImplemented = false`; Preview Sync and Sync Now remain disabled; and Milestone Q has not started.
+Milestone P did not activate synchronization. Milestone Q subsequently made only recursive `ListFilesAsync` available at the Infrastructure remote-filesystem boundary. `UploadFileAsync` and `DownloadFileAsync` remain explicitly unavailable; `GoogleDriveSyncProvider` does not exist; Google Drive remains configuration-only with `IsImplemented = false`; Preview Sync and Sync Now remain disabled; and Milestone R has not started.
+
+## Verify Milestone Q recursive file listing
+
+The default automated suite uses fake authentication and Drive APIs; it never requires a personal account or mutates external Drive data. Milestone Q acceptance verifies canonical run-relative `/` paths, direct and nested files, empty folders, pagination at every depth, defensive trash handling, exact/case/type collisions, unsupported Workspace objects and shortcuts, repeated identities and cycles, cancellation, deterministic credential/client disposal, read-only request boundaries, unavailable upload/download, absent provider-factory wiring, `IsImplemented = false`, and disabled Preview Sync/Sync Now.
+
+| Acceptance area | Existing deterministic coverage |
+| --- | --- |
+| Canonical direct/nested paths, separators, ordering, empty folders | `GoogleDriveRecursiveRelativePathTests`, `GoogleDriveOneLevelFileListingServiceTests`, `GoogleDriveRecursiveFileListingServiceTests` |
+| Every page at every depth and real remote-filesystem wiring | `GoogleDriveRecursivePaginationIntegrationTests` |
+| Trash, exact/case/type collisions, unsupported objects, shortcuts, cycles, repeated IDs | `GoogleDriveFolderChildEnumerationServiceTests`, `GoogleDriveOneLevelFileListingServiceTests`, `GoogleDriveRecursivePaginationIntegrationTests` |
+| Cancellation, no partial result, credential/client disposal, cache atomicity | `GoogleDriveRemoteOperationContextTests`, `GoogleDriveRunFolderResolverTests`, `GoogleDriveOneLevelFileListingServiceTests`, `GoogleDriveRecursivePaginationIntegrationTests` |
+| Metadata-only/no-mutation boundary and unavailable upload/download | `GoogleDriveObjectApiTests`, `GoogleDriveRemoteFileSystemTests`, `GoogleDriveSyncEngineCompatibilityTests` |
+| No provider activation and disabled Preview Sync/Sync Now | `GoogleDriveRemoteFileSystemTests`, `GoogleSdkBoundaryTests`, `GoogleDriveOAuthViewModelTests`, `SyncProviderCapabilityTests` |
+| Existing Milestones A-P | Full `Manager/Manager.sln` regression suite |
+
+Live development-account acceptance is intentionally separate because it creates, trashes, and manually removes controlled test objects. Use only a dedicated development test account and one controlled backup-run folder beneath the configured application root. Do not use personal saves, record object IDs, or automate cleanup through the application.
+
+1. Restore the selected profile silently and confirm no browser opens and the OAuth scope remains exactly `https://www.googleapis.com/auth/drive.file`.
+2. Beneath the configured application root, create one controlled run folder containing `manifest.json`, ordinary files at the run root, deeply nested ordinary files, and empty folders.
+3. Invoke `GoogleDriveRemoteFileSystem.ListFilesAsync` from a focused development harness or debugger using that saved profile and controlled run-relative folder.
+4. Confirm every returned value is relative to the controlled run folder, excludes the run-folder name, and uses `/` as its only separator.
+5. Confirm direct and deeply nested files are present and empty folders produce no entry.
+6. Place enough controlled objects at the run root and a nested folder to exercise multiple API pages; confirm every expected file is returned.
+7. Trash one controlled file in the Drive UI, list again, and confirm the trashed file is absent. Restore or remove it manually afterward.
+8. Create controlled exact duplicate names and then case-only names beneath one parent. Confirm each listing fails safely with no selected spelling, no partial paths, and no private names or IDs in diagnostics.
+9. Remove the controlled duplicates manually in the Drive UI.
+10. Cancel one listing while it is active and confirm no partial result is accepted and a later clean listing still succeeds.
+11. Inspect Drive activity and the focused harness: listing must issue no content download, create, update, delete, move, rename, trash, permission, upload, or download request.
+12. Confirm `UploadFileAsync` and `DownloadFileAsync` remain unavailable, Google Drive remains absent from `SyncProviderFactory`, `IsImplemented` remains false, and Preview Sync/Sync Now remain disabled.
+13. Review sanitized output and logs. They must contain no account value, object or parent ID, page token, query, URL, complete relative path, token, client secret, or raw provider response.
+
+Record only the date, pass/fail result, tested application commit, and sanitized failure categories in the project handoff. Never record the account, folder name/ID, returned personal paths, screenshots, OAuth configuration, or raw logs.
 
 ## Handle downloaded credential files
 
@@ -342,8 +374,6 @@ Rewriting Git history can reduce continued exposure, but it does not revoke a cr
 - [ ] Local OAuth files are ignored
 - [ ] `git diff` contains no credentials
 - [ ] `git status --ignored` shows local OAuth files as ignored
-
-Automated checks reduce risk but do not replace manual review.
 
 ## Official references
 

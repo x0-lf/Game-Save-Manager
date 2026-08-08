@@ -49,8 +49,8 @@ The long-term goal is a cross-platform Steam save manager with backup profiles, 
 * Google Drive authorization runs in the system browser with PKCE and a loopback callback, requests only `drive.file`, stores tokens through the protected secret store, restores them after restart, refreshes access when possible, and displays non-secret account metadata.
 * Google account lifecycle supports Connect, Reconnect, and explicit local Disconnect. Disconnect removes only the selected profile's protected OAuth token and clears its saved account identity; the profile, root-folder metadata, backups, history, and Drive files remain. External revocation is detected, its invalid local token is cleaned up when possible, and reconnect remains an explicit user action.
 * A connected Google Drive profile can explicitly set up or discover one visible `My Drive/GameSave Manager Backups` folder. Its Drive ID is authoritative; renames and moves within My Drive remain linked, while missing, trashed, invalid, or unsupported roots require confirmed replacement and duplicate matches are never chosen automatically.
-* An Infrastructure-only Google Drive object/path resolver normalizes `/`-separated relative paths, resolves exact-name children to authoritative IDs, safely creates only missing parent folders, rejects duplicate or trashed objects, follows pagination, and revalidates its in-memory cache before reuse. The remote-filesystem boundary can validate the saved account and authoritative root, discover top-level manifest-bearing runs, read bounded UTF-8 text, create immutable text only when missing, and read or replace the allowlisted `.gamesave-sync/sync-log.json` metadata.
-* Google Drive backup synchronization is not activated. `ListFilesAsync`, backup upload, and backup download remain unavailable; `GoogleDriveSyncProvider` does not exist. The [Google Drive developer setup guide](docs/google-drive-developer-setup.md) explains private development configuration; normal users do not create a Cloud project, and personal credentials or tokens must never be committed.
+* An Infrastructure-only Google Drive object/path resolver normalizes `/`-separated relative paths, resolves exact-name children to authoritative IDs, safely creates only missing parent folders, rejects duplicate or trashed objects, follows pagination, and revalidates its in-memory cache before reuse. The remote-filesystem boundary can validate the saved account and authoritative root, discover top-level manifest-bearing runs, list ordinary files recursively beneath one requested run, read bounded UTF-8 text, create immutable text only when missing, and read or replace the allowlisted `.gamesave-sync/sync-log.json` metadata.
+* Google Drive backup synchronization is not activated. Recursive `ListFilesAsync` is read-only and available only as an Infrastructure remote-filesystem primitive; backup upload and backup download remain unavailable, and `GoogleDriveSyncProvider` does not exist. The [Google Drive developer setup guide](docs/google-drive-developer-setup.md) explains private development configuration and the controlled listing-acceptance procedure; normal users do not create a Cloud project, and personal credentials or tokens must never be committed.
   * Type-safe provider selection exposes `LocalFolder`, `Sftp`, and configuration-only `GoogleDrive`. Only Local Folder and SFTP can preview or execute sync; WebDAV and OneDrive remain unavailable.
   * `ISyncProvider` abstraction with `LocalFolderSyncProvider` and `SftpSyncProvider` (SSH.NET); WebDAV and cloud providers come later.
   * **SFTP**: host/port/username with password or private-key-file authentication; passwords, passphrases, and trust-new-host confirmation are session-only, cleared when profiles change, and never written to disk. Host keys use trust-on-first-use: the SHA-256 fingerprint is shown on first connect, stored like SSH known_hosts, and any later change fails loudly ("Forget Stored Host Key" covers planned reinstalls).
@@ -204,7 +204,7 @@ Restore (Backups tab) copies backed-up files to their original locations:
 5. Untick any runs you do not want to copy, confirm, and press **Sync Now** - a byte-accurate progress bar tracks the copy.
 6. The remote keeps a shared `sync-log.json` of every executed sync; downloaded runs are immediately restorable from the Backups tab.
 
-Google Drive also appears in the provider selector for saved-profile setup and account authorization. It opens Google's supported system-browser flow, requests only `drive.file`, and displays the validated account metadata. After connection, an explicit setup action can create or rediscover the single app-accessible, visible `GameSave Manager Backups` folder in My Drive; checks reuse its authoritative Drive ID across restarts, renames, moves, and reconnects. The Infrastructure boundary can list top-level manifest-bearing runs and safely handle small application-owned text and provider metadata, but Google Drive remains configuration-only: Preview Sync and Sync Now are disabled, recursive `ListFilesAsync`, backup upload, and backup download are unavailable, and `GoogleDriveSyncProvider` does not exist. The per-file scope does not expose every arbitrary folder a user created outside the App. A future arbitrary-folder choice would use Google Picker without broadening the scope.
+Google Drive also appears in the provider selector for saved-profile setup and account authorization. It opens Google's supported system-browser flow, requests only `drive.file`, and displays the validated account metadata. After connection, an explicit setup action can create or rediscover the single app-accessible, visible `GameSave Manager Backups` folder in My Drive; checks reuse its authoritative Drive ID across restarts, renames, moves, and reconnects. The Infrastructure boundary can list top-level manifest-bearing runs, recursively list ordinary files beneath one requested run, and safely handle small application-owned text and provider metadata. Recursive listing is metadata-only, uses authoritative IDs, returns canonical run-relative `/` paths, and fails closed on duplicates, unsupported objects, invalid metadata, and identity cycles. Google Drive nevertheless remains configuration-only: Preview Sync and Sync Now are disabled, backup upload and backup download are unavailable, and `GoogleDriveSyncProvider` does not exist. The per-file scope does not expose every arbitrary folder a user created outside the App. A future arbitrary-folder choice would use Google Picker without broadening the scope.
 
 Sync never deletes or overwrites anything on either side; conflicts are reported and left for you to resolve (export one side as ZIP, or delete one side via Cleanup).
 
@@ -225,7 +225,7 @@ The executable projects that directly use SQLite explicitly constrain `SQLitePCL
 
 Steam KeyValues1 files are parsed by the selected .NET 8-compatible `ValveKeyValue` 0.20.0.417 release. Parser-specific types remain inside `GameSaves.Infrastructure`; the CLI consumes the provider-neutral Steam discovery services and no longer directly references a VDF parser. Strict KV1 escape translation preserves Steam's escaped Windows paths and rejects malformed unknown escapes without truncating them.
 
-The official Google client-library packages are referenced only by `GameSaves.Infrastructure`. Developer-local client configuration drives installed-app OAuth with PKCE, tokens persist only through `ISecretStore`, and short-lived Infrastructure services perform the minimal account, application-root, and internal object-resolution metadata requests. The resolver is not a remote filesystem: no backup-run listing, upload, download, or sync implementation exists.
+The official Google client-library packages are referenced only by `GameSaves.Infrastructure`. Developer-local client configuration drives installed-app OAuth with PKCE, tokens persist only through `ISecretStore`, and short-lived Infrastructure services perform the minimal account, application-root, object-resolution, and recursive-listing metadata requests. No Google Drive upload, download, provider wrapper, preview, or sync execution exists.
 
 Test packages: `Microsoft.NET.Test.Sdk`, `xunit`, `xunit.runner.visualstudio`.
 
@@ -580,19 +580,22 @@ Implement:
 
 Milestone P is complete at the Infrastructure remote-filesystem boundary. Development-account acceptance on 2026-08-03 confirmed silent authentication restore, authoritative root and folder checks, paginated manifest-bearing run discovery, ignored folders without manifests, bounded UTF-8 manifest reads, unreadable-manifest warnings, create-only manifest protection, and create-then-update provider metadata with the same authoritative file ID. The verification issued no backup-file listing, upload, download, delete, move, rename, trash, permission, or broader-scope operation and exposed no personal value or Drive ID in its output.
 
-Google Drive remains configuration-only and `IsImplemented = false`. `ListFilesAsync`, `UploadFileAsync`, and `DownloadFileAsync` remain explicitly unavailable; `GoogleDriveSyncProvider` does not exist; Google Drive is absent from `SyncProviderFactory`; Preview Sync and Sync Now remain disabled. Milestone Q has not started.
+Google Drive remains configuration-only and `IsImplemented = false`. Milestone Q subsequently implemented read-only recursive `ListFilesAsync`; `UploadFileAsync` and `DownloadFileAsync` remain explicitly unavailable, `GoogleDriveSyncProvider` does not exist, Google Drive is absent from `SyncProviderFactory`, and Preview Sync and Sync Now remain disabled.
 
 ### Q — Google Drive file listing
 
 Implement recursive file listing beneath a backup-run folder.
 
-* [ ] Return paths relative to the run folder
-* [ ] Keep `/` as the remote relative separator
-* [ ] Handle nested directories
-* [ ] Handle pagination
-* [ ] Ignore trashed objects
-* [ ] Detect ambiguous duplicate names instead of choosing one arbitrarily
-* [ ] Support cancellation
+* [x] Return paths relative to the run folder
+* [x] Keep `/` as the remote relative separator
+* [x] Handle nested directories
+* [x] Handle pagination at every depth
+* [x] Exclude trashed objects in queries and reject them defensively if returned
+* [x] Detect exact and case-insensitive ambiguity instead of choosing one object
+* [x] Reject unsupported objects, invalid metadata, repeated identities, and cycles
+* [x] Support cancellation with no partial result and deterministic disposal
+
+Milestone Q's implementation and automated acceptance are complete. Listing uses one short-lived authenticated operation context, authoritative Drive IDs, fully paginated per-parent metadata requests, and deterministic canonical paths relative to the requested run folder. It is read-only: no content download, create, update, delete, move, rename, trash, or permission operation belongs to the listing path. Google Drive remains configuration-only with `IsImplemented = false`; uploads, downloads, provider creation, Preview Sync, and Sync Now remain unavailable. The controlled development-account acceptance checklist is documented separately and must be recorded before treating the live acceptance portion as complete. Milestone R has not started.
 
 ### R — Google Drive uploads
 

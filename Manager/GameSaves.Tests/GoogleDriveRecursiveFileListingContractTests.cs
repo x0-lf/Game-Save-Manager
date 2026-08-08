@@ -1,7 +1,10 @@
+using Google;
+using Google.Apis.Requests;
 using GameSaves.App.ViewModels;
 using GameSaves.Core.Sync;
 using GameSaves.Infrastructure.GoogleDrive;
 using System.Collections;
+using System.Net;
 using System.Reflection;
 
 namespace GameSaves.Tests;
@@ -57,6 +60,98 @@ public sealed class GoogleDriveRecursiveFileListingContractTests
         Assert.Equal(
             expected,
             GoogleDriveRecursiveFileListingErrorCodes.ForStatus(status));
+    }
+
+    [Fact]
+    public void FailureMapper_CoversEveryFailureStatusWithSafeFixedDiagnostics()
+    {
+        GoogleDriveRecursiveFileListingStatus[] statuses = Enum.GetValues<
+                GoogleDriveRecursiveFileListingStatus>()
+            .Where(status =>
+                status != GoogleDriveRecursiveFileListingStatus.Completed)
+            .ToArray();
+
+        Assert.Equal(16, statuses.Length);
+        foreach (GoogleDriveRecursiveFileListingStatus status in statuses)
+        {
+            bool retryable = status is
+                GoogleDriveRecursiveFileListingStatus.RateLimited or
+                GoogleDriveRecursiveFileListingStatus.Unavailable;
+
+            GoogleDriveRecursiveFileListingException exception =
+                GoogleDriveRecursiveFileListingFailureMapper.FromStatus(
+                    status,
+                    retryable);
+
+            Assert.Equal(status, exception.Result.Status);
+            Assert.Equal(retryable, exception.Result.Retryable);
+            Assert.Equal(
+                GoogleDriveRecursiveFileListingErrorCodes.ForStatus(status),
+                exception.Result.SafeErrorCode);
+            Assert.Empty(exception.Result.Entries);
+            AssertSafeFailure(exception);
+        }
+    }
+
+    [Fact]
+    public void OrdinaryForbiddenProviderFailure_RemainsAccessDeniedAndPrivate()
+    {
+        string rawPrivateResponse = string.Join(" | ", SensitiveValues);
+        var providerError = new GoogleApiException("Drive", rawPrivateResponse)
+        {
+            HttpStatusCode = HttpStatusCode.Forbidden,
+            Error = new RequestError
+            {
+                Message = rawPrivateResponse,
+                Errors = new List<SingleError>
+                {
+                    new() { Reason = "forbidden", Message = rawPrivateResponse }
+                }
+            }
+        };
+        GoogleDriveApiException apiFailure = GoogleDriveObjectApi.MapException(
+            providerError,
+            GoogleDriveApiOperation.ObjectChildList);
+
+        GoogleDriveRecursiveFileListingException listingFailure =
+            GoogleDriveRecursiveFileListingFailureMapper.FromApiFailure(
+                apiFailure);
+
+        Assert.Equal(GoogleDriveApiFailure.AccessDenied, apiFailure.Failure);
+        Assert.Equal(
+            GoogleDriveRecursiveFileListingStatus.AccessDenied,
+            listingFailure.Result.Status);
+        Assert.NotEqual(
+            GoogleDriveRecursiveFileListingStatus.ReauthenticationRequired,
+            listingFailure.Result.Status);
+        Assert.Null(listingFailure.InnerException);
+        AssertSafeFailure(listingFailure);
+        AssertPrivateValuesAbsent(
+            apiFailure.Message,
+            apiFailure.ToString(),
+            apiFailure.Details.ToString());
+    }
+
+    [Fact]
+    public void WrappedRemoteFailure_DropsPrivateProfileAndRootDetails()
+    {
+        GoogleDriveRemoteValidationResult validation =
+            GoogleDriveRemoteValidationMapper.FromStatus(
+                GoogleDriveRemoteValidationStatus.RootInaccessible,
+                rootDisplayName: string.Join(" | ", SensitiveValues));
+
+        GoogleDriveRecursiveFileListingException listingFailure =
+            GoogleDriveRecursiveFileListingFailureMapper.FromRemoteValidation(
+                validation);
+
+        Assert.Equal(
+            GoogleDriveRecursiveFileListingStatus.AccessDenied,
+            listingFailure.Result.Status);
+        AssertSafeFailure(listingFailure);
+        AssertPrivateValuesAbsent(
+            validation.UserMessage,
+            validation.ToString(),
+            validation.ToSafeDiagnosticString());
     }
 
     [Fact]
@@ -211,6 +306,7 @@ public sealed class GoogleDriveRecursiveFileListingContractTests
         {
             typeof(GoogleDriveRecursiveFileListingStatus),
             typeof(GoogleDriveRecursiveFileListingErrorCodes),
+            typeof(GoogleDriveRecursiveFileListingFailureMapper),
             typeof(GoogleDriveRecursiveFileEntry),
             typeof(GoogleDriveRecursiveFileListingResult)
         };
@@ -237,6 +333,57 @@ public sealed class GoogleDriveRecursiveFileListingContractTests
         "save.dat",
         "files/C/Player/save.dat",
         "application/octet-stream");
+
+    private static readonly string[] SensitiveValues =
+    {
+        "access-token-private-marker",
+        "client-secret-private-marker",
+        "account@example.invalid",
+        "authoritative-object-id-private-marker",
+        "authoritative-parent-id-private-marker",
+        "Private Save Name.dat",
+        "private/run/path/Private Save Name.dat",
+        "private-page-token-marker",
+        "'private-parent-id' in parents",
+        "https://www.googleapis.invalid/private-response",
+        "raw-provider-response-private-marker"
+    };
+
+    private static void AssertSafeFailure(
+        GoogleDriveRecursiveFileListingException exception)
+    {
+        var surfaces = new List<string?>
+        {
+            exception.Message,
+            exception.ToString(),
+            exception.Result.SafeErrorCode,
+            exception.Result.SafeUserMessage,
+            exception.Result.ToString(),
+            exception.Result.ToSafeDiagnosticString()
+        };
+        for (Exception? current = exception.InnerException;
+             current is not null;
+             current = current.InnerException)
+        {
+            surfaces.Add(current.Message);
+            surfaces.Add(current.ToString());
+        }
+
+        AssertPrivateValuesAbsent(surfaces.ToArray());
+    }
+
+    private static void AssertPrivateValuesAbsent(params string?[] surfaces)
+    {
+        foreach (string privateValue in SensitiveValues)
+        {
+            Assert.All(
+                surfaces,
+                surface => Assert.DoesNotContain(
+                    privateValue,
+                    surface ?? string.Empty,
+                    StringComparison.OrdinalIgnoreCase));
+        }
+    }
 
     private static void AssertNoGoogleSdkType(Type type)
     {

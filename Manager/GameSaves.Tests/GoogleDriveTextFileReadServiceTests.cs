@@ -439,7 +439,8 @@ public sealed class GoogleDriveTextFileReadServiceTests
             reader,
             new UnusedProviderMetadataReadService(),
             new UnusedProviderMetadataReplacementService(),
-            new UnusedCreateOnlyTextFileService());
+            new UnusedCreateOnlyTextFileService(),
+            new UnusedRecursiveFileListingService());
         var backupHistory = new BackupHistoryService(
             new TestDatabasePathProvider(temp.GetPath("app", "gamesave.db")));
         var engine = new SyncEngine(
@@ -781,6 +782,17 @@ public sealed class GoogleDriveTextFileReadServiceTests
             CancellationToken cancellationToken = default) =>
             throw new InvalidOperationException(
                 "Manifest preview must not create remote text content.");
+    }
+
+    private sealed class UnusedRecursiveFileListingService
+        : IGoogleDriveRecursiveFileListingService
+    {
+        public Task<IReadOnlyList<string>> ListAsync(
+            Guid remoteProfileId,
+            string relativeFolder,
+            CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException(
+                "Manifest preview must not list remote files.");
     }
 
     private sealed record ResolveCall(
