@@ -204,6 +204,124 @@ public sealed class GoogleDriveRecursivePaginationIntegrationTests
     }
 
     [Fact]
+    public async Task RepeatedProviderMetadataAcrossPages_FailsWithoutDeduplication()
+    {
+        var factory = new PagedTreeClientFactory();
+        GoogleDriveObjectMetadata repeated = Blob(
+            "private-repeated-id",
+            "private-repeated.dat",
+            RunFolderId);
+        factory.AddPages(
+            RunFolderId,
+            Page(new[] { repeated }, "private-repeated-page-2"),
+            Page(new[] { repeated }, nextPageToken: null));
+        GoogleDriveOneLevelFileListingService service = Service(factory);
+        using GoogleDriveResolvedRunFolder resolved = ResolvedRunFolder();
+
+        GoogleDriveRecursiveFileListingException exception =
+            await Assert.ThrowsAsync<GoogleDriveRecursiveFileListingException>(() =>
+                service.ListAsync(resolved));
+
+        Assert.Equal(
+            GoogleDriveRecursiveFileListingStatus.Ambiguous,
+            exception.Result.Status);
+        Assert.Equal(
+            GoogleDriveRecursiveFileListingErrorCodes.Ambiguous,
+            exception.Result.SafeErrorCode);
+        Assert.Empty(exception.Result.Entries);
+        AssertClient(
+            factory.ClientFor(RunFolderId),
+            RunFolderId,
+            null,
+            "private-repeated-page-2");
+        AssertNoMutation(factory);
+        AssertPrivateValuesAbsent(
+            exception,
+            "private-repeated-id",
+            "private-repeated.dat",
+            "private-repeated-page-2");
+        AssertPrivateValuesAbsent(
+            exception.Result,
+            "private-repeated-id",
+            "private-repeated.dat",
+            "private-repeated-page-2");
+        Assert.False(resolved.IsDisposed);
+    }
+
+    [Fact]
+    public async Task CaseInsensitiveNamesSplitAcrossPages_FailAfterAllSiblingPages()
+    {
+        var factory = new PagedTreeClientFactory();
+        factory.AddPages(
+            RunFolderId,
+            Page(
+                new[]
+                {
+                    Blob(
+                        "private-first-collision-id",
+                        "private-save.dat",
+                        RunFolderId),
+                    Folder(
+                        "private-untraversed-folder-id",
+                        "private-untraversed",
+                        RunFolderId)
+                },
+                "private-collision-page-2"),
+            Page(
+                new[]
+                {
+                    Blob(
+                        "private-second-collision-id",
+                        "PRIVATE-SAVE.DAT",
+                        RunFolderId)
+                },
+                nextPageToken: null));
+        GoogleDriveOneLevelFileListingService service = Service(factory);
+        using GoogleDriveResolvedRunFolder resolved = ResolvedRunFolder();
+
+        GoogleDriveRecursiveFileListingException exception =
+            await Assert.ThrowsAsync<GoogleDriveRecursiveFileListingException>(() =>
+                service.ListAsync(resolved));
+
+        Assert.Equal(
+            GoogleDriveRecursiveFileListingStatus.CaseCollision,
+            exception.Result.Status);
+        Assert.Equal(
+            GoogleDriveRecursiveFileListingErrorCodes.CaseCollision,
+            exception.Result.SafeErrorCode);
+        Assert.Equal(
+            "The Google Drive backup folder contains names that differ only by case.",
+            exception.Result.SafeUserMessage);
+        Assert.False(exception.Result.Retryable);
+        Assert.Empty(exception.Result.Entries);
+        Assert.Single(factory.Clients);
+        AssertClient(
+            factory.ClientFor(RunFolderId),
+            RunFolderId,
+            null,
+            "private-collision-page-2");
+        Assert.Equal(0, factory.ClientFor(RunFolderId).RemainingPageCount);
+        AssertNoMutation(factory);
+        AssertPrivateValuesAbsent(
+            exception,
+            "private-first-collision-id",
+            "private-second-collision-id",
+            "private-untraversed-folder-id",
+            "private-save.dat",
+            "PRIVATE-SAVE.DAT",
+            "private-collision-page-2");
+        AssertPrivateValuesAbsent(
+            exception.Result,
+            "private-first-collision-id",
+            "private-second-collision-id",
+            "private-untraversed-folder-id",
+            "private-save.dat",
+            "PRIVATE-SAVE.DAT",
+            "private-collision-page-2");
+        Assert.False(resolved.IsDisposed);
+    }
+
+    [Fact]
     public async Task NestedIncompleteSearch_FailsWithoutPartialResultOrPrivateTokens()
     {
         var factory = new PagedTreeClientFactory();

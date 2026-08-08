@@ -9,10 +9,9 @@ namespace GameSaves.Infrastructure.GoogleDrive
 
     /// <summary>
     /// Iteratively lists ordinary blob files beneath one authoritative
-    /// backup-run folder. Exact duplicate sibling names fail closed before
-    /// any member of that sibling set is traversed or recorded. Repeated
-    /// identities and case-only collisions remain available for later
-    /// validation.
+    /// backup-run folder. Exact and case-only sibling-name collisions fail
+    /// closed before any member of that sibling set is traversed or recorded.
+    /// Repeated identities remain available for later validation.
     /// </summary>
     internal sealed class GoogleDriveOneLevelFileListingService
         : IGoogleDriveOneLevelFileListingService
@@ -61,7 +60,16 @@ namespace GameSaves.Infrastructure.GoogleDrive
                             GoogleDriveRecursiveFileListingStatus.InvalidMetadata);
                     }
 
-                    ValidateExactSiblingNames(children, cancellationToken);
+                    ValidateSiblingNames(
+                        children,
+                        StringComparer.Ordinal,
+                        GoogleDriveRecursiveFileListingStatus.Ambiguous,
+                        cancellationToken);
+                    ValidateSiblingNames(
+                        children,
+                        StringComparer.OrdinalIgnoreCase,
+                        GoogleDriveRecursiveFileListingStatus.CaseCollision,
+                        cancellationToken);
 
                     foreach (GoogleDriveFolderChildEntry? child in children)
                     {
@@ -110,12 +118,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 }
 
                 cancellationToken.ThrowIfCancellationRequested();
-                GoogleDriveRecursiveFileEntry[] orderedFiles = files
-                    .OrderBy(
-                        entry => entry.CanonicalRelativePath,
-                        StringComparer.Ordinal)
-                    .ToArray();
-                cancellationToken.ThrowIfCancellationRequested();
+                GoogleDriveRecursiveFileEntry[] orderedFiles =
+                    ValidateAndOrderFiles(files, cancellationToken);
 
                 return new GoogleDriveRecursiveFileListingResult(
                     GoogleDriveRecursiveFileListingStatus.Completed,
@@ -136,11 +140,69 @@ namespace GameSaves.Infrastructure.GoogleDrive
             }
         }
 
-        private static void ValidateExactSiblingNames(
-            IReadOnlyList<GoogleDriveFolderChildEntry> children,
+        internal static GoogleDriveRecursiveFileEntry[] ValidateAndOrderFiles(
+            IReadOnlyList<GoogleDriveRecursiveFileEntry> files,
             CancellationToken cancellationToken)
         {
-            var exactNames = new HashSet<string>(StringComparer.Ordinal);
+            ArgumentNullException.ThrowIfNull(files);
+
+            var exactPaths = new HashSet<string>(StringComparer.Ordinal);
+            var caseInsensitivePaths =
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (GoogleDriveRecursiveFileEntry? file in files)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (file is null ||
+                    !GoogleDriveRelativePath.TryParse(
+                        file.CanonicalRelativePath,
+                        out GoogleDriveRelativePath? path) ||
+                    path is null ||
+                    path.IsRoot ||
+                    !string.Equals(
+                        path.Canonical,
+                        file.CanonicalRelativePath,
+                        StringComparison.Ordinal) ||
+                    !string.Equals(
+                        path.Segments[^1],
+                        file.ExactFileName,
+                        StringComparison.Ordinal) ||
+                    GoogleDriveRecursiveObjectClassificationPolicy.Classify(
+                        file.MimeType) != GoogleDriveRecursiveObjectKind.BlobFile)
+                {
+                    throw Failure(
+                        GoogleDriveRecursiveFileListingStatus.InvalidMetadata);
+                }
+
+                if (!exactPaths.Add(file.CanonicalRelativePath))
+                {
+                    throw Failure(
+                        GoogleDriveRecursiveFileListingStatus.Ambiguous);
+                }
+
+                if (!caseInsensitivePaths.Add(file.CanonicalRelativePath))
+                {
+                    throw Failure(
+                        GoogleDriveRecursiveFileListingStatus.CaseCollision);
+                }
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            GoogleDriveRecursiveFileEntry[] orderedFiles = files
+                .OrderBy(
+                    file => file.CanonicalRelativePath,
+                    StringComparer.Ordinal)
+                .ToArray();
+            cancellationToken.ThrowIfCancellationRequested();
+            return orderedFiles;
+        }
+
+        private static void ValidateSiblingNames(
+            IReadOnlyList<GoogleDriveFolderChildEntry> children,
+            StringComparer comparer,
+            GoogleDriveRecursiveFileListingStatus collisionStatus,
+            CancellationToken cancellationToken)
+        {
+            var names = new HashSet<string>(comparer);
             foreach (GoogleDriveFolderChildEntry? child in children)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -150,11 +212,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
                         GoogleDriveRecursiveFileListingStatus.InvalidMetadata);
                 }
 
-                if (!exactNames.Add(child.ExactName))
-                {
-                    throw Failure(
-                        GoogleDriveRecursiveFileListingStatus.Ambiguous);
-                }
+                if (!names.Add(child.ExactName))
+                    throw Failure(collisionStatus);
             }
         }
 
@@ -173,6 +232,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
             {
                 GoogleDriveRecursiveFileListingStatus.Ambiguous =>
                     "The Google Drive backup folder contains ambiguous duplicate names.",
+                GoogleDriveRecursiveFileListingStatus.CaseCollision =>
+                    "The Google Drive backup folder contains names that differ only by case.",
                 GoogleDriveRecursiveFileListingStatus.UnsupportedObject =>
                     "The Google Drive backup folder contains an unsupported object.",
                 GoogleDriveRecursiveFileListingStatus.InvalidMetadata =>

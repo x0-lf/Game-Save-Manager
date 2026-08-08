@@ -74,7 +74,7 @@ public sealed class GoogleDriveOneLevelFileListingServiceTests
                 Blob("z-id", "z.dat"),
                 Blob("lower-id", "a.dat"),
                 Blob("manifest-id", "manifest.json"),
-                Blob("upper-id", "A.dat")
+                Blob("upper-id", "B.dat")
             }
         };
         var service = new GoogleDriveOneLevelFileListingService(enumeration);
@@ -84,11 +84,96 @@ public sealed class GoogleDriveOneLevelFileListingServiceTests
             await service.ListAsync(resolved);
 
         Assert.Equal(
-            new[] { "A.dat", "a.dat", "manifest.json", "z.dat" },
+            new[] { "B.dat", "a.dat", "manifest.json", "z.dat" },
             result.Entries.Select(entry => entry.CanonicalRelativePath));
         Assert.Equal(
             new[] { "upper-id", "lower-id", "manifest-id", "z-id" },
             result.Entries.Select(entry => entry.FileId));
+    }
+
+    [Fact]
+    public void FinalValidation_OrdersValidNestedPathsOrdinally()
+    {
+        GoogleDriveRecursiveFileEntry[] files =
+        {
+            ListedFile("z-id", "z-parent-id", "save.dat", "z/save.dat"),
+            ListedFile("a-id", "a-parent-id", "Save.dat", "a/Save.dat"),
+            ListedFile("root-id", RunFolderId, "manifest.json", "manifest.json")
+        };
+
+        GoogleDriveRecursiveFileEntry[] ordered =
+            GoogleDriveOneLevelFileListingService.ValidateAndOrderFiles(
+                files,
+                CancellationToken.None);
+
+        Assert.Equal(
+            new[] { "a/Save.dat", "manifest.json", "z/save.dat" },
+            ordered.Select(file => file.CanonicalRelativePath));
+    }
+
+    [Fact]
+    public void FinalValidation_RejectsExactFullPathCollision()
+    {
+        GoogleDriveRecursiveFileEntry[] files =
+        {
+            ListedFile(
+                "private-first-id",
+                "private-first-parent-id",
+                "save.dat",
+                "private-folder/save.dat"),
+            ListedFile(
+                "private-second-id",
+                "private-second-parent-id",
+                "save.dat",
+                "private-folder/save.dat")
+        };
+
+        GoogleDriveRecursiveFileListingException exception = Assert.Throws<
+            GoogleDriveRecursiveFileListingException>(() =>
+                GoogleDriveOneLevelFileListingService.ValidateAndOrderFiles(
+                    files,
+                    CancellationToken.None));
+
+        AssertAmbiguous(
+            exception,
+            "private-first-id",
+            "private-second-id",
+            "private-first-parent-id",
+            "private-second-parent-id",
+            "private-folder/save.dat");
+    }
+
+    [Fact]
+    public void FinalValidation_RejectsCaseInsensitiveFullPathCollision()
+    {
+        GoogleDriveRecursiveFileEntry[] files =
+        {
+            ListedFile(
+                "private-first-id",
+                "private-first-parent-id",
+                "save.dat",
+                "private-folder/save.dat"),
+            ListedFile(
+                "private-second-id",
+                "private-second-parent-id",
+                "SAVE.DAT",
+                "PRIVATE-FOLDER/SAVE.DAT")
+        };
+
+        GoogleDriveRecursiveFileListingException exception = Assert.Throws<
+            GoogleDriveRecursiveFileListingException>(() =>
+                GoogleDriveOneLevelFileListingService.ValidateAndOrderFiles(
+                    files,
+                    CancellationToken.None));
+
+        AssertCaseCollision(
+            exception,
+            "private-first-id",
+            "private-second-id",
+            "private-first-parent-id",
+            "private-second-parent-id",
+            "private-folder/save.dat",
+            "PRIVATE-FOLDER/SAVE.DAT");
     }
 
     [Fact]
@@ -281,27 +366,101 @@ public sealed class GoogleDriveOneLevelFileListingServiceTests
         Assert.Equal(new[] { RunFolderId }, enumeration.ParentFolderIds);
     }
 
-    [Fact]
-    public async Task CaseOnlyDifferentNames_AreNotExactDuplicates()
+    [Theory]
+    [InlineData("save.dat", "SAVE.DAT")]
+    [InlineData("\u00c9lan.dat", "\u00e9lan.dat")]
+    public async Task CaseInsensitiveFileNameCollision_FailsWithoutSelectingASpelling(
+        string firstName,
+        string secondName)
     {
         var enumeration = new RecordingChildEnumerationService
         {
             Children = new[]
             {
-                Blob("lower-id", "save.dat"),
-                Blob("upper-id", "SAVE.DAT")
+                Blob("first-id", firstName),
+                Blob("second-id", secondName)
             }
         };
         var service = new GoogleDriveOneLevelFileListingService(enumeration);
         using GoogleDriveResolvedRunFolder resolved = ResolvedRunFolder();
 
-        GoogleDriveRecursiveFileListingResult result =
-            await service.ListAsync(resolved);
+        GoogleDriveRecursiveFileListingException exception =
+            await Assert.ThrowsAsync<GoogleDriveRecursiveFileListingException>(() =>
+                service.ListAsync(resolved));
 
-        Assert.Equal(GoogleDriveRecursiveFileListingStatus.Completed, result.Status);
-        Assert.Equal(
-            new[] { "SAVE.DAT", "save.dat" },
-            result.Entries.Select(entry => entry.CanonicalRelativePath));
+        AssertCaseCollision(
+            exception,
+            firstName,
+            secondName,
+            "first-id",
+            "second-id",
+            RunFolderId);
+        Assert.Equal(1, enumeration.CallCount);
+    }
+
+    [Fact]
+    public async Task CaseInsensitiveFolderNameCollision_FailsBeforeTraversal()
+    {
+        var enumeration = new RecordingChildEnumerationService
+        {
+            Children = new[]
+            {
+                Folder("first-folder-id", "files"),
+                Folder("second-folder-id", "FILES")
+            }
+        };
+        enumeration.SetChildren(
+            "first-folder-id",
+            Blob("first-save-id", "first.dat", "first-folder-id"));
+        enumeration.SetChildren(
+            "second-folder-id",
+            Blob("second-save-id", "second.dat", "second-folder-id"));
+        var service = new GoogleDriveOneLevelFileListingService(enumeration);
+        using GoogleDriveResolvedRunFolder resolved = ResolvedRunFolder();
+
+        GoogleDriveRecursiveFileListingException exception =
+            await Assert.ThrowsAsync<GoogleDriveRecursiveFileListingException>(() =>
+                service.ListAsync(resolved));
+
+        AssertCaseCollision(
+            exception,
+            "files",
+            "FILES",
+            "first-folder-id",
+            "second-folder-id",
+            RunFolderId);
+        Assert.Equal(new[] { RunFolderId }, enumeration.ParentFolderIds);
+    }
+
+    [Fact]
+    public async Task CaseInsensitiveFileFolderCollision_FailsWithoutChoosingAType()
+    {
+        var enumeration = new RecordingChildEnumerationService
+        {
+            Children = new[]
+            {
+                Blob("file-id", "save"),
+                Folder("folder-id", "SAVE")
+            }
+        };
+        enumeration.SetChildren(
+            "folder-id",
+            Blob("nested-id", "nested.dat", "folder-id"));
+        var service = new GoogleDriveOneLevelFileListingService(enumeration);
+        using GoogleDriveResolvedRunFolder resolved = ResolvedRunFolder();
+
+        GoogleDriveRecursiveFileListingException exception =
+            await Assert.ThrowsAsync<GoogleDriveRecursiveFileListingException>(() =>
+                service.ListAsync(resolved));
+
+        AssertCaseCollision(
+            exception,
+            "save",
+            "SAVE",
+            "file-id",
+            "folder-id",
+            RunFolderId);
+        Assert.Equal(new[] { RunFolderId }, enumeration.ParentFolderIds);
     }
 
     [Fact]
@@ -399,7 +558,7 @@ public sealed class GoogleDriveOneLevelFileListingServiceTests
     }
 
     [Fact]
-    public async Task SiblingDirectories_ReturnFilesFromEveryBranch()
+    public async Task IdenticalFileNamesUnderDistinctParents_RemainValid()
     {
         var enumeration = new RecordingChildEnumerationService
         {
@@ -427,6 +586,12 @@ public sealed class GoogleDriveOneLevelFileListingServiceTests
         Assert.Equal(
             new[] { "slot-one-save-id", "slot-two-save-id" },
             result.Entries.Select(entry => entry.FileId));
+        var caseInsensitivePaths =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        Assert.All(
+            result.Entries,
+            entry => Assert.True(
+                caseInsensitivePaths.Add(entry.CanonicalRelativePath)));
     }
 
     [Fact]
@@ -467,6 +632,52 @@ public sealed class GoogleDriveOneLevelFileListingServiceTests
             "ambiguous-folder-id");
         Assert.Equal(
             new[] { RunFolderId, "unique-folder-id", "ambiguous-folder-id" },
+            enumeration.ParentFolderIds);
+        Assert.DoesNotContain(
+            "untouched-folder-id",
+            enumeration.ParentFolderIds,
+            StringComparer.Ordinal);
+    }
+
+    [Fact]
+    public async Task CaseInsensitiveCollisionInNestedParent_ReturnsNoPartialListing()
+    {
+        var enumeration = new RecordingChildEnumerationService
+        {
+            Children = new[]
+            {
+                Blob("root-file-id", "root.dat"),
+                Folder("unique-folder-id", "unique"),
+                Folder("collision-folder-id", "collision"),
+                Folder("untouched-folder-id", "untouched")
+            }
+        };
+        enumeration.SetChildren(
+            "unique-folder-id",
+            Blob("unique-file-id", "save.dat", "unique-folder-id"));
+        enumeration.SetChildren(
+            "collision-folder-id",
+            Blob("first-collision-id", "profile.sav", "collision-folder-id"),
+            Blob("second-collision-id", "PROFILE.SAV", "collision-folder-id"));
+        enumeration.SetChildren(
+            "untouched-folder-id",
+            Blob("untouched-file-id", "untouched.dat", "untouched-folder-id"));
+        var service = new GoogleDriveOneLevelFileListingService(enumeration);
+        using GoogleDriveResolvedRunFolder resolved = ResolvedRunFolder();
+
+        GoogleDriveRecursiveFileListingException exception =
+            await Assert.ThrowsAsync<GoogleDriveRecursiveFileListingException>(() =>
+                service.ListAsync(resolved));
+
+        AssertCaseCollision(
+            exception,
+            "profile.sav",
+            "PROFILE.SAV",
+            "first-collision-id",
+            "second-collision-id",
+            "collision-folder-id");
+        Assert.Equal(
+            new[] { RunFolderId, "unique-folder-id", "collision-folder-id" },
             enumeration.ParentFolderIds);
         Assert.DoesNotContain(
             "untouched-folder-id",
@@ -654,6 +865,39 @@ public sealed class GoogleDriveOneLevelFileListingServiceTests
         }
     }
 
+    private static void AssertCaseCollision(
+        GoogleDriveRecursiveFileListingException exception,
+        params string[] privateValues)
+    {
+        Assert.Equal(
+            GoogleDriveRecursiveFileListingStatus.CaseCollision,
+            exception.Result.Status);
+        Assert.Equal(
+            GoogleDriveRecursiveFileListingErrorCodes.CaseCollision,
+            exception.Result.SafeErrorCode);
+        Assert.False(exception.Result.Retryable);
+        Assert.Empty(exception.Result.Entries);
+        Assert.Equal(
+            "The Google Drive backup folder contains names that differ only by case.",
+            exception.Result.SafeUserMessage);
+
+        foreach (string privateValue in privateValues)
+        {
+            Assert.DoesNotContain(
+                privateValue,
+                exception.ToString(),
+                StringComparison.Ordinal);
+            Assert.DoesNotContain(
+                privateValue,
+                exception.Result.ToString(),
+                StringComparison.Ordinal);
+            Assert.DoesNotContain(
+                privateValue,
+                exception.Result.SafeUserMessage,
+                StringComparison.Ordinal);
+        }
+    }
+
     private static RecordingChildEnumerationService NestedOrderingTree(
         bool reverseProviderOrder)
     {
@@ -684,6 +928,18 @@ public sealed class GoogleDriveOneLevelFileListingServiceTests
             "application/octet-stream",
             GoogleDriveRecursiveObjectKind.BlobFile,
             parentFolderId);
+
+    private static GoogleDriveRecursiveFileEntry ListedFile(
+        string fileId,
+        string parentFolderId,
+        string exactName,
+        string canonicalPath) =>
+        new(
+            fileId,
+            parentFolderId,
+            exactName,
+            canonicalPath,
+            "application/octet-stream");
 
     private static GoogleDriveFolderChildEntry Folder(
         string objectId,
