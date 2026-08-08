@@ -9,8 +9,10 @@ namespace GameSaves.Infrastructure.GoogleDrive
 
     /// <summary>
     /// Iteratively lists ordinary blob files beneath one authoritative
-    /// backup-run folder. Duplicate names and repeated identities are
-    /// preserved for later validation rather than selected or deduplicated.
+    /// backup-run folder. Exact duplicate sibling names fail closed before
+    /// any member of that sibling set is traversed or recorded. Repeated
+    /// identities and case-only collisions remain available for later
+    /// validation.
     /// </summary>
     internal sealed class GoogleDriveOneLevelFileListingService
         : IGoogleDriveOneLevelFileListingService
@@ -58,6 +60,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
                         throw Failure(
                             GoogleDriveRecursiveFileListingStatus.InvalidMetadata);
                     }
+
+                    ValidateExactSiblingNames(children, cancellationToken);
 
                     foreach (GoogleDriveFolderChildEntry? child in children)
                     {
@@ -132,6 +136,28 @@ namespace GameSaves.Infrastructure.GoogleDrive
             }
         }
 
+        private static void ValidateExactSiblingNames(
+            IReadOnlyList<GoogleDriveFolderChildEntry> children,
+            CancellationToken cancellationToken)
+        {
+            var exactNames = new HashSet<string>(StringComparer.Ordinal);
+            foreach (GoogleDriveFolderChildEntry? child in children)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (child is null)
+                {
+                    throw Failure(
+                        GoogleDriveRecursiveFileListingStatus.InvalidMetadata);
+                }
+
+                if (!exactNames.Add(child.ExactName))
+                {
+                    throw Failure(
+                        GoogleDriveRecursiveFileListingStatus.Ambiguous);
+                }
+            }
+        }
+
         private static GoogleDriveRecursiveFileListingException Failure(
             GoogleDriveRecursiveFileListingStatus status) =>
             new(new GoogleDriveRecursiveFileListingResult(
@@ -145,6 +171,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
             GoogleDriveRecursiveFileListingStatus status) =>
             status switch
             {
+                GoogleDriveRecursiveFileListingStatus.Ambiguous =>
+                    "The Google Drive backup folder contains ambiguous duplicate names.",
                 GoogleDriveRecursiveFileListingStatus.UnsupportedObject =>
                     "The Google Drive backup folder contains an unsupported object.",
                 GoogleDriveRecursiveFileListingStatus.InvalidMetadata =>

@@ -136,6 +136,74 @@ public sealed class GoogleDriveRecursivePaginationIntegrationTests
     }
 
     [Fact]
+    public async Task ExactDuplicateNamesSplitAcrossPages_FailAfterAllSiblingPages()
+    {
+        var factory = new PagedTreeClientFactory();
+        factory.AddPages(
+            RunFolderId,
+            Page(
+                new[]
+                {
+                    Blob(
+                        "private-first-duplicate-id",
+                        "private-duplicate.dat",
+                        RunFolderId),
+                    Folder(
+                        "private-untraversed-folder-id",
+                        "private-untraversed",
+                        RunFolderId)
+                },
+                "private-duplicate-page-2"),
+            Page(
+                new[]
+                {
+                    Blob(
+                        "private-second-duplicate-id",
+                        "private-duplicate.dat",
+                        RunFolderId)
+                },
+                nextPageToken: null));
+        GoogleDriveOneLevelFileListingService service = Service(factory);
+        using GoogleDriveResolvedRunFolder resolved = ResolvedRunFolder();
+
+        GoogleDriveRecursiveFileListingException exception =
+            await Assert.ThrowsAsync<GoogleDriveRecursiveFileListingException>(() =>
+                service.ListAsync(resolved));
+
+        Assert.Equal(
+            GoogleDriveRecursiveFileListingStatus.Ambiguous,
+            exception.Result.Status);
+        Assert.Equal(
+            GoogleDriveRecursiveFileListingErrorCodes.Ambiguous,
+            exception.Result.SafeErrorCode);
+        Assert.False(exception.Result.Retryable);
+        Assert.Empty(exception.Result.Entries);
+        Assert.Single(factory.Clients);
+        AssertClient(
+            factory.ClientFor(RunFolderId),
+            RunFolderId,
+            null,
+            "private-duplicate-page-2");
+        Assert.Equal(0, factory.ClientFor(RunFolderId).RemainingPageCount);
+        AssertNoMutation(factory);
+        AssertPrivateValuesAbsent(
+            exception,
+            "private-first-duplicate-id",
+            "private-second-duplicate-id",
+            "private-untraversed-folder-id",
+            "private-duplicate.dat",
+            "private-duplicate-page-2");
+        AssertPrivateValuesAbsent(
+            exception.Result,
+            "private-first-duplicate-id",
+            "private-second-duplicate-id",
+            "private-untraversed-folder-id",
+            "private-duplicate.dat",
+            "private-duplicate-page-2");
+        Assert.False(resolved.IsDisposed);
+    }
+
+    [Fact]
     public async Task NestedIncompleteSearch_FailsWithoutPartialResultOrPrivateTokens()
     {
         var factory = new PagedTreeClientFactory();
