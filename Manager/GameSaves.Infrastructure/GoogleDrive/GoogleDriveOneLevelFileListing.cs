@@ -8,10 +8,9 @@ namespace GameSaves.Infrastructure.GoogleDrive
     }
 
     /// <summary>
-    /// Lists ordinary blob files immediately beneath one authoritative
-    /// backup-run folder. Child folders are left for the later traversal
-    /// coordinator, and duplicate names are preserved for the later
-    /// collision-validation policy rather than selected or deduplicated here.
+    /// Iteratively lists ordinary blob files beneath one authoritative
+    /// backup-run folder. Duplicate names and repeated identities are
+    /// preserved for later validation rather than selected or deduplicated.
     /// </summary>
     internal sealed class GoogleDriveOneLevelFileListingService
         : IGoogleDriveOneLevelFileListingService
@@ -35,58 +34,74 @@ namespace GameSaves.Infrastructure.GoogleDrive
             {
                 GoogleDriveRemoteOperationContext operationContext =
                     resolvedRunFolder.OperationContext;
-                IReadOnlyList<GoogleDriveFolderChildEntry> children =
-                    await _childEnumerationService.EnumerateAsync(
-                        operationContext,
-                        resolvedRunFolder.FolderId,
-                        cancellationToken).ConfigureAwait(false);
-
-                cancellationToken.ThrowIfCancellationRequested();
-                if (children is null)
-                {
-                    throw Failure(
-                        GoogleDriveRecursiveFileListingStatus.InvalidMetadata);
-                }
-
                 GoogleDriveRecursiveRelativePath runRelativeRoot =
                     GoogleDriveRecursiveRelativePath.StartAtRunFolder();
-                var files = new List<GoogleDriveRecursiveFileEntry>(children.Count);
+                var pendingFolders = new Queue<PendingFolder>();
+                pendingFolders.Enqueue(new PendingFolder(
+                    resolvedRunFolder.FolderId,
+                    runRelativeRoot,
+                    depth: 0));
+                var files = new List<GoogleDriveRecursiveFileEntry>();
 
-                foreach (GoogleDriveFolderChildEntry? child in children)
+                while (pendingFolders.TryDequeue(out PendingFolder? pendingFolder))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    if (child is null)
+                    IReadOnlyList<GoogleDriveFolderChildEntry> children =
+                        await _childEnumerationService.EnumerateAsync(
+                            operationContext,
+                            pendingFolder.FolderId,
+                            cancellationToken).ConfigureAwait(false);
+
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (children is null)
                     {
                         throw Failure(
                             GoogleDriveRecursiveFileListingStatus.InvalidMetadata);
                     }
 
-                    switch (child.Kind)
+                    foreach (GoogleDriveFolderChildEntry? child in children)
                     {
-                        case GoogleDriveRecursiveObjectKind.Folder:
-                            continue;
-
-                        case GoogleDriveRecursiveObjectKind.BlobFile:
-                            GoogleDriveRecursiveRelativePath relativePath =
-                                runRelativeRoot.AppendChild(child.ExactName);
-                            cancellationToken.ThrowIfCancellationRequested();
-                            files.Add(new GoogleDriveRecursiveFileEntry(
-                                child.ObjectId,
-                                resolvedRunFolder.FolderId,
-                                child.ExactName,
-                                relativePath.Canonical,
-                                child.MimeType));
-                            break;
-
-                        case GoogleDriveRecursiveObjectKind.GoogleWorkspaceDocument:
-                        case GoogleDriveRecursiveObjectKind.Shortcut:
-                        case GoogleDriveRecursiveObjectKind.Unsupported:
-                            throw Failure(
-                                GoogleDriveRecursiveFileListingStatus.UnsupportedObject);
-
-                        default:
+                        cancellationToken.ThrowIfCancellationRequested();
+                        if (child is null)
+                        {
                             throw Failure(
                                 GoogleDriveRecursiveFileListingStatus.InvalidMetadata);
+                        }
+
+                        GoogleDriveRecursiveRelativePath relativePath =
+                            pendingFolder.RelativePathPrefix.AppendChild(
+                                child.ExactName);
+
+                        switch (child.Kind)
+                        {
+                            case GoogleDriveRecursiveObjectKind.Folder:
+                                cancellationToken.ThrowIfCancellationRequested();
+                                pendingFolders.Enqueue(new PendingFolder(
+                                    child.ObjectId,
+                                    relativePath,
+                                    pendingFolder.Depth + 1));
+                                break;
+
+                            case GoogleDriveRecursiveObjectKind.BlobFile:
+                                cancellationToken.ThrowIfCancellationRequested();
+                                files.Add(new GoogleDriveRecursiveFileEntry(
+                                    child.ObjectId,
+                                    pendingFolder.FolderId,
+                                    child.ExactName,
+                                    relativePath.Canonical,
+                                    child.MimeType));
+                                break;
+
+                            case GoogleDriveRecursiveObjectKind.GoogleWorkspaceDocument:
+                            case GoogleDriveRecursiveObjectKind.Shortcut:
+                            case GoogleDriveRecursiveObjectKind.Unsupported:
+                                throw Failure(
+                                    GoogleDriveRecursiveFileListingStatus.UnsupportedObject);
+
+                            default:
+                                throw Failure(
+                                    GoogleDriveRecursiveFileListingStatus.InvalidMetadata);
+                        }
                     }
                 }
 
@@ -136,5 +151,27 @@ namespace GameSaves.Infrastructure.GoogleDrive
                     "Google Drive returned invalid file metadata.",
                 _ => "The Google Drive backup folder could not be listed."
             };
+
+        private sealed class PendingFolder
+        {
+            public PendingFolder(
+                string folderId,
+                GoogleDriveRecursiveRelativePath relativePathPrefix,
+                int depth)
+            {
+                if (string.IsNullOrWhiteSpace(folderId))
+                    throw new ArgumentException(nameof(folderId));
+                ArgumentNullException.ThrowIfNull(relativePathPrefix);
+                if (depth < 0 || depth != relativePathPrefix.Depth)
+                    throw new ArgumentOutOfRangeException(nameof(depth));
+                FolderId = folderId;
+                RelativePathPrefix = relativePathPrefix;
+                Depth = depth;
+            }
+
+            public string FolderId { get; }
+            public GoogleDriveRecursiveRelativePath RelativePathPrefix { get; }
+            public int Depth { get; }
+        }
     }
 }
