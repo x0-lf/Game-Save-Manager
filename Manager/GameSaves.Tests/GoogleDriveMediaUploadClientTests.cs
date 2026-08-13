@@ -5,6 +5,7 @@ using Google.Apis.Auth.OAuth2;
 using Google.Apis.Auth.OAuth2.Flows;
 using Google.Apis.Auth.OAuth2.Responses;
 using Google.Apis.Drive.v3;
+using Google.Apis.Http;
 using Google.Apis.Services;
 using Google.Apis.Upload;
 using System.Reflection;
@@ -117,7 +118,7 @@ public sealed class GoogleDriveMediaUploadClientTests
     }
 
     [Fact]
-    public void SdkAdapter_UsesCreateMediaUploadAndMapsOnlyProjectState()
+    public void SdkAdapter_BuildsRestrictedCreateRequestAndMapsOnlyProjectState()
     {
         using var drive = new DriveService(new BaseClientService.Initializer
         {
@@ -132,6 +133,10 @@ public sealed class GoogleDriveMediaUploadClientTests
                 "private-name-marker",
                 source,
                 "application/octet-stream");
+        Google.Apis.Drive.v3.Data.File requestMetadata =
+            GoogleDriveMediaUploadClient.CreateMetadata(
+                "private-parent-marker",
+                "private-name-marker");
         GoogleDriveMediaUploadMetadata metadata =
             GoogleDriveMediaUploadClient.Map(
                 new Google.Apis.Drive.v3.Data.File
@@ -145,8 +150,64 @@ public sealed class GoogleDriveMediaUploadClientTests
                 });
 
         Assert.IsAssignableFrom<ResumableUpload>(upload);
+        Assert.Equal("private-name-marker", requestMetadata.Name);
+        Assert.Equal(
+            ["private-parent-marker"],
+            requestMetadata.Parents);
+        Assert.Equal("application/octet-stream", requestMetadata.MimeType);
+        Assert.Equal(
+            "id,name,mimeType,trashed,parents,driveId,size",
+            upload.Fields);
+        Assert.False(upload.SupportsAllDrives);
+        Assert.Null(upload.UseContentAsIndexableText);
+        Assert.Null(upload.OcrLanguage);
+        Assert.Null(upload.IncludePermissionsForView);
+        Assert.Null(upload.KeepRevisionForever);
         Assert.IsType<GoogleDriveMediaUploadMetadata>(metadata);
         Assert.Equal(3, metadata.Size);
+    }
+
+    [Fact]
+    public void SdkAdapter_RejectsAnyNonOpaqueMediaType()
+    {
+        using var drive = new DriveService(new BaseClientService.Initializer
+        {
+            ApplicationName = "Game Save Manager Tests"
+        });
+        using var source = new MemoryStream([1], writable: false);
+
+        Assert.Throws<ArgumentException>(() =>
+            GoogleDriveMediaUploadClient.CreateSdkUpload(
+                drive,
+                "private-parent-marker",
+                "private-name-marker",
+                source,
+                "text/plain"));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData((5 * 1024 * 1024) + 1)]
+    public void SdkAdapter_UsesResumableCreateWithDefaultChunkingForEverySize(
+        int size)
+    {
+        using var drive = new DriveService(new BaseClientService.Initializer
+        {
+            ApplicationName = "Game Save Manager Tests"
+        });
+        using var source = new MemoryStream(new byte[size], writable: false);
+
+        FilesResource.CreateMediaUpload upload =
+            GoogleDriveMediaUploadClient.CreateSdkUpload(
+                drive,
+                "private-parent-marker",
+                "private-name-marker",
+                source,
+                "application/octet-stream");
+
+        Assert.IsAssignableFrom<ResumableUpload>(upload);
+        Assert.Equal(ResumableUpload.DefaultChunkSize, upload.ChunkSize);
     }
 
     [Theory]
@@ -202,6 +263,55 @@ public sealed class GoogleDriveMediaUploadClientTests
                 "application/octet-stream",
                 progress: null,
                 CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task SdkClient_PreCanceledTokenStopsBeforeInitiation()
+    {
+        var handler = new BlockingInitiationHandler();
+        using var client = new GoogleDriveMediaUploadClient(
+            DriveWithHandler(handler));
+        using var source = new MemoryStream([1], writable: false);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.UploadAsync(
+                "private-parent-marker",
+                "private-name-marker",
+                source,
+                1,
+                "application/octet-stream",
+                progress: null,
+                cancellation.Token));
+
+        Assert.Equal(0, handler.Calls);
+    }
+
+    [Fact]
+    public async Task SdkClient_ForwardsCancellationDuringInitiation()
+    {
+        var handler = new BlockingInitiationHandler();
+        using var client = new GoogleDriveMediaUploadClient(
+            DriveWithHandler(handler));
+        using var source = new MemoryStream([1], writable: false);
+        using var cancellation = new CancellationTokenSource();
+
+        Task<GoogleDriveMediaUploadMetadata> upload = client.UploadAsync(
+            "private-parent-marker",
+            "private-name-marker",
+            source,
+            1,
+            "application/octet-stream",
+            progress: null,
+            cancellation.Token);
+        await handler.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => upload);
+        Assert.Equal(1, handler.Calls);
+        Assert.True(handler.CancellationToken.CanBeCanceled);
+        Assert.True(handler.CancellationToken.IsCancellationRequested);
     }
 
     [Fact]
@@ -393,6 +503,41 @@ public sealed class GoogleDriveMediaUploadClientTests
                 flow,
                 "test-user",
                 new TokenResponse { RefreshToken = "test-refresh-token" }));
+    }
+
+    private static DriveService DriveWithHandler(HttpMessageHandler handler)
+    {
+        var factory = new HttpClientFromMessageHandlerFactory(_ =>
+            new HttpClientFromMessageHandlerFactory.ConfiguredHttpMessageHandler(
+                handler,
+                false,
+                false));
+        return new DriveService(new BaseClientService.Initializer
+        {
+            ApplicationName = "Game Save Manager Tests",
+            HttpClientFactory = factory
+        });
+    }
+
+    private sealed class BlockingInitiationHandler : HttpMessageHandler
+    {
+        public TaskCompletionSource<bool> Started { get; } = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public int Calls { get; private set; }
+
+        public CancellationToken CancellationToken { get; private set; }
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            Calls++;
+            CancellationToken = cancellationToken;
+            Started.TrySetResult(true);
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            return new HttpResponseMessage(System.Net.HttpStatusCode.OK);
+        }
     }
 
     private sealed class StubUploadProgress(

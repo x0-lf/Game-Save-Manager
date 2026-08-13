@@ -120,6 +120,10 @@ namespace GameSaves.Infrastructure.GoogleDrive
     internal sealed class GoogleDriveMediaUploadClient
         : IGoogleDriveMediaUploadClient
     {
+        internal const string OpaqueMediaType = "application/octet-stream";
+        internal const string ResponseFields =
+            "id,name,mimeType,trashed,parents,driveId,size";
+
         private DriveService? _drive;
         private int _uploadStarted;
 
@@ -193,14 +197,35 @@ namespace GameSaves.Infrastructure.GoogleDrive
             string mediaType)
         {
             ArgumentNullException.ThrowIfNull(drive);
+            if (!string.Equals(
+                    mediaType,
+                    OpaqueMediaType,
+                    StringComparison.Ordinal))
+            {
+                throw new ArgumentException(
+                    "The opaque upload media type is required.",
+                    nameof(mediaType));
+            }
 
-            var metadata = new DriveFile
+            FilesResource.CreateMediaUpload upload = drive.Files.Create(
+                CreateMetadata(parentFolderId, exactFileName),
+                source,
+                OpaqueMediaType);
+            upload.Fields = ResponseFields;
+            upload.SupportsAllDrives =
+                GoogleDriveRequestContract.SupportsAllDrives;
+            return upload;
+        }
+
+        internal static DriveFile CreateMetadata(
+            string parentFolderId,
+            string exactFileName) =>
+            new()
             {
                 Name = exactFileName,
+                MimeType = OpaqueMediaType,
                 Parents = [parentFolderId]
             };
-            return drive.Files.Create(metadata, source, mediaType);
-        }
 
         internal static GoogleDriveMediaUploadMetadata Map(DriveFile? file) =>
             new(
@@ -266,10 +291,13 @@ namespace GameSaves.Infrastructure.GoogleDrive
             }
             if (expectedLength < 0)
                 throw new ArgumentOutOfRangeException(nameof(expectedLength));
-            if (string.IsNullOrWhiteSpace(mediaType))
+            if (!string.Equals(
+                    mediaType,
+                    OpaqueMediaType,
+                    StringComparison.Ordinal))
             {
                 throw new ArgumentException(
-                    "An opaque media type is required.",
+                    "The opaque upload media type is required.",
                     nameof(mediaType));
             }
         }
