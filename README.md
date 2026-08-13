@@ -595,7 +595,9 @@ Implement recursive file listing beneath a backup-run folder.
 * [x] Reject unsupported objects, invalid metadata, repeated identities, and cycles
 * [x] Support cancellation with no partial result and deterministic disposal
 
-Milestone Q's implementation and automated acceptance are complete. Listing uses one short-lived authenticated operation context, authoritative Drive IDs, fully paginated per-parent metadata requests, and deterministic canonical paths relative to the requested run folder. It is read-only: no content download, create, update, delete, move, rename, trash, or permission operation belongs to the listing path. Google Drive remains configuration-only with `IsImplemented = false`; uploads, downloads, provider creation, Preview Sync, and Sync Now remain unavailable. The controlled development-account acceptance checklist is documented separately and must be recorded before treating the live acceptance portion as complete. Milestone R has not started.
+Milestone Q is complete. Listing uses one short-lived authenticated operation context, authoritative Drive IDs, fully paginated per-parent metadata requests, and deterministic canonical paths relative to the requested run folder. It is read-only: no content download, create, update, delete, move, rename, trash, or permission operation belongs to the listing path. Google Drive remains configuration-only with `IsImplemented = false`; uploads, downloads, provider creation, Preview Sync, and Sync Now remain unavailable.
+
+Controlled development-account acceptance was recorded on 2026-08-13 against commit `ba83dead168b15e958807882b703aa0920770770` with the result PASS and no sanitized failure categories. Two acceptance requirements, live exact-duplicate and live case-only-collision fixtures, are unexecutable under the `drive.file` scope because that scope cannot enumerate objects the application did not create; both keep deterministic automated coverage. See `docs/decisions.md` `D-023`. Milestone R has not started.
 
 ### R — Google Drive uploads
 
