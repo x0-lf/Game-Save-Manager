@@ -2,7 +2,10 @@ using GameSaves.Core.Sync;
 using GameSaves.Infrastructure.GoogleDrive;
 using Google.Apis.Auth.OAuth2;
 using Google.Apis.Auth.OAuth2.Flows;
+using Google.Apis.Auth.OAuth2.Requests;
 using Google.Apis.Auth.OAuth2.Responses;
+using Google.Apis.Util;
+using Google.Apis.Util.Store;
 using System.Reflection;
 
 namespace GameSaves.Tests;
@@ -653,6 +656,164 @@ public sealed class GoogleDriveUploadServiceTests
         Assert.Empty(cache.Stored);
     }
 
+    [Theory]
+    [InlineData(DisposalOutcome.Success)]
+    [InlineData(DisposalOutcome.ValidationFailure)]
+    [InlineData(DisposalOutcome.ProviderFailure)]
+    [InlineData(DisposalOutcome.Cancellation)]
+    public async Task UploadAsync_DisposesEveryOwnedResourceExactlyOnce(
+        DisposalOutcome outcome)
+    {
+        var temporary = new TemporaryFile([1]);
+        using var cancellation = new CancellationTokenSource();
+        var stream = new DisposalTrackingFileStream(temporary.Path);
+        var source = new GoogleDriveLocalUploadSource(stream, stream.Length);
+        TrackingAuthorizationCodeFlow flow = new();
+        GoogleDriveRemoteOperationContext context = Context(flow);
+        var coordinator = new GoogleDriveObjectCreationCoordinator();
+        Exception providerFailure = new IOException(
+            "The synthetic provider stage did not complete.");
+        GoogleDriveMediaUploadMetadata response = outcome ==
+            DisposalOutcome.ValidationFailure
+                ? ValidMetadata("root-id", "other.bin", 1)
+                : ValidMetadata("root-id", "save.bin", 1);
+        var mediaFactory = outcome == DisposalOutcome.ProviderFailure
+            ? new RecordingMediaClientFactory(providerFailure)
+            : new RecordingMediaClientFactory(response);
+        if (outcome == DisposalOutcome.Cancellation)
+            mediaFactory.Client.BeforeReturn = cancellation.Cancel;
+        GoogleDriveBinaryUploadService service = Service(
+            new RecordingChildEnumerationService([[], []]),
+            new RecordingContextFactory(context),
+            mediaFactory,
+            coordinator: coordinator,
+            openSourceAsync: (_, cancellationToken) =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return Task.FromResult(source);
+            });
+
+        Exception? exception = await Record.ExceptionAsync(() =>
+            service.UploadAsync(
+                temporary.Path,
+                GoogleDriveBinaryUploadRequest.Parse(
+                    ProfileId,
+                    "save.bin",
+                    1),
+                cancellation.Token));
+
+        switch (outcome)
+        {
+            case DisposalOutcome.Success:
+                Assert.Null(exception);
+                break;
+            case DisposalOutcome.ValidationFailure:
+                Assert.IsType<GoogleDriveUploadResponseException>(exception);
+                break;
+            case DisposalOutcome.ProviderFailure:
+                Assert.Same(providerFailure, exception);
+                break;
+            case DisposalOutcome.Cancellation:
+                Assert.IsAssignableFrom<OperationCanceledException>(exception);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(outcome));
+        }
+
+        Assert.Equal(1, stream.DisposeCalls);
+        Assert.False(stream.CanRead);
+        Assert.False(File.Exists(temporary.Path));
+        Assert.Equal(1, flow.DisposeCalls);
+        Assert.Equal(1, mediaFactory.Client.DisposeCalls);
+        Assert.True(context.IsDisposed);
+        using var leaseTimeout = new CancellationTokenSource(
+            TimeSpan.FromSeconds(5));
+        using IDisposable lease = await coordinator.AcquireAsync(
+            "root-id",
+            "save.bin",
+            leaseTimeout.Token);
+    }
+
+    [Fact]
+    public void ServiceSource_OwnsEachResourceOnceWithoutManualDisposal()
+    {
+        string source = System.IO.File.ReadAllText(System.IO.Path.Combine(
+            FindManagerRoot(),
+            "GameSaves.Infrastructure",
+            "GoogleDrive",
+            "GoogleDriveBinaryUploadService.cs"));
+        string[] ownershipDeclarations =
+        [
+            "using GoogleDriveLocalUploadSource source =",
+            "using GoogleDriveRemoteOperationContext context =",
+            "using IDisposable lease =",
+            "using IGoogleDriveMediaUploadClient mediaClient ="
+        ];
+
+        Assert.All(ownershipDeclarations, declaration => Assert.Equal(
+            1,
+            source.Split(declaration, StringSplitOptions.None).Length - 1));
+        Assert.DoesNotContain(".Dispose(", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Cancellation_WaitsForLateProviderReturnThenDisposesAllWork()
+    {
+        var temporary = new TemporaryFile([1]);
+        using var cancellation = new CancellationTokenSource();
+        var stream = new DisposalTrackingFileStream(temporary.Path);
+        var source = new GoogleDriveLocalUploadSource(stream, stream.Length);
+        TrackingAuthorizationCodeFlow flow = new();
+        GoogleDriveRemoteOperationContext context = Context(flow);
+        var coordinator = new GoogleDriveObjectCreationCoordinator();
+        var mediaFactory = new LateReturningMediaClientFactory(
+            ValidMetadata("root-id", "save.bin", 1));
+        GoogleDriveBinaryUploadService service = Service(
+            new RecordingChildEnumerationService([[], []]),
+            new RecordingContextFactory(context),
+            mediaFactory,
+            coordinator: coordinator,
+            openSourceAsync: (_, cancellationToken) =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return Task.FromResult(source);
+            });
+
+        Task<GoogleDriveBinaryUploadResult> upload = service.UploadAsync(
+            temporary.Path,
+            GoogleDriveBinaryUploadRequest.Parse(
+                ProfileId,
+                "save.bin",
+                1),
+            cancellation.Token);
+        await mediaFactory.Client.Started.Task.WaitAsync(
+            TimeSpan.FromSeconds(5));
+        cancellation.Cancel();
+
+        Assert.False(upload.IsCompleted);
+        Assert.Equal(1, mediaFactory.Client.ActiveCalls);
+        Assert.Equal(0, mediaFactory.Client.DisposeCalls);
+        Assert.Equal(0, stream.DisposeCalls);
+        Assert.Equal(0, flow.DisposeCalls);
+
+        mediaFactory.Client.Complete();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => upload);
+
+        Assert.True(upload.IsCompleted);
+        Assert.Equal(0, mediaFactory.Client.ActiveCalls);
+        Assert.Equal(1, mediaFactory.Client.DisposeCalls);
+        Assert.Equal(1, stream.DisposeCalls);
+        Assert.Equal(1, flow.DisposeCalls);
+        Assert.True(context.IsDisposed);
+        Assert.False(File.Exists(temporary.Path));
+        using var leaseTimeout = new CancellationTokenSource(
+            TimeSpan.FromSeconds(5));
+        using IDisposable lease = await coordinator.AcquireAsync(
+            "root-id",
+            "save.bin",
+            leaseTimeout.Token);
+    }
+
     [Fact]
     public void ServiceContract_IsInternalOneFileOnlyAndSdkFree()
     {
@@ -709,8 +870,10 @@ public sealed class GoogleDriveUploadServiceTests
             "Trash",
             "Update",
             "Retry",
+            "Task.Run",
             "Task.Delay",
-            "ContinueWith"
+            "ContinueWith",
+            "async void"
         ];
 
         Assert.All(forbidden, value =>
@@ -749,12 +912,14 @@ public sealed class GoogleDriveUploadServiceTests
         IGoogleDriveRemoteOperationContextFactory contextFactory,
         IGoogleDriveMediaUploadClientFactory mediaFactory,
         RecordingObjectIdCache? cache = null,
+        GoogleDriveObjectCreationCoordinator? coordinator = null,
         Func<string, CancellationToken,
             Task<GoogleDriveLocalUploadSource>>? openSourceAsync = null)
     {
+        coordinator ??= new GoogleDriveObjectCreationCoordinator();
         var guard = new GoogleDriveCreateOnlyUploadTargetGuard(
             enumeration,
-            new GoogleDriveObjectCreationCoordinator());
+            coordinator);
         var parentPreparation = new GoogleDriveUploadParentPreparationService(
             enumeration,
             guard,
@@ -835,6 +1000,17 @@ public sealed class GoogleDriveUploadServiceTests
 
     private static GoogleDriveRemoteOperationContext Context() =>
         new(ProfileId, "root-id", Credential(), new UnusedResolver());
+
+    private static GoogleDriveRemoteOperationContext Context(
+        IAuthorizationCodeFlow flow) =>
+        new(
+            ProfileId,
+            "root-id",
+            new GoogleAuthorizedCredential(new UserCredential(
+                flow,
+                ProfileId.ToString("D"),
+                new TokenResponse { AccessToken = "test-access-token" })),
+            new UnusedResolver());
 
     private static GoogleAuthorizedCredential Credential()
     {
@@ -964,6 +1140,8 @@ public sealed class GoogleDriveUploadServiceTests
 
         public bool IsDisposed { get; private set; }
 
+        public int DisposeCalls { get; private set; }
+
         public CancellationToken CancellationToken { get; private set; }
 
         public Action? BeforeReturn { get; set; }
@@ -1011,7 +1189,70 @@ public sealed class GoogleDriveUploadServiceTests
             return _response!;
         }
 
-        public void Dispose() => IsDisposed = true;
+        public void Dispose()
+        {
+            DisposeCalls++;
+            IsDisposed = true;
+        }
+    }
+
+    private sealed class LateReturningMediaClientFactory
+        : IGoogleDriveMediaUploadClientFactory
+    {
+        public LateReturningMediaClientFactory(
+            GoogleDriveMediaUploadMetadata response) =>
+            Client = new LateReturningMediaClient(response);
+
+        public LateReturningMediaClient Client { get; }
+
+        public IGoogleDriveMediaUploadClient Create(
+            GoogleAuthorizedCredential credential) => Client;
+    }
+
+    private sealed class LateReturningMediaClient
+        : IGoogleDriveMediaUploadClient
+    {
+        private readonly GoogleDriveMediaUploadMetadata _response;
+        private readonly TaskCompletionSource<bool> _release = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _activeCalls;
+
+        public LateReturningMediaClient(
+            GoogleDriveMediaUploadMetadata response) =>
+            _response = response;
+
+        public TaskCompletionSource<bool> Started { get; } = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public int ActiveCalls => Volatile.Read(ref _activeCalls);
+
+        public int DisposeCalls { get; private set; }
+
+        public async Task<GoogleDriveMediaUploadMetadata> UploadAsync(
+            string parentFolderId,
+            string exactFileName,
+            Stream source,
+            long expectedLength,
+            string mediaType,
+            IProgress<GoogleDriveMediaUploadProgress>? progress,
+            CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref _activeCalls);
+            Started.TrySetResult(true);
+            try
+            {
+                await _release.Task.ConfigureAwait(false);
+                return _response;
+            }
+            finally
+            {
+                Interlocked.Decrement(ref _activeCalls);
+            }
+        }
+
+        public void Complete() => _release.TrySetResult(true);
+
+        public void Dispose() => DisposeCalls++;
     }
 
     private sealed class RecordingChildEnumerationService
@@ -1226,5 +1467,84 @@ public sealed class GoogleDriveUploadServiceTests
                 MaximumRequestedRead,
                 requestedRead);
         }
+    }
+
+    private sealed class DisposalTrackingFileStream : FileStream
+    {
+        public DisposalTrackingFileStream(string path)
+            : base(path, new FileStreamOptions
+            {
+                Mode = FileMode.Open,
+                Access = FileAccess.Read,
+                Share = FileShare.Read,
+                Options = FileOptions.DeleteOnClose
+            })
+        {
+        }
+
+        public int DisposeCalls { get; private set; }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+                DisposeCalls++;
+            base.Dispose(disposing);
+        }
+    }
+
+    private sealed class TrackingAuthorizationCodeFlow
+        : IAuthorizationCodeFlow
+    {
+        public int DisposeCalls { get; private set; }
+
+        public IAccessMethod AccessMethod => throw new NotSupportedException();
+
+        public IClock Clock => SystemClock.Default;
+
+        public IDataStore DataStore => throw new NotSupportedException();
+
+        public Task<TokenResponse> LoadTokenAsync(
+            string userId,
+            CancellationToken taskCancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task DeleteTokenAsync(
+            string userId,
+            CancellationToken taskCancellationToken) =>
+            throw new NotSupportedException();
+
+        public AuthorizationCodeRequestUrl CreateAuthorizationCodeRequest(
+            string redirectUri) => throw new NotSupportedException();
+
+        public Task<TokenResponse> ExchangeCodeForTokenAsync(
+            string userId,
+            string code,
+            string redirectUri,
+            CancellationToken taskCancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<TokenResponse> RefreshTokenAsync(
+            string userId,
+            string refreshToken,
+            CancellationToken taskCancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task RevokeTokenAsync(
+            string userId,
+            string token,
+            CancellationToken taskCancellationToken) =>
+            throw new NotSupportedException();
+
+        public bool ShouldForceTokenRetrieval() => false;
+
+        public void Dispose() => DisposeCalls++;
+    }
+
+    public enum DisposalOutcome
+    {
+        Success,
+        ValidationFailure,
+        ProviderFailure,
+        Cancellation
     }
 }

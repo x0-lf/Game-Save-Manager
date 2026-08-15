@@ -118,6 +118,19 @@ public sealed class GoogleDriveMediaUploadClientTests
     }
 
     [Fact]
+    public void SdkClient_DisposesOwnedDriveServiceExactlyOnce()
+    {
+        var drive = new DisposalTrackingDriveService();
+        var client = new GoogleDriveMediaUploadClient(drive);
+
+        client.Dispose();
+        client.Dispose();
+
+        Assert.True(client.IsDisposed);
+        Assert.Equal(1, drive.DisposeCalls);
+    }
+
+    [Fact]
     public void SdkAdapter_BuildsRestrictedCreateRequestAndMapsOnlyProjectState()
     {
         using var drive = new DriveService(new BaseClientService.Initializer
@@ -611,6 +624,25 @@ public sealed class GoogleDriveMediaUploadClientTests
             ApplicationName = "Game Save Manager Tests",
             HttpClientFactory = factory
         });
+    }
+
+    private sealed class DisposalTrackingDriveService : DriveService
+    {
+        public DisposalTrackingDriveService()
+            : base(new BaseClientService.Initializer
+            {
+                ApplicationName = "Game Save Manager Tests"
+            })
+        {
+        }
+
+        public int DisposeCalls { get; private set; }
+
+        public override void Dispose()
+        {
+            DisposeCalls++;
+            base.Dispose();
+        }
     }
 
     private sealed class BlockingInitiationHandler : HttpMessageHandler
