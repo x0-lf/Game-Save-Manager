@@ -15,7 +15,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
     internal sealed class GoogleDriveBinaryUploadService
         : IGoogleDriveBinaryUploadService
     {
-        private readonly GoogleDriveLocalUploadSourceOpener _sourceOpener;
+        private readonly Func<string, CancellationToken,
+            Task<GoogleDriveLocalUploadSource>> _openSourceAsync;
         private readonly IGoogleDriveRemoteOperationContextFactory _contextFactory;
         private readonly GoogleDriveUploadParentPreparationService
             _parentPreparationService;
@@ -23,14 +24,15 @@ namespace GameSaves.Infrastructure.GoogleDrive
         private readonly IGoogleDriveMediaUploadClientFactory _mediaClientFactory;
 
         public GoogleDriveBinaryUploadService(
-            GoogleDriveLocalUploadSourceOpener sourceOpener,
+            Func<string, CancellationToken,
+                Task<GoogleDriveLocalUploadSource>> openSourceAsync,
             IGoogleDriveRemoteOperationContextFactory contextFactory,
             GoogleDriveUploadParentPreparationService parentPreparationService,
             GoogleDriveCreateOnlyUploadTargetGuard targetGuard,
             IGoogleDriveMediaUploadClientFactory mediaClientFactory)
         {
-            _sourceOpener = sourceOpener ??
-                throw new ArgumentNullException(nameof(sourceOpener));
+            _openSourceAsync = openSourceAsync ??
+                throw new ArgumentNullException(nameof(openSourceAsync));
             _contextFactory = contextFactory ??
                 throw new ArgumentNullException(nameof(contextFactory));
             _parentPreparationService = parentPreparationService ??
@@ -50,7 +52,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
             cancellationToken.ThrowIfCancellationRequested();
 
             using GoogleDriveLocalUploadSource source =
-                await _sourceOpener.OpenAsync(
+                await _openSourceAsync(
                     localFilePath,
                     cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();

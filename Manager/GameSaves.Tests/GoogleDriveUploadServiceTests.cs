@@ -68,6 +68,111 @@ public sealed class GoogleDriveUploadServiceTests
     }
 
     [Fact]
+    public async Task UploadAsync_PassesOpenedStreamDirectlyWithoutMaterializing()
+    {
+        using var temporary = new TemporaryFile([1, 2, 3]);
+        var stream = new FileStream(
+            temporary.Path,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read);
+        var source = new GoogleDriveLocalUploadSource(stream, stream.Length);
+        var enumeration = new RecordingChildEnumerationService([[], []]);
+        using GoogleDriveRemoteOperationContext context = Context();
+        var mediaFactory = ValidMediaFactory("root-id", "save.bin", 3);
+        GoogleDriveBinaryUploadService service = Service(
+            enumeration,
+            new RecordingContextFactory(context),
+            mediaFactory,
+            openSourceAsync: (path, cancellationToken) =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                Assert.Equal(temporary.Path, path);
+                return Task.FromResult(source);
+            });
+
+        await service.UploadAsync(
+            temporary.Path,
+            GoogleDriveBinaryUploadRequest.Parse(
+                ProfileId,
+                "save.bin",
+                3));
+
+        Assert.Same(stream, mediaFactory.Client.Source);
+        Assert.Equal(0, mediaFactory.Client.SourcePosition);
+        Assert.False(stream.CanRead);
+    }
+
+    [Fact]
+    public async Task UploadAsync_PreservesZeroByteStreamPositionAndLifetime()
+    {
+        using var temporary = new TemporaryFile([]);
+        var enumeration = new RecordingChildEnumerationService([[], []]);
+        using GoogleDriveRemoteOperationContext context = Context();
+        var mediaFactory = new RecordingMediaClientFactory(
+            ValidMetadata("root-id", "empty.bin", 0),
+            readBufferSize: 16 * 1024);
+        GoogleDriveBinaryUploadService service = Service(
+            enumeration,
+            new RecordingContextFactory(context),
+            mediaFactory);
+
+        await service.UploadAsync(
+            temporary.Path,
+            GoogleDriveBinaryUploadRequest.Parse(
+                ProfileId,
+                "empty.bin",
+                0));
+
+        Assert.Equal(0, mediaFactory.Client.ExpectedLength);
+        Assert.Equal(0, mediaFactory.Client.SourcePosition);
+        Assert.Equal(0, mediaFactory.Client.SourcePositionAfterRead);
+        Assert.Equal(0, mediaFactory.Client.BytesRead);
+        Assert.False(mediaFactory.Client.Source!.CanRead);
+    }
+
+    [Fact]
+    public async Task UploadAsync_LargeStreamUsesBoundedReadsWithoutEagerCopy()
+    {
+        const long length = (8 * 1024 * 1024) + 17;
+        const int readBufferSize = 16 * 1024;
+        using var temporary = new TemporaryFile(length);
+        var stream = new BoundedReadFileStream(
+            temporary.Path,
+            maximumReadSize: 32 * 1024);
+        var source = new GoogleDriveLocalUploadSource(stream, stream.Length);
+        var enumeration = new RecordingChildEnumerationService([[], []]);
+        using GoogleDriveRemoteOperationContext context = Context();
+        var mediaFactory = new RecordingMediaClientFactory(
+            ValidMetadata("root-id", "large.bin", length),
+            readBufferSize);
+        GoogleDriveBinaryUploadService service = Service(
+            enumeration,
+            new RecordingContextFactory(context),
+            mediaFactory,
+            openSourceAsync: (_, cancellationToken) =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return Task.FromResult(source);
+            });
+
+        await service.UploadAsync(
+            temporary.Path,
+            GoogleDriveBinaryUploadRequest.Parse(
+                ProfileId,
+                "large.bin",
+                length));
+
+        Assert.Same(stream, mediaFactory.Client.Source);
+        Assert.Equal(0, mediaFactory.Client.SourcePosition);
+        Assert.Equal(length, mediaFactory.Client.SourcePositionAfterRead);
+        Assert.Equal(length, mediaFactory.Client.BytesRead);
+        Assert.True(stream.ReadCount > 1);
+        Assert.InRange(stream.MaximumRequestedRead, 1, readBufferSize);
+        Assert.False(stream.CanRead);
+    }
+
+    [Fact]
     public async Task SourceFailure_PreservesSourceCategory()
     {
         string missingPath = System.IO.Path.Combine(
@@ -288,6 +393,14 @@ public sealed class GoogleDriveUploadServiceTests
             "IGoogleDriveObjectIdCache",
             "GameSaves.App",
             "Google.Apis",
+            "ReadAllBytes",
+            "ReadAllText",
+            "ReadToEnd",
+            "CopyTo",
+            "MemoryStream",
+            "StreamReader",
+            "BinaryReader",
+            "ToArray(",
             "foreach (",
             "for ("
         ];
@@ -299,8 +412,10 @@ public sealed class GoogleDriveUploadServiceTests
     private static GoogleDriveBinaryUploadService Service(
         RecordingChildEnumerationService enumeration,
         IGoogleDriveRemoteOperationContextFactory contextFactory,
-        RecordingMediaClientFactory mediaFactory,
-        RecordingObjectIdCache? cache = null)
+        IGoogleDriveMediaUploadClientFactory mediaFactory,
+        RecordingObjectIdCache? cache = null,
+        Func<string, CancellationToken,
+            Task<GoogleDriveLocalUploadSource>>? openSourceAsync = null)
     {
         var guard = new GoogleDriveCreateOnlyUploadTargetGuard(
             enumeration,
@@ -310,8 +425,9 @@ public sealed class GoogleDriveUploadServiceTests
             guard,
             new UnexpectedObjectApi(),
             cache ?? new RecordingObjectIdCache());
+        var sourceOpener = new GoogleDriveLocalUploadSourceOpener();
         return new GoogleDriveBinaryUploadService(
-            new GoogleDriveLocalUploadSourceOpener(),
+            openSourceAsync ?? sourceOpener.OpenAsync,
             contextFactory,
             parentPreparation,
             guard,
@@ -341,14 +457,20 @@ public sealed class GoogleDriveUploadServiceTests
         string parentId,
         string exactName,
         long length) =>
-        new(new GoogleDriveMediaUploadMetadata(
+        new(ValidMetadata(parentId, exactName, length));
+
+    private static GoogleDriveMediaUploadMetadata ValidMetadata(
+        string parentId,
+        string exactName,
+        long length) =>
+        new(
             "uploaded-id",
             exactName,
             GoogleDriveMediaUploadClient.OpaqueMediaType,
             trashed: false,
             parentIds: [parentId],
             driveId: null,
-            size: length));
+            size: length);
 
     private static GoogleDriveFolderChildEntry Folder(
         string id,
@@ -442,6 +564,11 @@ public sealed class GoogleDriveUploadServiceTests
             GoogleDriveMediaUploadMetadata response) =>
             Client = new RecordingMediaClient(response);
 
+        public RecordingMediaClientFactory(
+            GoogleDriveMediaUploadMetadata response,
+            int readBufferSize) =>
+            Client = new RecordingMediaClient(response, readBufferSize);
+
         public RecordingMediaClientFactory(Exception failure) =>
             Client = new RecordingMediaClient(failure);
 
@@ -455,9 +582,18 @@ public sealed class GoogleDriveUploadServiceTests
     {
         private readonly GoogleDriveMediaUploadMetadata? _response;
         private readonly Exception? _failure;
+        private readonly int? _readBufferSize;
 
         public RecordingMediaClient(GoogleDriveMediaUploadMetadata response) =>
             _response = response;
+
+        public RecordingMediaClient(
+            GoogleDriveMediaUploadMetadata response,
+            int readBufferSize)
+        {
+            _response = response;
+            _readBufferSize = readBufferSize;
+        }
 
         public RecordingMediaClient(Exception failure) =>
             _failure = failure;
@@ -468,6 +604,12 @@ public sealed class GoogleDriveUploadServiceTests
 
         public Stream? Source { get; private set; }
 
+        public long SourcePosition { get; private set; }
+
+        public long SourcePositionAfterRead { get; private set; }
+
+        public long BytesRead { get; private set; }
+
         public long ExpectedLength { get; private set; }
 
         public string? MediaType { get; private set; }
@@ -476,7 +618,7 @@ public sealed class GoogleDriveUploadServiceTests
 
         public bool IsDisposed { get; private set; }
 
-        public Task<GoogleDriveMediaUploadMetadata> UploadAsync(
+        public async Task<GoogleDriveMediaUploadMetadata> UploadAsync(
             string parentFolderId,
             string exactFileName,
             Stream source,
@@ -489,12 +631,27 @@ public sealed class GoogleDriveUploadServiceTests
             ParentId = parentFolderId;
             ExactName = exactFileName;
             Source = source;
+            SourcePosition = source.Position;
             ExpectedLength = expectedLength;
             MediaType = mediaType;
             UploadCount++;
-            return _failure is null
-                ? Task.FromResult(_response!)
-                : Task.FromException<GoogleDriveMediaUploadMetadata>(_failure);
+
+            if (_readBufferSize is int readBufferSize)
+            {
+                byte[] buffer = new byte[readBufferSize];
+                int bytesRead;
+                while ((bytesRead = await source.ReadAsync(
+                    buffer.AsMemory(), cancellationToken)) != 0)
+                {
+                    BytesRead += bytesRead;
+                }
+            }
+
+            SourcePositionAfterRead = source.Position;
+            if (_failure is not null)
+                throw _failure;
+
+            return _response!;
         }
 
         public void Dispose() => IsDisposed = true;
@@ -627,12 +784,80 @@ public sealed class GoogleDriveUploadServiceTests
             File.WriteAllBytes(Path, content);
         }
 
+        public TemporaryFile(long length)
+        {
+            Path = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(),
+                $"gamesaves-r9-{Guid.NewGuid():N}.tmp");
+            using FileStream stream = File.Create(Path);
+            stream.SetLength(length);
+        }
+
         public string Path { get; }
 
         public void Dispose()
         {
             if (File.Exists(Path))
                 File.Delete(Path);
+        }
+    }
+
+    private sealed class BoundedReadFileStream : FileStream
+    {
+        private readonly int _maximumReadSize;
+
+        public BoundedReadFileStream(string path, int maximumReadSize)
+            : base(path, FileMode.Open, FileAccess.Read, FileShare.Read)
+        {
+            _maximumReadSize = maximumReadSize;
+        }
+
+        public int ReadCount { get; private set; }
+
+        public int MaximumRequestedRead { get; private set; }
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            ValidateReadSize(count);
+            return base.Read(buffer, offset, count);
+        }
+
+        public override int Read(Span<byte> buffer)
+        {
+            ValidateReadSize(buffer.Length);
+            return base.Read(buffer);
+        }
+
+        public override Task<int> ReadAsync(
+            byte[] buffer,
+            int offset,
+            int count,
+            CancellationToken cancellationToken)
+        {
+            ValidateReadSize(count);
+            return base.ReadAsync(buffer, offset, count, cancellationToken);
+        }
+
+        public override ValueTask<int> ReadAsync(
+            Memory<byte> buffer,
+            CancellationToken cancellationToken = default)
+        {
+            ValidateReadSize(buffer.Length);
+            return base.ReadAsync(buffer, cancellationToken);
+        }
+
+        private void ValidateReadSize(int requestedRead)
+        {
+            if (requestedRead > _maximumReadSize)
+            {
+                throw new InvalidOperationException(
+                    "The synthetic stream rejects eager reads.");
+            }
+
+            ReadCount++;
+            MaximumRequestedRead = Math.Max(
+                MaximumRequestedRead,
+                requestedRead);
         }
     }
 }
