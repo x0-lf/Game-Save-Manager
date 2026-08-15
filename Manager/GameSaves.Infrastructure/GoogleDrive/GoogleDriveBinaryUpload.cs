@@ -3,12 +3,30 @@ namespace GameSaves.Infrastructure.GoogleDrive
     internal enum GoogleDriveBinaryUploadStatus
     {
         Completed = 0,
-        Failed = 1
+        Failed = 1,
+        Indeterminate = 2
     }
 
     internal static class GoogleDriveBinaryUploadErrorCodes
     {
         public const string Failed = "GoogleDriveBinaryUploadFailed";
+        public const string CompletionIndeterminate =
+            "GoogleDriveUploadCompletionIndeterminate";
+    }
+
+    internal sealed class GoogleDriveUploadCompletionIndeterminateException
+        : Exception
+    {
+        public GoogleDriveUploadCompletionIndeterminateException()
+            : base("The Google Drive upload completion is uncertain.")
+        {
+        }
+
+        public string SafeErrorCode =>
+            GoogleDriveBinaryUploadErrorCodes.CompletionIndeterminate;
+
+        public override string ToString() =>
+            $"{GetType().FullName}: {Message} ({SafeErrorCode})";
     }
 
     /// <summary>
@@ -112,9 +130,18 @@ namespace GameSaves.Infrastructure.GoogleDrive
                         nameof(completedBytes));
                 }
 
+                string expectedErrorCode = status switch
+                {
+                    GoogleDriveBinaryUploadStatus.Failed =>
+                        GoogleDriveBinaryUploadErrorCodes.Failed,
+                    GoogleDriveBinaryUploadStatus.Indeterminate =>
+                        GoogleDriveBinaryUploadErrorCodes
+                            .CompletionIndeterminate,
+                    _ => throw new ArgumentOutOfRangeException(nameof(status))
+                };
                 if (!string.Equals(
                         safeErrorCode,
-                        GoogleDriveBinaryUploadErrorCodes.Failed,
+                        expectedErrorCode,
                         StringComparison.Ordinal))
                 {
                     throw new ArgumentException(

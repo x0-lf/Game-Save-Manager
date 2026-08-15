@@ -340,6 +340,42 @@ public sealed class GoogleDriveUploadServiceTests
     }
 
     [Fact]
+    public async Task LostCompletionResponse_ReturnsIndeterminateWithoutRetry()
+    {
+        using var temporary = new TemporaryFile([1]);
+        var enumeration = new RecordingChildEnumerationService([[], []]);
+        var cache = new RecordingObjectIdCache();
+        using GoogleDriveRemoteOperationContext context = Context();
+        var mediaFactory = new RecordingMediaClientFactory(
+            new GoogleDriveUploadCompletionIndeterminateException());
+        GoogleDriveBinaryUploadService service = Service(
+            enumeration,
+            new RecordingContextFactory(context),
+            mediaFactory,
+            cache);
+
+        GoogleDriveBinaryUploadResult result = await service.UploadAsync(
+            temporary.Path,
+            GoogleDriveBinaryUploadRequest.Parse(
+                ProfileId,
+                "save.bin",
+                1));
+
+        Assert.Equal(
+            GoogleDriveBinaryUploadStatus.Indeterminate,
+            result.Status);
+        Assert.Equal(0, result.CompletedBytes);
+        Assert.Equal(
+            GoogleDriveBinaryUploadErrorCodes.CompletionIndeterminate,
+            result.SafeErrorCode);
+        Assert.Equal(1, mediaFactory.Client.UploadCount);
+        Assert.Equal(["root-id", "root-id"], enumeration.ParentIds);
+        Assert.Empty(cache.Stored);
+        Assert.True(mediaFactory.Client.IsDisposed);
+        Assert.True(context.IsDisposed);
+    }
+
+    [Fact]
     public async Task ResponseFailure_PreservesResponseCategory()
     {
         using var temporary = new TemporaryFile([1]);
@@ -558,13 +594,15 @@ public sealed class GoogleDriveUploadServiceTests
     }
 
     [Fact]
-    public async Task CancellationAfterSdkCompletion_ProducesNoResult()
+    public async Task LateResponseAfterBytesAccepted_ProducesCancellationOnly()
     {
         using var temporary = new TemporaryFile([1]);
         using var cancellation = new CancellationTokenSource();
         var enumeration = new RecordingChildEnumerationService([[], []]);
         using GoogleDriveRemoteOperationContext context = Context();
-        var mediaFactory = ValidMediaFactory("root-id", "save.bin", 1);
+        var mediaFactory = new RecordingMediaClientFactory(
+            ValidMetadata("root-id", "save.bin", 1),
+            readBufferSize: 1);
         mediaFactory.Client.BeforeReturn = cancellation.Cancel;
         GoogleDriveBinaryUploadService service = Service(
             enumeration,
@@ -581,7 +619,38 @@ public sealed class GoogleDriveUploadServiceTests
                 cancellation.Token));
 
         Assert.Equal(1, mediaFactory.Client.UploadCount);
+        Assert.Equal(1, mediaFactory.Client.BytesRead);
         Assert.True(mediaFactory.Client.IsDisposed);
+    }
+
+    [Fact]
+    public async Task IndeterminateFailureAfterCancellation_RemainsCancellation()
+    {
+        using var temporary = new TemporaryFile([1]);
+        using var cancellation = new CancellationTokenSource();
+        var enumeration = new RecordingChildEnumerationService([[], []]);
+        var cache = new RecordingObjectIdCache();
+        using GoogleDriveRemoteOperationContext context = Context();
+        var mediaFactory = new RecordingMediaClientFactory(
+            new GoogleDriveUploadCompletionIndeterminateException());
+        mediaFactory.Client.BeforeFailure = cancellation.Cancel;
+        GoogleDriveBinaryUploadService service = Service(
+            enumeration,
+            new RecordingContextFactory(context),
+            mediaFactory,
+            cache);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            service.UploadAsync(
+                temporary.Path,
+                GoogleDriveBinaryUploadRequest.Parse(
+                    ProfileId,
+                    "save.bin",
+                    1),
+                cancellation.Token));
+
+        Assert.Equal(1, mediaFactory.Client.UploadCount);
+        Assert.Empty(cache.Stored);
     }
 
     [Fact]
@@ -635,7 +704,13 @@ public sealed class GoogleDriveUploadServiceTests
             "BinaryReader",
             "ToArray(",
             "foreach (",
-            "for ("
+            "for (",
+            "Delete",
+            "Trash",
+            "Update",
+            "Retry",
+            "Task.Delay",
+            "ContinueWith"
         ];
 
         Assert.All(forbidden, value =>
@@ -893,6 +968,8 @@ public sealed class GoogleDriveUploadServiceTests
 
         public Action? BeforeReturn { get; set; }
 
+        public Action? BeforeFailure { get; set; }
+
         public async Task<GoogleDriveMediaUploadMetadata> UploadAsync(
             string parentFolderId,
             string exactFileName,
@@ -925,7 +1002,10 @@ public sealed class GoogleDriveUploadServiceTests
 
             SourcePositionAfterRead = source.Position;
             if (_failure is not null)
+            {
+                BeforeFailure?.Invoke();
                 throw _failure;
+            }
 
             BeforeReturn?.Invoke();
             return _response!;

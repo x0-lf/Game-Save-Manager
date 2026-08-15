@@ -77,6 +77,7 @@ public sealed class GoogleDriveUploadContractTests
     {
         Assert.Equal(0, (int)GoogleDriveBinaryUploadStatus.Completed);
         Assert.Equal(1, (int)GoogleDriveBinaryUploadStatus.Failed);
+        Assert.Equal(2, (int)GoogleDriveBinaryUploadStatus.Indeterminate);
     }
 
     [Fact]
@@ -107,6 +108,23 @@ public sealed class GoogleDriveUploadContractTests
     }
 
     [Fact]
+    public void IndeterminateResult_CarriesFixedErrorCodeAndNoBytes()
+    {
+        var result = new GoogleDriveBinaryUploadResult(
+            GoogleDriveBinaryUploadStatus.Indeterminate,
+            0,
+            GoogleDriveBinaryUploadErrorCodes.CompletionIndeterminate);
+
+        Assert.Equal(
+            GoogleDriveBinaryUploadStatus.Indeterminate,
+            result.Status);
+        Assert.Equal(0, result.CompletedBytes);
+        Assert.Equal(
+            "GoogleDriveUploadCompletionIndeterminate",
+            result.SafeErrorCode);
+    }
+
+    [Fact]
     public void InconsistentResults_AreRejected()
     {
         Assert.Throws<ArgumentException>(() =>
@@ -128,6 +146,11 @@ public sealed class GoogleDriveUploadContractTests
                 GoogleDriveBinaryUploadStatus.Failed,
                 0,
                 "unsafe/private/path"));
+        Assert.Throws<ArgumentException>(() =>
+            new GoogleDriveBinaryUploadResult(
+                GoogleDriveBinaryUploadStatus.Indeterminate,
+                0,
+                GoogleDriveBinaryUploadErrorCodes.Failed));
     }
 
     [Fact]
@@ -158,6 +181,10 @@ public sealed class GoogleDriveUploadContractTests
             GoogleDriveBinaryUploadStatus.Failed,
             0,
             GoogleDriveBinaryUploadErrorCodes.Failed);
+        var indeterminate = new GoogleDriveBinaryUploadResult(
+            GoogleDriveBinaryUploadStatus.Indeterminate,
+            0,
+            GoogleDriveBinaryUploadErrorCodes.CompletionIndeterminate);
 
         Assert.Equal(
             "Google Drive binary upload request (segments=2; expectedBytes=42)",
@@ -171,12 +198,17 @@ public sealed class GoogleDriveUploadContractTests
             "Google Drive binary upload: status=Failed; completedBytes=0",
             failed.ToSafeDiagnosticString());
         Assert.Equal(failed.ToSafeDiagnosticString(), failed.ToString());
+        Assert.Equal(
+            "Google Drive binary upload: status=Indeterminate; " +
+            "completedBytes=0",
+            indeterminate.ToSafeDiagnosticString());
 
         string formatted = string.Join(
             Environment.NewLine,
             request,
             completed,
-            failed);
+            failed,
+            indeterminate);
         Assert.DoesNotContain(privatePath, formatted, StringComparison.Ordinal);
         Assert.DoesNotContain("Private Folder", formatted, StringComparison.Ordinal);
         Assert.DoesNotContain("Personal Save.bin", formatted, StringComparison.Ordinal);
@@ -197,7 +229,8 @@ public sealed class GoogleDriveUploadContractTests
             requestType,
             resultType,
             typeof(GoogleDriveBinaryUploadStatus),
-            typeof(GoogleDriveBinaryUploadErrorCodes)
+            typeof(GoogleDriveBinaryUploadErrorCodes),
+            typeof(GoogleDriveUploadCompletionIndeterminateException)
         ];
 
         Assert.True(requestType.IsSealed);

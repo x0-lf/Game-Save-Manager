@@ -82,15 +82,30 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 _mediaClientFactory.Create(context.Credential);
             cancellationToken.ThrowIfCancellationRequested();
 
-            GoogleDriveMediaUploadMetadata response =
-                await mediaClient.UploadAsync(
-                    parentId,
-                    exactName,
-                    source.Stream,
-                    source.Length,
-                    GoogleDriveMediaUploadClient.OpaqueMediaType,
-                    progress: null,
-                    cancellationToken).ConfigureAwait(false);
+            GoogleDriveMediaUploadMetadata response;
+            try
+            {
+                response = await mediaClient.UploadAsync(
+                        parentId,
+                        exactName,
+                        source.Stream,
+                        source.Length,
+                        GoogleDriveMediaUploadClient.OpaqueMediaType,
+                        progress: null,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (GoogleDriveUploadCompletionIndeterminateException)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                GoogleDriveBinaryUploadResult indeterminateResult = new(
+                    GoogleDriveBinaryUploadStatus.Indeterminate,
+                    completedBytes: 0,
+                    GoogleDriveBinaryUploadErrorCodes
+                        .CompletionIndeterminate);
+                cancellationToken.ThrowIfCancellationRequested();
+                return indeterminateResult;
+            }
             cancellationToken.ThrowIfCancellationRequested();
 
             GoogleDriveUploadResponseValidator.Validate(

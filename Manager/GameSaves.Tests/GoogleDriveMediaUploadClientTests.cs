@@ -243,6 +243,42 @@ public sealed class GoogleDriveMediaUploadClientTests
             StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(0, 0, true)]
+    [InlineData(8, 8, true)]
+    [InlineData(7, 8, false)]
+    public void FailedSdkCompletion_UsesAcceptedByteEvidence(
+        long bytesSent,
+        long expectedLength,
+        bool expected)
+    {
+        var sdkProgress = new StubUploadProgress(
+            UploadStatus.Failed,
+            bytesSent,
+            new IOException("private-provider-marker"));
+
+        Assert.Equal(
+            expected,
+            GoogleDriveMediaUploadClient.CompletionMayBeIndeterminate(
+                sdkProgress,
+                expectedLength));
+    }
+
+    [Fact]
+    public void IndeterminateCompletionFailure_IsFixedAndSafe()
+    {
+        var exception =
+            new GoogleDriveUploadCompletionIndeterminateException();
+
+        Assert.Equal(
+            GoogleDriveBinaryUploadErrorCodes.CompletionIndeterminate,
+            exception.SafeErrorCode);
+        Assert.DoesNotContain(
+            "private-provider-marker",
+            exception.ToString(),
+            StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task DisposedSdkClient_RejectsUploadWithoutNetworkWork()
     {
@@ -444,6 +480,64 @@ public sealed class GoogleDriveMediaUploadClientTests
                 GoogleDriveMediaUploadProgressStatus.Completed);
     }
 
+    [Fact]
+    public async Task DeterministicFake_SupportsLateProviderResponse()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var response = new GoogleDriveMediaUploadMetadata(
+            "private-id-marker",
+            "private-name-marker",
+            "application/octet-stream",
+            trashed: false,
+            ["private-parent-marker"],
+            driveId: null,
+            size: 1);
+        var fake = new FakeGoogleDriveMediaUploadClient
+        {
+            Response = response,
+            ChunkBytes = [1],
+            BeforeReturn = cancellation.Cancel
+        };
+        using var source = new MemoryStream([1], writable: false);
+
+        GoogleDriveMediaUploadMetadata result = await fake.UploadAsync(
+            "private-parent-marker",
+            "private-name-marker",
+            source,
+            1,
+            "application/octet-stream",
+            progress: null,
+            cancellation.Token);
+
+        Assert.Same(response, result);
+        Assert.True(cancellation.IsCancellationRequested);
+        Assert.Single(fake.Calls);
+    }
+
+    [Fact]
+    public async Task DeterministicFake_SupportsLostCompletionResponse()
+    {
+        var fake = new FakeGoogleDriveMediaUploadClient
+        {
+            ChunkBytes = [1],
+            Failure = new GoogleDriveUploadCompletionIndeterminateException()
+        };
+        using var source = new MemoryStream([1], writable: false);
+
+        await Assert.ThrowsAsync<
+            GoogleDriveUploadCompletionIndeterminateException>(() =>
+            fake.UploadAsync(
+                "private-parent-marker",
+                "private-name-marker",
+                source,
+                1,
+                "application/octet-stream",
+                progress: null,
+                CancellationToken.None));
+
+        Assert.Single(fake.Calls);
+    }
+
     private static void AssertNoGoogleSdkType(Type type)
     {
         const BindingFlags members =
@@ -598,6 +692,8 @@ internal sealed class FakeGoogleDriveMediaUploadClient
 
     public Action<long>? ChunkReported { get; set; }
 
+    public Action? BeforeReturn { get; set; }
+
     public List<FakeGoogleDriveMediaUploadCall> Calls { get; } = [];
 
     public int DisposeCalls { get; private set; }
@@ -646,6 +742,7 @@ internal sealed class FakeGoogleDriveMediaUploadClient
         progress?.Report(new GoogleDriveMediaUploadProgress(
             GoogleDriveMediaUploadProgressStatus.Completed,
             expectedLength));
+        BeforeReturn?.Invoke();
         await Task.CompletedTask;
         return Response;
     }

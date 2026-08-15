@@ -176,6 +176,11 @@ namespace GameSaves.Infrastructure.GoogleDrive
 
             if (completed.Status != UploadStatus.Completed)
             {
+                if (CompletionMayBeIndeterminate(completed, expectedLength))
+                {
+                    throw new GoogleDriveUploadCompletionIndeterminateException();
+                }
+
                 completed.ThrowOnFailure();
                 throw new IOException(
                     "The Google Drive media upload did not complete.");
@@ -263,6 +268,18 @@ namespace GameSaves.Infrastructure.GoogleDrive
             return new GoogleDriveMediaUploadProgress(
                 status,
                 progress.BytesSent);
+        }
+
+        internal static bool CompletionMayBeIndeterminate(
+            IUploadProgress progress,
+            long expectedLength)
+        {
+            ArgumentNullException.ThrowIfNull(progress);
+            if (expectedLength < 0)
+                throw new ArgumentOutOfRangeException(nameof(expectedLength));
+
+            return progress.Status == UploadStatus.Failed &&
+                progress.BytesSent >= expectedLength;
         }
 
         private static void ValidateInput(
