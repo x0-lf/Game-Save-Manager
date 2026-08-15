@@ -343,11 +343,12 @@ public sealed class GoogleDriveUploadServiceTests
     }
 
     [Fact]
-    public async Task MediaFailure_PropagatesUnchanged()
+    public async Task MediaFailure_EscapesThroughOneSanitizedBoundary()
     {
         using var temporary = new TemporaryFile([1]);
         var expected = new IOException(
-            "The synthetic media stage did not complete.");
+            "The synthetic media stage did not complete for " +
+            "Private Folder/Personal Save.bin.");
         var enumeration = new RecordingChildEnumerationService([[], []]);
         var cache = new RecordingObjectIdCache();
         using GoogleDriveRemoteOperationContext context = Context();
@@ -358,16 +359,152 @@ public sealed class GoogleDriveUploadServiceTests
             mediaFactory,
             cache);
 
-        IOException actual = await Assert.ThrowsAsync<IOException>(() =>
-            service.UploadAsync(
-                temporary.Path,
-                GoogleDriveBinaryUploadRequest.Parse(
-                    ProfileId,
-                    "save.bin",
-                    1)));
+        GoogleDriveRemoteOperationException actual =
+            await Assert.ThrowsAsync<GoogleDriveRemoteOperationException>(() =>
+                service.UploadAsync(
+                    temporary.Path,
+                    GoogleDriveBinaryUploadRequest.Parse(
+                        ProfileId,
+                        "save.bin",
+                        1)));
 
-        Assert.Same(expected, actual);
+        Assert.NotSame(expected, actual);
+        Assert.Equal(
+            GoogleDriveRemoteValidationStatus.Failed,
+            actual.Result.Status);
+        Assert.Equal(
+            GoogleDriveBinaryUploadErrorCodes.Failed,
+            actual.Result.ErrorCode);
+        Assert.Null(actual.InnerException);
+        Assert.DoesNotContain(
+            "Personal Save.bin",
+            actual.ToString(),
+            StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(
+            "Private Folder",
+            actual.ToString(),
+            StringComparison.OrdinalIgnoreCase);
         Assert.True(mediaFactory.Client.IsDisposed);
+        Assert.True(context.IsDisposed);
+        Assert.Empty(cache.StoreCalls);
+    }
+
+    [Theory]
+    [InlineData(401, "invalidCredentials", "GoogleDriveUploadAuthenticationRequired")]
+    [InlineData(403, "forbidden", "GoogleDriveUploadAccessDenied")]
+    [InlineData(403, "storageQuotaExceeded", "GoogleDriveUploadQuotaExceeded")]
+    [InlineData(429, "rateLimitExceeded", "GoogleDriveUploadRateLimited")]
+    [InlineData(503, "backendError", "GoogleDriveUploadUnavailable")]
+    public async Task ProviderUploadFailures_UseFixedSanitizedCategories(
+        int status,
+        string reason,
+        string expectedErrorCode)
+    {
+        const string privateResponse =
+            "C:\\Users\\Someone\\Saves\\Personal Save.bin object-id-marker " +
+            "access_token=ya29.private someone@example.invalid " +
+            "https://www.googleapis.com/upload/drive/v3/files?upload_id=private";
+        using var temporary = new TemporaryFile([1]);
+        var providerFailure = new Google.GoogleApiException(
+            "Drive",
+            privateResponse)
+        {
+            HttpStatusCode = (System.Net.HttpStatusCode)status,
+            Error = new Google.Apis.Requests.RequestError
+            {
+                Errors = new List<Google.Apis.Requests.SingleError>
+                {
+                    new() { Reason = reason }
+                }
+            }
+        };
+        var cache = new RecordingObjectIdCache();
+        using GoogleDriveRemoteOperationContext context = Context();
+        var mediaFactory = new RecordingMediaClientFactory(providerFailure);
+        GoogleDriveBinaryUploadService service = Service(
+            new RecordingChildEnumerationService([[], []]),
+            new RecordingContextFactory(context),
+            mediaFactory,
+            cache);
+
+        GoogleDriveRemoteOperationException actual =
+            await Assert.ThrowsAsync<GoogleDriveRemoteOperationException>(() =>
+                service.UploadAsync(
+                    temporary.Path,
+                    GoogleDriveBinaryUploadRequest.Parse(
+                        ProfileId,
+                        "save.bin",
+                        1)));
+
+        Assert.Equal(expectedErrorCode, actual.Result.ErrorCode);
+        Assert.Null(actual.InnerException);
+        string formatted = string.Join(
+            Environment.NewLine,
+            actual.Message,
+            actual.ToString(),
+            actual.Result.UserMessage,
+            actual.Result.ToSafeDiagnosticString());
+        foreach (string privateValue in new[]
+        {
+            "Personal Save.bin",
+            "C:\\Users\\Someone",
+            "object-id-marker",
+            "access_token",
+            "ya29.private",
+            "someone@example.invalid",
+            "googleapis.com",
+            "upload_id"
+        })
+        {
+            Assert.DoesNotContain(
+                privateValue,
+                formatted,
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        Assert.Empty(cache.StoreCalls);
+        Assert.True(mediaFactory.Client.IsDisposed);
+        Assert.True(context.IsDisposed);
+    }
+
+    [Fact]
+    public async Task ProviderAuthenticationFailure_InvalidatesOnlyThatProfile()
+    {
+        using var temporary = new TemporaryFile([1]);
+        var scope = new GoogleDriveObjectCacheScope(ProfileId, "root-id");
+        var cache = new RecordingObjectIdCache();
+        cache.Preload(scope, "root-id", "other.bin", GoogleDriveObjectKind.File);
+        var providerFailure = new Google.GoogleApiException(
+            "Drive",
+            "private-provider-response")
+        {
+            HttpStatusCode = System.Net.HttpStatusCode.Unauthorized
+        };
+        using GoogleDriveRemoteOperationContext context = Context();
+        GoogleDriveBinaryUploadService service = Service(
+            new RecordingChildEnumerationService([[], []]),
+            new RecordingContextFactory(context),
+            new RecordingMediaClientFactory(providerFailure),
+            cache);
+
+        GoogleDriveRemoteOperationException actual =
+            await Assert.ThrowsAsync<GoogleDriveRemoteOperationException>(() =>
+                service.UploadAsync(
+                    temporary.Path,
+                    GoogleDriveBinaryUploadRequest.Parse(
+                        ProfileId,
+                        "save.bin",
+                        1)));
+
+        Assert.Equal(
+            "GoogleDriveUploadAuthenticationRequired",
+            actual.Result.ErrorCode);
+        (Guid invalidatedProfileId, GoogleDriveObjectCacheInvalidationReason
+            reason) = Assert.Single(cache.InvalidatedProfiles);
+        Assert.Equal(ProfileId, invalidatedProfileId);
+        Assert.Equal(
+            GoogleDriveObjectCacheInvalidationReason.AuthorizationRevocation,
+            reason);
         Assert.Empty(cache.StoreCalls);
     }
 
@@ -554,15 +691,19 @@ public sealed class GoogleDriveUploadServiceTests
             new RecordingMediaClientFactory(transientFailure),
             cache);
 
-        IOException actual = await Assert.ThrowsAsync<IOException>(() =>
-            service.UploadAsync(
-                temporary.Path,
-                GoogleDriveBinaryUploadRequest.Parse(
-                    ProfileId,
-                    "save.bin",
-                    1)));
+        GoogleDriveRemoteOperationException actual =
+            await Assert.ThrowsAsync<GoogleDriveRemoteOperationException>(() =>
+                service.UploadAsync(
+                    temporary.Path,
+                    GoogleDriveBinaryUploadRequest.Parse(
+                        ProfileId,
+                        "save.bin",
+                        1)));
 
-        Assert.Same(transientFailure, actual);
+        Assert.NotSame(transientFailure, actual);
+        Assert.Equal(
+            GoogleDriveBinaryUploadErrorCodes.Failed,
+            actual.Result.ErrorCode);
         Assert.False(cache.Contains(
             scope,
             "root-id",
@@ -1011,7 +1152,11 @@ public sealed class GoogleDriveUploadServiceTests
                 Assert.IsType<GoogleDriveUploadResponseException>(exception);
                 break;
             case DisposalOutcome.ProviderFailure:
-                Assert.Same(providerFailure, exception);
+                Assert.NotSame(providerFailure, exception);
+                Assert.Equal(
+                    GoogleDriveBinaryUploadErrorCodes.Failed,
+                    Assert.IsType<GoogleDriveRemoteOperationException>(exception)
+                        .Result.ErrorCode);
                 break;
             case DisposalOutcome.Cancellation:
                 Assert.IsAssignableFrom<OperationCanceledException>(exception);

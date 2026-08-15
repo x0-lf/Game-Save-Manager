@@ -62,25 +62,44 @@ namespace GameSaves.Infrastructure.GoogleDrive
                     request,
                     cancellationToken).ConfigureAwait(false);
             }
-            catch (GoogleDriveRemoteOperationException exception)
+            catch (OperationCanceledException)
             {
-                TryInvalidateProfile(
-                    request.RemoteProfileId,
-                    exception.Result.Status is
-                        GoogleDriveRemoteValidationStatus.AuthorizationRevoked or
-                        GoogleDriveRemoteValidationStatus.ReauthenticationRequired);
                 throw;
             }
-            catch (GoogleDriveRecursiveFileListingException exception)
+            catch (Exception exception)
             {
+                GoogleDriveUploadFailureDetails details =
+                    GoogleDriveUploadFailureMapper.Classify(exception);
                 TryInvalidateProfile(
                     request.RemoteProfileId,
-                    exception.Result.Status ==
-                        GoogleDriveRecursiveFileListingStatus
-                            .ReauthenticationRequired);
-                throw;
+                    RequiresReauthentication(exception, details));
+                Exception safeFailure =
+                    GoogleDriveUploadFailureMapper.ToSafeException(
+                        exception,
+                        details);
+                if (ReferenceEquals(safeFailure, exception))
+                    throw;
+
+                throw safeFailure;
             }
         }
+
+        private static bool RequiresReauthentication(
+            Exception exception,
+            GoogleDriveUploadFailureDetails details) =>
+            exception switch
+            {
+                GoogleDriveRemoteOperationException remote =>
+                    remote.Result.Status is
+                        GoogleDriveRemoteValidationStatus.AuthorizationRevoked or
+                        GoogleDriveRemoteValidationStatus.ReauthenticationRequired,
+                GoogleDriveRecursiveFileListingException listing =>
+                    listing.Result.Status ==
+                        GoogleDriveRecursiveFileListingStatus
+                            .ReauthenticationRequired,
+                _ => details.Category ==
+                    GoogleDriveUploadFailureCategory.ReauthenticationRequired
+            };
 
         private async Task<GoogleDriveBinaryUploadResult> UploadCoreAsync(
             string localFilePath,
