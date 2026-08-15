@@ -51,6 +51,154 @@ public sealed class SyncEngineTests
     }
 
     [Fact]
+    public async Task Upload_ProgressAdvancesOncePerCompletedFile()
+    {
+        using var temp = new TemporaryDirectory();
+        var pathProvider = new TestDatabasePathProvider(
+            temp.GetPath("app", "gamesave.db"));
+        var backupHistory = new BackupHistoryService(pathProvider);
+        string runRoot = Path.Combine(
+            backupHistory.GetBackupBasePath(),
+            "run-one");
+        TestData.CreateBackupRun(
+            runRoot,
+            temp.GetPath("original.sav"),
+            "sync payload");
+
+        var remote = new RecordingRemoteFileSystem();
+        var engine = new SyncEngine(
+            remote,
+            "Test remote",
+            "test://remote",
+            backupHistory,
+            new RecordingHistoryRepository());
+        SyncPlan preview = await engine.CreatePreviewAsync(new SyncOptions());
+        long totalBytes = Directory
+            .EnumerateFiles(runRoot, "*", SearchOption.AllDirectories)
+            .Sum(path => new FileInfo(path).Length);
+        SyncItem item = Assert.Single(preview.Items) with
+        {
+            TotalBytes = totalBytes
+        };
+        SyncPlan plan = preview with
+        {
+            Items = [item],
+            BytesToUpload = totalBytes
+        };
+        var progress = new RecordingProgress<SyncProgress>();
+
+        SyncResult result = await engine.ExecuteAsync(
+            plan,
+            new SyncOptions
+            {
+                DryRun = false,
+                ConfirmExecution = true,
+                Progress = progress
+            });
+
+        Assert.Equal(remote.UploadedPaths.Count, progress.Values.Count);
+        long expectedBytesDone = 0;
+        for (int index = 0; index < remote.UploadedPaths.Count; index++)
+        {
+            expectedBytesDone +=
+                remote.BinaryFiles[remote.UploadedPaths[index]].LongLength;
+            Assert.Equal(expectedBytesDone, progress.Values[index].BytesDone);
+            Assert.Equal(totalBytes, progress.Values[index].BytesTotal);
+        }
+        Assert.Equal(totalBytes, result.BytesCopied);
+        Assert.Equal(totalBytes, Assert.Single(result.Items).Bytes);
+    }
+
+    [Fact]
+    public async Task FailedUpload_ReportsNoCompletedBytesOrProgress()
+    {
+        using var temp = new TemporaryDirectory();
+        var pathProvider = new TestDatabasePathProvider(
+            temp.GetPath("app", "gamesave.db"));
+        var backupHistory = new BackupHistoryService(pathProvider);
+        string runRoot = Path.Combine(
+            backupHistory.GetBackupBasePath(),
+            "run-one");
+        TestData.CreateBackupRun(
+            runRoot,
+            temp.GetPath("original.sav"),
+            "sync payload");
+
+        var remote = new RecordingRemoteFileSystem
+        {
+            UploadException = new IOException(
+                "Synthetic upload failure.")
+        };
+        var engine = new SyncEngine(
+            remote,
+            "Test remote",
+            "test://remote",
+            backupHistory,
+            new RecordingHistoryRepository());
+        SyncPlan plan = await engine.CreatePreviewAsync(new SyncOptions());
+        var progress = new RecordingProgress<SyncProgress>();
+
+        SyncResult result = await engine.ExecuteAsync(
+            plan,
+            new SyncOptions
+            {
+                DryRun = false,
+                ConfirmExecution = true,
+                Progress = progress
+            });
+
+        SyncItemResult item = Assert.Single(result.Items);
+        Assert.Equal(SyncItemStatus.Failed, item.Status);
+        Assert.Equal(0, item.Bytes);
+        Assert.Equal(0, result.BytesCopied);
+        Assert.Empty(progress.Values);
+        Assert.Empty(remote.UploadedPaths);
+    }
+
+    [Fact]
+    public async Task CancelledUpload_ReportsNoCompletedBytesOrProgress()
+    {
+        using var temp = new TemporaryDirectory();
+        var pathProvider = new TestDatabasePathProvider(
+            temp.GetPath("app", "gamesave.db"));
+        var backupHistory = new BackupHistoryService(pathProvider);
+        string runRoot = Path.Combine(
+            backupHistory.GetBackupBasePath(),
+            "run-one");
+        TestData.CreateBackupRun(
+            runRoot,
+            temp.GetPath("original.sav"),
+            "sync payload");
+
+        var remote = new RecordingRemoteFileSystem
+        {
+            UploadException = new OperationCanceledException(
+                "Synthetic upload cancellation.")
+        };
+        var engine = new SyncEngine(
+            remote,
+            "Test remote",
+            "test://remote",
+            backupHistory,
+            new RecordingHistoryRepository());
+        SyncPlan plan = await engine.CreatePreviewAsync(new SyncOptions());
+        var progress = new RecordingProgress<SyncProgress>();
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            engine.ExecuteAsync(
+                plan,
+                new SyncOptions
+                {
+                    DryRun = false,
+                    ConfirmExecution = true,
+                    Progress = progress
+                }));
+
+        Assert.Empty(progress.Values);
+        Assert.Empty(remote.UploadedPaths);
+    }
+
+    [Fact]
     public async Task Preview_ReportsConflictAndIgnoresIncompleteRemoteFolders()
     {
         using var temp = new TemporaryDirectory();
@@ -188,6 +336,7 @@ public sealed class SyncEngineTests
         public List<string> ProviderMetadataReads { get; } = new();
         public List<string> ProviderMetadataReplacements { get; } = new();
         public bool FailMetadataReplacement { get; set; }
+        public Exception? UploadException { get; set; }
 
         public string DisplayRoot => "test://remote";
 
@@ -282,6 +431,9 @@ public sealed class SyncEngineTests
             string relativeRemotePath,
             CancellationToken cancellationToken = default)
         {
+            if (UploadException is not null)
+                throw UploadException;
+
             if (TextFiles.ContainsKey(relativeRemotePath) || BinaryFiles.ContainsKey(relativeRemotePath))
                 throw new IOException("Remote file already exists.");
 

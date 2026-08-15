@@ -68,6 +68,29 @@ public sealed class GoogleDriveUploadServiceTests
     }
 
     [Fact]
+    public async Task UploadAsync_ReturnsOpenedLengthInsteadOfPlannedLength()
+    {
+        using var temporary = new TemporaryFile([1, 2, 3]);
+        var enumeration = new RecordingChildEnumerationService([[], []]);
+        using GoogleDriveRemoteOperationContext context = Context();
+        var mediaFactory = ValidMediaFactory("root-id", "save.bin", 3);
+        GoogleDriveBinaryUploadService service = Service(
+            enumeration,
+            new RecordingContextFactory(context),
+            mediaFactory);
+
+        GoogleDriveBinaryUploadResult result = await service.UploadAsync(
+            temporary.Path,
+            GoogleDriveBinaryUploadRequest.Parse(
+                ProfileId,
+                "save.bin",
+                expectedLength: 99));
+
+        Assert.Equal(3, mediaFactory.Client.ExpectedLength);
+        Assert.Equal(3, result.CompletedBytes);
+    }
+
+    [Fact]
     public async Task UploadAsync_PassesOpenedStreamDirectlyWithoutMaterializing()
     {
         using var temporary = new TemporaryFile([1, 2, 3]);
