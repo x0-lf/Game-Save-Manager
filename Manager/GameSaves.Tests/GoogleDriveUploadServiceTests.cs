@@ -57,7 +57,14 @@ public sealed class GoogleDriveUploadServiceTests
         Assert.Equal(
             ["root-id", "run-id", "nested-id", "nested-id"],
             enumeration.ParentIds);
-        Assert.Equal(2, cache.Stored.Count);
+        Assert.Equal(3, cache.Stored.Count);
+        CacheStoreCall uploaded = cache.StoreCalls[^1];
+        Assert.Equal(ProfileId, uploaded.Scope.RemoteProfileId);
+        Assert.Equal("root-id", uploaded.Scope.RootFolderId);
+        Assert.Equal("nested-id", uploaded.ParentId);
+        Assert.Equal("save.bin", uploaded.ExactName);
+        Assert.Equal(GoogleDriveObjectKind.File, uploaded.Kind);
+        Assert.Equal("uploaded-id", uploaded.Metadata.Id);
         Assert.Equal("nested-id", mediaFactory.Client.ParentId);
         Assert.Equal("save.bin", mediaFactory.Client.ExactName);
         Assert.Equal(3, mediaFactory.Client.ExpectedLength);
@@ -286,20 +293,39 @@ public sealed class GoogleDriveUploadServiceTests
         Assert.Equal(0, mediaFactory.Client.UploadCount);
     }
 
-    [Fact]
-    public async Task TargetFailure_PreservesTargetCategory()
+    [Theory]
+    [InlineData(
+        "save.bin",
+        false,
+        GoogleDriveCreateOnlyUploadTargetErrorCodes.AlreadyExists)]
+    [InlineData(
+        "SAVE.bin",
+        false,
+        GoogleDriveCreateOnlyUploadTargetErrorCodes.CaseCollision)]
+    [InlineData(
+        "save.bin",
+        true,
+        GoogleDriveCreateOnlyUploadTargetErrorCodes.TypeCollision)]
+    public async Task TargetCollision_PreservesCategoryWithoutCacheWrite(
+        string existingName,
+        bool existingIsFolder,
+        string expectedErrorCode)
     {
         using var temporary = new TemporaryFile([1]);
         var enumeration = new RecordingChildEnumerationService(
         [
-            [Blob("existing-id", "save.bin", "root-id")]
+            [existingIsFolder
+                ? Folder("existing-id", existingName, "root-id")
+                : Blob("existing-id", existingName, "root-id")]
         ]);
+        var cache = new RecordingObjectIdCache();
         using GoogleDriveRemoteOperationContext context = Context();
         var mediaFactory = ValidMediaFactory("root-id", "save.bin", 1);
         GoogleDriveBinaryUploadService service = Service(
             enumeration,
             new RecordingContextFactory(context),
-            mediaFactory);
+            mediaFactory,
+            cache);
 
         GoogleDriveRemoteOperationException exception =
             await Assert.ThrowsAsync<GoogleDriveRemoteOperationException>(() =>
@@ -310,10 +336,10 @@ public sealed class GoogleDriveUploadServiceTests
                         "save.bin",
                         1)));
 
-        Assert.Equal(
-            GoogleDriveCreateOnlyUploadTargetErrorCodes.AlreadyExists,
-            exception.Result.ErrorCode);
+        Assert.Equal(expectedErrorCode, exception.Result.ErrorCode);
         Assert.Equal(0, mediaFactory.Client.UploadCount);
+        Assert.Empty(cache.StoreCalls);
+        Assert.Empty(cache.Removed);
     }
 
     [Fact]
@@ -323,12 +349,14 @@ public sealed class GoogleDriveUploadServiceTests
         var expected = new IOException(
             "The synthetic media stage did not complete.");
         var enumeration = new RecordingChildEnumerationService([[], []]);
+        var cache = new RecordingObjectIdCache();
         using GoogleDriveRemoteOperationContext context = Context();
         var mediaFactory = new RecordingMediaClientFactory(expected);
         GoogleDriveBinaryUploadService service = Service(
             enumeration,
             new RecordingContextFactory(context),
-            mediaFactory);
+            mediaFactory,
+            cache);
 
         IOException actual = await Assert.ThrowsAsync<IOException>(() =>
             service.UploadAsync(
@@ -340,6 +368,7 @@ public sealed class GoogleDriveUploadServiceTests
 
         Assert.Same(expected, actual);
         Assert.True(mediaFactory.Client.IsDisposed);
+        Assert.Empty(cache.StoreCalls);
     }
 
     [Fact]
@@ -383,6 +412,7 @@ public sealed class GoogleDriveUploadServiceTests
     {
         using var temporary = new TemporaryFile([1]);
         var enumeration = new RecordingChildEnumerationService([[], []]);
+        var cache = new RecordingObjectIdCache();
         using GoogleDriveRemoteOperationContext context = Context();
         var mediaFactory = new RecordingMediaClientFactory(
             new GoogleDriveMediaUploadMetadata(
@@ -396,7 +426,8 @@ public sealed class GoogleDriveUploadServiceTests
         GoogleDriveBinaryUploadService service = Service(
             enumeration,
             new RecordingContextFactory(context),
-            mediaFactory);
+            mediaFactory,
+            cache);
 
         GoogleDriveUploadResponseException exception =
             await Assert.ThrowsAsync<GoogleDriveUploadResponseException>(() =>
@@ -411,6 +442,272 @@ public sealed class GoogleDriveUploadServiceTests
             GoogleDriveUploadResponseErrorCodes.NameMismatch,
             exception.SafeErrorCode);
         Assert.True(mediaFactory.Client.IsDisposed);
+        Assert.Empty(cache.StoreCalls);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CacheRejection_NeverReturnsUploadSuccess(bool throws)
+    {
+        using var temporary = new TemporaryFile([1]);
+        var cache = new RecordingObjectIdCache
+        {
+            StoreResult = false,
+            StoreFailure = throws
+                ? new InvalidOperationException(
+                    "The synthetic cache rejected the entry.")
+                : null
+        };
+        using GoogleDriveRemoteOperationContext context = Context();
+        var mediaFactory = ValidMediaFactory("root-id", "save.bin", 1);
+        GoogleDriveBinaryUploadService service = Service(
+            new RecordingChildEnumerationService([[], []]),
+            new RecordingContextFactory(context),
+            mediaFactory,
+            cache);
+
+        GoogleDriveRemoteOperationException exception =
+            await Assert.ThrowsAsync<GoogleDriveRemoteOperationException>(() =>
+                service.UploadAsync(
+                    temporary.Path,
+                    GoogleDriveBinaryUploadRequest.Parse(
+                        ProfileId,
+                        "save.bin",
+                        1)));
+
+        Assert.Equal(
+            GoogleDriveBinaryUploadErrorCodes.CacheRejected,
+            exception.Result.ErrorCode);
+        Assert.DoesNotContain(
+            "synthetic cache",
+            exception.ToString(),
+            StringComparison.OrdinalIgnoreCase);
+        Assert.Null(exception.InnerException);
+        Assert.Equal(1, mediaFactory.Client.UploadCount);
+        Assert.Empty(cache.Stored);
+        Assert.Empty(cache.Entries);
+    }
+
+    [Fact]
+    public async Task CancellationDuringCacheCommit_RollsBackTargetEntry()
+    {
+        using var temporary = new TemporaryFile([1]);
+        using var cancellation = new CancellationTokenSource();
+        var cache = new RecordingObjectIdCache
+        {
+            AfterStore = call =>
+            {
+                if (call.Kind == GoogleDriveObjectKind.File)
+                    cancellation.Cancel();
+            }
+        };
+        using GoogleDriveRemoteOperationContext context = Context();
+        GoogleDriveBinaryUploadService service = Service(
+            new RecordingChildEnumerationService([[], []]),
+            new RecordingContextFactory(context),
+            ValidMediaFactory("root-id", "save.bin", 1),
+            cache);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            service.UploadAsync(
+                temporary.Path,
+                GoogleDriveBinaryUploadRequest.Parse(
+                    ProfileId,
+                    "save.bin",
+                    1),
+                cancellation.Token));
+
+        Assert.Single(cache.StoreCalls);
+        Assert.Empty(cache.Entries);
+        Assert.Single(cache.Removed);
+        Assert.Equal("root-id", cache.Removed[0].ParentId);
+        Assert.Equal("save.bin", cache.Removed[0].ExactName);
+        Assert.Equal(GoogleDriveObjectKind.File, cache.Removed[0].Kind);
+    }
+
+    [Fact]
+    public async Task ConfirmedMissingTarget_EvictsOnlyItsPreciseStaleEntry()
+    {
+        using var temporary = new TemporaryFile([1]);
+        var scope = new GoogleDriveObjectCacheScope(ProfileId, "root-id");
+        Guid otherProfileId = Guid.Parse(
+            "623fb73a-14f0-49b6-b095-f86c603dd34a");
+        var otherScope = new GoogleDriveObjectCacheScope(
+            otherProfileId,
+            "other-root-id");
+        var cache = new RecordingObjectIdCache();
+        cache.Preload(scope, "root-id", "save.bin", GoogleDriveObjectKind.File);
+        cache.Preload(scope, "root-id", "other.bin", GoogleDriveObjectKind.File);
+        cache.Preload(scope, "root-id", "save.bin", GoogleDriveObjectKind.Folder);
+        cache.Preload(
+            otherScope,
+            "other-root-id",
+            "save.bin",
+            GoogleDriveObjectKind.File);
+        Exception transientFailure = new IOException(
+            "The synthetic transient provider call did not complete.");
+        using GoogleDriveRemoteOperationContext context = Context();
+        GoogleDriveBinaryUploadService service = Service(
+            new RecordingChildEnumerationService([[], []]),
+            new RecordingContextFactory(context),
+            new RecordingMediaClientFactory(transientFailure),
+            cache);
+
+        IOException actual = await Assert.ThrowsAsync<IOException>(() =>
+            service.UploadAsync(
+                temporary.Path,
+                GoogleDriveBinaryUploadRequest.Parse(
+                    ProfileId,
+                    "save.bin",
+                    1)));
+
+        Assert.Same(transientFailure, actual);
+        Assert.False(cache.Contains(
+            scope,
+            "root-id",
+            "save.bin",
+            GoogleDriveObjectKind.File));
+        Assert.True(cache.Contains(
+            scope,
+            "root-id",
+            "other.bin",
+            GoogleDriveObjectKind.File));
+        Assert.True(cache.Contains(
+            scope,
+            "root-id",
+            "save.bin",
+            GoogleDriveObjectKind.Folder));
+        Assert.True(cache.Contains(
+            otherScope,
+            "other-root-id",
+            "save.bin",
+            GoogleDriveObjectKind.File));
+        Assert.Single(cache.Removed);
+        Assert.Empty(cache.InvalidatedProfiles);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Reauthentication_InvalidatesOnlyAffectedProfile(
+        bool duringEnumeration)
+    {
+        using var temporary = new TemporaryFile([1]);
+        Guid otherProfileId = Guid.Parse(
+            "623fb73a-14f0-49b6-b095-f86c603dd34a");
+        var firstScope = new GoogleDriveObjectCacheScope(ProfileId, "root-id");
+        var secondScope = new GoogleDriveObjectCacheScope(ProfileId, "root-two-id");
+        var otherScope = new GoogleDriveObjectCacheScope(
+            otherProfileId,
+            "other-root-id");
+        var cache = new RecordingObjectIdCache();
+        cache.Preload(
+            firstScope,
+            "root-id",
+            "first.bin",
+            GoogleDriveObjectKind.File);
+        cache.Preload(
+            secondScope,
+            "root-two-id",
+            "second.bin",
+            GoogleDriveObjectKind.File);
+        cache.Preload(
+            otherScope,
+            "other-root-id",
+            "other.bin",
+            GoogleDriveObjectKind.File);
+        using GoogleDriveRemoteOperationContext context = Context();
+        var enumeration = new RecordingChildEnumerationService([[], []]);
+        Exception expected;
+        IGoogleDriveRemoteOperationContextFactory contextFactory;
+        if (duringEnumeration)
+        {
+            expected = GoogleDriveRecursiveFileListingFailureMapper.FromStatus(
+                GoogleDriveRecursiveFileListingStatus
+                    .ReauthenticationRequired);
+            enumeration.Failure = expected;
+            contextFactory = new RecordingContextFactory(context);
+        }
+        else
+        {
+            expected = new GoogleDriveRemoteOperationContextException(
+                GoogleDriveRemoteValidationMapper.FromStatus(
+                    GoogleDriveRemoteValidationStatus
+                        .ReauthenticationRequired));
+            contextFactory = new FailingContextFactory(expected);
+        }
+        GoogleDriveBinaryUploadService service = Service(
+            enumeration,
+            contextFactory,
+            ValidMediaFactory("root-id", "save.bin", 1),
+            cache);
+
+        Exception? actual = await Record.ExceptionAsync(() =>
+            service.UploadAsync(
+                temporary.Path,
+                GoogleDriveBinaryUploadRequest.Parse(
+                    ProfileId,
+                    "save.bin",
+                    1)));
+
+        Assert.Same(expected, actual);
+        Assert.False(cache.Contains(
+            firstScope,
+            "root-id",
+            "first.bin",
+            GoogleDriveObjectKind.File));
+        Assert.False(cache.Contains(
+            secondScope,
+            "root-two-id",
+            "second.bin",
+            GoogleDriveObjectKind.File));
+        Assert.True(cache.Contains(
+            otherScope,
+            "other-root-id",
+            "other.bin",
+            GoogleDriveObjectKind.File));
+        Assert.Equal(
+            [(ProfileId,
+                GoogleDriveObjectCacheInvalidationReason
+                    .AuthorizationRevocation)],
+            cache.InvalidatedProfiles);
+        Assert.Empty(cache.Removed);
+    }
+
+    [Fact]
+    public async Task TransientContextFailure_PreservesSafeCacheEntries()
+    {
+        using var temporary = new TemporaryFile([1]);
+        var scope = new GoogleDriveObjectCacheScope(ProfileId, "root-id");
+        var cache = new RecordingObjectIdCache();
+        cache.Preload(scope, "root-id", "save.bin", GoogleDriveObjectKind.File);
+        var expected = new GoogleDriveRemoteOperationContextException(
+            GoogleDriveRemoteValidationMapper.FromStatus(
+                GoogleDriveRemoteValidationStatus.RateLimited));
+        GoogleDriveBinaryUploadService service = Service(
+            new RecordingChildEnumerationService([]),
+            new FailingContextFactory(expected),
+            ValidMediaFactory("root-id", "save.bin", 1),
+            cache);
+
+        GoogleDriveRemoteOperationContextException actual =
+            await Assert.ThrowsAsync<GoogleDriveRemoteOperationContextException>(
+                () => service.UploadAsync(
+                    temporary.Path,
+                    GoogleDriveBinaryUploadRequest.Parse(
+                        ProfileId,
+                        "save.bin",
+                        1)));
+
+        Assert.Same(expected, actual);
+        Assert.True(cache.Contains(
+            scope,
+            "root-id",
+            "save.bin",
+            GoogleDriveObjectKind.File));
+        Assert.Empty(cache.InvalidatedProfiles);
+        Assert.Empty(cache.Removed);
     }
 
     [Fact]
@@ -602,6 +899,7 @@ public sealed class GoogleDriveUploadServiceTests
         using var temporary = new TemporaryFile([1]);
         using var cancellation = new CancellationTokenSource();
         var enumeration = new RecordingChildEnumerationService([[], []]);
+        var cache = new RecordingObjectIdCache();
         using GoogleDriveRemoteOperationContext context = Context();
         var mediaFactory = new RecordingMediaClientFactory(
             ValidMetadata("root-id", "save.bin", 1),
@@ -610,7 +908,8 @@ public sealed class GoogleDriveUploadServiceTests
         GoogleDriveBinaryUploadService service = Service(
             enumeration,
             new RecordingContextFactory(context),
-            mediaFactory);
+            mediaFactory,
+            cache);
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             service.UploadAsync(
@@ -624,6 +923,7 @@ public sealed class GoogleDriveUploadServiceTests
         Assert.Equal(1, mediaFactory.Client.UploadCount);
         Assert.Equal(1, mediaFactory.Client.BytesRead);
         Assert.True(mediaFactory.Client.IsDisposed);
+        Assert.Empty(cache.StoreCalls);
     }
 
     [Fact]
@@ -838,7 +1138,7 @@ public sealed class GoogleDriveUploadServiceTests
     }
 
     [Fact]
-    public void ServiceSource_HasNoRunProviderWiringOrCompletedFileCache()
+    public void ServiceSource_HasNoRunProviderWiringOrAdjacentWork()
     {
         string source = System.IO.File.ReadAllText(System.IO.Path.Combine(
             FindManagerRoot(),
@@ -853,7 +1153,6 @@ public sealed class GoogleDriveUploadServiceTests
             "ListRunFolderNamesAsync",
             "DownloadFileAsync",
             "IServiceCollection",
-            "IGoogleDriveObjectIdCache",
             "GameSaves.App",
             "Google.Apis",
             "ReadAllBytes",
@@ -867,7 +1166,7 @@ public sealed class GoogleDriveUploadServiceTests
             "foreach (",
             "for (",
             "Delete",
-            "Trash",
+            "TrashAsync",
             "Update",
             "Retry",
             "Task.Run",
@@ -881,7 +1180,7 @@ public sealed class GoogleDriveUploadServiceTests
     }
 
     [Fact]
-    public void ServiceSource_ChecksCancellationAroundValidationAndResult()
+    public void ServiceSource_OrdersValidationCacheAndResultWithCancellation()
     {
         string source = System.IO.File.ReadAllText(System.IO.Path.Combine(
             FindManagerRoot(),
@@ -891,15 +1190,25 @@ public sealed class GoogleDriveUploadServiceTests
         int validation = source.IndexOf(
             "GoogleDriveUploadResponseValidator.Validate",
             StringComparison.Ordinal);
+        int cache = source.IndexOf(
+            "CacheCompletedUpload(",
+            validation,
+            StringComparison.Ordinal);
         int result = source.IndexOf(
             "GoogleDriveBinaryUploadResult result = new",
             StringComparison.Ordinal);
         int returned = source.IndexOf("return result", StringComparison.Ordinal);
 
-        Assert.True(validation >= 0 && result > validation && returned > result);
+        Assert.True(
+            validation >= 0 && cache > validation && result > cache &&
+            returned > result);
         Assert.Contains(
             "cancellationToken.ThrowIfCancellationRequested()",
-            source[validation..result],
+            source[validation..cache],
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "cancellationToken.ThrowIfCancellationRequested()",
+            source[cache..result],
             StringComparison.Ordinal);
         Assert.Contains(
             "cancellationToken.ThrowIfCancellationRequested()",
@@ -917,6 +1226,7 @@ public sealed class GoogleDriveUploadServiceTests
             Task<GoogleDriveLocalUploadSource>>? openSourceAsync = null)
     {
         coordinator ??= new GoogleDriveObjectCreationCoordinator();
+        cache ??= new RecordingObjectIdCache();
         var guard = new GoogleDriveCreateOnlyUploadTargetGuard(
             enumeration,
             coordinator);
@@ -924,14 +1234,15 @@ public sealed class GoogleDriveUploadServiceTests
             enumeration,
             guard,
             new UnexpectedObjectApi(),
-            cache ?? new RecordingObjectIdCache());
+            cache);
         var sourceOpener = new GoogleDriveLocalUploadSourceOpener();
         return new GoogleDriveBinaryUploadService(
             openSourceAsync ?? sourceOpener.OpenAsync,
             contextFactory,
             parentPreparation,
             guard,
-            mediaFactory);
+            mediaFactory,
+            cache);
     }
 
     private static string FindManagerRoot()
@@ -1275,12 +1586,19 @@ public sealed class GoogleDriveUploadServiceTests
 
         public List<CancellationToken> CancellationTokens { get; } = new();
 
+        public Exception? Failure { get; set; }
+
         public Task<IReadOnlyList<GoogleDriveFolderChildEntry>> EnumerateAsync(
             GoogleDriveRemoteOperationContext context,
             string parentFolderId,
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (Failure is not null)
+            {
+                return Task.FromException<
+                    IReadOnlyList<GoogleDriveFolderChildEntry>>(Failure);
+            }
             ParentIds.Add(parentFolderId);
             CancellationTokens.Add(cancellationToken);
             _enumerated?.Invoke(ParentIds.Count);
@@ -1290,7 +1608,61 @@ public sealed class GoogleDriveUploadServiceTests
 
     private sealed class RecordingObjectIdCache : IGoogleDriveObjectIdCache
     {
+        private readonly Dictionary<CacheKey, GoogleDriveObjectIdCacheEntry>
+            _entries = new();
+
         public List<GoogleDriveObjectMetadata> Stored { get; } = new();
+
+        public List<CacheStoreCall> StoreCalls { get; } = new();
+
+        public List<CacheKey> Removed { get; } = new();
+
+        public List<(Guid ProfileId,
+            GoogleDriveObjectCacheInvalidationReason Reason)>
+            InvalidatedProfiles { get; } = new();
+
+        public IReadOnlyDictionary<CacheKey, GoogleDriveObjectIdCacheEntry>
+            Entries => _entries;
+
+        public bool StoreResult { get; set; } = true;
+
+        public Exception? StoreFailure { get; set; }
+
+        public Action<CacheStoreCall>? AfterStore { get; set; }
+
+        public void Preload(
+            GoogleDriveObjectCacheScope scope,
+            string parentId,
+            string exactName,
+            GoogleDriveObjectKind kind)
+        {
+            string mimeType = kind == GoogleDriveObjectKind.Folder
+                ? GoogleDriveApplicationRoot.FolderMimeType
+                : GoogleDriveMediaUploadClient.OpaqueMediaType;
+            var metadata = new GoogleDriveObjectMetadata(
+                $"preloaded-{_entries.Count}",
+                exactName,
+                mimeType,
+                trashed: false,
+                parentIds: [parentId],
+                driveId: null);
+            _entries[new CacheKey(
+                scope,
+                parentId,
+                exactName,
+                kind)] = new GoogleDriveObjectIdCacheEntry(metadata);
+        }
+
+        public bool Contains(
+            GoogleDriveObjectCacheScope scope,
+            string parentId,
+            string exactName,
+            GoogleDriveObjectKind kind) =>
+            _entries.ContainsKey(new CacheKey(
+                scope,
+                parentId,
+                exactName,
+                kind));
 
         public bool TryGet(
             GoogleDriveObjectCacheScope scope,
@@ -1299,8 +1671,9 @@ public sealed class GoogleDriveUploadServiceTests
             GoogleDriveObjectKind expectedKind,
             out GoogleDriveObjectIdCacheEntry? entry)
         {
-            entry = null;
-            return false;
+            return _entries.TryGetValue(
+                new CacheKey(scope, parentId, exactName, expectedKind),
+                out entry);
         }
 
         public bool TryStoreUniqueValidated(
@@ -1310,7 +1683,25 @@ public sealed class GoogleDriveUploadServiceTests
             GoogleDriveObjectKind expectedKind,
             GoogleDriveObjectMetadata metadata)
         {
+            var call = new CacheStoreCall(
+                scope,
+                parentId,
+                exactName,
+                expectedKind,
+                metadata);
+            StoreCalls.Add(call);
+            if (StoreFailure is not null)
+                throw StoreFailure;
+            if (!StoreResult)
+                return false;
+
             Stored.Add(metadata);
+            _entries[new CacheKey(
+                scope,
+                parentId,
+                exactName,
+                expectedKind)] = new GoogleDriveObjectIdCacheEntry(metadata);
+            AfterStore?.Invoke(call);
             return true;
         }
 
@@ -1318,8 +1709,16 @@ public sealed class GoogleDriveUploadServiceTests
             GoogleDriveObjectCacheScope scope,
             string parentId,
             string exactName,
-            GoogleDriveObjectKind expectedKind) =>
-            throw new InvalidOperationException("Unexpected cache removal.");
+            GoogleDriveObjectKind expectedKind)
+        {
+            var key = new CacheKey(
+                scope,
+                parentId,
+                exactName,
+                expectedKind);
+            Removed.Add(key);
+            _entries.Remove(key);
+        }
 
         public void ClearScope(GoogleDriveObjectCacheScope scope) =>
             throw new InvalidOperationException("Unexpected cache clear.");
@@ -1331,8 +1730,16 @@ public sealed class GoogleDriveUploadServiceTests
 
         public void InvalidateProfile(
             Guid remoteProfileId,
-            GoogleDriveObjectCacheInvalidationReason reason) =>
-            throw new InvalidOperationException("Unexpected profile invalidation.");
+            GoogleDriveObjectCacheInvalidationReason reason)
+        {
+            InvalidatedProfiles.Add((remoteProfileId, reason));
+            foreach (CacheKey key in _entries.Keys
+                .Where(key => key.Scope.RemoteProfileId == remoteProfileId)
+                .ToArray())
+            {
+                _entries.Remove(key);
+            }
+        }
     }
 
     private sealed class UnexpectedObjectApi : IGoogleDriveObjectApi
@@ -1547,4 +1954,17 @@ public sealed class GoogleDriveUploadServiceTests
         ProviderFailure,
         Cancellation
     }
+
+    private sealed record CacheStoreCall(
+        GoogleDriveObjectCacheScope Scope,
+        string ParentId,
+        string ExactName,
+        GoogleDriveObjectKind Kind,
+        GoogleDriveObjectMetadata Metadata);
+
+    private sealed record CacheKey(
+        GoogleDriveObjectCacheScope Scope,
+        string ParentId,
+        string ExactName,
+        GoogleDriveObjectKind Kind);
 }

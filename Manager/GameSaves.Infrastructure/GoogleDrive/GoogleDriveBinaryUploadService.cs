@@ -22,6 +22,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
             _parentPreparationService;
         private readonly GoogleDriveCreateOnlyUploadTargetGuard _targetGuard;
         private readonly IGoogleDriveMediaUploadClientFactory _mediaClientFactory;
+        private readonly IGoogleDriveObjectIdCache _objectIdCache;
 
         public GoogleDriveBinaryUploadService(
             Func<string, CancellationToken,
@@ -29,7 +30,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
             IGoogleDriveRemoteOperationContextFactory contextFactory,
             GoogleDriveUploadParentPreparationService parentPreparationService,
             GoogleDriveCreateOnlyUploadTargetGuard targetGuard,
-            IGoogleDriveMediaUploadClientFactory mediaClientFactory)
+            IGoogleDriveMediaUploadClientFactory mediaClientFactory,
+            IGoogleDriveObjectIdCache objectIdCache)
         {
             _openSourceAsync = openSourceAsync ??
                 throw new ArgumentNullException(nameof(openSourceAsync));
@@ -41,6 +43,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 throw new ArgumentNullException(nameof(targetGuard));
             _mediaClientFactory = mediaClientFactory ??
                 throw new ArgumentNullException(nameof(mediaClientFactory));
+            _objectIdCache = objectIdCache ??
+                throw new ArgumentNullException(nameof(objectIdCache));
         }
 
         public async Task<GoogleDriveBinaryUploadResult> UploadAsync(
@@ -51,6 +55,38 @@ namespace GameSaves.Infrastructure.GoogleDrive
             ArgumentNullException.ThrowIfNull(request);
             cancellationToken.ThrowIfCancellationRequested();
 
+            try
+            {
+                return await UploadCoreAsync(
+                    localFilePath,
+                    request,
+                    cancellationToken).ConfigureAwait(false);
+            }
+            catch (GoogleDriveRemoteOperationException exception)
+            {
+                TryInvalidateProfile(
+                    request.RemoteProfileId,
+                    exception.Result.Status is
+                        GoogleDriveRemoteValidationStatus.AuthorizationRevoked or
+                        GoogleDriveRemoteValidationStatus.ReauthenticationRequired);
+                throw;
+            }
+            catch (GoogleDriveRecursiveFileListingException exception)
+            {
+                TryInvalidateProfile(
+                    request.RemoteProfileId,
+                    exception.Result.Status ==
+                        GoogleDriveRecursiveFileListingStatus
+                            .ReauthenticationRequired);
+                throw;
+            }
+        }
+
+        private async Task<GoogleDriveBinaryUploadResult> UploadCoreAsync(
+            string localFilePath,
+            GoogleDriveBinaryUploadRequest request,
+            CancellationToken cancellationToken)
+        {
             using GoogleDriveLocalUploadSource source =
                 await _openSourceAsync(
                     localFilePath,
@@ -62,6 +98,9 @@ namespace GameSaves.Infrastructure.GoogleDrive
                     request.RemoteProfileId,
                     cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
+            var cacheScope = new GoogleDriveObjectCacheScope(
+                context.RemoteProfileId,
+                context.RootFolderId);
 
             string parentId = await _parentPreparationService.PrepareAsync(
                 context,
@@ -76,6 +115,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 exactName,
                 GoogleDriveObjectKind.File,
                 cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            RemoveConfirmedStaleTarget(cacheScope, parentId, exactName);
             cancellationToken.ThrowIfCancellationRequested();
 
             using IGoogleDriveMediaUploadClient mediaClient =
@@ -114,6 +155,13 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 exactName,
                 source.Length);
             cancellationToken.ThrowIfCancellationRequested();
+            CacheCompletedUpload(
+                cacheScope,
+                parentId,
+                exactName,
+                response,
+                cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
 
             GoogleDriveBinaryUploadResult result = new(
                 GoogleDriveBinaryUploadStatus.Completed,
@@ -121,6 +169,125 @@ namespace GameSaves.Infrastructure.GoogleDrive
             cancellationToken.ThrowIfCancellationRequested();
             return result;
         }
+
+        private void RemoveConfirmedStaleTarget(
+            GoogleDriveObjectCacheScope scope,
+            string parentId,
+            string exactName)
+        {
+            try
+            {
+                if (_objectIdCache.TryGet(
+                        scope,
+                        parentId,
+                        exactName,
+                        GoogleDriveObjectKind.File,
+                        out GoogleDriveObjectIdCacheEntry? entry) &&
+                    entry is not null)
+                {
+                    _objectIdCache.Remove(
+                        scope,
+                        parentId,
+                        exactName,
+                        GoogleDriveObjectKind.File);
+                }
+            }
+            catch
+            {
+                throw CacheFailure();
+            }
+        }
+
+        private void TryInvalidateProfile(
+            Guid remoteProfileId,
+            bool reauthenticationRequired)
+        {
+            if (!reauthenticationRequired)
+                return;
+
+            try
+            {
+                _objectIdCache.InvalidateProfile(
+                    remoteProfileId,
+                    GoogleDriveObjectCacheInvalidationReason
+                        .AuthorizationRevocation);
+            }
+            catch
+            {
+                // The classified authentication failure remains authoritative.
+            }
+        }
+
+        private void CacheCompletedUpload(
+            GoogleDriveObjectCacheScope scope,
+            string parentId,
+            string exactName,
+            GoogleDriveMediaUploadMetadata response,
+            CancellationToken cancellationToken)
+        {
+            var metadata = new GoogleDriveObjectMetadata(
+                response.Id!,
+                response.Name!,
+                response.MimeType!,
+                response.Trashed!.Value,
+                response.ParentIds!,
+                response.DriveId);
+
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!_objectIdCache.TryStoreUniqueValidated(
+                        scope,
+                        parentId,
+                        exactName,
+                        GoogleDriveObjectKind.File,
+                        metadata))
+                {
+                    throw CacheFailure();
+                }
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+            catch (OperationCanceledException)
+            {
+                TryRemoveTarget(scope, parentId, exactName);
+                throw;
+            }
+            catch
+            {
+                TryRemoveTarget(scope, parentId, exactName);
+                throw CacheFailure();
+            }
+        }
+
+        private void TryRemoveTarget(
+            GoogleDriveObjectCacheScope scope,
+            string parentId,
+            string exactName)
+        {
+            try
+            {
+                _objectIdCache.Remove(
+                    scope,
+                    parentId,
+                    exactName,
+                    GoogleDriveObjectKind.File);
+            }
+            catch
+            {
+                // Cache cleanup must not replace cancellation or the fixed
+                // cache-rejection failure.
+            }
+        }
+
+        private static GoogleDriveRemoteOperationException CacheFailure() =>
+            new(new GoogleDriveRemoteValidationResult(
+                GoogleDriveRemoteValidationStatus.Failed,
+                GoogleDriveBinaryUploadErrorCodes.CacheRejected,
+                "The completed Google Drive upload could not be recorded safely.",
+                retryable: false,
+                rootDisplayName: null,
+                wasAuthenticationRefreshed: false,
+                cacheInvalidated: false));
 
         private static GoogleDriveRelativePath ParentPath(
             GoogleDriveRelativePath path) =>

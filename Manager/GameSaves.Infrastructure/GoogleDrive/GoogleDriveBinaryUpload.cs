@@ -12,6 +12,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
         public const string Failed = "GoogleDriveBinaryUploadFailed";
         public const string CompletionIndeterminate =
             "GoogleDriveUploadCompletionIndeterminate";
+        public const string CacheRejected =
+            "GoogleDriveUploadCacheRejected";
     }
 
     internal sealed class GoogleDriveUploadCompletionIndeterminateException
