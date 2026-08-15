@@ -207,6 +207,46 @@ public sealed class GoogleDriveUploadTargetGuardTests
             CancellationToken.None);
     }
 
+    [Fact]
+    public async Task CancellationWhileWaitingForLease_StopsBeforeSecondGuard()
+    {
+        var enumeration = new RecordingChildEnumerationService
+        {
+            Results = new Queue<IReadOnlyList<GoogleDriveFolderChildEntry>>(
+            [
+                Array.Empty<GoogleDriveFolderChildEntry>()
+            ])
+        };
+        var coordinator = new GoogleDriveObjectCreationCoordinator();
+        IDisposable blocker = await coordinator.AcquireAsync(
+            "authoritative-parent-id",
+            "target.bin",
+            CancellationToken.None);
+        var guard = new GoogleDriveCreateOnlyUploadTargetGuard(
+            enumeration,
+            coordinator);
+        using GoogleDriveRemoteOperationContext context = Context();
+        using var cancellation = new CancellationTokenSource();
+
+        Task<IDisposable> acquisition = guard.AcquireAsync(
+            context,
+            "authoritative-parent-id",
+            "target.bin",
+            GoogleDriveObjectKind.File,
+            cancellation.Token).AsTask();
+        await enumeration.FirstCallObserved.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => acquisition);
+        Assert.Equal(1, enumeration.CallCount);
+
+        blocker.Dispose();
+        using IDisposable releasedLease = await coordinator.AcquireAsync(
+            "authoritative-parent-id",
+            "target.bin",
+            CancellationToken.None);
+    }
+
     private static GoogleDriveFolderChildEntry Child(
         string id,
         string name,

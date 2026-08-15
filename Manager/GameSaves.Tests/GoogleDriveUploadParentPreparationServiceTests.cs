@@ -306,6 +306,62 @@ public sealed class GoogleDriveUploadParentPreparationServiceTests
         AssertSafe(exception, "Parent", "Child", "created-1");
     }
 
+    [Fact]
+    public async Task MissingParentCreation_ForwardsCallerToken()
+    {
+        var enumeration = new RecordingChildEnumerationService([[], [], []]);
+        var api = new RecordingObjectApi();
+        GoogleDriveUploadParentPreparationService service = Service(
+            enumeration,
+            api);
+        using GoogleDriveRemoteOperationContext context = Context();
+        using var cancellation = new CancellationTokenSource();
+
+        await service.PrepareAsync(
+            context,
+            GoogleDriveRelativePath.Parse("Parent"),
+            cancellation.Token);
+
+        Assert.All(enumeration.CancellationTokens,
+            token => Assert.Equal(cancellation.Token, token));
+        Assert.Equal([cancellation.Token], api.CancellationTokens);
+    }
+
+    [Fact]
+    public async Task CancellationAfterFolderCreate_StopsBeforeCacheOrNextSegment()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var enumeration = new RecordingChildEnumerationService([[], [], []]);
+        var api = new RecordingObjectApi
+        {
+            CreateHandler = (parentId, name) =>
+            {
+                cancellation.Cancel();
+                return Metadata(
+                    "created-id",
+                    name,
+                    FolderMime(),
+                    [parentId]);
+            }
+        };
+        var cache = new RecordingObjectIdCache();
+        GoogleDriveUploadParentPreparationService service = Service(
+            enumeration,
+            api,
+            cache);
+        using GoogleDriveRemoteOperationContext context = Context();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            service.PrepareAsync(
+                context,
+                GoogleDriveRelativePath.Parse("Parent/Child"),
+                cancellation.Token));
+
+        Assert.Single(api.CreateCalls);
+        Assert.Empty(cache.Stored);
+        Assert.Equal(3, enumeration.ParentIds.Count);
+    }
+
     private static GoogleDriveUploadParentPreparationService Service(
         RecordingChildEnumerationService enumeration,
         RecordingObjectApi? objectApi = null,
@@ -416,6 +472,8 @@ public sealed class GoogleDriveUploadParentPreparationServiceTests
 
         public List<string> ParentIds { get; } = new();
 
+        public List<CancellationToken> CancellationTokens { get; } = new();
+
         public Task<IReadOnlyList<GoogleDriveFolderChildEntry>> EnumerateAsync(
             GoogleDriveRemoteOperationContext context,
             string parentFolderId,
@@ -423,6 +481,7 @@ public sealed class GoogleDriveUploadParentPreparationServiceTests
         {
             cancellationToken.ThrowIfCancellationRequested();
             ParentIds.Add(parentFolderId);
+            CancellationTokens.Add(cancellationToken);
             return Task.FromResult(_results.Dequeue());
         }
     }
@@ -432,6 +491,8 @@ public sealed class GoogleDriveUploadParentPreparationServiceTests
         private int _createSequence;
 
         public List<(string ParentId, string Name)> CreateCalls { get; } = new();
+
+        public List<CancellationToken> CancellationTokens { get; } = new();
 
         public Func<string, string, GoogleDriveObjectMetadata>? CreateHandler
         {
@@ -461,6 +522,7 @@ public sealed class GoogleDriveUploadParentPreparationServiceTests
         {
             cancellationToken.ThrowIfCancellationRequested();
             CreateCalls.Add((parentId, name));
+            CancellationTokens.Add(cancellationToken);
             int sequence = Interlocked.Increment(ref _createSequence);
             return Task.FromResult(CreateHandler is null
                 ? new GoogleDriveObjectMetadata(

@@ -100,9 +100,11 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 source.Length);
             cancellationToken.ThrowIfCancellationRequested();
 
-            return new GoogleDriveBinaryUploadResult(
+            GoogleDriveBinaryUploadResult result = new(
                 GoogleDriveBinaryUploadStatus.Completed,
                 source.Length);
+            cancellationToken.ThrowIfCancellationRequested();
+            return result;
         }
 
         private static GoogleDriveRelativePath ParentPath(

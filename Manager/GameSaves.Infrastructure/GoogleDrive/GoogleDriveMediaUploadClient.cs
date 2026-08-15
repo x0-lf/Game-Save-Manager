@@ -169,6 +169,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                     progress.Report(MapProgress(sdkProgress));
             }
 
+            cancellationToken.ThrowIfCancellationRequested();
             IUploadProgress completed = await upload.UploadAsync(
                 cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
@@ -180,7 +181,9 @@ namespace GameSaves.Infrastructure.GoogleDrive
                     "The Google Drive media upload did not complete.");
             }
 
-            return Map(upload.ResponseBody);
+            GoogleDriveMediaUploadMetadata response = Map(upload.ResponseBody);
+            cancellationToken.ThrowIfCancellationRequested();
+            return response;
         }
 
         public void Dispose()

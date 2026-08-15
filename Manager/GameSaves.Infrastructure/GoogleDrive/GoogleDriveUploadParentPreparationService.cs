@@ -79,6 +79,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                     parentId,
                     segment,
                     cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
                 if (folder is null)
                 {
                     using IDisposable lease = await _targetGuard.AcquireAsync(
