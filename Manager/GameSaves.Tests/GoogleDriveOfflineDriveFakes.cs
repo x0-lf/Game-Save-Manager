@@ -326,12 +326,33 @@ internal sealed class OfflineDriveMediaDownloadClientFactory(OfflineDriveStore d
         return new Client(this, drive);
     }
 
+    public List<string> MetadataCalls { get; } = [];
+
     private sealed class Client(
         OfflineDriveMediaDownloadClientFactory owner,
         OfflineDriveStore drive)
         : IGoogleDriveMediaDownloadClient
     {
         private bool _disposed;
+
+        public Task<GoogleDriveMediaDownloadMetadata> GetMetadataAsync(
+            string fileId,
+            CancellationToken cancellationToken)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            cancellationToken.ThrowIfCancellationRequested();
+            owner.MetadataCalls.Add(fileId);
+
+            OfflineDriveObject value = drive.GetRequired(fileId);
+            return Task.FromResult(new GoogleDriveMediaDownloadMetadata(
+                value.Metadata.Id,
+                value.Metadata.Name,
+                value.Metadata.MimeType,
+                value.Metadata.Trashed,
+                value.Metadata.ParentIds,
+                value.Metadata.DriveId,
+                value.Content?.LongLength ?? 0));
+        }
 
         public async Task<long> DownloadAsync(
             string fileId,

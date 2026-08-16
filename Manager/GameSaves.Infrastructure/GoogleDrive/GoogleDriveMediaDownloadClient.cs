@@ -1,6 +1,7 @@
 using Google.Apis.Download;
 using Google.Apis.Drive.v3;
 using Google.Apis.Services;
+using DriveFile = Google.Apis.Drive.v3.Data.File;
 
 namespace GameSaves.Infrastructure.GoogleDrive
 {
@@ -36,8 +37,63 @@ namespace GameSaves.Infrastructure.GoogleDrive
             $"bytesDownloaded={BytesDownloaded}";
     }
 
+    /// <summary>
+    /// Project-owned snapshot of the only source metadata a backup download
+    /// validates. Diagnostic formatting exposes presence and counts only.
+    /// </summary>
+    internal sealed class GoogleDriveMediaDownloadMetadata
+    {
+        public GoogleDriveMediaDownloadMetadata(
+            string? id,
+            string? name,
+            string? mimeType,
+            bool? trashed,
+            IEnumerable<string>? parentIds,
+            string? driveId,
+            long? size)
+        {
+            Id = id;
+            Name = name;
+            MimeType = mimeType;
+            Trashed = trashed;
+            ParentIds = parentIds?.ToArray();
+            DriveId = driveId;
+            Size = size;
+        }
+
+        public string? Id { get; }
+
+        public string? Name { get; }
+
+        public string? MimeType { get; }
+
+        public bool? Trashed { get; }
+
+        public IReadOnlyList<string>? ParentIds { get; }
+
+        public string? DriveId { get; }
+
+        public long? Size { get; }
+
+        public override string ToString() =>
+            "Google Drive media download metadata: " +
+            $"idPresent={!string.IsNullOrWhiteSpace(Id)}; " +
+            $"namePresent={Name is not null}; " +
+            $"mimeTypePresent={MimeType is not null}; " +
+            $"trashedPresent={Trashed is not null}; " +
+            $"parents={ParentIds?.Count ?? -1}; " +
+            $"sharedDrive={DriveId is not null}; sizePresent={Size is not null}";
+    }
+
     internal interface IGoogleDriveMediaDownloadClient : IDisposable
     {
+        /// <summary>
+        /// Reads only the source metadata a backup download validates.
+        /// </summary>
+        Task<GoogleDriveMediaDownloadMetadata> GetMetadataAsync(
+            string fileId,
+            CancellationToken cancellationToken);
+
         /// <summary>
         /// Streams one Drive file's content into the destination and returns
         /// the number of bytes the provider reported as written.
@@ -87,6 +143,23 @@ namespace GameSaves.Infrastructure.GoogleDrive
             _drive = drive ?? throw new ArgumentNullException(nameof(drive));
 
         internal bool IsDisposed => _drive is null;
+
+        public async Task<GoogleDriveMediaDownloadMetadata> GetMetadataAsync(
+            string fileId,
+            CancellationToken cancellationToken)
+        {
+            DriveService drive = _drive ??
+                throw new ObjectDisposedException(GetType().Name);
+            cancellationToken.ThrowIfCancellationRequested();
+
+            FilesResource.GetRequest request = CreateSdkMetadataRequest(
+                drive,
+                fileId);
+            DriveFile file = await request.ExecuteAsync(cancellationToken)
+                .ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            return Map(file);
+        }
 
         public async Task<long> DownloadAsync(
             string fileId,
@@ -153,6 +226,34 @@ namespace GameSaves.Infrastructure.GoogleDrive
             request.AcknowledgeAbuse = false;
             return request;
         }
+
+        internal static FilesResource.GetRequest CreateSdkMetadataRequest(
+            DriveService drive,
+            string fileId)
+        {
+            ArgumentNullException.ThrowIfNull(drive);
+            if (string.IsNullOrWhiteSpace(fileId))
+            {
+                throw new ArgumentException(
+                    "An authoritative file ID is required.",
+                    nameof(fileId));
+            }
+
+            FilesResource.GetRequest request = drive.Files.Get(fileId);
+            request.Fields = GoogleDriveRequestContract.BinaryDownloadMetadataFields;
+            request.SupportsAllDrives = GoogleDriveRequestContract.SupportsAllDrives;
+            return request;
+        }
+
+        internal static GoogleDriveMediaDownloadMetadata Map(DriveFile? file) =>
+            new(
+                file?.Id,
+                file?.Name,
+                file?.MimeType,
+                file?.Trashed,
+                file?.Parents,
+                file?.DriveId,
+                file?.Size);
 
         internal static GoogleDriveMediaDownloadProgress MapProgress(
             IDownloadProgress progress)

@@ -45,6 +45,7 @@ public sealed class GoogleDriveMediaDownloadClientTests
         [
             typeof(IGoogleDriveMediaDownloadClient),
             typeof(IGoogleDriveMediaDownloadClientFactory),
+            typeof(GoogleDriveMediaDownloadMetadata),
             typeof(GoogleDriveMediaDownloadProgress),
             typeof(GoogleDriveMediaDownloadProgressStatus)
         ];
@@ -123,6 +124,115 @@ public sealed class GoogleDriveMediaDownloadClientTests
             GoogleDriveMediaDownloadClient.CreateSdkRequest(drive, "  "));
         Assert.Throws<ArgumentNullException>(() =>
             GoogleDriveMediaDownloadClient.CreateSdkRequest(null!, "id"));
+    }
+
+    [Fact]
+    public void SdkAdapter_RequestsOnlyTheMetadataDownloadValidates()
+    {
+        using var drive = new DriveService(new BaseClientService.Initializer
+        {
+            ApplicationName = "Game Save Manager Tests"
+        });
+
+        FilesResource.GetRequest request =
+            GoogleDriveMediaDownloadClient.CreateSdkMetadataRequest(
+                drive,
+                "private-id-marker");
+
+        Assert.Equal(
+            "id,name,mimeType,trashed,parents,driveId,size",
+            request.Fields);
+        Assert.Equal(
+            GoogleDriveRequestContract.BinaryDownloadMetadataFields,
+            request.Fields);
+        Assert.Equal("private-id-marker", request.FileId);
+        Assert.False(request.SupportsAllDrives);
+        Assert.Null(request.AcknowledgeAbuse);
+        Assert.Null(request.IncludePermissionsForView);
+        Assert.Equal("GET", request.HttpMethod);
+        Assert.Throws<ArgumentException>(() =>
+            GoogleDriveMediaDownloadClient.CreateSdkMetadataRequest(drive, " "));
+        Assert.Throws<ArgumentNullException>(() =>
+            GoogleDriveMediaDownloadClient.CreateSdkMetadataRequest(null!, "id"));
+    }
+
+    [Fact]
+    public void SdkMetadata_MapsOnlyProjectStateAndFormatsSafely()
+    {
+        GoogleDriveMediaDownloadMetadata mapped =
+            GoogleDriveMediaDownloadClient.Map(new Google.Apis.Drive.v3.Data.File
+            {
+                Id = "private-id-marker",
+                Name = "private-name-marker",
+                MimeType = "application/octet-stream",
+                Trashed = false,
+                Parents = ["private-parent-marker"],
+                Size = 42
+            });
+        GoogleDriveMediaDownloadMetadata empty =
+            GoogleDriveMediaDownloadClient.Map(null);
+
+        Assert.Equal("private-id-marker", mapped.Id);
+        Assert.Equal("private-name-marker", mapped.Name);
+        Assert.Equal("application/octet-stream", mapped.MimeType);
+        Assert.False(mapped.Trashed);
+        Assert.Equal(["private-parent-marker"], mapped.ParentIds);
+        Assert.Null(mapped.DriveId);
+        Assert.Equal(42, mapped.Size);
+        Assert.Null(empty.Id);
+        Assert.Null(empty.Size);
+
+        string formatted = string.Join(
+            Environment.NewLine,
+            mapped.ToString(),
+            empty.ToString());
+        Assert.DoesNotContain("private-id-marker", formatted, StringComparison.Ordinal);
+        Assert.DoesNotContain("private-name-marker", formatted, StringComparison.Ordinal);
+        Assert.DoesNotContain("private-parent-marker", formatted, StringComparison.Ordinal);
+        Assert.Contains("parents=1", formatted, StringComparison.Ordinal);
+        Assert.Contains("sizePresent=True", formatted, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task MetadataRequest_ForwardsCancellationAndRejectsDisposedClients()
+    {
+        var handler = new BlockingRequestHandler();
+        using var client = new GoogleDriveMediaDownloadClient(
+            DriveWithHandler(handler));
+        using var cancellation = new CancellationTokenSource();
+
+        Task<GoogleDriveMediaDownloadMetadata> pending =
+            client.GetMetadataAsync("private-id-marker", cancellation.Token);
+        await handler.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pending);
+        Assert.Equal(1, handler.Calls);
+        Assert.True(handler.CancellationToken.IsCancellationRequested);
+
+        var disposedHandler = new BlockingRequestHandler();
+        var disposed = new GoogleDriveMediaDownloadClient(
+            DriveWithHandler(disposedHandler));
+        disposed.Dispose();
+
+        await Assert.ThrowsAsync<ObjectDisposedException>(() =>
+            disposed.GetMetadataAsync("private-id-marker", CancellationToken.None));
+        Assert.Equal(0, disposedHandler.Calls);
+    }
+
+    [Fact]
+    public async Task MetadataRequest_PreCanceledTokenStopsBeforeTheRequest()
+    {
+        var handler = new BlockingRequestHandler();
+        using var client = new GoogleDriveMediaDownloadClient(
+            DriveWithHandler(handler));
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            client.GetMetadataAsync("private-id-marker", cancellation.Token));
+
+        Assert.Equal(0, handler.Calls);
     }
 
     [Theory]
@@ -450,6 +560,11 @@ public sealed class GoogleDriveMediaDownloadClientTests
 
     private sealed class BoundaryFakeClient : IGoogleDriveMediaDownloadClient
     {
+        public Task<GoogleDriveMediaDownloadMetadata> GetMetadataAsync(
+            string fileId,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
         public Task<long> DownloadAsync(
             string fileId,
             Stream destination,

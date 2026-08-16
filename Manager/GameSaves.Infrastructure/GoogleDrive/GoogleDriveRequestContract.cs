@@ -22,6 +22,11 @@ namespace GameSaves.Infrastructure.GoogleDrive
         public const string TextContentMetadataFields =
             "id,mimeType,trashed,driveId,size,capabilities(canDownload)";
 
+        // Backup download validates identity, exact name, opaque type, parent,
+        // My Drive location, and byte length, and requests nothing else.
+        public const string BinaryDownloadMetadataFields =
+            "id,name,mimeType,trashed,parents,driveId,size";
+
         public const string TextCreationResponseFields = MetadataFields;
 
         public const string TextReplacementMetadataFields =
