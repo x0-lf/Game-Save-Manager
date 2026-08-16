@@ -533,7 +533,7 @@ public sealed class GoogleDriveSyncEngineCompatibilityTests
             QueryBuilder = new GoogleDriveQueryBuilder();
             Resolver = new OfflineResolver(Drive);
             ContextFactory = new RecordingContextFactory(Resolver);
-            ObjectClients = new RecordingObjectClientFactory(Drive, QueryBuilder);
+            ObjectClients = new OfflineDriveObjectClientFactory(Drive, QueryBuilder);
             var objectApi = new GoogleDriveObjectApi(QueryBuilder, ObjectClients);
             var cache = new GoogleDriveObjectIdCache();
             ContentApi = new RecordingTextContentApi(Drive);
@@ -572,7 +572,7 @@ public sealed class GoogleDriveSyncEngineCompatibilityTests
                 new GoogleDriveOneLevelFileListingService(
                     childEnumeration,
                     cache));
-            MediaUploads = new RecordingMediaUploadClientFactory(Drive);
+            MediaUploads = new OfflineDriveMediaUploadClientFactory(Drive);
             var targetGuard = new GoogleDriveCreateOnlyUploadTargetGuard(
                 childEnumeration,
                 new GoogleDriveObjectCreationCoordinator());
@@ -614,7 +614,7 @@ public sealed class GoogleDriveSyncEngineCompatibilityTests
 
         public RecordingContextFactory ContextFactory { get; }
 
-        public RecordingObjectClientFactory ObjectClients { get; }
+        public OfflineDriveObjectClientFactory ObjectClients { get; }
 
         public RecordingTextContentApi ContentApi { get; }
 
@@ -622,7 +622,7 @@ public sealed class GoogleDriveSyncEngineCompatibilityTests
 
         public RecordingTextReplacementApi ReplacementApi { get; }
 
-        public RecordingMediaUploadClientFactory MediaUploads { get; }
+        public OfflineDriveMediaUploadClientFactory MediaUploads { get; }
 
         public RecordingRemoteFileSystem Remote { get; }
 
@@ -956,216 +956,6 @@ public sealed class GoogleDriveSyncEngineCompatibilityTests
                 "The object has the wrong type.");
     }
 
-    private sealed class RecordingObjectClientFactory(
-        OfflineDriveStore drive,
-        GoogleDriveQueryBuilder queryBuilder)
-        : IGoogleDriveObjectClientFactory
-    {
-        private int _disposedClients;
-        private int _createFolderCalls;
-
-        public List<GoogleDriveObjectListRequest> ListRequests { get; } = [];
-
-        public List<GoogleDriveObjectGetRequest> GetRequests { get; } = [];
-
-        public List<FolderCreateCall> CreatedFolders { get; } = [];
-
-        public int DisposedClients => Volatile.Read(ref _disposedClients);
-
-        public int CreateFolderCalls => Volatile.Read(ref _createFolderCalls);
-
-        public IGoogleDriveObjectClient Create(GoogleAuthorizedCredential credential)
-        {
-            Assert.False(credential.IsDisposed);
-            return new Client(this, drive, queryBuilder);
-        }
-
-        private sealed class Client(
-            RecordingObjectClientFactory owner,
-            OfflineDriveStore drive,
-            GoogleDriveQueryBuilder queryBuilder)
-            : IGoogleDriveObjectClient
-        {
-            private bool _disposed;
-
-            public Task<GoogleDriveObjectMetadata> GetAsync(
-                GoogleDriveObjectGetRequest request,
-                CancellationToken cancellationToken)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                owner.GetRequests.Add(request);
-                return Task.FromResult(drive.GetRequired(request.ObjectId).Metadata);
-            }
-
-            public Task<GoogleDriveObjectListPage> ListAsync(
-                GoogleDriveObjectListRequest request,
-                CancellationToken cancellationToken)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                owner.ListRequests.Add(request);
-                IReadOnlyList<GoogleDriveObjectMetadata> objects =
-                    ResolveQuery(request.Query);
-                int offset = request.PageToken is null
-                    ? 0
-                    : int.Parse(request.PageToken["page-".Length..]);
-                GoogleDriveObjectMetadata[] page = objects
-                    .Skip(offset)
-                    .Take(1)
-                    .ToArray();
-                string? next = offset + page.Length < objects.Count
-                    ? $"page-{offset + page.Length}"
-                    : null;
-                return Task.FromResult(new GoogleDriveObjectListPage(
-                    page,
-                    next,
-                    IncompleteSearch: false));
-            }
-
-            public Task<GoogleDriveObjectMetadata> CreateFolderAsync(
-                GoogleDriveFolderCreateRequest request,
-                CancellationToken cancellationToken)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                Interlocked.Increment(ref owner._createFolderCalls);
-                OfflineDriveObject created = drive.AddGeneratedFolder(
-                    request.Name,
-                    request.ParentId);
-                owner.CreatedFolders.Add(
-                    new FolderCreateCall(request.ParentId, request.Name));
-                return Task.FromResult(created.Metadata);
-            }
-
-            private IReadOnlyList<GoogleDriveObjectMetadata> ResolveQuery(string query)
-            {
-                foreach (string parentId in drive.ObjectIds)
-                {
-                    if (query == queryBuilder.BuildDirectChildrenQuery(
-                            parentId,
-                            GoogleDriveObjectKind.Folder))
-                    {
-                        return drive.FindChildren(parentId)
-                            .Where(value =>
-                                value.Metadata.Kind == GoogleDriveObjectKind.Folder)
-                            .Select(value => value.Metadata)
-                            .ToArray();
-                    }
-
-                    if (query == queryBuilder.BuildDirectChildrenQuery(
-                            parentId,
-                            expectedKind: null))
-                    {
-                        return drive.FindChildren(parentId)
-                            .Select(value => value.Metadata)
-                            .ToArray();
-                    }
-
-                    if (query == queryBuilder.BuildExactNameChildQuery(
-                            parentId,
-                            "manifest.json"))
-                    {
-                        return drive.FindChildren(parentId, "manifest.json")
-                            .Select(value => value.Metadata)
-                            .ToArray();
-                    }
-                }
-
-                throw new InvalidOperationException(
-                    "The offline Drive client received an unexpected query.");
-            }
-
-            public void Dispose()
-            {
-                if (_disposed)
-                    return;
-                _disposed = true;
-                Interlocked.Increment(ref owner._disposedClients);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Fake Google media-upload API. It stores completed creates in the
-    /// offline Drive, records their order, and can fail or observe one
-    /// requested name without touching any other object.
-    /// </summary>
-    private sealed class RecordingMediaUploadClientFactory(OfflineDriveStore drive)
-        : IGoogleDriveMediaUploadClientFactory
-    {
-        private int _disposedClients;
-
-        public List<MediaUploadCall> Calls { get; } = [];
-
-        public Func<string, Exception?>? FailureFor { get; set; }
-
-        public Action<string>? BeforeCreate { get; set; }
-
-        public int DisposedClients => Volatile.Read(ref _disposedClients);
-
-        public IGoogleDriveMediaUploadClient Create(
-            GoogleAuthorizedCredential credential)
-        {
-            Assert.False(credential.IsDisposed);
-            return new Client(this, drive);
-        }
-
-        private sealed class Client(
-            RecordingMediaUploadClientFactory owner,
-            OfflineDriveStore drive)
-            : IGoogleDriveMediaUploadClient
-        {
-            private bool _disposed;
-
-            public async Task<GoogleDriveMediaUploadMetadata> UploadAsync(
-                string parentFolderId,
-                string exactFileName,
-                Stream source,
-                long expectedLength,
-                string mediaType,
-                IProgress<GoogleDriveMediaUploadProgress>? progress,
-                CancellationToken cancellationToken)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                owner.BeforeCreate?.Invoke(exactFileName);
-                cancellationToken.ThrowIfCancellationRequested();
-
-                using var buffer = new MemoryStream();
-                await source.CopyToAsync(buffer, cancellationToken);
-                cancellationToken.ThrowIfCancellationRequested();
-
-                if (owner.FailureFor?.Invoke(exactFileName) is Exception failure)
-                    throw failure;
-
-                OfflineDriveObject created = drive.AddGeneratedFile(
-                    exactFileName,
-                    parentFolderId,
-                    buffer.ToArray(),
-                    mediaType);
-                owner.Calls.Add(new MediaUploadCall(
-                    exactFileName,
-                    parentFolderId,
-                    buffer.Length,
-                    created.Metadata.Id));
-
-                return new GoogleDriveMediaUploadMetadata(
-                    created.Metadata.Id,
-                    exactFileName,
-                    mediaType,
-                    trashed: false,
-                    parentIds: [parentFolderId],
-                    driveId: null,
-                    size: buffer.Length);
-            }
-
-            public void Dispose()
-            {
-                if (_disposed)
-                    return;
-                _disposed = true;
-                Interlocked.Increment(ref owner._disposedClients);
-            }
-        }
-    }
-
     private sealed class RecordingTextContentApi(OfflineDriveStore drive)
         : IGoogleDriveTextContentApi
     {
@@ -1235,134 +1025,6 @@ public sealed class GoogleDriveSyncEngineCompatibilityTests
                 contentBytes.ToArray(),
                 mediaType));
             return Task.FromResult(new GoogleDriveTextReplacementResult(fileId));
-        }
-    }
-
-    private sealed class OfflineDriveStore
-    {
-        private readonly object _gate = new();
-        private readonly Dictionary<string, OfflineDriveObject> _objects = [];
-        private int _nextFolderId;
-        private int _nextFileId;
-
-        public OfflineDriveStore(string rootId)
-        {
-            RootId = rootId;
-            AddFolder(rootId, "Application Root", GoogleDriveRequestContract.MyDriveRootId);
-        }
-
-        public string RootId { get; }
-
-        public IReadOnlyList<string> ObjectIds
-        {
-            get
-            {
-                lock (_gate)
-                    return _objects.Keys.ToArray();
-            }
-        }
-
-        public void AddFolder(string id, string name, string? parentId = null) =>
-            Add(new OfflineDriveObject(
-                new GoogleDriveObjectMetadata(
-                    id,
-                    name,
-                    GoogleDriveApplicationRoot.FolderMimeType,
-                    trashed: false,
-                    parentIds: [parentId ?? RootId],
-                    driveId: null),
-                Content: null));
-
-        public void AddFile(
-            string id,
-            string name,
-            string parentId,
-            byte[] content,
-            string mediaType = "application/json") =>
-            Add(new OfflineDriveObject(
-                new GoogleDriveObjectMetadata(
-                    id,
-                    name,
-                    mediaType,
-                    trashed: false,
-                    parentIds: [parentId],
-                    driveId: null),
-                content.ToArray()));
-
-        public OfflineDriveObject AddGeneratedFolder(
-            string name,
-            string parentId)
-        {
-            string id = $"created-folder-{Interlocked.Increment(ref _nextFolderId)}";
-            AddFolder(id, name, parentId);
-            return GetRequired(id);
-        }
-
-        public OfflineDriveObject AddGeneratedFile(
-            string name,
-            string parentId,
-            byte[] content,
-            string mediaType)
-        {
-            string id = $"created-file-{Interlocked.Increment(ref _nextFileId)}";
-            AddFile(id, name, parentId, content, mediaType);
-            return GetRequired(id);
-        }
-
-        public OfflineDriveObject GetRequired(string id)
-        {
-            lock (_gate)
-                return _objects[id];
-        }
-
-        public IReadOnlyList<OfflineDriveObject> FindChildren(
-            string parentId,
-            string? exactName = null)
-        {
-            lock (_gate)
-            {
-                return _objects.Values
-                    .Where(value => value.Metadata.ParentIds.Contains(
-                        parentId,
-                        StringComparer.Ordinal))
-                    .Where(value => exactName is null || string.Equals(
-                        value.Metadata.Name,
-                        exactName,
-                        StringComparison.Ordinal))
-                    .OrderBy(value => value.Metadata.Name, StringComparer.Ordinal)
-                    .ThenBy(value => value.Metadata.Id, StringComparer.Ordinal)
-                    .ToArray();
-            }
-        }
-
-        public string GetRequiredFolderId(string name, string parentId)
-        {
-            OfflineDriveObject value = Assert.Single(FindChildren(parentId, name));
-            Assert.Equal(GoogleDriveObjectKind.Folder, value.Metadata.Kind);
-            return value.Metadata.Id;
-        }
-
-        public byte[] GetRequiredFileBytes(string name, string parentId)
-        {
-            OfflineDriveObject value = Assert.Single(FindChildren(parentId, name));
-            Assert.Equal(GoogleDriveObjectKind.File, value.Metadata.Kind);
-            return value.Content!.ToArray();
-        }
-
-        public void ReplaceContent(string fileId, byte[] content)
-        {
-            lock (_gate)
-            {
-                OfflineDriveObject existing = _objects[fileId];
-                Assert.Equal(GoogleDriveObjectKind.File, existing.Metadata.Kind);
-                _objects[fileId] = existing with { Content = content.ToArray() };
-            }
-        }
-
-        private void Add(OfflineDriveObject value)
-        {
-            lock (_gate)
-                _objects.Add(value.Metadata.Id, value);
         }
     }
 
@@ -1462,14 +1124,6 @@ public sealed class GoogleDriveSyncEngineCompatibilityTests
 
     private sealed record RemoteCall(string Name, string? Path);
 
-    private sealed record FolderCreateCall(string ParentId, string Name);
-
-    private sealed record MediaUploadCall(
-        string FileName,
-        string ParentId,
-        long Bytes,
-        string FileId);
-
     private sealed record TextCreationCall(
         string FileId,
         string ParentId,
@@ -1482,7 +1136,4 @@ public sealed class GoogleDriveSyncEngineCompatibilityTests
         byte[] Content,
         string MediaType);
 
-    private sealed record OfflineDriveObject(
-        GoogleDriveObjectMetadata Metadata,
-        byte[]? Content);
 }
