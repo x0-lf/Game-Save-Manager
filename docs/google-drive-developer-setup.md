@@ -432,17 +432,49 @@ malformed types still fail closed with the unchanged
 `GoogleDriveUploadMimeTypeMismatch` code. See `D-025` in `docs/decisions.md`.
 The request still asks for `application/octet-stream`, unchanged from `D-019`.
 
-Milestone R stays open until a live re-run passes. The re-run needs a new
-controlled run-folder name, because the attempt above already created its
-folder, its payloads, and its manifest object; those objects are harmless,
-the application never removes them, and deleting them is a manual Drive-UI
-action.
+The re-run used a new controlled run-folder name, because the attempt above
+already created its folder, its payloads, and its manifest object; those
+objects are harmless, the application never removes them, and deleting them is
+a manual Drive-UI action. Its result is recorded next.
+
+### Recorded Milestone R live acceptance result
+
+```text
+Date: 2026-08-16
+Tested commit: 48d4d4db33a9e369d69b7e55a07df83eeee8516b
+Result: PASS
+Sanitized failure categories: none
+```
+
+Every stage passed: silent authentication restore with a reachable configured
+root; zero-byte, small, larger-than-5-MiB, and deeply nested create-only
+uploads returning exact byte counts with their missing parents created;
+exact-name and case-only retries refused without overwriting; cancellation of
+an active upload reporting no success; the run becoming discoverable only after
+its `manifest.json` existed; and download plus provider activation still
+unavailable.
+
+Two checklist observations are operator-visual and were not separately
+reported: whether a browser window opened, and whether Drive activity showed
+any operation other than creates. Both are guaranteed structurally rather than
+observationally. Ordinary operations never open a browser under `D-005`, and
+the upload composition can only issue get, list, folder-create, and one media
+create, which
+`GoogleDriveUploadIntegrationTests.UploadComposition_IssuesNoForbiddenDriveOperation`
+proves at the interface level.
+
+The controlled objects from both attempts remain in the development account.
+The application never removes them; deleting them is a manual Drive-UI action.
+
+**Milestone R is closed.**
 
 ### Live upload acceptance checklist
 
-This checklist requires explicit user authorization before any acts on
+This checklist requires explicit user authorization before any agent acts on
 it, because it writes controlled synthetic objects to a real development
-account. It is **not** part of the automated suite and has **not** been run.
+account. It is **not** part of the automated suite. It was run twice on
+2026-08-16: the first attempt failed as recorded above, and the re-run after
+the `D-025` fix passed as recorded below.
 
 Use only an explicitly authorized development test account and one controlled
 run folder beneath the configured application root. Use synthetic data only,

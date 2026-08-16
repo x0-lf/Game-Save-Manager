@@ -611,9 +611,9 @@ Controlled development-account acceptance was recorded on 2026-08-13 against com
 * [x] Ensure interrupted runs without a manifest are not treated as complete backups
 * [x] Map quota, authentication, permission, and transient errors to clear warnings
 
-Milestone R is implemented and automatically verified at the Infrastructure
-remote-filesystem boundary, and its live development-account acceptance is
-still outstanding, so the milestone is not closed. `UploadFileAsync` streams one
+Milestone R is complete. Controlled development-account acceptance was recorded
+on 2026-08-16 against commit `48d4d4db33a9e369d69b7e55a07df83eeee8516b` with the
+result PASS and no sanitized failure categories. `UploadFileAsync` streams one
 local file through the official resumable `files.create` path as opaque
 `application/octet-stream` bytes, creates missing parents through authoritative
 My Drive IDs, refuses exact, case-only, and type collisions instead of

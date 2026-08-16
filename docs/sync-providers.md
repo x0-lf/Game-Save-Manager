@@ -203,8 +203,8 @@ The listing path is metadata-only and read-only. It does not download file conte
 ## Google Drive create-only file upload
 
 Milestone R wires only `GoogleDriveRemoteFileSystem.UploadFileAsync` to an
-Infrastructure-internal one-file upload service. Its live development-account
-acceptance is still outstanding, so the milestone is not closed.
+Infrastructure-internal one-file upload service. Its controlled live acceptance
+was recorded on 2026-08-16 with the result PASS, so the milestone is closed.
 
 One call uploads one local file to one canonical `/` remote path:
 
