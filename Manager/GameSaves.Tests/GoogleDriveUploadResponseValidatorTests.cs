@@ -70,14 +70,32 @@ public sealed class GoogleDriveUploadResponseValidatorTests
     }
 
     [Theory]
-    [InlineData("Application/Octet-Stream")]
-    [InlineData("text/plain")]
-    public void MimeMismatch_FailsClosedWithFixedCode(string mimeType)
+    [InlineData("application/vnd.google-apps.folder")]
+    [InlineData("application/vnd.google-apps.document")]
+    [InlineData("application/vnd.google-apps.shortcut")]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("not-a-mime-type")]
+    public void NonBlobResponseType_FailsClosedWithFixedCode(string mimeType)
     {
         AssertFailure(
             ValidResponse(mimeType: mimeType),
             GoogleDriveUploadResponseFailure.MimeTypeMismatch,
             GoogleDriveUploadResponseErrorCodes.MimeTypeMismatch);
+    }
+
+    [Theory]
+    [InlineData("application/octet-stream")]
+    [InlineData("Application/Octet-Stream")]
+    [InlineData("application/json")]
+    [InlineData("text/plain")]
+    public void ProviderAssignedBlobType_RemainsValid(string mimeType)
+    {
+        GoogleDriveUploadResponseValidator.Validate(
+            ValidResponse(mimeType: mimeType),
+            ExpectedParent,
+            ExpectedName,
+            ExpectedLength);
     }
 
     [Fact]

@@ -133,10 +133,14 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 throw Failure(GoogleDriveUploadResponseFailure.NameMismatch);
             }
 
-            if (!string.Equals(
-                    response.MimeType,
-                    GoogleDriveMediaUploadClient.OpaqueMediaType,
-                    StringComparison.Ordinal))
+            // The request always asks for the opaque media type, but Google
+            // Drive may store its own type for a known extension. Requiring an
+            // exact echo rejected real manifest uploads, so the response only
+            // has to remain an ordinary uploaded blob: never a folder, a
+            // Workspace document, a shortcut, or a malformed type.
+            if (GoogleDriveRecursiveObjectClassificationPolicy.Classify(
+                    response.MimeType) !=
+                GoogleDriveRecursiveObjectKind.BlobFile)
             {
                 throw Failure(
                     GoogleDriveUploadResponseFailure.MimeTypeMismatch);
