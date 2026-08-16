@@ -14,7 +14,7 @@ The capability catalog describes provider behavior; the provider factory remains
 |---|---:|---:|---|---|
 | Local or mounted folder | Yes | Yes | Folder path | Folder selection, connection testing, open in native file manager |
 | SFTP server (SSH) | Yes | Yes | Session credentials | Server credentials, connection testing |
-| Google Drive | No | Yes | Interactive desktop OAuth | Account/root configuration and internal read-only recursive file listing; sync unavailable |
+| Google Drive | No | Yes | Interactive desktop OAuth | Account/root configuration, internal read-only recursive file listing, and internal create-only file upload; sync unavailable |
 | WebDAV | No | No | Planned server credentials | Planned persistent authentication, connection testing, logout, open location |
 | OneDrive | No | No | Planned interactive OAuth | Same planned high-level capabilities as Google Drive |
 
@@ -196,7 +196,53 @@ Returned values are ordinary blob-file paths relative to the requested run folde
 
 Listing fails closed—with no partial paths or partial cache commit—when it encounters exact or case-insensitive sibling collisions, file/folder collisions, malformed or inconsistent metadata, trashed/shared-drive objects, Workspace documents, shortcuts, unsupported types, repeated identities, cycles, incomplete searches, authentication/access failures, provider failures, or cancellation. Only a missing requested folder or an empty folder produces the provider-neutral empty list; a descendant disappearing during traversal remains a failure.
 
-The listing path is metadata-only and read-only. It does not download file content, inspect manifests, create or update objects, delete, move, rename, trash, change permissions, upload, or download. `UploadFileAsync` and `DownloadFileAsync` remain explicitly unavailable. Google Drive remains configuration-only, absent from `SyncProviderFactory`, and disabled for Preview Sync and Sync Now. Milestone R has not started.
+Because `drive.file` is a per-object grant, listing returns only objects this application created or that the user explicitly opened with it. Folders and files a user adds by hand in the Drive UI are never enumerated, even inside the app-created application root. This is a property of the least-privilege scope, confirmed live on 2026-08-09 and recorded as `D-023`. Google Picker folder authorization is the supported way to extend a grant to a user-chosen folder and its contents while keeping `drive.file`; it remains future work with no assigned milestone task.
+
+The listing path is metadata-only and read-only. It does not download file content, inspect manifests, create or update objects, delete, move, rename, trash, change permissions, upload, or download. Google Drive remains configuration-only, absent from `SyncProviderFactory`, and disabled for Preview Sync and Sync Now.
+
+## Google Drive create-only file upload
+
+Milestone R wires only `GoogleDriveRemoteFileSystem.UploadFileAsync` to an
+Infrastructure-internal one-file upload service. Its live development-account
+acceptance is still outstanding, so the milestone is not closed.
+
+One call uploads one local file to one canonical `/` remote path:
+
+```text
+UploadFileAsync
+    -> parse the target with GoogleDriveRelativePath, rejecting empty, root,
+       absolute, traversal, and doubled-separator paths
+    -> open one stable read-only local FileStream and capture its length once
+    -> create one short-lived authenticated operation context
+    -> prepare each missing parent segment under authoritative My Drive IDs
+    -> guard the create-only target twice, the second time inside the
+       existing parent-ID and exact-name creation lease
+    -> stream the source through the official resumable files.create path as
+       opaque application/octet-stream bytes
+    -> validate the completed response identity, exact name, MIME, single
+       expected parent, non-trashed My Drive location, and exact size
+    -> record only that validated identity in the scoped object-ID cache
+    -> return the validated completed byte count
+```
+
+Uploads never update, overwrite, delete, trash, rename, move, share, or change
+permissions on any object. An existing sibling matching the target under
+`StringComparer.OrdinalIgnoreCase` blocks creation regardless of type; no
+spelling is selected. Cancellation, an invalid response, an indeterminate
+completion, or a rejected cache write is never success and never reports
+completed bytes, and the operation never deletes remote state to clean up.
+Every failure escapes through one sanitized boundary with a fixed category and
+stable code, so no credential, account value, local path, remote name, object
+ID, query, upload or session URL, token, or raw provider response can reach a
+message, `ToString()`, or wrapped exception.
+
+`SyncEngine` still owns run enumeration and uploads the root `manifest.json`
+last, so an interrupted run leaves a folder that existing discovery does not
+treat as a complete backup. Milestone R adds no retry, recovery, or cleanup.
+
+`DownloadFileAsync` remains explicitly unavailable, `GoogleDriveSyncProvider`
+does not exist, Google Drive remains absent from `SyncProviderFactory` with
+`IsImplemented = false`, and Preview Sync and Sync Now remain disabled.
 
 ## Remote metadata write semantics
 
@@ -223,7 +269,7 @@ Provider metadata replacement validates the exact `.gamesave-sync/sync-log.json`
 
 The parent-ID/name create lock and profile/path metadata lock coordinate only this application process. Google Drive does not enforce globally unique names, so cross-process duplicate names remain possible; a later authoritative lookup reports that state as ambiguity instead of choosing or deleting an object.
 
-Milestone P did not activate Google Drive synchronization. Milestone Q subsequently made only `ListFilesAsync` available at the Infrastructure remote-filesystem boundary. `UploadFileAsync` and `DownloadFileAsync` remain explicitly unavailable, `GoogleDriveSyncProvider` does not exist, and Google Drive remains absent from `SyncProviderFactory` with `IsImplemented = false`. It is configuration-only, Preview Sync and Sync Now remain disabled, and Milestone R has not started.
+Milestone P did not activate Google Drive synchronization. Milestone Q subsequently made `ListFilesAsync` available at the Infrastructure remote-filesystem boundary, and Milestone R added create-only `UploadFileAsync`. `DownloadFileAsync` remains explicitly unavailable, `GoogleDriveSyncProvider` does not exist, and Google Drive remains absent from `SyncProviderFactory` with `IsImplemented = false`. It is configuration-only and Preview Sync and Sync Now remain disabled.
 
 ## Saved profiles and secrets
 

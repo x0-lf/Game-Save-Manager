@@ -278,7 +278,7 @@ Use only a development account and controlled objects beneath an isolated child 
 
 This acceptance was completed with a development account on 2026-08-03. The controlled verification passed, including unchanged metadata identity across replacement and no forbidden Drive mutation. Clean was intentionally not added because deletion and trash operations are outside Milestone P; remove controlled acceptance objects manually in the Drive UI after inspection if desired.
 
-Milestone P did not activate synchronization. Milestone Q subsequently made only recursive `ListFilesAsync` available at the Infrastructure remote-filesystem boundary. `UploadFileAsync` and `DownloadFileAsync` remain explicitly unavailable; `GoogleDriveSyncProvider` does not exist; Google Drive remains configuration-only with `IsImplemented = false`; Preview Sync and Sync Now remain disabled; and Milestone R has not started.
+Milestone P did not activate synchronization. Milestone Q subsequently made recursive `ListFilesAsync` available at the Infrastructure remote-filesystem boundary, and Milestone R added create-only `UploadFileAsync`. `DownloadFileAsync` remains explicitly unavailable; `GoogleDriveSyncProvider` does not exist; Google Drive remains configuration-only with `IsImplemented = false`; and Preview Sync and Sync Now remain disabled.
 
 ## Verify Milestone Q recursive file listing
 
@@ -296,21 +296,136 @@ The default automated suite uses fake authentication and Drive APIs; it never re
 
 Live development-account acceptance is intentionally separate because it creates, trashes, and manually removes controlled test objects. Use only a dedicated development test account and one controlled backup-run folder beneath the configured application root. Do not use personal saves, record object IDs, or automate cleanup through the application.
 
+> **Scope constraint confirmed on 2026-08-09.** `https://www.googleapis.com/auth/drive.file` is a per-object grant. This application can enumerate only objects it created or that the user explicitly opened with it. A folder or file added by hand in the Drive UI is **never** returned by `files.list` for this application, even inside the app-created application root. A controlled fixture built manually is therefore invisible to `ListFilesAsync`, and the listing correctly reports the run folder as missing. Steps 2, 7, 8, and 9 below assume manual creation and cannot be executed as written. See `D-023` in `docs/decisions.md`.
+>
+> Consequences for this checklist:
+>
+> - every object a live check must see has to be created by the application itself, which currently means folders and small text files through the existing create-only primitives, because binary upload arrives only in Milestone R;
+> - manually trashing an **application-created** file still works, because trashing does not revoke the grant, so the trash-exclusion check stays viable;
+> - exact-duplicate and case-only-collision fixtures cannot be produced at all: a Drive-UI copy is user-created and therefore invisible, and the create-only text service deliberately refuses to create a colliding sibling. Those two requirements keep their deterministic automated coverage listed above;
+> - Google Picker folder authorization would let a user grant folder-and-contents access while keeping `drive.file`, but it is a separate future feature and must not be added to close Milestone Q;
+> - never broaden the OAuth scope to make this checklist easier.
+>
+> Changing how this checklist obtains its fixture relaxes the read-only rule for the acceptance harness and requires explicit user authorization before any agent acts on it.
+>
+> **Authorization recorded 2026-08-13:** the user selected Option 2. A temporary harness may create one controlled fixture through the existing application create-only folder and small-text primitives, run all reachable live checks, and use deterministic automated coverage for the exact/case collision checks that `drive.file` makes unexecutable. This does not authorize binary upload, broader scope, Picker, automated trash/delete/cleanup, provider activation, or Milestone R work.
+
+For a temporary local acceptance harness, store the private run-folder name and expected file count only in these Windows user environment variables:
+
+```powershell
+[Environment]::SetEnvironmentVariable(
+    "GAMESAVES_Q21_RUN_FOLDER", "<private run-folder name>", "User")
+
+[Environment]::SetEnvironmentVariable(
+    "GAMESAVES_Q21_EXPECTED_FILE_COUNT", "<expected file count>", "User")
+```
+
+The harness may read Process first and then User scope, but must never print, serialize, snapshot, or commit either value. Environment-variable names are non-secret; their values remain private local acceptance data. Remove any scratch harness before final verification.
+
 1. Restore the selected profile silently and confirm no browser opens and the OAuth scope remains exactly `https://www.googleapis.com/auth/drive.file`.
-2. Beneath the configured application root, create one controlled run folder containing `manifest.json`, ordinary files at the run root, deeply nested ordinary files, and empty folders.
+2. Through the temporary harness and existing application create-only folder/text primitives, create one controlled run folder containing `manifest.json`, ordinary files at the run root, deeply nested ordinary files, and empty folders.
 3. Invoke `GoogleDriveRemoteFileSystem.ListFilesAsync` from a focused development harness or debugger using that saved profile and controlled run-relative folder.
 4. Confirm every returned value is relative to the controlled run folder, excludes the run-folder name, and uses `/` as its only separator.
 5. Confirm direct and deeply nested files are present and empty folders produce no entry.
 6. Place enough controlled objects at the run root and a nested folder to exercise multiple API pages; confirm every expected file is returned.
 7. Trash one controlled file in the Drive UI, list again, and confirm the trashed file is absent. Restore or remove it manually afterward.
-8. Create controlled exact duplicate names and then case-only names beneath one parent. Confirm each listing fails safely with no selected spelling, no partial paths, and no private names or IDs in diagnostics.
-9. Remove the controlled duplicates manually in the Drive UI.
+8. Do not attempt exact-duplicate or case-only-collision fixtures live. Re-run their deterministic automated coverage and record that those live stages are unexecutable under `drive.file`.
+9. Confirm the automated collision checks fail closed with sanitized `GoogleDriveFileListingAmbiguous` and `GoogleDriveFileListingCaseCollision` categories and no partial result.
 10. Cancel one listing while it is active and confirm no partial result is accepted and a later clean listing still succeeds.
-11. Inspect Drive activity and the focused harness: listing must issue no content download, create, update, delete, move, rename, trash, permission, upload, or download request.
+11. Reset the harness observer after authorized fixture creation, then inspect Drive activity and the focused harness: listing must issue no content download, create, update, delete, move, rename, trash, permission, upload, or download request.
 12. Confirm `UploadFileAsync` and `DownloadFileAsync` remain unavailable, Google Drive remains absent from `SyncProviderFactory`, `IsImplemented` remains false, and Preview Sync/Sync Now remain disabled.
 13. Review sanitized output and logs. They must contain no account value, object or parent ID, page token, query, URL, complete relative path, token, client secret, or raw provider response.
 
 Record only the date, pass/fail result, tested application commit, and sanitized failure categories in the project handoff. Never record the account, folder name/ID, returned personal paths, screenshots, OAuth configuration, or raw logs.
+
+### Recorded Milestone Q acceptance result
+
+```text
+Date: 2026-08-13
+Tested commit: ba83dead168b15e958807882b703aa0920770770
+Result: PASS
+Sanitized failure categories: none
+```
+
+Requirements that the `drive.file` scope made unexecutable live, recorded as categories rather than skipped silently:
+
+- exact-duplicate sibling fixture, expected sanitized category `GoogleDriveFileListingAmbiguous`;
+- case-only-collision sibling fixture, expected sanitized category `GoogleDriveFileListingCaseCollision`.
+
+Both retain deterministic automated coverage in `GoogleDriveOneLevelFileListingServiceTests` and `GoogleDriveRecursivePaginationIntegrationTests`, which passed 60 tests during acceptance. Neither was attempted live and neither was faked. See `D-023` in `docs/decisions.md` for why a live fixture for them cannot exist under this scope.
+
+The controlled fixture was created by the application through the existing create-only folder and text primitives. The only manual Drive-UI actions were trashing one application-created file and restoring it; the application issued no trash, restore, delete, rename, move, share, or permission request at any point. The complete sanitized attempt record, including the reusable harness design, is `docs/q21-live-attempt-log.md`.
+
+## Verify Milestone R create-only uploads
+
+Milestone R adds one create-only streamed binary upload behind
+`GoogleDriveRemoteFileSystem.UploadFileAsync`. The default automated suite is
+hermetic: it uses fake authentication, a fake Drive object client, and a fake
+media API, and never touches a real account, browser, token, or network.
+
+### Automated requirement coverage
+
+| Milestone R requirement | Deterministic coverage |
+| --- | --- |
+| Internal upload request/result contracts, safe formatting, and Core/App isolation | `GoogleDriveUploadContractTests` |
+| Stable local source validation, read-only sharing, captured length, disposal, and no local path in errors | `GoogleDriveUploadSourceTests` |
+| Fakeable media-client boundary, one short-lived `DriveService`, deterministic disposal | `GoogleDriveMediaUploadClientTests.Factory_CreatesDistinctShortLivedSdkClients`, `GoogleDriveMediaUploadClientTests.SdkClient_DisposesOwnedDriveServiceExactlyOnce` |
+| Restricted resumable `files.create` request, exact response fields, no conversion or indexing flags, default chunking | `GoogleDriveMediaUploadClientTests.SdkAdapter_BuildsRestrictedCreateRequestAndMapsOnlyProjectState`, `GoogleDriveMediaUploadClientTests.SdkAdapter_UsesResumableCreateWithDefaultChunkingForEverySize` |
+| Completed-response validation for identity, exact name, opaque MIME, single expected parent, non-trashed My Drive location, and exact size | `GoogleDriveUploadResponseValidatorTests` |
+| Create-only target guard across exact, case-only, type, and cross-page collisions, rechecked inside the creation lease | `GoogleDriveCreateOnlyUploadTargetGuardTests`, `GoogleDriveUploadIntegrationTests.Upload_RefusesEveryWindowsEquivalentTarget`, `GoogleDriveUploadIntegrationTests.Upload_RefusesACollisionThatOnlyAppearsOnALaterPage` |
+| Case-safe parent preparation through authoritative IDs, validated create responses, and no colliding parent | `GoogleDriveUploadParentPreparationServiceTests`, `GoogleDriveUploadIntegrationTests.Upload_TravelsTheWholeCompositionAndCreatesNestedParents` |
+| One-file orchestration that preserves each stage category and touches no run, provider, or UI state | `GoogleDriveUploadServiceTests.UploadAsync_ComposesOneCompleteFileUpload`, `GoogleDriveUploadServiceTests.ServiceSource_HasNoRunProviderWiringOrAdjacentWork` |
+| Streamed upload with no eager buffering, bounded reads, and zero-byte support | `GoogleDriveUploadServiceTests.UploadAsync_PassesOpenedStreamDirectlyWithoutMaterializing`, `GoogleDriveUploadServiceTests.UploadAsync_LargeStreamUsesBoundedReadsWithoutEagerCopy`, `GoogleDriveUploadServiceTests.UploadAsync_PreservesZeroByteStreamPositionAndLifetime` |
+| Validated completed byte accounting and the unchanged `SyncProgress` contract | `GoogleDriveUploadServiceTests.UploadAsync_ReturnsOpenedLengthInsteadOfPlannedLength`, `SyncEngineTests` |
+| Cancellation at every boundary, never a provider failure or partial success | `GoogleDriveUploadServiceTests.UploadAsync_ForwardsCallerTokenToEveryAsyncBoundary`, `GoogleDriveUploadServiceTests.CancellationAtEitherTargetGuard_StopsBeforeUpload`, `GoogleDriveUploadIntegrationTests.Upload_CancellationLeavesNoRemoteFileAndNoCacheEntry` |
+| Indeterminate completion that never becomes success, cache, retry, or cleanup | `GoogleDriveUploadServiceTests.LostCompletionResponse_ReturnsIndeterminateWithoutRetry`, `GoogleDriveUploadServiceTests.LateResponseAfterBytesAccepted_ProducesCancellationOnly` |
+| Exactly-once disposal of stream, lease, context, credential, and media client on all outcomes | `GoogleDriveUploadServiceTests.UploadAsync_DisposesEveryOwnedResourceExactlyOnce`, `GoogleDriveUploadServiceTests.Cancellation_WaitsForLateProviderReturnThenDisposesAllWork` |
+| Cache commit only after validation, precise eviction, and affected-profile invalidation | `GoogleDriveUploadServiceTests.CacheRejection_NeverReturnsUploadSuccess`, `GoogleDriveUploadServiceTests.ConfirmedMissingTarget_EvictsOnlyItsPreciseStaleEntry`, `GoogleDriveUploadServiceTests.Reauthentication_InvalidatesOnlyAffectedProfile`, `GoogleDriveObjectIdCacheTests` |
+| One sanitized failure boundary, the fixed category matrix, distinct stable codes, and no private value in any message, `ToString()`, or wrapped exception | `GoogleDriveUploadFailureMapperTests` |
+| Zero, small, boundary, larger-than-5-MiB, and multi-chunk sizes on one resumable path with exact bytes and monotonic progress | `GoogleDriveUploadServiceTests.EverySize_UsesOneResumableBoundaryAndPreservesExactBytes`, `GoogleDriveMediaUploadClientTests.ChunkProgress_NeverRegressesAndOnlyCompletesAtFullLength` |
+| Only `UploadFileAsync` wired, returning the validated completed byte count, with download and provider activation still unavailable | `GoogleDriveRemoteFileSystemTests`, `GoogleDriveUploadIntegrationTests.Composition_KeepsDownloadAndProviderActivationUnavailable` |
+| `SyncEngine` manifest-last ordering and preserved incomplete runs | `GoogleDriveSyncEngineCompatibilityTests.Upload_CreatesEveryPayloadBeforeTheRootManifest`, `GoogleDriveSyncEngineCompatibilityTests.PayloadFailure_LeavesAnIncompleteRunWithoutAManifest`, `GoogleDriveSyncEngineCompatibilityTests.ManifestFailure_KeepsPayloadsAndNeverRepairsTheRun` |
+| Dependency injection to media client integration and no forbidden Drive operation | `GoogleDriveUploadIntegrationTests` |
+| Existing Milestones A-Q, Local Folder, and SFTP behaviour | Full `Manager/Manager.sln` regression suite |
+
+### Recorded Milestone R automated verification
+
+```text
+Date: 2026-08-16
+Tested commit: 5a7f56b8e341bb540a1a7a935dcb8d527c068ec0
+Release suite: 1,431 passed, 0 failed, 0 skipped
+Release build: succeeded, 2 known Reviewer warnings, 0 errors
+Direct package baseline: unchanged
+Vulnerable: SSH.NET 2024.2.0, High, GHSA-q939-rpr3-3284
+Deprecated: xUnit 2.9.3 (Legacy)
+```
+
+### Live upload acceptance, not yet performed
+
+This checklist requires explicit user authorization before any acts on
+it, because it writes controlled synthetic objects to a real development
+account. It is **not** part of the automated suite and has **not** been run.
+
+Use only an explicitly authorized development test account and one controlled
+run folder beneath the configured application root. Use synthetic data only,
+never a personal save.
+
+1. Restore the selected profile silently and confirm no browser opens and the requested scope remains exactly `https://www.googleapis.com/auth/drive.file`.
+2. Upload one zero-byte file, one small file, one file larger than 5 MiB, and one deeply nested file, and confirm each returns its exact byte count.
+3. Confirm every missing parent segment was created once, in parent-first order, beneath the authoritative root.
+4. Retry one upload to an existing exact name and confirm it is refused with no overwrite, update, or rename.
+5. Retry one upload to a case-only variant of an existing name and confirm the same refusal.
+6. Cancel one upload in progress and confirm no success is reported, no cache entry is kept, and no delete or trash request is issued.
+7. Upload a complete run through the existing sync path and confirm `manifest.json` is created last.
+8. Interrupt a run before its manifest and confirm the remote folder stays present, is not discoverable as a completed run, and is never cleaned up automatically.
+9. Inspect Drive activity and confirm no update, delete, trash, rename, move, share, permission, download, or provider-activation request occurred.
+10. Review sanitized output and confirm it contains no account value, object or parent ID, page token, query, upload or session URL, local path, remote name, token, or raw provider response.
+
+Remove controlled objects manually in the Drive UI afterwards; the application
+has no cleanup behaviour and must never gain one for acceptance convenience.
+
+Record only the date, tested commit, pass or fail, and sanitized failure
+categories. Milestone R stays open until that live result exists.
 
 ## Handle downloaded credential files
 
