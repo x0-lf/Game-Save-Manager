@@ -580,7 +580,7 @@ Implement:
 
 Milestone P is complete at the Infrastructure remote-filesystem boundary. Development-account acceptance on 2026-08-03 confirmed silent authentication restore, authoritative root and folder checks, paginated manifest-bearing run discovery, ignored folders without manifests, bounded UTF-8 manifest reads, unreadable-manifest warnings, create-only manifest protection, and create-then-update provider metadata with the same authoritative file ID. The verification issued no backup-file listing, upload, download, delete, move, rename, trash, permission, or broader-scope operation and exposed no personal value or Drive ID in its output.
 
-Google Drive remains configuration-only and `IsImplemented = false`. Milestone Q subsequently implemented read-only recursive `ListFilesAsync`; `UploadFileAsync` and `DownloadFileAsync` remain explicitly unavailable, `GoogleDriveSyncProvider` does not exist, Google Drive is absent from `SyncProviderFactory`, and Preview Sync and Sync Now remain disabled.
+Google Drive remains configuration-only and `IsImplemented = false`. Milestone Q subsequently implemented read-only recursive `ListFilesAsync` and Milestone R added create-only `UploadFileAsync`; `DownloadFileAsync` remains explicitly unavailable, `GoogleDriveSyncProvider` does not exist, Google Drive is absent from `SyncProviderFactory`, and Preview Sync and Sync Now remain disabled.
 
 ### Q — Google Drive file listing
 
@@ -597,19 +597,35 @@ Implement recursive file listing beneath a backup-run folder.
 
 Milestone Q is complete. Listing uses one short-lived authenticated operation context, authoritative Drive IDs, fully paginated per-parent metadata requests, and deterministic canonical paths relative to the requested run folder. It is read-only: no content download, create, update, delete, move, rename, trash, or permission operation belongs to the listing path. Google Drive remains configuration-only with `IsImplemented = false`; uploads, downloads, provider creation, Preview Sync, and Sync Now remain unavailable.
 
-Controlled development-account acceptance was recorded on 2026-08-13 against commit `ba83dead168b15e958807882b703aa0920770770` with the result PASS and no sanitized failure categories. Two acceptance requirements, live exact-duplicate and live case-only-collision fixtures, are unexecutable under the `drive.file` scope because that scope cannot enumerate objects the application did not create; both keep deterministic automated coverage. See `docs/decisions.md` `D-023`. Milestone R has not started.
+Controlled development-account acceptance was recorded on 2026-08-13 against commit `ba83dead168b15e958807882b703aa0920770770` with the result PASS and no sanitized failure categories. Two acceptance requirements, live exact-duplicate and live case-only-collision fixtures, are unexecutable under the `drive.file` scope because that scope cannot enumerate objects the application did not create; both keep deterministic automated coverage. See `docs/decisions.md` `D-023`. Milestone R implementation followed and is described below; it remains open until its own live acceptance is recorded.
 
 ### R — Google Drive uploads
 
-* [ ] Stream file uploads without loading entire files into memory
-* [ ] Create parent folders as required
-* [ ] Never overwrite an existing remote file
-* [ ] Report progress through the existing sync progress model
-* [ ] Support cancellation
-* [ ] Use resumable uploads for larger files
-* [ ] Keep `manifest.json` uploaded last
-* [ ] Ensure interrupted runs without a manifest are not treated as complete backups
-* [ ] Map quota, authentication, permission, and transient errors to clear warnings
+* [x] Stream file uploads without loading entire files into memory
+* [x] Create parent folders as required
+* [x] Never overwrite an existing remote file
+* [x] Report progress through the existing sync progress model
+* [x] Support cancellation
+* [x] Use resumable uploads for larger files
+* [x] Keep `manifest.json` uploaded last
+* [x] Ensure interrupted runs without a manifest are not treated as complete backups
+* [x] Map quota, authentication, permission, and transient errors to clear warnings
+
+Milestone R is implemented and automatically verified at the Infrastructure
+remote-filesystem boundary, and its live development-account acceptance is
+still outstanding, so the milestone is not closed. `UploadFileAsync` streams one
+local file through the official resumable `files.create` path as opaque
+`application/octet-stream` bytes, creates missing parents through authoritative
+My Drive IDs, refuses exact, case-only, and type collisions instead of
+overwriting, validates the completed response before reporting bytes, and maps
+every failure to fixed sanitized categories. `SyncEngine` still owns run
+ordering and uploads `manifest.json` last, so an interrupted run stays present
+but is never discoverable as a complete backup and is never cleaned up
+automatically.
+
+`DownloadFileAsync` remains explicitly unavailable, `GoogleDriveSyncProvider`
+does not exist, Google Drive is still absent from `SyncProviderFactory` with
+`IsImplemented = false`, and Preview Sync and Sync Now remain disabled.
 
 ### S — Google Drive downloads
 

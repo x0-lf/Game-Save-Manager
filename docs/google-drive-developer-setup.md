@@ -400,7 +400,45 @@ Vulnerable: SSH.NET 2024.2.0, High, GHSA-q939-rpr3-3284
 Deprecated: xUnit 2.9.3 (Legacy)
 ```
 
-### Live upload acceptance, not yet performed
+### Recorded Milestone R live acceptance attempt
+
+```text
+Date: 2026-08-16
+Tested commit: 5a7f56b8e341bb540a1a7a935dcb8d527c068ec0, plus the temporary harness
+Result: FAIL
+Sanitized failure categories: R20_MANIFEST_LAST:GoogleDriveUploadMimeTypeMismatch
+```
+
+Stages that passed live: silent authentication restore with no browser and a
+reachable configured root; zero-byte, small, larger-than-5-MiB, and deeply
+nested create-only uploads returning exact byte counts with their missing
+parents created; exact-name and case-only retries refused without overwriting;
+cancellation of an active upload reporting no success; and download plus
+provider activation still unavailable.
+
+The single failure was real and is the reason live acceptance exists. Google
+Drive stored its own media type for the uploaded `manifest.json` instead of
+echoing the requested `application/octet-stream`, and the upload response
+validator required an exact echo, so a valid completed create was rejected.
+Every `.bin` payload in the same run passed, which isolates the cause to the
+provider assigning a type for a known extension. Because `SyncEngine` uploads
+the root `manifest.json` last for every run, every real Drive sync would have
+failed at its manifest.
+
+The validator now requires the completed response to remain an ordinary
+uploaded blob, judged by the existing classification policy, rather than an
+exact opaque-type echo. Folders, Google Workspace documents, shortcuts, and
+malformed types still fail closed with the unchanged
+`GoogleDriveUploadMimeTypeMismatch` code. See `D-025` in `docs/decisions.md`.
+The request still asks for `application/octet-stream`, unchanged from `D-019`.
+
+Milestone R stays open until a live re-run passes. The re-run needs a new
+controlled run-folder name, because the attempt above already created its
+folder, its payloads, and its manifest object; those objects are harmless,
+the application never removes them, and deleting them is a manual Drive-UI
+action.
+
+### Live upload acceptance checklist
 
 This checklist requires explicit user authorization before any acts on
 it, because it writes controlled synthetic objects to a real development
