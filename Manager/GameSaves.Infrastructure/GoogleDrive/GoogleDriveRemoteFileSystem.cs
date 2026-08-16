@@ -32,6 +32,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
             _createOnlyTextFileService;
         private readonly IGoogleDriveRecursiveFileListingService
             _recursiveFileListingService;
+        private readonly IGoogleDriveBinaryUploadService _binaryUploadService;
 
         public GoogleDriveRemoteFileSystemFactory(
             ISyncRemoteProfileRepository profileRepository,
@@ -44,7 +45,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
             IGoogleDriveProviderMetadataReplacementService
                 providerMetadataReplacementService,
             IGoogleDriveCreateOnlyTextFileService createOnlyTextFileService,
-            IGoogleDriveRecursiveFileListingService recursiveFileListingService)
+            IGoogleDriveRecursiveFileListingService recursiveFileListingService,
+            IGoogleDriveBinaryUploadService binaryUploadService)
         {
             _profileRepository = profileRepository ??
                 throw new ArgumentNullException(nameof(profileRepository));
@@ -68,6 +70,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 throw new ArgumentNullException(nameof(createOnlyTextFileService));
             _recursiveFileListingService = recursiveFileListingService ??
                 throw new ArgumentNullException(nameof(recursiveFileListingService));
+            _binaryUploadService = binaryUploadService ??
+                throw new ArgumentNullException(nameof(binaryUploadService));
         }
 
         public IRemoteFileSystem Create(Guid remoteProfileId)
@@ -91,7 +95,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 _providerMetadataReadService,
                 _providerMetadataReplacementService,
                 _createOnlyTextFileService,
-                _recursiveFileListingService);
+                _recursiveFileListingService,
+                _binaryUploadService);
         }
 
         private static string GetSafeDisplayRoot(SyncRemoteProfile? profile)
@@ -124,8 +129,9 @@ namespace GameSaves.Infrastructure.GoogleDrive
 
     /// <summary>
     /// Google Drive implementation boundary for the currently completed
-    /// remote primitives. Transfer operations remain unavailable so SyncEngine
-    /// cannot treat Google Drive as a working provider.
+    /// remote primitives. Download remains unavailable, and Google Drive stays
+    /// inactive in the provider catalog and factory, so SyncEngine still
+    /// cannot treat it as a working provider.
     /// </summary>
     internal sealed class GoogleDriveRemoteFileSystem : IRemoteFileSystem
     {
@@ -146,6 +152,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
             _createOnlyTextFileService;
         private readonly IGoogleDriveRecursiveFileListingService
             _recursiveFileListingService;
+        private readonly IGoogleDriveBinaryUploadService _binaryUploadService;
 
         internal GoogleDriveRemoteFileSystem(
             Guid remoteProfileId,
@@ -159,7 +166,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
             IGoogleDriveProviderMetadataReplacementService
                 providerMetadataReplacementService,
             IGoogleDriveCreateOnlyTextFileService createOnlyTextFileService,
-            IGoogleDriveRecursiveFileListingService recursiveFileListingService)
+            IGoogleDriveRecursiveFileListingService recursiveFileListingService,
+            IGoogleDriveBinaryUploadService binaryUploadService)
         {
             if (remoteProfileId == Guid.Empty)
             {
@@ -196,6 +204,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 throw new ArgumentNullException(nameof(createOnlyTextFileService));
             _recursiveFileListingService = recursiveFileListingService ??
                 throw new ArgumentNullException(nameof(recursiveFileListingService));
+            _binaryUploadService = binaryUploadService ??
+                throw new ArgumentNullException(nameof(binaryUploadService));
         }
 
         public string DisplayRoot { get; }
@@ -283,11 +293,59 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 relativeFolder,
                 cancellationToken);
 
-        public Task<long> UploadFileAsync(
+        public async Task<long> UploadFileAsync(
             string localFilePath,
             string relativeRemotePath,
-            CancellationToken cancellationToken = default) =>
-            Unsupported<long>();
+            CancellationToken cancellationToken = default)
+        {
+            if (!GoogleDriveRelativePath.TryParse(
+                    relativeRemotePath,
+                    out GoogleDriveRelativePath? remotePath) ||
+                remotePath is null ||
+                remotePath.IsRoot)
+            {
+                throw GoogleDriveUploadFailureMapper.InvalidTargetPath();
+            }
+
+            GoogleDriveBinaryUploadResult result =
+                await _binaryUploadService.UploadAsync(
+                    localFilePath,
+                    new GoogleDriveBinaryUploadRequest(
+                        _remoteProfileId,
+                        remotePath,
+                        PlannedLength(localFilePath)),
+                    cancellationToken).ConfigureAwait(false);
+
+            if (result.Status != GoogleDriveBinaryUploadStatus.Completed)
+                throw GoogleDriveUploadFailureMapper.FromIncompleteResult(result);
+
+            return result.CompletedBytes;
+        }
+
+        /// <summary>
+        /// A diagnostic-only planned size. The upload service validates and
+        /// opens the source itself, and the validated opened length is the
+        /// only value that decides success or completed bytes.
+        /// </summary>
+        private static long PlannedLength(string localFilePath)
+        {
+            if (string.IsNullOrWhiteSpace(localFilePath))
+                return 0;
+
+            try
+            {
+                var file = new FileInfo(localFilePath);
+                return file.Exists && file.Length > 0 ? file.Length : 0;
+            }
+            catch (Exception exception) when (
+                exception is IOException or
+                    UnauthorizedAccessException or
+                    ArgumentException or
+                    NotSupportedException)
+            {
+                return 0;
+            }
+        }
 
         public Task<long> DownloadFileAsync(
             string relativeRemotePath,

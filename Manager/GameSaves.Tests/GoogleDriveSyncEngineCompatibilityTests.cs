@@ -383,7 +383,8 @@ public sealed class GoogleDriveSyncEngineCompatibilityTests
                 providerReader,
                 providerReplacement,
                 createOnly,
-                recursiveListing);
+                recursiveListing,
+                new FakeGoogleDriveBinaryUploadService());
             Remote = new RecordingRemoteFileSystem(inner);
         }
 

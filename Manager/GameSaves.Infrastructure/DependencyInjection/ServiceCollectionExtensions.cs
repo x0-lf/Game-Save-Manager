@@ -182,6 +182,24 @@ namespace GameSaves.Infrastructure.DependencyInjection
                 GoogleDriveRunFolderResolver>();
             services.AddSingleton<IGoogleDriveRecursiveFileListingService,
                 GoogleDriveRecursiveFileListingService>();
+            services.AddSingleton<GoogleDriveCreateOnlyUploadTargetGuard>();
+            services.AddSingleton<GoogleDriveUploadParentPreparationService>();
+            services.AddSingleton<GoogleDriveLocalUploadSourceOpener>();
+            services.AddSingleton<IGoogleDriveMediaUploadClientFactory,
+                GoogleDriveMediaUploadClientFactory>();
+            services.AddSingleton<IGoogleDriveBinaryUploadService>(provider =>
+                new GoogleDriveBinaryUploadService(
+                    provider.GetRequiredService<GoogleDriveLocalUploadSourceOpener>()
+                        .OpenAsync,
+                    provider.GetRequiredService<
+                        IGoogleDriveRemoteOperationContextFactory>(),
+                    provider.GetRequiredService<
+                        GoogleDriveUploadParentPreparationService>(),
+                    provider.GetRequiredService<
+                        GoogleDriveCreateOnlyUploadTargetGuard>(),
+                    provider.GetRequiredService<
+                        IGoogleDriveMediaUploadClientFactory>(),
+                    provider.GetRequiredService<IGoogleDriveObjectIdCache>()));
             services.AddSingleton<IGoogleDriveRootFolderService>(provider =>
                 new GoogleDriveRootFolderService(
                     provider.GetRequiredService<ISyncRemoteProfileRepository>(),

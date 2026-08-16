@@ -22,6 +22,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
 
     internal static class GoogleDriveUploadErrorCodes
     {
+        public const string InvalidTargetPath =
+            "GoogleDriveUploadInvalidTargetPath";
         public const string ParentPreparation = "GoogleDriveUploadParentFailed";
         public const string TargetCollision =
             "GoogleDriveUploadTargetCollision";
@@ -139,16 +141,51 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 GoogleDriveRemoteOperationException or
                 GoogleDriveRecursiveFileListingException
                 ? exception
-                : new GoogleDriveRemoteOperationException(
-                    new GoogleDriveRemoteValidationResult(
-                        Status(details.Category),
-                        details.SafeErrorCode,
-                        details.SafeUserMessage,
-                        details.Retryable,
-                        rootDisplayName: null,
-                        wasAuthenticationRefreshed: false,
-                        cacheInvalidated: false));
+                : SafeException(details);
         }
+
+        private static GoogleDriveRemoteOperationException SafeException(
+            GoogleDriveUploadFailureDetails details) =>
+            new(new GoogleDriveRemoteValidationResult(
+                Status(details.Category),
+                details.SafeErrorCode,
+                details.SafeUserMessage,
+                details.Retryable,
+                rootDisplayName: null,
+                wasAuthenticationRefreshed: false,
+                cacheInvalidated: false));
+
+        /// <summary>
+        /// Builds the sanitized failure for an upload result that did not
+        /// complete. A non-completed result is never success and never
+        /// reports completed bytes.
+        /// </summary>
+        public static Exception FromIncompleteResult(
+            GoogleDriveBinaryUploadResult result)
+        {
+            ArgumentNullException.ThrowIfNull(result);
+            if (result.Status == GoogleDriveBinaryUploadStatus.Completed)
+            {
+                throw new ArgumentException(
+                    "A completed upload is not a failure.",
+                    nameof(result));
+            }
+
+            GoogleDriveUploadFailureCategory category =
+                result.Status == GoogleDriveBinaryUploadStatus.Indeterminate
+                    ? GoogleDriveUploadFailureCategory.IndeterminateCompletion
+                    : GoogleDriveUploadFailureCategory.Failed;
+            return SafeException(Details(category, result.SafeErrorCode));
+        }
+
+        /// <summary>
+        /// Builds the sanitized failure for a remote target path that is not
+        /// one canonical non-root Google Drive path.
+        /// </summary>
+        public static Exception InvalidTargetPath() =>
+            SafeException(Details(
+                GoogleDriveUploadFailureCategory.Failed,
+                GoogleDriveUploadErrorCodes.InvalidTargetPath));
 
         private static string ApiSafeErrorCode(GoogleDriveApiFailure failure) =>
             GoogleDriveUploadErrorCodes.ForCategory(Category(failure));

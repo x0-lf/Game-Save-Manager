@@ -35,7 +35,8 @@ public sealed class GoogleDriveRemoteFileSystemTests
             new RecordingProviderMetadataReadService(),
             new RecordingProviderMetadataReplacementService(),
             new RecordingCreateOnlyTextFileService(),
-            new RecordingRecursiveFileListingService());
+            new RecordingRecursiveFileListingService(),
+            new FakeGoogleDriveBinaryUploadService());
 
         IRemoteFileSystem first = factory.Create(ProfileId);
         IRemoteFileSystem second = factory.Create(ProfileId);
@@ -71,7 +72,8 @@ public sealed class GoogleDriveRemoteFileSystemTests
             new RecordingProviderMetadataReadService(),
             new RecordingProviderMetadataReplacementService(),
             new RecordingCreateOnlyTextFileService(),
-            new RecordingRecursiveFileListingService());
+            new RecordingRecursiveFileListingService(),
+            new FakeGoogleDriveBinaryUploadService());
 
         await factory.Create(ProfileId).ValidateAsync();
         await factory.Create(secondProfileId).ValidateAsync();
@@ -104,7 +106,8 @@ public sealed class GoogleDriveRemoteFileSystemTests
             new RecordingProviderMetadataReadService(),
             new RecordingProviderMetadataReplacementService(),
             new RecordingCreateOnlyTextFileService(),
-            new RecordingRecursiveFileListingService());
+            new RecordingRecursiveFileListingService(),
+            new FakeGoogleDriveBinaryUploadService());
 
         IRemoteFileSystem remote = factory.Create(ProfileId);
 
@@ -129,7 +132,8 @@ public sealed class GoogleDriveRemoteFileSystemTests
             new RecordingProviderMetadataReadService(),
             new RecordingProviderMetadataReplacementService(),
             new RecordingCreateOnlyTextFileService(),
-            new RecordingRecursiveFileListingService());
+            new RecordingRecursiveFileListingService(),
+            new FakeGoogleDriveBinaryUploadService());
 
         IRemoteFileSystem missing = factory.Create(ProfileId);
         repository.Create(Profile() with
@@ -189,6 +193,41 @@ public sealed class GoogleDriveRemoteFileSystemTests
             services,
             descriptor => descriptor.ServiceType ==
                           typeof(GoogleDriveRemoteFileSystem));
+    }
+
+    [Fact]
+    public void DependencyInjection_ResolvesUploadServicesWithoutActivation()
+    {
+        var validation = new RecordingValidationService();
+        var services = new ServiceCollection();
+        services.AddGameSavesInfrastructure();
+        services.RemoveAll<IGoogleDriveRemoteValidationService>();
+        services.AddSingleton<IGoogleDriveRemoteValidationService>(validation);
+
+        using ServiceProvider provider = services.BuildServiceProvider();
+        var uploadService = provider.GetRequiredService<
+            IGoogleDriveBinaryUploadService>();
+
+        Assert.IsType<GoogleDriveBinaryUploadService>(uploadService);
+        Assert.IsType<GoogleDriveMediaUploadClientFactory>(
+            provider.GetRequiredService<IGoogleDriveMediaUploadClientFactory>());
+        Assert.NotNull(provider.GetRequiredService<
+            GoogleDriveUploadParentPreparationService>());
+        Assert.NotNull(provider.GetRequiredService<
+            GoogleDriveCreateOnlyUploadTargetGuard>());
+        Assert.NotNull(provider.GetRequiredService<
+            GoogleDriveLocalUploadSourceOpener>());
+        Assert.Same(
+            uploadService,
+            provider.GetRequiredService<IGoogleDriveBinaryUploadService>());
+        Assert.Equal(0, validation.Calls);
+        Assert.False(new SyncProviderCatalog()
+            .GetDescriptor(SyncProviderKind.GoogleDrive).IsImplemented);
+        Assert.DoesNotContain(
+            services,
+            descriptor => descriptor.ImplementationType?.Name.Contains(
+                "GoogleDriveSyncProvider",
+                StringComparison.Ordinal) == true);
     }
 
     [Fact]
@@ -422,33 +461,208 @@ public sealed class GoogleDriveRemoteFileSystemTests
     }
 
     [Fact]
-    public async Task TransferOperations_FailExplicitlyWithoutValidationOrDriveWork()
+    public async Task DownloadRemainsExplicitlyUnavailableWithoutDriveWork()
     {
         var validation = new RecordingValidationService();
-        IRemoteFileSystem remote = Remote(validation);
-        var operations = new (string Name, Func<Task> Invoke)[]
-        {
-            (nameof(IRemoteFileSystem.UploadFileAsync),
-                async () => await remote.UploadFileAsync(
-                    "local.sav",
-                    "run/save.sav")),
-            (nameof(IRemoteFileSystem.DownloadFileAsync),
-                async () => await remote.DownloadFileAsync(
-                    "run/save.sav",
-                    "local.sav"))
-        };
+        var uploads = new FakeGoogleDriveBinaryUploadService();
+        IRemoteFileSystem remote = Remote(validation, binaryUploads: uploads);
 
-        foreach ((string name, Func<Task> invoke) in operations)
+        NotSupportedException exception =
+            await Assert.ThrowsAsync<NotSupportedException>(async () =>
+                await remote.DownloadFileAsync("run/save.sav", "local.sav"));
+
+        Assert.Equal(
+            GoogleDriveRemoteFileSystem.OperationsUnavailableMessage,
+            exception.Message);
+        Assert.Equal(0, validation.Calls);
+        Assert.Empty(uploads.Calls);
+    }
+
+    [Fact]
+    public async Task UploadFileAsync_DelegatesOneFileAndReturnsCompletedBytes()
+    {
+        using var cancellation = new CancellationTokenSource();
+        using var temporary = new TemporaryUploadFile(new byte[] { 1, 2, 3, 4 });
+        var validation = new RecordingValidationService();
+        var uploads = new FakeGoogleDriveBinaryUploadService
         {
-            NotSupportedException exception =
-                await Assert.ThrowsAsync<NotSupportedException>(invoke);
-            Assert.Equal(
-                GoogleDriveRemoteFileSystem.OperationsUnavailableMessage,
-                exception.Message);
-            Assert.False(string.IsNullOrWhiteSpace(name));
+            Result = new GoogleDriveBinaryUploadResult(
+                GoogleDriveBinaryUploadStatus.Completed,
+                4)
+        };
+        IRemoteFileSystem remote = Remote(validation, binaryUploads: uploads);
+
+        long bytes = await remote.UploadFileAsync(
+            temporary.Path,
+            "Run 42/nested/save.sav",
+            cancellation.Token);
+
+        Assert.Equal(4, bytes);
+        FakeGoogleDriveBinaryUploadCall call = Assert.Single(uploads.Calls);
+        Assert.Equal(temporary.Path, call.LocalFilePath);
+        Assert.Equal(ProfileId, call.Request.RemoteProfileId);
+        Assert.Equal("Run 42/nested/save.sav", call.Request.CanonicalRemotePath);
+        Assert.Equal(
+            ["Run 42", "nested", "save.sav"],
+            call.Request.RemotePath.Segments);
+        Assert.Equal(4, call.Request.ExpectedLength);
+        Assert.Equal(cancellation.Token, call.CancellationToken);
+        Assert.Equal(0, validation.Calls);
+    }
+
+    [Fact]
+    public async Task UploadFileAsync_ReturnsValidatedBytesNotThePlannedLength()
+    {
+        using var temporary = new TemporaryUploadFile(new byte[] { 1, 2, 3, 4 });
+        var uploads = new FakeGoogleDriveBinaryUploadService
+        {
+            Result = new GoogleDriveBinaryUploadResult(
+                GoogleDriveBinaryUploadStatus.Completed,
+                9)
+        };
+        IRemoteFileSystem remote = Remote(
+            new RecordingValidationService(),
+            binaryUploads: uploads);
+
+        long bytes = await remote.UploadFileAsync(temporary.Path, "run/save.sav");
+
+        Assert.Equal(9, bytes);
+        Assert.Equal(4, uploads.Calls.Single().Request.ExpectedLength);
+    }
+
+    [Theory]
+    [InlineData((int)GoogleDriveBinaryUploadStatus.Failed,
+        "GoogleDriveBinaryUploadFailed")]
+    [InlineData((int)GoogleDriveBinaryUploadStatus.Indeterminate,
+        "GoogleDriveUploadCompletionIndeterminate")]
+    public async Task UploadFileAsync_NeverReportsBytesForAnIncompleteResult(
+        int statusValue,
+        string expectedErrorCode)
+    {
+        using var temporary = new TemporaryUploadFile(new byte[] { 1 });
+        var status = (GoogleDriveBinaryUploadStatus)statusValue;
+        var uploads = new FakeGoogleDriveBinaryUploadService
+        {
+            Result = new GoogleDriveBinaryUploadResult(
+                status,
+                0,
+                status == GoogleDriveBinaryUploadStatus.Failed
+                    ? GoogleDriveBinaryUploadErrorCodes.Failed
+                    : GoogleDriveBinaryUploadErrorCodes.CompletionIndeterminate)
+        };
+        IRemoteFileSystem remote = Remote(
+            new RecordingValidationService(),
+            binaryUploads: uploads);
+
+        GoogleDriveRemoteOperationException exception =
+            await Assert.ThrowsAsync<GoogleDriveRemoteOperationException>(() =>
+                remote.UploadFileAsync(temporary.Path, "run/save.sav"));
+
+        Assert.Equal(expectedErrorCode, exception.Result.ErrorCode);
+        Assert.Null(exception.InnerException);
+        Assert.DoesNotContain(
+            "save.sav",
+            exception.ToString(),
+            StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(
+            temporary.Path,
+            exception.ToString(),
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("/run/save.sav")]
+    [InlineData("run/save.sav/")]
+    [InlineData("run//save.sav")]
+    [InlineData("run/../save.sav")]
+    [InlineData("run/./save.sav")]
+    public async Task UploadFileAsync_RejectsAnUnsafeTargetBeforeAnyDriveWork(
+        string relativeRemotePath)
+    {
+        var validation = new RecordingValidationService();
+        var uploads = new FakeGoogleDriveBinaryUploadService();
+        IRemoteFileSystem remote = Remote(validation, binaryUploads: uploads);
+
+        GoogleDriveRemoteOperationException exception =
+            await Assert.ThrowsAsync<GoogleDriveRemoteOperationException>(() =>
+                remote.UploadFileAsync("local.sav", relativeRemotePath));
+
+        Assert.Equal(
+            "GoogleDriveUploadInvalidTargetPath",
+            exception.Result.ErrorCode);
+        Assert.DoesNotContain(
+            "save.sav",
+            exception.ToString(),
+            StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(uploads.Calls);
+        Assert.Equal(0, validation.Calls);
+    }
+
+    [Fact]
+    public async Task UploadFileAsync_PropagatesCancellationWithoutBytes()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var uploads = new FakeGoogleDriveBinaryUploadService();
+        IRemoteFileSystem remote = Remote(
+            new RecordingValidationService(),
+            binaryUploads: uploads);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            remote.UploadFileAsync(
+                "local.sav",
+                "run/save.sav",
+                cancellation.Token));
+
+        Assert.Empty(uploads.Calls);
+    }
+
+    [Fact]
+    public async Task UploadFileAsync_KeepsMissingSourcesInsideTheUploadService()
+    {
+        var uploads = new FakeGoogleDriveBinaryUploadService
+        {
+            Failure = new GoogleDriveLocalUploadSourceException(
+                GoogleDriveLocalUploadSourceFailure.NotFound)
+        };
+        IRemoteFileSystem remote = Remote(
+            new RecordingValidationService(),
+            binaryUploads: uploads);
+
+        GoogleDriveLocalUploadSourceException exception =
+            await Assert.ThrowsAsync<GoogleDriveLocalUploadSourceException>(() =>
+                remote.UploadFileAsync(
+                    @"C:\private\missing save.sav",
+                    "run/save.sav"));
+
+        Assert.Equal(
+            "GoogleDriveUploadSourceNotFound",
+            exception.SafeErrorCode);
+        Assert.Equal(0, uploads.Calls.Single().Request.ExpectedLength);
+        Assert.DoesNotContain(
+            "private",
+            exception.ToString(),
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    private sealed class TemporaryUploadFile : IDisposable
+    {
+        public TemporaryUploadFile(byte[] content)
+        {
+            Path = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(),
+                $"gamesaves-r17-{Guid.NewGuid():N}.tmp");
+            File.WriteAllBytes(Path, content);
         }
 
-        Assert.Equal(0, validation.Calls);
+        public string Path { get; }
+
+        public void Dispose()
+        {
+            if (File.Exists(Path))
+                File.Delete(Path);
+        }
     }
 
     [Fact]
@@ -477,6 +691,10 @@ public sealed class GoogleDriveRemoteFileSystemTests
             fieldTypes);
         Assert.Contains(
             typeof(IGoogleDriveRecursiveFileListingService),
+            fieldTypes);
+        Assert.Contains(typeof(IGoogleDriveBinaryUploadService), fieldTypes);
+        Assert.DoesNotContain(
+            typeof(IGoogleDriveMediaUploadClientFactory),
             fieldTypes);
         Assert.DoesNotContain(typeof(IGoogleDriveObjectPathResolver), fieldTypes);
         Assert.DoesNotContain(typeof(IGoogleDriveObjectApi), fieldTypes);
@@ -521,7 +739,8 @@ public sealed class GoogleDriveRemoteFileSystemTests
         RecordingProviderMetadataReplacementService?
             providerMetadataReplacements = null,
         RecordingCreateOnlyTextFileService? createOnlyTextFiles = null,
-        RecordingRecursiveFileListingService? recursiveFileListing = null) =>
+        RecordingRecursiveFileListingService? recursiveFileListing = null,
+        FakeGoogleDriveBinaryUploadService? binaryUploads = null) =>
         new GoogleDriveRemoteFileSystem(
             ProfileId,
             "GameSave Manager Backups",
@@ -535,7 +754,8 @@ public sealed class GoogleDriveRemoteFileSystemTests
                 new RecordingProviderMetadataReplacementService(),
             createOnlyTextFiles ?? new RecordingCreateOnlyTextFileService(),
             recursiveFileListing ??
-                new RecordingRecursiveFileListingService());
+                new RecordingRecursiveFileListingService(),
+            binaryUploads ?? new FakeGoogleDriveBinaryUploadService());
 
     private static SyncRemoteProfile Profile() =>
         new(
@@ -772,5 +992,51 @@ public sealed class GoogleDriveRemoteFileSystemTests
             cancellationToken.ThrowIfCancellationRequested();
             return Task.FromResult(Result);
         }
+    }
+}
+
+internal sealed class FakeGoogleDriveBinaryUploadCall
+{
+    public FakeGoogleDriveBinaryUploadCall(
+        string localFilePath,
+        GoogleDriveBinaryUploadRequest request,
+        CancellationToken cancellationToken)
+    {
+        LocalFilePath = localFilePath;
+        Request = request;
+        CancellationToken = cancellationToken;
+    }
+
+    public string LocalFilePath { get; }
+
+    public GoogleDriveBinaryUploadRequest Request { get; }
+
+    public CancellationToken CancellationToken { get; }
+}
+
+internal sealed class FakeGoogleDriveBinaryUploadService
+    : IGoogleDriveBinaryUploadService
+{
+    public GoogleDriveBinaryUploadResult Result { get; set; } =
+        new(GoogleDriveBinaryUploadStatus.Completed, 0);
+
+    public Exception? Failure { get; set; }
+
+    public List<FakeGoogleDriveBinaryUploadCall> Calls { get; } = [];
+
+    public Task<GoogleDriveBinaryUploadResult> UploadAsync(
+        string localFilePath,
+        GoogleDriveBinaryUploadRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        Calls.Add(new FakeGoogleDriveBinaryUploadCall(
+            localFilePath,
+            request,
+            cancellationToken));
+
+        return Failure is null
+            ? Task.FromResult(Result)
+            : Task.FromException<GoogleDriveBinaryUploadResult>(Failure);
     }
 }
