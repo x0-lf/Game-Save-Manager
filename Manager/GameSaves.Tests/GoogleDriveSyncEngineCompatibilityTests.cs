@@ -275,6 +275,207 @@ public sealed class GoogleDriveSyncEngineCompatibilityTests
         Assert.False(catalog.IsImplemented(SyncProviderKind.GoogleDrive));
     }
 
+    [Fact]
+    public async Task Upload_CreatesEveryPayloadBeforeTheRootManifest()
+    {
+        using var temp = new TemporaryDirectory();
+        using var fixture = new Fixture();
+        LocalRun run = CreateLocalRun(temp, "Run 42");
+        var engine = Engine(fixture.Remote, run.History);
+
+        SyncPlan plan = await engine.CreatePreviewAsync(new SyncOptions());
+        SyncItem item = Assert.Single(plan.Items);
+        Assert.Equal(SyncItemAction.UploadToRemote, item.Action);
+
+        SyncResult result = await engine.ExecuteAsync(plan, ExecuteOptions());
+
+        SyncItemResult uploaded = Assert.Single(result.Items);
+        Assert.Equal(SyncItemStatus.Uploaded, uploaded.Status);
+        Assert.Equal(run.TotalBytes, uploaded.Bytes);
+        string[] created = fixture.MediaUploads.Calls
+            .Select(call => call.FileName)
+            .ToArray();
+        Assert.Equal(3, created.Length);
+        Assert.Equal("manifest.json", created[^1]);
+        Assert.Equal(
+            ["data.bin", "slot1.sav"],
+            created[..^1].Order(StringComparer.Ordinal).ToArray());
+        Assert.Equal("Run 42/manifest.json", LastUploadedRelativePath(fixture));
+
+        string runFolderId = fixture.Drive.GetRequiredFolderId(
+            "Run 42",
+            Fixture.RootId);
+        string savesFolderId = fixture.Drive.GetRequiredFolderId(
+            "saves",
+            runFolderId);
+        Assert.Equal(
+            [
+                new FolderCreateCall(Fixture.RootId, "Run 42"),
+                new FolderCreateCall(runFolderId, "saves"),
+                new FolderCreateCall(savesFolderId, "profile")
+            ],
+            fixture.ObjectClients.CreatedFolders
+                .Where(call => call.Name != ".gamesave-sync")
+                .ToArray());
+        Assert.Equal(
+            [1, 2, 3],
+            fixture.Drive.GetRequiredFileBytes(
+                "slot1.sav",
+                fixture.Drive.GetRequiredFolderId("profile", savesFolderId)));
+        Assert.Contains(
+            "Run 42",
+            await fixture.Remote.ListRunFolderNamesAsync());
+        Assert.Empty(fixture.ReplacementApi.Calls);
+        Assert.DoesNotContain(
+            fixture.Remote.Calls,
+            call => call.Name == nameof(IRemoteFileSystem.DownloadFileAsync));
+    }
+
+    [Fact]
+    public async Task PayloadFailure_LeavesAnIncompleteRunWithoutAManifest()
+    {
+        using var temp = new TemporaryDirectory();
+        using var fixture = new Fixture();
+        LocalRun run = CreateLocalRun(temp, "Run 43", singlePayload: true);
+        fixture.MediaUploads.FailureFor = name => name == "data.bin"
+            ? new IOException(
+                "The synthetic provider rejected C:\\private\\Run 43\\data.bin.")
+            : null;
+        var engine = Engine(fixture.Remote, run.History);
+
+        SyncPlan plan = await engine.CreatePreviewAsync(new SyncOptions());
+        SyncResult result = await engine.ExecuteAsync(plan, ExecuteOptions());
+
+        SyncItemResult failed = Assert.Single(result.Items);
+        Assert.Equal(SyncItemStatus.Failed, failed.Status);
+        Assert.Equal(0, failed.Bytes);
+        Assert.Empty(fixture.MediaUploads.Calls);
+        Assert.DoesNotContain(
+            fixture.Remote.Calls,
+            call => call.Path == "Run 43/manifest.json");
+        await AssertIncompleteRunPreserved(fixture, "Run 43");
+        Assert.DoesNotContain(
+            "private",
+            failed.Error ?? string.Empty,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(
+            "data.bin",
+            failed.Error ?? string.Empty,
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task CancellationBeforeTheManifest_LeavesAnIncompleteRun()
+    {
+        using var temp = new TemporaryDirectory();
+        using var fixture = new Fixture();
+        using var cancellation = new CancellationTokenSource();
+        LocalRun run = CreateLocalRun(temp, "Run 44", singlePayload: true);
+        fixture.MediaUploads.BeforeCreate = name =>
+        {
+            if (name == "data.bin")
+                cancellation.Cancel();
+        };
+        var engine = Engine(fixture.Remote, run.History);
+
+        SyncPlan plan = await engine.CreatePreviewAsync(new SyncOptions());
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            engine.ExecuteAsync(plan, ExecuteOptions(), cancellation.Token));
+
+        Assert.Empty(fixture.MediaUploads.Calls);
+        await AssertIncompleteRunPreserved(fixture, "Run 44");
+    }
+
+    [Fact]
+    public async Task ManifestFailure_KeepsPayloadsAndNeverRepairsTheRun()
+    {
+        using var temp = new TemporaryDirectory();
+        using var fixture = new Fixture();
+        LocalRun run = CreateLocalRun(temp, "Run 45", singlePayload: true);
+        fixture.MediaUploads.FailureFor = name => name == "manifest.json"
+            ? new IOException("The synthetic provider rejected the manifest.")
+            : null;
+        var engine = Engine(fixture.Remote, run.History);
+
+        SyncPlan plan = await engine.CreatePreviewAsync(new SyncOptions());
+        SyncResult result = await engine.ExecuteAsync(plan, ExecuteOptions());
+
+        SyncItemResult failed = Assert.Single(result.Items);
+        Assert.Equal(SyncItemStatus.Failed, failed.Status);
+        MediaUploadCall payload = Assert.Single(fixture.MediaUploads.Calls);
+        Assert.Equal("data.bin", payload.FileName);
+        Assert.Equal(
+            [4, 5],
+            fixture.Drive.GetRequiredFileBytes("data.bin", payload.ParentId));
+        await AssertIncompleteRunPreserved(fixture, "Run 45");
+    }
+
+    private static async Task AssertIncompleteRunPreserved(
+        Fixture fixture,
+        string runName)
+    {
+        string runFolderId = fixture.Drive.GetRequiredFolderId(
+            runName,
+            Fixture.RootId);
+
+        Assert.Empty(fixture.Drive.FindChildren(runFolderId, "manifest.json"));
+        Assert.DoesNotContain(
+            runName,
+            await fixture.Remote.ListRunFolderNamesAsync());
+        Assert.Empty(fixture.ReplacementApi.Calls);
+        Assert.DoesNotContain(
+            fixture.MediaUploads.Calls,
+            call => call.FileName == "manifest.json");
+        Assert.NotEmpty(fixture.Drive.ObjectIds);
+    }
+
+    private static string LastUploadedRelativePath(Fixture fixture) =>
+        fixture.Remote.Calls
+            .Where(call => call.Name == nameof(IRemoteFileSystem.UploadFileAsync))
+            .Select(call => call.Path!)
+            .Last();
+
+    private static SyncOptions ExecuteOptions() =>
+        new()
+        {
+            DryRun = false,
+            ConfirmExecution = true
+        };
+
+    private static LocalRun CreateLocalRun(
+        TemporaryDirectory temp,
+        string runName,
+        bool singlePayload = false)
+    {
+        string runRoot = temp.GetPath(runName);
+        Directory.CreateDirectory(runRoot);
+        string manifestPath = Path.Combine(runRoot, "manifest.json");
+        TransferBackupManifest manifest = Manifest($"{runName} Game");
+        string manifestJson = JsonSerializer.Serialize(manifest);
+        File.WriteAllText(manifestPath, manifestJson);
+        File.WriteAllBytes(Path.Combine(runRoot, "data.bin"), [4, 5]);
+        long totalBytes = 2 + Encoding.UTF8.GetByteCount(manifestJson);
+
+        if (!singlePayload)
+        {
+            string nested = Path.Combine(runRoot, "saves", "profile");
+            Directory.CreateDirectory(nested);
+            File.WriteAllBytes(Path.Combine(nested, "slot1.sav"), [1, 2, 3]);
+            totalBytes += 3;
+        }
+
+        return new LocalRun(
+            new StaticBackupHistoryService(
+                temp.Path,
+                new TransferBackupRunInfo(runRoot, manifestPath, manifest)),
+            totalBytes);
+    }
+
+    private sealed record LocalRun(
+        StaticBackupHistoryService History,
+        long TotalBytes);
+
     private static SyncEngine Engine(
         IRemoteFileSystem remote,
         IBackupHistoryService history) =>
@@ -364,11 +565,28 @@ public sealed class GoogleDriveSyncEngineCompatibilityTests
                     ReplacementApi,
                     new GoogleDriveProviderMetadataReplacementCoordinator(),
                     cache);
+            var childEnumeration = new GoogleDriveFolderChildEnumerationService(
+                objectApi);
             var recursiveListing = new GoogleDriveRecursiveFileListingService(
                 new GoogleDriveRunFolderResolver(ContextFactory),
                 new GoogleDriveOneLevelFileListingService(
-                    new GoogleDriveFolderChildEnumerationService(objectApi),
+                    childEnumeration,
                     cache));
+            MediaUploads = new RecordingMediaUploadClientFactory(Drive);
+            var targetGuard = new GoogleDriveCreateOnlyUploadTargetGuard(
+                childEnumeration,
+                new GoogleDriveObjectCreationCoordinator());
+            var binaryUpload = new GoogleDriveBinaryUploadService(
+                new GoogleDriveLocalUploadSourceOpener().OpenAsync,
+                ContextFactory,
+                new GoogleDriveUploadParentPreparationService(
+                    childEnumeration,
+                    targetGuard,
+                    objectApi,
+                    cache),
+                targetGuard,
+                MediaUploads,
+                cache);
             var inner = new GoogleDriveRemoteFileSystem(
                 ProfileId,
                 "Google Drive",
@@ -384,7 +602,7 @@ public sealed class GoogleDriveSyncEngineCompatibilityTests
                 providerReplacement,
                 createOnly,
                 recursiveListing,
-                new FakeGoogleDriveBinaryUploadService());
+                binaryUpload);
             Remote = new RecordingRemoteFileSystem(inner);
         }
 
@@ -403,6 +621,8 @@ public sealed class GoogleDriveSyncEngineCompatibilityTests
         public RecordingTextCreationApi CreationApi { get; }
 
         public RecordingTextReplacementApi ReplacementApi { get; }
+
+        public RecordingMediaUploadClientFactory MediaUploads { get; }
 
         public RecordingRemoteFileSystem Remote { get; }
 
@@ -748,6 +968,8 @@ public sealed class GoogleDriveSyncEngineCompatibilityTests
 
         public List<GoogleDriveObjectGetRequest> GetRequests { get; } = [];
 
+        public List<FolderCreateCall> CreatedFolders { get; } = [];
+
         public int DisposedClients => Volatile.Read(ref _disposedClients);
 
         public int CreateFolderCalls => Volatile.Read(ref _createFolderCalls);
@@ -803,9 +1025,14 @@ public sealed class GoogleDriveSyncEngineCompatibilityTests
                 GoogleDriveFolderCreateRequest request,
                 CancellationToken cancellationToken)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 Interlocked.Increment(ref owner._createFolderCalls);
-                throw new InvalidOperationException(
-                    "SyncEngine compatibility reads must not create folders through the object API.");
+                OfflineDriveObject created = drive.AddGeneratedFolder(
+                    request.Name,
+                    request.ParentId);
+                owner.CreatedFolders.Add(
+                    new FolderCreateCall(request.ParentId, request.Name));
+                return Task.FromResult(created.Metadata);
             }
 
             private IReadOnlyList<GoogleDriveObjectMetadata> ResolveQuery(string query)
@@ -823,6 +1050,15 @@ public sealed class GoogleDriveSyncEngineCompatibilityTests
                             .ToArray();
                     }
 
+                    if (query == queryBuilder.BuildDirectChildrenQuery(
+                            parentId,
+                            expectedKind: null))
+                    {
+                        return drive.FindChildren(parentId)
+                            .Select(value => value.Metadata)
+                            .ToArray();
+                    }
+
                     if (query == queryBuilder.BuildExactNameChildQuery(
                             parentId,
                             "manifest.json"))
@@ -835,6 +1071,89 @@ public sealed class GoogleDriveSyncEngineCompatibilityTests
 
                 throw new InvalidOperationException(
                     "The offline Drive client received an unexpected query.");
+            }
+
+            public void Dispose()
+            {
+                if (_disposed)
+                    return;
+                _disposed = true;
+                Interlocked.Increment(ref owner._disposedClients);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Fake Google media-upload API. It stores completed creates in the
+    /// offline Drive, records their order, and can fail or observe one
+    /// requested name without touching any other object.
+    /// </summary>
+    private sealed class RecordingMediaUploadClientFactory(OfflineDriveStore drive)
+        : IGoogleDriveMediaUploadClientFactory
+    {
+        private int _disposedClients;
+
+        public List<MediaUploadCall> Calls { get; } = [];
+
+        public Func<string, Exception?>? FailureFor { get; set; }
+
+        public Action<string>? BeforeCreate { get; set; }
+
+        public int DisposedClients => Volatile.Read(ref _disposedClients);
+
+        public IGoogleDriveMediaUploadClient Create(
+            GoogleAuthorizedCredential credential)
+        {
+            Assert.False(credential.IsDisposed);
+            return new Client(this, drive);
+        }
+
+        private sealed class Client(
+            RecordingMediaUploadClientFactory owner,
+            OfflineDriveStore drive)
+            : IGoogleDriveMediaUploadClient
+        {
+            private bool _disposed;
+
+            public async Task<GoogleDriveMediaUploadMetadata> UploadAsync(
+                string parentFolderId,
+                string exactFileName,
+                Stream source,
+                long expectedLength,
+                string mediaType,
+                IProgress<GoogleDriveMediaUploadProgress>? progress,
+                CancellationToken cancellationToken)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                owner.BeforeCreate?.Invoke(exactFileName);
+                cancellationToken.ThrowIfCancellationRequested();
+
+                using var buffer = new MemoryStream();
+                await source.CopyToAsync(buffer, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (owner.FailureFor?.Invoke(exactFileName) is Exception failure)
+                    throw failure;
+
+                OfflineDriveObject created = drive.AddGeneratedFile(
+                    exactFileName,
+                    parentFolderId,
+                    buffer.ToArray(),
+                    mediaType);
+                owner.Calls.Add(new MediaUploadCall(
+                    exactFileName,
+                    parentFolderId,
+                    buffer.Length,
+                    created.Metadata.Id));
+
+                return new GoogleDriveMediaUploadMetadata(
+                    created.Metadata.Id,
+                    exactFileName,
+                    mediaType,
+                    trashed: false,
+                    parentIds: [parentFolderId],
+                    driveId: null,
+                    size: buffer.Length);
             }
 
             public void Dispose()
@@ -1142,6 +1461,14 @@ public sealed class GoogleDriveSyncEngineCompatibilityTests
     }
 
     private sealed record RemoteCall(string Name, string? Path);
+
+    private sealed record FolderCreateCall(string ParentId, string Name);
+
+    private sealed record MediaUploadCall(
+        string FileName,
+        string ParentId,
+        long Bytes,
+        string FileId);
 
     private sealed record TextCreationCall(
         string FileId,
