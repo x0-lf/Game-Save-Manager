@@ -201,7 +201,11 @@ public sealed class GoogleDriveMediaUploadClientTests
     [Theory]
     [InlineData(0)]
     [InlineData(1)]
+    [InlineData(64 * 1024)]
+    [InlineData((5 * 1024 * 1024) - 1)]
+    [InlineData(5 * 1024 * 1024)]
     [InlineData((5 * 1024 * 1024) + 1)]
+    [InlineData((10 * 1024 * 1024) + 7)]
     public void SdkAdapter_UsesResumableCreateWithDefaultChunkingForEverySize(
         int size)
     {
@@ -221,6 +225,202 @@ public sealed class GoogleDriveMediaUploadClientTests
 
         Assert.IsAssignableFrom<ResumableUpload>(upload);
         Assert.Equal(ResumableUpload.DefaultChunkSize, upload.ChunkSize);
+        Assert.Equal(
+            GoogleDriveMediaUploadClient.ResponseFields,
+            upload.Fields);
+        Assert.False(upload.SupportsAllDrives);
+        Assert.Null(upload.UseContentAsIndexableText);
+        Assert.Null(upload.OcrLanguage);
+        Assert.Null(upload.KeepRevisionForever);
+        Assert.Null(upload.IncludePermissionsForView);
+        Assert.Equal("private-name-marker", upload.Body.Name);
+        Assert.Equal("application/octet-stream", upload.Body.MimeType);
+        Assert.Equal(["private-parent-marker"], upload.Body.Parents);
+        Assert.Null(upload.Body.Id);
+        Assert.Null(upload.Body.Trashed);
+        Assert.Null(upload.Body.DriveId);
+        Assert.Null(upload.Body.Size);
+    }
+
+    [Fact]
+    public void SdkAdapter_ExposesExactlyOneUploadCreatePath()
+    {
+        MethodInfo[] uploadFactories = typeof(GoogleDriveMediaUploadClient)
+            .GetMethods(
+                BindingFlags.Public | BindingFlags.NonPublic |
+                BindingFlags.Instance | BindingFlags.Static)
+            .Where(method =>
+                typeof(ResumableUpload).IsAssignableFrom(method.ReturnType))
+            .ToArray();
+
+        Assert.Equal(
+            ["CreateSdkUpload"],
+            uploadFactories.Select(method => method.Name));
+    }
+
+    [Fact]
+    public void BinaryUploadSource_HasNoAlternateMultipartOrSimplePath()
+    {
+        string clientSource = ReadGoogleDriveSource("GoogleDriveMediaUploadClient.cs");
+        string serviceSource = ReadGoogleDriveSource("GoogleDriveBinaryUploadService.cs");
+
+        Assert.Equal(
+            1,
+            CountOccurrences(clientSource, "Files.Create("));
+        Assert.Equal(
+            1,
+            CountOccurrences(clientSource, "CreateMediaUpload upload = drive.Files.Create("));
+        foreach (string source in new[] { clientSource, serviceSource })
+        {
+            Assert.DoesNotContain("uploadType", source, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("MultipartContent", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("FilesResource.UpdateMediaUpload", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("Files.Update", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("GoogleDriveTextCreationApi", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("ChunkSize =", source, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public async Task ChunkProgress_NeverRegressesAndOnlyCompletesAtFullLength()
+    {
+        const long length = (10 * 1024 * 1024) + 7;
+        var fake = new FakeGoogleDriveMediaUploadClient
+        {
+            Response = new GoogleDriveMediaUploadMetadata(
+                "private-id-marker",
+                "private-name-marker",
+                "application/octet-stream",
+                trashed: false,
+                ["private-parent-marker"],
+                driveId: null,
+                length),
+            ChunkBytes = [0, 4 * 1024 * 1024, 4 * 1024 * 1024, 10 * 1024 * 1024, length]
+        };
+        var progress = new RecordingProgress<GoogleDriveMediaUploadProgress>();
+        using var source = new MemoryStream(new byte[8], writable: false);
+
+        await fake.UploadAsync(
+            "private-parent-marker",
+            "private-name-marker",
+            source,
+            length,
+            "application/octet-stream",
+            progress,
+            CancellationToken.None);
+
+        AssertMonotonicProgress(progress.Values, length);
+        Assert.Equal(
+            GoogleDriveMediaUploadProgressStatus.Completed,
+            progress.Values[^1].Status);
+        Assert.Equal(length, progress.Values[^1].BytesSent);
+        Assert.Single(
+            progress.Values,
+            value => value.Status ==
+                GoogleDriveMediaUploadProgressStatus.Completed);
+    }
+
+    [Fact]
+    public async Task CancellationBetweenChunks_ReportsNoCompletedProgress()
+    {
+        const long length = 12 * 1024 * 1024;
+        using var cancellation = new CancellationTokenSource();
+        var fake = new FakeGoogleDriveMediaUploadClient
+        {
+            ChunkBytes = [4 * 1024 * 1024, 8 * 1024 * 1024, length],
+            ChunkReported = bytesSent =>
+            {
+                if (bytesSent == 8 * 1024 * 1024)
+                    cancellation.Cancel();
+            }
+        };
+        var progress = new RecordingProgress<GoogleDriveMediaUploadProgress>();
+        using var source = new MemoryStream(new byte[8], writable: false);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            fake.UploadAsync(
+                "private-parent-marker",
+                "private-name-marker",
+                source,
+                length,
+                "application/octet-stream",
+                progress,
+                cancellation.Token));
+
+        AssertMonotonicProgress(progress.Values, length);
+        Assert.Equal(8 * 1024 * 1024, progress.Values[^1].BytesSent);
+        Assert.DoesNotContain(
+            progress.Values,
+            value => value.Status ==
+                GoogleDriveMediaUploadProgressStatus.Completed);
+    }
+
+    [Fact]
+    public void MappedSdkProgress_PreservesEveryReportedByteCountInOrder()
+    {
+        long[] reported = [0, 1, 5 * 1024 * 1024, (10 * 1024 * 1024) + 7];
+
+        GoogleDriveMediaUploadProgress[] mapped = reported
+            .Select(bytesSent => GoogleDriveMediaUploadClient.MapProgress(
+                new StubUploadProgress(
+                    UploadStatus.Uploading,
+                    bytesSent,
+                    exception: null)))
+            .ToArray();
+
+        Assert.Equal(reported, mapped.Select(value => value.BytesSent));
+        AssertMonotonicProgress(mapped, (10 * 1024 * 1024) + 7);
+    }
+
+    private static void AssertMonotonicProgress(
+        IReadOnlyList<GoogleDriveMediaUploadProgress> values,
+        long expectedLength)
+    {
+        Assert.NotEmpty(values);
+        long previous = -1;
+        foreach (GoogleDriveMediaUploadProgress value in values)
+        {
+            Assert.True(value.BytesSent >= previous);
+            Assert.True(value.BytesSent <= expectedLength);
+            previous = value.BytesSent;
+        }
+    }
+
+    private static int CountOccurrences(string source, string value)
+    {
+        int count = 0;
+        int index = source.IndexOf(value, StringComparison.Ordinal);
+        while (index >= 0)
+        {
+            count++;
+            index = source.IndexOf(
+                value,
+                index + value.Length,
+                StringComparison.Ordinal);
+        }
+
+        return count;
+    }
+
+    private static string ReadGoogleDriveSource(string fileName)
+    {
+        DirectoryInfo? directory = new(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "Manager.sln")))
+            {
+                return File.ReadAllText(Path.Combine(
+                    directory.FullName,
+                    "GameSaves.Infrastructure",
+                    "GoogleDrive",
+                    fileName));
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new DirectoryNotFoundException(
+            "Could not locate Manager.sln from the test output directory.");
     }
 
     [Theory]

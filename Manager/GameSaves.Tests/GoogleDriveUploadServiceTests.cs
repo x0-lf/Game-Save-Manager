@@ -77,6 +77,136 @@ public sealed class GoogleDriveUploadServiceTests
         Assert.True(context.IsDisposed);
     }
 
+    public static TheoryData<long> ResumableUploadSizes => new()
+    {
+        0,
+        1,
+        64 * 1024,
+        (5 * 1024 * 1024) - 1,
+        5 * 1024 * 1024,
+        (5 * 1024 * 1024) + 1,
+        (10 * 1024 * 1024) + 7
+    };
+
+    [Theory]
+    [MemberData(nameof(ResumableUploadSizes))]
+    public async Task EverySize_UsesOneResumableBoundaryAndPreservesExactBytes(
+        long length)
+    {
+        using var temporary = new TemporaryFile(length, seed: 7);
+        byte[] expectedContent = System.Security.Cryptography.SHA256.HashData(
+            File.ReadAllBytes(temporary.Path));
+        var enumeration = new RecordingChildEnumerationService([[], []]);
+        var cache = new RecordingObjectIdCache();
+        using GoogleDriveRemoteOperationContext context = Context();
+        var mediaFactory = new RecordingMediaClientFactory(
+            ValidMetadata("root-id", "save.bin", length),
+            readBufferSize: 64 * 1024);
+        GoogleDriveBinaryUploadService service = Service(
+            enumeration,
+            new RecordingContextFactory(context),
+            mediaFactory,
+            cache);
+
+        GoogleDriveBinaryUploadResult result = await service.UploadAsync(
+            temporary.Path,
+            GoogleDriveBinaryUploadRequest.Parse(ProfileId, "save.bin", length));
+
+        Assert.Equal(GoogleDriveBinaryUploadStatus.Completed, result.Status);
+        Assert.Equal(length, result.CompletedBytes);
+        Assert.Equal(1, mediaFactory.Client.UploadCount);
+        Assert.Equal(length, mediaFactory.Client.ExpectedLength);
+        Assert.Equal(length, mediaFactory.Client.BytesRead);
+        Assert.Equal(expectedContent, mediaFactory.Client.ContentHash);
+        Assert.Equal(
+            GoogleDriveMediaUploadClient.OpaqueMediaType,
+            mediaFactory.Client.MediaType);
+        Assert.Equal(0, mediaFactory.Client.SourcePosition);
+        Assert.Single(cache.StoreCalls);
+        Assert.True(mediaFactory.Client.IsDisposed);
+        Assert.True(context.IsDisposed);
+    }
+
+    [Fact]
+    public async Task MultiChunkUpload_CompletesOnceThroughTheSameBoundary()
+    {
+        const long length = (10 * 1024 * 1024) + 7;
+        using var temporary = new TemporaryFile(length, seed: 11);
+        List<long> chunks = [];
+        var fake = new FakeGoogleDriveMediaUploadClient
+        {
+            Response = ValidMetadata("root-id", "save.bin", length),
+            ChunkBytes = [4 * 1024 * 1024, 8 * 1024 * 1024, length],
+            ChunkReported = chunks.Add
+        };
+        var cache = new RecordingObjectIdCache();
+        using GoogleDriveRemoteOperationContext context = Context();
+        GoogleDriveBinaryUploadService service = Service(
+            new RecordingChildEnumerationService([[], []]),
+            new RecordingContextFactory(context),
+            new FakeMediaClientFactory(fake),
+            cache);
+
+        GoogleDriveBinaryUploadResult result = await service.UploadAsync(
+            temporary.Path,
+            GoogleDriveBinaryUploadRequest.Parse(ProfileId, "save.bin", length));
+
+        Assert.Equal(GoogleDriveBinaryUploadStatus.Completed, result.Status);
+        Assert.Equal(length, result.CompletedBytes);
+        FakeGoogleDriveMediaUploadCall call = Assert.Single(fake.Calls);
+        Assert.Equal(length, call.ExpectedLength);
+        Assert.Equal(
+            GoogleDriveMediaUploadClient.OpaqueMediaType,
+            call.MediaType);
+        Assert.Equal([4 * 1024 * 1024, 8 * 1024 * 1024, length], chunks);
+        Assert.Single(cache.StoreCalls);
+        Assert.Equal(1, fake.DisposeCalls);
+        Assert.True(context.IsDisposed);
+    }
+
+    [Fact]
+    public async Task CancellationBetweenChunks_ReturnsNoSuccessAndNoCacheEntry()
+    {
+        const long length = 12 * 1024 * 1024;
+        using var temporary = new TemporaryFile(length, seed: 13);
+        using var cancellation = new CancellationTokenSource();
+        List<long> chunks = [];
+        var fake = new FakeGoogleDriveMediaUploadClient
+        {
+            Response = ValidMetadata("root-id", "save.bin", length),
+            ChunkBytes = [4 * 1024 * 1024, 8 * 1024 * 1024, length],
+            ChunkReported = bytesSent =>
+            {
+                chunks.Add(bytesSent);
+                if (bytesSent == 8 * 1024 * 1024)
+                    cancellation.Cancel();
+            }
+        };
+        var cache = new RecordingObjectIdCache();
+        using GoogleDriveRemoteOperationContext context = Context();
+        GoogleDriveBinaryUploadService service = Service(
+            new RecordingChildEnumerationService([[], []]),
+            new RecordingContextFactory(context),
+            new FakeMediaClientFactory(fake),
+            cache);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            service.UploadAsync(
+                temporary.Path,
+                GoogleDriveBinaryUploadRequest.Parse(
+                    ProfileId,
+                    "save.bin",
+                    length),
+                cancellation.Token));
+
+        Assert.Single(fake.Calls);
+        Assert.Equal([4 * 1024 * 1024, 8 * 1024 * 1024], chunks);
+        Assert.Empty(cache.StoreCalls);
+        Assert.Empty(cache.Entries);
+        Assert.Equal(1, fake.DisposeCalls);
+        Assert.True(context.IsDisposed);
+    }
+
     [Fact]
     public async Task UploadAsync_ReturnsOpenedLengthInsteadOfPlannedLength()
     {
@@ -1588,6 +1718,8 @@ public sealed class GoogleDriveUploadServiceTests
 
         public long BytesRead { get; private set; }
 
+        public byte[]? ContentHash { get; private set; }
+
         public long ExpectedLength { get; private set; }
 
         public string? MediaType { get; private set; }
@@ -1625,13 +1757,18 @@ public sealed class GoogleDriveUploadServiceTests
 
             if (_readBufferSize is int readBufferSize)
             {
+                using var content = System.Security.Cryptography.IncrementalHash
+                    .CreateHash(System.Security.Cryptography.HashAlgorithmName.SHA256);
                 byte[] buffer = new byte[readBufferSize];
                 int bytesRead;
                 while ((bytesRead = await source.ReadAsync(
                     buffer.AsMemory(), cancellationToken)) != 0)
                 {
+                    content.AppendData(buffer.AsSpan(0, bytesRead));
                     BytesRead += bytesRead;
                 }
+
+                ContentHash = content.GetCurrentHash();
             }
 
             SourcePositionAfterRead = source.Position;
@@ -1650,6 +1787,18 @@ public sealed class GoogleDriveUploadServiceTests
             DisposeCalls++;
             IsDisposed = true;
         }
+    }
+
+    private sealed class FakeMediaClientFactory
+        : IGoogleDriveMediaUploadClientFactory
+    {
+        private readonly FakeGoogleDriveMediaUploadClient _client;
+
+        public FakeMediaClientFactory(
+            FakeGoogleDriveMediaUploadClient client) => _client = client;
+
+        public IGoogleDriveMediaUploadClient Create(
+            GoogleAuthorizedCredential credential) => _client;
     }
 
     private sealed class LateReturningMediaClientFactory
@@ -1951,6 +2100,23 @@ public sealed class GoogleDriveUploadServiceTests
                 $"gamesaves-r9-{Guid.NewGuid():N}.tmp");
             using FileStream stream = File.Create(Path);
             stream.SetLength(length);
+        }
+
+        public TemporaryFile(long length, byte seed)
+        {
+            Path = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(),
+                $"gamesaves-r16-{Guid.NewGuid():N}.tmp");
+            byte[] block = new byte[64 * 1024];
+            for (int index = 0; index < block.Length; index++)
+                block[index] = (byte)(index + seed);
+
+            using FileStream stream = File.Create(Path);
+            for (long written = 0; written < length; written += block.Length)
+            {
+                stream.Write(
+                    block.AsSpan(0, (int)Math.Min(block.Length, length - written)));
+            }
         }
 
         public string Path { get; }
