@@ -294,6 +294,101 @@ internal sealed class OfflineDriveObjectClientFactory(
     }
 }
 
+internal sealed record MediaDownloadCall(string FileId, long BytesWritten);
+
+/// <summary>
+/// Deterministic fake media-download client. It streams stored offline Drive
+/// content into the destination in fixed chunks and can report progress, fail,
+/// or observe cancellation without any network access.
+/// </summary>
+internal sealed class OfflineDriveMediaDownloadClientFactory(OfflineDriveStore drive)
+    : IGoogleDriveMediaDownloadClientFactory
+{
+    private int _disposedClients;
+
+    public List<MediaDownloadCall> Calls { get; } = [];
+
+    public Func<string, Exception?>? FailureFor { get; set; }
+
+    public Action<long>? ChunkWritten { get; set; }
+
+    public int ChunkSize { get; set; } = 4096;
+
+    public int CreatedClients { get; private set; }
+
+    public int DisposedClients => Volatile.Read(ref _disposedClients);
+
+    public IGoogleDriveMediaDownloadClient Create(
+        GoogleAuthorizedCredential credential)
+    {
+        Assert.False(credential.IsDisposed);
+        CreatedClients++;
+        return new Client(this, drive);
+    }
+
+    private sealed class Client(
+        OfflineDriveMediaDownloadClientFactory owner,
+        OfflineDriveStore drive)
+        : IGoogleDriveMediaDownloadClient
+    {
+        private bool _disposed;
+
+        public async Task<long> DownloadAsync(
+            string fileId,
+            Stream destination,
+            IProgress<GoogleDriveMediaDownloadProgress>? progress,
+            CancellationToken cancellationToken)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (owner.FailureFor?.Invoke(fileId) is Exception failure)
+            {
+                progress?.Report(new GoogleDriveMediaDownloadProgress(
+                    GoogleDriveMediaDownloadProgressStatus.Failed,
+                    0));
+                throw failure;
+            }
+
+            byte[] content = drive.GetRequired(fileId).Content ?? [];
+            progress?.Report(new GoogleDriveMediaDownloadProgress(
+                GoogleDriveMediaDownloadProgressStatus.NotStarted,
+                0));
+
+            long written = 0;
+            for (int offset = 0; offset < content.Length; offset += owner.ChunkSize)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                int length = Math.Min(owner.ChunkSize, content.Length - offset);
+                await destination.WriteAsync(
+                    content.AsMemory(offset, length),
+                    cancellationToken);
+                written += length;
+                progress?.Report(new GoogleDriveMediaDownloadProgress(
+                    GoogleDriveMediaDownloadProgressStatus.Downloading,
+                    written));
+                owner.ChunkWritten?.Invoke(written);
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
+            await destination.FlushAsync(cancellationToken);
+            progress?.Report(new GoogleDriveMediaDownloadProgress(
+                GoogleDriveMediaDownloadProgressStatus.Completed,
+                written));
+            owner.Calls.Add(new MediaDownloadCall(fileId, written));
+            return written;
+        }
+
+        public void Dispose()
+        {
+            if (_disposed)
+                return;
+            _disposed = true;
+            Interlocked.Increment(ref owner._disposedClients);
+        }
+    }
+}
+
 /// <summary>
 /// Fake Google media-upload API. It stores completed creates in the offline
 /// Drive, records their order, and can fail or observe one requested name
