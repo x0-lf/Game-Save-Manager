@@ -280,6 +280,18 @@ internal sealed class OfflineDriveObjectClientFactory(
                 }
             }
 
+            // An exact-name lookup for a name that does not exist is a normal
+            // Drive answer, not an unexpected query: real Drive returns an
+            // empty page. Only the parent has to be known.
+            foreach (string parentId in drive.ObjectIds)
+            {
+                if (query.Contains($"'{parentId}' in parents", StringComparison.Ordinal) &&
+                    query.Contains("name = '", StringComparison.Ordinal))
+                {
+                    return [];
+                }
+            }
+
             throw new InvalidOperationException(
                 "The offline Drive client received an unexpected query.");
         }
