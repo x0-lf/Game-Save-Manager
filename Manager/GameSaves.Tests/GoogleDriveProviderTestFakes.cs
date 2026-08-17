@@ -20,6 +20,15 @@ internal sealed class RecordingProviderRemoteFileSystem : IRemoteFileSystem
     public Dictionary<string, Exception> Failures { get; } =
         new(StringComparer.Ordinal);
 
+    /// <summary>The token each recorded call received, in call order.</summary>
+    public List<CancellationToken> Tokens { get; } = new();
+
+    /// <summary>Runs before a member records, so a test can cancel mid-call.</summary>
+    public Action<string>? OnCall { get; set; }
+
+    /// <summary>Content returned by every immutable text read.</summary>
+    public string? TextFileContent { get; init; }
+
     public string DisplayRoot { get; init; } = DefaultDisplayRoot;
 
     public string GetDisplayPath(string relativePath) =>
@@ -47,7 +56,7 @@ internal sealed class RecordingProviderRemoteFileSystem : IRemoteFileSystem
     public Task<string?> ReadTextFileAsync(
         string relativePath,
         CancellationToken cancellationToken = default) =>
-        Record<string?>(null, cancellationToken);
+        Record(TextFileContent, cancellationToken);
 
     public Task CreateTextFileIfMissingAsync(
         string relativePath,
@@ -88,7 +97,9 @@ internal sealed class RecordingProviderRemoteFileSystem : IRemoteFileSystem
         CancellationToken cancellationToken,
         [System.Runtime.CompilerServices.CallerMemberName] string caller = "")
     {
+        OnCall?.Invoke(caller);
         Calls.Add(caller);
+        Tokens.Add(cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         if (Failures.TryGetValue(caller, out Exception? failure))
             throw failure;
