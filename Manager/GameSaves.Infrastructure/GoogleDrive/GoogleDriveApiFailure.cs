@@ -20,7 +20,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
         TextContentCreate = 11,
         TextContentReplacementMetadataGet = 12,
         TextContentReplace = 13,
-        FileMediaUpload = 14
+        FileMediaUpload = 14,
+        FileMediaDownload = 15
     }
 
     internal enum GoogleDriveApiFailure

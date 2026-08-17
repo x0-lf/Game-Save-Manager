@@ -33,6 +33,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
         private readonly IGoogleDriveRecursiveFileListingService
             _recursiveFileListingService;
         private readonly IGoogleDriveBinaryUploadService _binaryUploadService;
+        private readonly IGoogleDriveBinaryDownloadService _binaryDownloadService;
 
         public GoogleDriveRemoteFileSystemFactory(
             ISyncRemoteProfileRepository profileRepository,
@@ -46,7 +47,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 providerMetadataReplacementService,
             IGoogleDriveCreateOnlyTextFileService createOnlyTextFileService,
             IGoogleDriveRecursiveFileListingService recursiveFileListingService,
-            IGoogleDriveBinaryUploadService binaryUploadService)
+            IGoogleDriveBinaryUploadService binaryUploadService,
+            IGoogleDriveBinaryDownloadService binaryDownloadService)
         {
             _profileRepository = profileRepository ??
                 throw new ArgumentNullException(nameof(profileRepository));
@@ -72,6 +74,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 throw new ArgumentNullException(nameof(recursiveFileListingService));
             _binaryUploadService = binaryUploadService ??
                 throw new ArgumentNullException(nameof(binaryUploadService));
+            _binaryDownloadService = binaryDownloadService ??
+                throw new ArgumentNullException(nameof(binaryDownloadService));
         }
 
         public IRemoteFileSystem Create(Guid remoteProfileId)
@@ -96,7 +100,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 _providerMetadataReplacementService,
                 _createOnlyTextFileService,
                 _recursiveFileListingService,
-                _binaryUploadService);
+                _binaryUploadService,
+                _binaryDownloadService);
         }
 
         private static string GetSafeDisplayRoot(SyncRemoteProfile? profile)
@@ -129,15 +134,11 @@ namespace GameSaves.Infrastructure.GoogleDrive
 
     /// <summary>
     /// Google Drive implementation boundary for the currently completed
-    /// remote primitives. Download remains unavailable, and Google Drive stays
-    /// inactive in the provider catalog and factory, so SyncEngine still
-    /// cannot treat it as a working provider.
+    /// remote primitives. Google Drive stays inactive in the provider catalog
+    /// and factory, so SyncEngine still cannot treat it as a working provider.
     /// </summary>
     internal sealed class GoogleDriveRemoteFileSystem : IRemoteFileSystem
     {
-        internal const string OperationsUnavailableMessage =
-            "Google Drive remote transfer operations are implemented in later milestones.";
-
         private readonly Guid _remoteProfileId;
         private readonly IGoogleDriveRemoteValidationService _validationService;
         private readonly IGoogleDriveRootExistenceService _rootExistenceService;
@@ -153,6 +154,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
         private readonly IGoogleDriveRecursiveFileListingService
             _recursiveFileListingService;
         private readonly IGoogleDriveBinaryUploadService _binaryUploadService;
+        private readonly IGoogleDriveBinaryDownloadService _binaryDownloadService;
 
         internal GoogleDriveRemoteFileSystem(
             Guid remoteProfileId,
@@ -167,7 +169,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 providerMetadataReplacementService,
             IGoogleDriveCreateOnlyTextFileService createOnlyTextFileService,
             IGoogleDriveRecursiveFileListingService recursiveFileListingService,
-            IGoogleDriveBinaryUploadService binaryUploadService)
+            IGoogleDriveBinaryUploadService binaryUploadService,
+            IGoogleDriveBinaryDownloadService binaryDownloadService)
         {
             if (remoteProfileId == Guid.Empty)
             {
@@ -206,6 +209,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 throw new ArgumentNullException(nameof(recursiveFileListingService));
             _binaryUploadService = binaryUploadService ??
                 throw new ArgumentNullException(nameof(binaryUploadService));
+            _binaryDownloadService = binaryDownloadService ??
+                throw new ArgumentNullException(nameof(binaryDownloadService));
         }
 
         public string DisplayRoot { get; }
@@ -347,19 +352,32 @@ namespace GameSaves.Infrastructure.GoogleDrive
             }
         }
 
-        public Task<long> DownloadFileAsync(
+        public async Task<long> DownloadFileAsync(
             string relativeRemotePath,
             string localFilePath,
-            CancellationToken cancellationToken = default) =>
-            Unsupported<long>();
+            CancellationToken cancellationToken = default)
+        {
+            if (!GoogleDriveRelativePath.TryParse(
+                    relativeRemotePath,
+                    out GoogleDriveRelativePath? remotePath) ||
+                remotePath is null ||
+                remotePath.IsRoot)
+            {
+                throw GoogleDriveDownloadFailureMapper.InvalidSourcePath();
+            }
 
-        private static Task Unsupported() =>
-            Task.FromException(CreateUnavailableException());
+            GoogleDriveBinaryDownloadResult result =
+                await _binaryDownloadService.DownloadAsync(
+                    new GoogleDriveBinaryDownloadRequest(
+                        _remoteProfileId,
+                        remotePath),
+                    localFilePath,
+                    cancellationToken).ConfigureAwait(false);
 
-        private static Task<T> Unsupported<T>() =>
-            Task.FromException<T>(CreateUnavailableException());
+            if (result.Status != GoogleDriveBinaryDownloadStatus.Completed)
+                throw GoogleDriveDownloadFailureMapper.FromIncompleteResult(result);
 
-        private static NotSupportedException CreateUnavailableException() =>
-            new(OperationsUnavailableMessage);
+            return result.CompletedBytes;
+        }
     }
 }

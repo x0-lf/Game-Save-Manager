@@ -14,7 +14,7 @@ The capability catalog describes provider behavior; the provider factory remains
 |---|---:|---:|---|---|
 | Local or mounted folder | Yes | Yes | Folder path | Folder selection, connection testing, open in native file manager |
 | SFTP server (SSH) | Yes | Yes | Session credentials | Server credentials, connection testing |
-| Google Drive | No | Yes | Interactive desktop OAuth | Account/root configuration, internal read-only recursive file listing, and internal create-only file upload; sync unavailable |
+| Google Drive | No | Yes | Interactive desktop OAuth | Account/root configuration, internal recursive file listing, create-only file upload, and no-overwrite file download; sync unavailable |
 | WebDAV | No | No | Planned server credentials | Planned persistent authentication, connection testing, logout, open location |
 | OneDrive | No | No | Planned interactive OAuth | Same planned high-level capabilities as Google Drive |
 
@@ -240,9 +240,45 @@ message, `ToString()`, or wrapped exception.
 last, so an interrupted run leaves a folder that existing discovery does not
 treat as a complete backup. Milestone R adds no retry, recovery, or cleanup.
 
-`DownloadFileAsync` remains explicitly unavailable, `GoogleDriveSyncProvider`
-does not exist, Google Drive remains absent from `SyncProviderFactory` with
-`IsImplemented = false`, and Preview Sync and Sync Now remain disabled.
+`GoogleDriveSyncProvider` does not exist, Google Drive remains absent from
+`SyncProviderFactory` with `IsImplemented = false`, and Preview Sync and Sync
+Now remain disabled.
+
+## Google Drive no-overwrite file download
+
+Milestone S wires `GoogleDriveRemoteFileSystem.DownloadFileAsync` to an
+Infrastructure-internal one-file download service. Its live development-account
+acceptance is still outstanding, so the milestone is not closed.
+
+```text
+DownloadFileAsync
+    -> parse the source with GoogleDriveRelativePath, rejecting empty, root,
+       absolute, traversal, and doubled-separator paths
+    -> refuse an existing final file or directory before any Drive work
+    -> create only the missing destination folder and open one exclusive
+       temporary sibling named <file>.<guid>.gsdownload
+    -> create one short-lived authenticated operation context
+    -> resolve the source to one authoritative blob under the configured root
+    -> read only id, name, mimeType, trashed, parents, driveId, and size
+    -> stream the content straight into the temporary file
+    -> validate identity, exact name, blob type, trash state, single expected
+       parent, My Drive location, and the written length against that size
+    -> move the temporary file to its final name without overwriting
+    -> return the validated completed byte count
+```
+
+Downloads never overwrite, truncate, move, or delete an existing local file or
+directory. The only local deletion is this operation's own temporary file, on
+every failure and cancellation path. Cancellation, a short or long body, a
+changed source, or a destination that appeared during the transfer is never
+success, and every failure escapes through one sanitized boundary with a fixed
+category and stable code. Lifecycle logging records only fixed stages, byte
+counts, categories, and codes.
+
+`SyncEngine` keeps run enumeration, manifest rewriting, restore verification,
+and progress. A Drive-downloaded run is rewritten exactly as a Local Folder one,
+SHA-256 in the manifest stays the content identity, and an interrupted run has
+no manifest, so run discovery never presents it as a complete backup.
 
 ## Remote metadata write semantics
 
@@ -269,7 +305,7 @@ Provider metadata replacement validates the exact `.gamesave-sync/sync-log.json`
 
 The parent-ID/name create lock and profile/path metadata lock coordinate only this application process. Google Drive does not enforce globally unique names, so cross-process duplicate names remain possible; a later authoritative lookup reports that state as ambiguity instead of choosing or deleting an object.
 
-Milestone P did not activate Google Drive synchronization. Milestone Q subsequently made `ListFilesAsync` available at the Infrastructure remote-filesystem boundary, and Milestone R added create-only `UploadFileAsync`. `DownloadFileAsync` remains explicitly unavailable, `GoogleDriveSyncProvider` does not exist, and Google Drive remains absent from `SyncProviderFactory` with `IsImplemented = false`. It is configuration-only and Preview Sync and Sync Now remain disabled.
+Milestone P did not activate Google Drive synchronization. Milestone Q subsequently made `ListFilesAsync` available at the Infrastructure remote-filesystem boundary, Milestone R added create-only `UploadFileAsync`, and Milestone S added no-overwrite `DownloadFileAsync`. `GoogleDriveSyncProvider` does not exist, and Google Drive remains absent from `SyncProviderFactory` with `IsImplemented = false`. It is configuration-only and Preview Sync and Sync Now remain disabled.
 
 ## Saved profiles and secrets
 

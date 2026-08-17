@@ -441,7 +441,8 @@ public sealed class GoogleDriveTextFileReadServiceTests
             new UnusedProviderMetadataReplacementService(),
             new UnusedCreateOnlyTextFileService(),
             new UnusedRecursiveFileListingService(),
-            new FakeGoogleDriveBinaryUploadService());
+            new FakeGoogleDriveBinaryUploadService(),
+            new FakeGoogleDriveBinaryDownloadService());
         var backupHistory = new BackupHistoryService(
             new TestDatabasePathProvider(temp.GetPath("app", "gamesave.db")));
         var engine = new SyncEngine(

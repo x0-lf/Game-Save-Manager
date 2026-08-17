@@ -306,17 +306,10 @@ public sealed class GoogleDriveUploadIntegrationTests
     }
 
     [Fact]
-    public async Task Composition_KeepsDownloadAndProviderActivationUnavailable()
+    public void Composition_KeepsProviderActivationUnavailable()
     {
         using var harness = new Harness();
 
-        NotSupportedException download =
-            await Assert.ThrowsAsync<NotSupportedException>(async () =>
-                await harness.Remote.DownloadFileAsync("Run 42/save.bin", "local.sav"));
-
-        Assert.Equal(
-            GoogleDriveRemoteFileSystem.OperationsUnavailableMessage,
-            download.Message);
         Assert.False(new SyncProviderCatalog()
             .GetDescriptor(SyncProviderKind.GoogleDrive).IsImplemented);
         Assert.DoesNotContain(

@@ -232,7 +232,7 @@ public sealed class GoogleDriveDownloadContractTests
     }
 
     [Fact]
-    public void DownloadRemainsUnwiredAtTheRemoteBoundary()
+    public void DownloadIsWiredAtTheRemoteBoundary()
     {
         string source = File.ReadAllText(Path.Combine(
             FindManagerRoot(),
@@ -241,14 +241,14 @@ public sealed class GoogleDriveDownloadContractTests
             "GoogleDriveRemoteFileSystem.cs"));
 
         Assert.Contains(
-            "public Task<long> DownloadFileAsync(",
+            "public async Task<long> DownloadFileAsync(",
             source,
             StringComparison.Ordinal);
-        Assert.Contains("Unsupported<long>();", source, StringComparison.Ordinal);
-        Assert.DoesNotContain(
+        Assert.Contains(
             "GoogleDriveBinaryDownloadRequest",
             source,
             StringComparison.Ordinal);
+        Assert.DoesNotContain("Unsupported<long>", source, StringComparison.Ordinal);
     }
 
     private static string FindManagerRoot()

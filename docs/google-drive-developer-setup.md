@@ -497,6 +497,75 @@ has no cleanup behaviour and must never gain one for acceptance convenience.
 Record only the date, tested commit, pass or fail, and sanitized failure
 categories. Milestone R stays open until that live result exists.
 
+## Verify Milestone S no-overwrite downloads
+
+Milestone S adds one streamed, verified, no-overwrite download behind
+`GoogleDriveRemoteFileSystem.DownloadFileAsync`. The default automated suite is
+hermetic: fake authentication, a fake Drive object client, and a fake media
+API, with no real account, browser, token, or network.
+
+### Automated requirement coverage
+
+| Milestone S requirement | Deterministic coverage |
+| --- | --- |
+| Internal download request/result contracts, safe formatting, and Core/App isolation | `GoogleDriveDownloadContractTests` |
+| Destination refused when occupied, missing directory created, one exclusive temporary sibling, no local path in errors | `GoogleDriveDownloadDestinationTests` |
+| Fakeable media boundary, one short-lived `DriveService`, one download per client, deterministic disposal | `GoogleDriveMediaDownloadClientTests.Factory_CreatesDistinctShortLivedSdkClients`, `GoogleDriveMediaDownloadClientTests.SdkClient_DisposesOwnedDriveServiceExactlyOnce` |
+| Read-only media request and metadata limited to the validated field set | `GoogleDriveMediaDownloadClientTests.SdkAdapter_BuildsAReadOnlyMediaRequest`, `GoogleDriveMediaDownloadClientTests.SdkAdapter_RequestsOnlyTheMetadataDownloadValidates` |
+| Source resolved to one authoritative blob; missing, ambiguous, case-colliding, wrongly typed, and unsupported sources fail closed | `GoogleDriveDownloadSourceResolverTests`, `GoogleDriveDownloadIntegrationTests.Download_FailsClosedForEveryUnsafeSource` |
+| Streamed transfer with no payload copy, bounded writes, and zero-byte support | `GoogleDriveDownloadStreamingTests.Streaming_HandsTheDestinationStreamToTheClientUnchanged`, `GoogleDriveDownloadStreamingTests.ContentThatFailsAnEagerCopy_StillDownloads`, `GoogleDriveDownloadStreamingTests.LargeContent_IsWrittenInBoundedChunksWithExactBytes` |
+| Completed length validated against the authoritative source size before placement | `GoogleDriveDownloadCompletionValidatorTests`, `GoogleDriveDownloadResilienceTests.TruncatedBody_FailsClosedWithoutPlacing` |
+| Atomic placement that never overwrites an existing file or directory | `GoogleDriveDownloadPlacementTests.ValidatedTemporaryFile_MovesToItsFinalName`, `GoogleDriveDownloadPlacementTests.DestinationThatAppearedDuringTheTransfer_IsNeverOverwritten`, `GoogleDriveDownloadIntegrationTests.Download_RefusesAnExistingDestinationAndLeavesItUntouched` |
+| Temporary-file removal on every failure path, scoped to this operation's own file | `GoogleDriveDownloadCleanupTests`, `GoogleDriveDownloadCleanupTests.Cleanup_RefusesAnyPathThatIsNotOneOfItsTemporaryFiles` |
+| Cancellation at every boundary with the caller token forwarded everywhere | `GoogleDriveDownloadServiceTests.Cancellation_AtEveryBoundaryLeavesNoLocalFile`, `GoogleDriveDownloadServiceTests.DownloadAsync_ForwardsTheCallerTokenToEveryProviderCall` |
+| One sanitized failure boundary, distinct stable codes, and no private value in any message, `ToString()`, or log | `GoogleDriveDownloadFailureMapperTests`, `GoogleDriveDownloadFailureMapperTests.EscapingFailureSurfaces_ExposeNoPrivateValue`, `GoogleDriveDownloadFailureMapperTests.LifecycleLogging_WritesOnlyStagesCodesAndByteCounts` |
+| Exactly-once disposal of stream, client, context, and credential on every outcome | `GoogleDriveDownloadResilienceTests.EveryOutcome_ReleasesEachOwnedResourceExactlyOnce`, `GoogleDriveDownloadResilienceTests.LateReturningProvider_LeavesNoBackgroundWorkBehind` |
+| Size matrix from zero bytes to larger than 10 MiB on one boundary with exact bytes | `GoogleDriveDownloadResilienceTests.EverySize_TakesTheSameBoundaryAndPreservesExactBytes`, `GoogleDriveDownloadIntegrationTests.Download_PreservesExactBytesForEverySize` |
+| Disk-full, network interruption, and interrupted-run data safety | `GoogleDriveDownloadResilienceTests.DiskFullDuringTransfer_LeavesNoLocalFileAndStaysSanitized`, `GoogleDriveDownloadResilienceTests.NetworkInterruption_IsReportedAsTemporarilyUnavailable`, `GoogleDriveDownloadResilienceTests.OrphanTemporaryFileFromAnInterruptedRun_IsNeverTouched`, `GoogleDriveDownloadResilienceTests.InterruptedRun_LeavesTheExistingLocalRunUntouched` |
+| Only `DownloadFileAsync` wired, returning validated bytes, with provider activation still absent | `GoogleDriveRemoteFileSystemTests`, `GoogleDriveDownloadIntegrationTests.DownloadAndUpload_ShareOneRemoteBoundaryWithoutInterfering` |
+| Manifest rewriting identical to Local Folder, SHA-256 kept as content identity, interrupted runs never presented as complete | `GoogleDriveSyncEngineCompatibilityTests.Download_RewritesTheManifestExactlyLikeLocalFolderDoes`, `GoogleDriveSyncEngineCompatibilityTests.DownloadedRun_IsDiscoverableAndPassesSha256Verification`, `GoogleDriveSyncEngineCompatibilityTests.TamperedRemoteContent_DownloadsButFailsSha256Verification`, `GoogleDriveSyncEngineCompatibilityTests.InterruptedDownload_LeavesNoRunPresentedAsComplete`, `GoogleDriveSyncEngineCompatibilityTests.RemoteRunWithoutAManifest_IsNeverOfferedForDownload` |
+| Dependency injection to media client integration and no forbidden Drive operation | `GoogleDriveDownloadIntegrationTests`, `GoogleDriveDownloadIntegrationTests.DownloadComposition_IssuesNoForbiddenDriveOperation` |
+| Existing Milestones A-R, Local Folder, and SFTP behaviour | Full `Manager/Manager.sln` regression suite |
+
+### Recorded Milestone S automated verification
+
+```text
+Date: 2026-08-16
+Tested tree: Milestone S Tasks 1-16 on top of 174bc7b
+Release suite: 1,631 passed, 0 failed, 0 skipped
+Release build: succeeded, 0 warnings, 0 errors
+Direct package baseline: unchanged
+Banned legacy packages: none present
+Vulnerable: SSH.NET 2024.2.0, High, GHSA-q939-rpr3-3284
+Deprecated: xUnit 2.9.3 (Legacy)
+Sandbox limitation: none; all four package commands completed
+```
+
+### Live download acceptance, not yet performed
+
+This checklist needs explicit user authorization before any agent acts on it,
+because it reads a real development account and writes controlled files to a
+local temporary folder. It is **not** part of the automated suite and has
+**not** been run.
+
+Downloads only read Drive, and they never overwrite a local file, so this run
+is less invasive than the Milestone R upload acceptance. Use only an explicitly
+authorized development test account and controlled synthetic objects.
+
+1. Restore the selected profile silently and confirm no browser opens and the requested scope remains exactly `https://www.googleapis.com/auth/drive.file`.
+2. Download one zero-byte file, one small file, one file larger than 5 MiB, and one deeply nested file, and confirm each returns its exact byte count and matches the remote content.
+3. Confirm each download lands at its final name only after completion, and that no `.gsdownload` temporary file remains anywhere in the destination folder.
+4. Retry one download to a destination that already exists and confirm it is refused with no overwrite and the existing bytes unchanged.
+5. Cancel one download in progress and confirm no final file appears, no temporary file remains, and the existing local data is untouched.
+6. Download a complete run through the existing sync path and confirm the manifest is rewritten, the run appears in the Backups list, and its SHA-256 verification passes.
+7. Interrupt a run download before its manifest and confirm the partial run is not offered as a complete backup and nothing is cleaned up automatically.
+8. Inspect Drive activity and confirm only metadata and media reads occurred: no create, update, delete, trash, rename, move, share, permission, or provider-activation request.
+9. Review sanitized output and confirm it contains no account value, object or parent ID, page token, query, media URL, local path, remote name, token, or raw provider response.
+
+Remove the controlled local files manually afterwards. Record only the date,
+tested commit, pass or fail, and sanitized failure categories. Milestone S
+stays open until that live result exists.
+
 ## Handle downloaded credential files
 
 If Google offers a downloaded OAuth client JSON:

@@ -629,15 +629,32 @@ does not exist, Google Drive is still absent from `SyncProviderFactory` with
 
 ### S — Google Drive downloads
 
-* [ ] Stream downloads to a temporary local file first
-* [ ] Never overwrite an existing final local file
-* [ ] Move the temporary file into place only after a successful download
-* [ ] Delete failed temporary files
-* [ ] Report byte progress
-* [ ] Support cancellation
-* [ ] Preserve current manifest rewriting
-* [ ] Verify downloaded backup runs before they become restorable
-* [ ] Keep SHA-256 manifests as the content identity source
+* [x] Stream downloads to a temporary local file first
+* [x] Never overwrite an existing final local file
+* [x] Move the temporary file into place only after a successful download
+* [x] Delete failed temporary files
+* [x] Report byte progress
+* [x] Support cancellation
+* [x] Preserve current manifest rewriting
+* [x] Verify downloaded backup runs before they become restorable
+* [x] Keep SHA-256 manifests as the content identity source
+
+Milestone S is implemented and automatically verified at the Infrastructure
+remote-filesystem boundary, and its live development-account acceptance is
+still outstanding, so the milestone is not closed. `DownloadFileAsync` resolves
+the source through authoritative My Drive IDs, streams it into a unique
+temporary file beside the destination, validates the written length against the
+authoritative source size, and only then moves it to its final name. It never
+overwrites an existing file or directory, removes its temporary file on every
+failure and cancellation path, and never deletes anything else. Manifest
+rewriting is unchanged and SHA-256 in the manifest remains the content
+identity: a downloaded run whose bytes do not match its manifest hash is
+refused by restore, and an interrupted run has no manifest, so run discovery
+never presents it as a complete backup.
+
+`GoogleDriveSyncProvider` still does not exist, Google Drive is still absent
+from `SyncProviderFactory` with `IsImplemented = false`, and Preview Sync and
+Sync Now remain disabled.
 
 ### T — GoogleDriveSyncProvider
 

@@ -476,6 +476,247 @@ public sealed class GoogleDriveSyncEngineCompatibilityTests
         StaticBackupHistoryService History,
         long TotalBytes);
 
+    [Fact]
+    public async Task Download_RewritesTheManifestExactlyLikeLocalFolderDoes()
+    {
+        using var temp = new TemporaryDirectory();
+        using var fixture = new Fixture();
+        RemoteRun run = fixture.AddRemoteRun("Run 50", ("files/saves/slot1.sav", [1, 2, 3]));
+        string driveBase = temp.GetPath("drive-base");
+        string localBase = temp.GetPath("local-base");
+        Directory.CreateDirectory(driveBase);
+        Directory.CreateDirectory(localBase);
+
+        var driveEngine = Engine(
+            fixture.Remote,
+            new StaticBackupHistoryService(driveBase));
+        SyncPlan drivePlan = await driveEngine.CreatePreviewAsync(new SyncOptions());
+        SyncResult driveResult = await driveEngine.ExecuteAsync(
+            drivePlan,
+            ExecuteOptions());
+
+        LocalFolderRemoteFileSystem local = run.WriteToLocalFolder(
+            temp.GetPath("local-remote"),
+            localBase);
+        var localEngine = Engine(
+            local,
+            new StaticBackupHistoryService(localBase));
+        SyncPlan localPlan = await localEngine.CreatePreviewAsync(new SyncOptions());
+        SyncResult localResult = await localEngine.ExecuteAsync(
+            localPlan,
+            ExecuteOptions());
+
+        Assert.Equal(
+            SyncItemStatus.Downloaded,
+            Assert.Single(driveResult.Items).Status);
+        Assert.Equal(
+            SyncItemStatus.Downloaded,
+            Assert.Single(localResult.Items).Status);
+
+        TransferBackupManifest driveManifest = ReadManifest(driveBase, "Run 50");
+        TransferBackupManifest localManifest = ReadManifest(localBase, "Run 50");
+
+        // Everything except the machine-specific root must match exactly.
+        Assert.Equal(
+            localManifest with { Items = [] },
+            driveManifest with { Items = [] });
+        Assert.Equal(
+            localManifest.Items
+                .Select(item => item with
+                {
+                    BackupFile = Relative(item.BackupFile, localBase)
+                })
+                .ToArray(),
+            driveManifest.Items
+                .Select(item => item with
+                {
+                    BackupFile = Relative(item.BackupFile, driveBase)
+                })
+                .ToArray());
+        Assert.Equal(
+            [1, 2, 3],
+            File.ReadAllBytes(
+                Path.Combine(driveBase, "Run 50", "files", "saves", "slot1.sav")));
+    }
+
+    [Fact]
+    public async Task DownloadedRun_IsDiscoverableAndPassesSha256Verification()
+    {
+        using var temp = new TemporaryDirectory();
+        using var fixture = new Fixture();
+        fixture.AddRemoteRun("Run 51", ("files/saves/slot1.sav", [4, 5, 6, 7]));
+        string backupBase = temp.GetPath("backups");
+        Directory.CreateDirectory(backupBase);
+        var engine = Engine(
+            fixture.Remote,
+            new StaticBackupHistoryService(backupBase));
+
+        SyncPlan plan = await engine.CreatePreviewAsync(new SyncOptions());
+        await engine.ExecuteAsync(plan, ExecuteOptions());
+
+        string runRoot = Path.Combine(backupBase, "Run 51");
+        TransferBackupManifest manifest =
+            JsonSerializer.Deserialize<TransferBackupManifest>(
+                File.ReadAllText(Path.Combine(runRoot, "manifest.json")))!;
+        TransferOverwriteBackupItem item = Assert.Single(manifest.Items);
+
+        Assert.True(File.Exists(item.BackupFile));
+        Assert.Equal(
+            item.Sha256,
+            Convert.ToHexString(
+                System.Security.Cryptography.SHA256.HashData(
+                    File.ReadAllBytes(item.BackupFile))),
+            ignoreCase: true);
+    }
+
+    [Fact]
+    public async Task TamperedRemoteContent_DownloadsButFailsSha256Verification()
+    {
+        using var temp = new TemporaryDirectory();
+        using var fixture = new Fixture();
+        RemoteRun run = fixture.AddRemoteRun("Run 52", ("files/saves/slot1.sav", [8, 8, 8, 8]));
+        run.ReplaceRemoteContent("files/saves/slot1.sav", [9, 9, 9, 9]);
+        string backupBase = temp.GetPath("backups");
+        Directory.CreateDirectory(backupBase);
+        var engine = Engine(
+            fixture.Remote,
+            new StaticBackupHistoryService(backupBase));
+
+        SyncPlan plan = await engine.CreatePreviewAsync(new SyncOptions());
+        SyncResult result = await engine.ExecuteAsync(plan, ExecuteOptions());
+
+        Assert.Equal(
+            SyncItemStatus.Downloaded,
+            Assert.Single(result.Items).Status);
+
+        string runRoot = Path.Combine(backupBase, "Run 52");
+        TransferBackupManifest manifest =
+            JsonSerializer.Deserialize<TransferBackupManifest>(
+                File.ReadAllText(Path.Combine(runRoot, "manifest.json")))!;
+        TransferOverwriteBackupItem item = Assert.Single(manifest.Items);
+
+        // SHA-256 in the manifest stays the identity: the tampered payload no
+        // longer matches it, so restore refuses this file.
+        Assert.NotEqual(
+            item.Sha256,
+            Convert.ToHexString(
+                System.Security.Cryptography.SHA256.HashData(
+                    File.ReadAllBytes(item.BackupFile))),
+            StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task InterruptedDownload_LeavesNoRunPresentedAsComplete()
+    {
+        using var temp = new TemporaryDirectory();
+        using var fixture = new Fixture();
+        fixture.AddRemoteRun(
+            "Run 53",
+            ("files/saves/slot1.sav", [1, 2, 3]),
+            ("files/saves/slot2.sav", [4, 5, 6]));
+        string backupBase = temp.GetPath("backups");
+        Directory.CreateDirectory(backupBase);
+        string existing = Path.Combine(backupBase, "keep.txt");
+        File.WriteAllText(existing, "keep");
+        fixture.MediaDownloads.FailureFor = fileId =>
+            fixture.Drive.GetRequired(fileId).Metadata.Name == "manifest.json"
+                ? new IOException("The synthetic provider interrupted the manifest.")
+                : null;
+        var engine = Engine(
+            fixture.Remote,
+            new StaticBackupHistoryService(backupBase));
+
+        SyncPlan plan = await engine.CreatePreviewAsync(new SyncOptions());
+        SyncResult result = await engine.ExecuteAsync(plan, ExecuteOptions());
+
+        Assert.Equal(SyncItemStatus.Failed, Assert.Single(result.Items).Status);
+        string runRoot = Path.Combine(backupBase, "Run 53");
+        Assert.False(
+            File.Exists(Path.Combine(runRoot, "manifest.json")),
+            "An interrupted run must not carry a manifest.");
+        Assert.Empty(Directory.GetFiles(
+            backupBase,
+            $"*{GoogleDriveLocalDownloadDestination.TemporarySuffix}",
+            SearchOption.AllDirectories));
+        Assert.Equal("keep", File.ReadAllText(existing));
+
+        var history = new GameSaves.Infrastructure.Transfers.BackupHistoryService(
+            new TestDatabasePathProvider(temp.GetPath("app", "gamesave.db")));
+        Assert.DoesNotContain(
+            await history.GetRunsAsync(),
+            candidate => candidate.BackupRootPath == runRoot);
+    }
+
+    [Fact]
+    public async Task RemoteRunWithoutAManifest_IsNeverOfferedForDownload()
+    {
+        using var temp = new TemporaryDirectory();
+        using var fixture = new Fixture();
+        fixture.Drive.AddFolder("headless-run-id", "Run 54");
+        fixture.Drive.AddFile(
+            "headless-file-id",
+            "slot1.sav",
+            "headless-run-id",
+            [1],
+            "application/octet-stream");
+        var engine = Engine(
+            fixture.Remote,
+            new StaticBackupHistoryService(temp.Path));
+
+        SyncPlan plan = await engine.CreatePreviewAsync(new SyncOptions());
+
+        Assert.DoesNotContain(plan.Items, item => item.RunName == "Run 54");
+        Assert.Empty(fixture.MediaDownloads.Calls);
+    }
+
+    private sealed record RemoteRun(
+        OfflineDriveStore Drive,
+        string RunName,
+        string RunFolderId,
+        TransferBackupManifest Manifest,
+        IReadOnlyList<(string RelativePath, byte[] Content)> Files)
+    {
+        public void ReplaceRemoteContent(string relativePath, byte[] content)
+        {
+            string name = relativePath.Split('/')[^1];
+            string parentId = RunFolderId;
+            foreach (string segment in relativePath.Split('/')[..^1])
+                parentId = Drive.GetRequiredFolderId(segment, parentId);
+
+            OfflineDriveObject file = Assert.Single(
+                Drive.FindChildren(parentId, name));
+            Drive.ReplaceContent(file.Metadata.Id, content);
+        }
+
+        public LocalFolderRemoteFileSystem WriteToLocalFolder(
+            string remoteRoot,
+            string backupBase)
+        {
+            string runRoot = Path.Combine(remoteRoot, RunName);
+            Directory.CreateDirectory(runRoot);
+            foreach ((string relativePath, byte[] content) in Files)
+            {
+                string target = Path.Combine(
+                    runRoot,
+                    relativePath.Replace('/', Path.DirectorySeparatorChar));
+                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                File.WriteAllBytes(target, content);
+            }
+
+            File.WriteAllText(
+                Path.Combine(runRoot, "manifest.json"),
+                JsonSerializer.Serialize(Manifest));
+            return new LocalFolderRemoteFileSystem(remoteRoot, backupBase);
+        }
+    }
+
+    private static TransferBackupManifest ReadManifest(string basePath, string runName) =>
+        JsonSerializer.Deserialize<TransferBackupManifest>(
+            File.ReadAllText(Path.Combine(basePath, runName, "manifest.json")))!;
+
+    private static string Relative(string path, string basePath) =>
+        Path.GetRelativePath(basePath, path);
+
     private static SyncEngine Engine(
         IRemoteFileSystem remote,
         IBackupHistoryService history) =>
@@ -573,6 +814,7 @@ public sealed class GoogleDriveSyncEngineCompatibilityTests
                     childEnumeration,
                     cache));
             MediaUploads = new OfflineDriveMediaUploadClientFactory(Drive);
+            MediaDownloads = new OfflineDriveMediaDownloadClientFactory(Drive);
             var targetGuard = new GoogleDriveCreateOnlyUploadTargetGuard(
                 childEnumeration,
                 new GoogleDriveObjectCreationCoordinator());
@@ -602,7 +844,13 @@ public sealed class GoogleDriveSyncEngineCompatibilityTests
                 providerReplacement,
                 createOnly,
                 recursiveListing,
-                binaryUpload);
+                binaryUpload,
+                new GoogleDriveBinaryDownloadService(
+                    new GoogleDriveLocalDownloadDestinationOpener().OpenAsync,
+                    ContextFactory,
+                    new GoogleDriveDownloadSourceResolver(childEnumeration),
+                    MediaDownloads,
+                    new GoogleDriveDownloadContentStreamer()));
             Remote = new RecordingRemoteFileSystem(inner);
         }
 
@@ -624,7 +872,67 @@ public sealed class GoogleDriveSyncEngineCompatibilityTests
 
         public OfflineDriveMediaUploadClientFactory MediaUploads { get; }
 
+        public OfflineDriveMediaDownloadClientFactory MediaDownloads { get; }
+
         public RecordingRemoteFileSystem Remote { get; }
+
+        private static string RunRelative(string relativePath) =>
+            relativePath.Replace('/', '\\');
+
+        public RemoteRun AddRemoteRun(
+            string runName,
+            params (string RelativePath, byte[] Content)[] files)
+        {
+            OfflineDriveObject runFolder = Drive.AddGeneratedFolder(runName, RootId);
+            var items = new List<TransferOverwriteBackupItem>();
+
+            foreach ((string relativePath, byte[] content) in files)
+            {
+                string parentId = runFolder.Metadata.Id;
+                string[] segments = relativePath.Split('/');
+                foreach (string segment in segments[..^1])
+                {
+                    IReadOnlyList<OfflineDriveObject> existing =
+                        Drive.FindChildren(parentId, segment);
+                    parentId = existing.Count == 1
+                        ? existing[0].Metadata.Id
+                        : Drive.AddGeneratedFolder(segment, parentId).Metadata.Id;
+                }
+
+                Drive.AddGeneratedFile(
+                    segments[^1],
+                    parentId,
+                    content,
+                    "application/octet-stream");
+                items.Add(new TransferOverwriteBackupItem(
+                    OriginalFile: $"C:\\original\\{segments[^1]}",
+                    BackupFile: $"C:\\remote-run\\{RunRelative(relativePath)}",
+                    Bytes: content.LongLength,
+                    Sha256: Convert.ToHexString(
+                        System.Security.Cryptography.SHA256.HashData(content)),
+                    BackedUpUtc: ManifestTimestamp));
+            }
+
+            TransferBackupManifest manifest = Manifest($"{runName} Game") with
+            {
+                FileCount = items.Count,
+                TotalBytes = items.Sum(item => item.Bytes),
+                Items = items
+            };
+            Drive.AddGeneratedFile(
+                "manifest.json",
+                runFolder.Metadata.Id,
+                System.Text.Encoding.UTF8.GetBytes(
+                    JsonSerializer.Serialize(manifest)),
+                "application/json");
+
+            return new RemoteRun(
+                Drive,
+                runName,
+                runFolder.Metadata.Id,
+                manifest,
+                files);
+        }
 
         public void Dispose()
         {

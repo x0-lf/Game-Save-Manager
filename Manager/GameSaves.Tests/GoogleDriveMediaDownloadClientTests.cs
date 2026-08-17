@@ -452,7 +452,7 @@ public sealed class GoogleDriveMediaDownloadClientTests
     }
 
     [Fact]
-    public void DownloadBoundary_IsNotWiredIntoTheRemoteFileSystemYet()
+    public void DownloadBoundary_StaysBehindTheDownloadService()
     {
         string source = File.ReadAllText(Path.Combine(
             FindManagerRoot(),
@@ -464,7 +464,10 @@ public sealed class GoogleDriveMediaDownloadClientTests
             "IGoogleDriveMediaDownloadClient",
             source,
             StringComparison.Ordinal);
-        Assert.Contains("Unsupported<long>();", source, StringComparison.Ordinal);
+        Assert.Contains(
+            "IGoogleDriveBinaryDownloadService",
+            source,
+            StringComparison.Ordinal);
     }
 
     [Fact]

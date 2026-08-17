@@ -187,6 +187,21 @@ namespace GameSaves.Infrastructure.DependencyInjection
             services.AddSingleton<GoogleDriveLocalUploadSourceOpener>();
             services.AddSingleton<IGoogleDriveMediaUploadClientFactory,
                 GoogleDriveMediaUploadClientFactory>();
+            services.AddSingleton<GoogleDriveDownloadSourceResolver>();
+            services.AddSingleton<GoogleDriveDownloadContentStreamer>();
+            services.AddSingleton<GoogleDriveLocalDownloadDestinationOpener>();
+            services.AddSingleton<IGoogleDriveMediaDownloadClientFactory,
+                GoogleDriveMediaDownloadClientFactory>();
+            services.AddSingleton<IGoogleDriveBinaryDownloadService>(provider =>
+                new GoogleDriveBinaryDownloadService(
+                    provider.GetRequiredService<
+                        GoogleDriveLocalDownloadDestinationOpener>().OpenAsync,
+                    provider.GetRequiredService<
+                        IGoogleDriveRemoteOperationContextFactory>(),
+                    provider.GetRequiredService<GoogleDriveDownloadSourceResolver>(),
+                    provider.GetRequiredService<
+                        IGoogleDriveMediaDownloadClientFactory>(),
+                    provider.GetRequiredService<GoogleDriveDownloadContentStreamer>()));
             services.AddSingleton<IGoogleDriveBinaryUploadService>(provider =>
                 new GoogleDriveBinaryUploadService(
                     provider.GetRequiredService<GoogleDriveLocalUploadSourceOpener>()
