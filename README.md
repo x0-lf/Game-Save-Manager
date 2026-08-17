@@ -639,9 +639,9 @@ does not exist, Google Drive is still absent from `SyncProviderFactory` with
 * [x] Verify downloaded backup runs before they become restorable
 * [x] Keep SHA-256 manifests as the content identity source
 
-Milestone S is implemented and automatically verified at the Infrastructure
-remote-filesystem boundary, and its live development-account acceptance is
-still outstanding, so the milestone is not closed. `DownloadFileAsync` resolves
+Milestone S is complete and closed. It is automatically verified at the
+Infrastructure remote-filesystem boundary, and its controlled
+development-account live acceptance passed on 2026-08-17. `DownloadFileAsync` resolves
 the source through authoritative My Drive IDs, streams it into a unique
 temporary file beside the destination, validates the written length against the
 authoritative source size, and only then moves it to its final name. It never

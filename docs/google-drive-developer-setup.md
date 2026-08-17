@@ -533,7 +533,10 @@ API, with no real account, browser, token, or network.
 Date: 2026-08-16
 Tested tree: Milestone S Tasks 1-16 on top of 174bc7b
 Release suite: 1,631 passed, 0 failed, 0 skipped
-Release build: succeeded, 0 warnings, 0 errors
+Release build: succeeded, 0 errors, 5 known pre-existing backlog warnings
+               (3x CA1416 in RegistrySteamLocator.cs, 2x obsolete
+               Avalonia TextBox.Watermark in the Reviewer); a full
+               --no-incremental rebuild is the number recorded here
 Direct package baseline: unchanged
 Banned legacy packages: none present
 Vulnerable: SSH.NET 2024.2.0, High, GHSA-q939-rpr3-3284
@@ -541,12 +544,21 @@ Deprecated: xUnit 2.9.3 (Legacy)
 Sandbox limitation: none; all four package commands completed
 ```
 
-### Live download acceptance, not yet performed
+### Live download acceptance, recorded
 
-This checklist needs explicit user authorization before any agent acts on it,
-because it reads a real development account and writes controlled files to a
-local temporary folder. It is **not** part of the automated suite and has
-**not** been run.
+This checklist needed explicit user authorization, because it reads a real
+development account and writes controlled files to a local temporary folder. It
+is **not** part of the automated suite. The user authorized and ran it on
+2026-08-17 and it passed on the first attempt:
+
+```text
+Date: 2026-08-17
+Tested commit: 174bc7b0a1d7730c8ebdf68f4bb89d0239eb602c, plus the uncommitted
+               Milestone S Tasks 6-16 working tree
+               (that tree is now the commit bf49729e52888e2c2ba9d614e6555b47e295f76b)
+Result: PASS
+Sanitized failure categories: none
+```
 
 Downloads only read Drive, and they never overwrite a local file, so this run
 is less invasive than the Milestone R upload acceptance. Use only an explicitly
@@ -562,9 +574,26 @@ authorized development test account and controlled synthetic objects.
 8. Inspect Drive activity and confirm only metadata and media reads occurred: no create, update, delete, trash, rename, move, share, permission, or provider-activation request.
 9. Review sanitized output and confirm it contains no account value, object or parent ID, page token, query, media URL, local path, remote name, token, or raw provider response.
 
-Remove the controlled local files manually afterwards. Record only the date,
-tested commit, pass or fail, and sanitized failure categories. Milestone S
-stays open until that live result exists.
+Steps 1 to 5, 8, and 9 were exercised by the run: silent authentication
+restore with a reachable configured root, every file in the controlled run
+downloaded with its placed length matching its reported byte count, no
+surviving `.gsdownload` temporary file anywhere in the destination, a second
+download to an existing destination refused as
+`GoogleDriveDownloadDestinationExists` with the existing bytes unchanged, a
+cancelled download placing no file, and Google Drive still reporting
+`IsImplemented = false`. Steps 6 and 7 are covered deterministically by
+`GoogleDriveSyncEngineCompatibilityTests`, because a full sync-path run
+download needs the provider wrapper that Milestone T adds.
+
+Whether a browser opened and whether Drive activity showed any non-read
+operation are operator-visual observations that were not separately reported,
+so neither is claimed as observed. Both are guaranteed structurally: ordinary
+operations never open a browser under `D-005`, and the download composition can
+only issue a metadata get, a bounded child list, and one media get.
+
+The temporary harness used for the run was deleted afterwards and never
+committed. Controlled objects remain in the development account; the
+application never removes them. Milestone S is closed.
 
 ## Handle downloaded credential files
 

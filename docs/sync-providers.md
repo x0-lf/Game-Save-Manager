@@ -247,8 +247,9 @@ Now remain disabled.
 ## Google Drive no-overwrite file download
 
 Milestone S wires `GoogleDriveRemoteFileSystem.DownloadFileAsync` to an
-Infrastructure-internal one-file download service. Its live development-account
-acceptance is still outstanding, so the milestone is not closed.
+Infrastructure-internal one-file download service. Its controlled
+development-account live acceptance passed on 2026-08-17, so the milestone is
+closed.
 
 ```text
 DownloadFileAsync
