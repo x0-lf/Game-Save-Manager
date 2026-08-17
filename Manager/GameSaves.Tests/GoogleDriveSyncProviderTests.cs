@@ -115,14 +115,76 @@ public sealed class GoogleDriveSyncProviderTests
     }
 
     [Fact]
+    public void Dispose_IsIdempotent()
+    {
+        var remote = new RecordingProviderRemoteFileSystem();
+        ISyncProvider provider = Provider(remote);
+
+        provider.Dispose();
+        provider.Dispose();
+        provider.Dispose();
+
+        Assert.Empty(remote.Calls);
+    }
+
+    [Fact]
+    public async Task DisposedProvider_RefusesEveryOperationWithoutRemoteWork()
+    {
+        var remote = new RecordingProviderRemoteFileSystem();
+        ISyncProvider provider = Provider(remote);
+        SyncPlan plan = await provider.CreatePreviewAsync(new SyncOptions());
+        provider.Dispose();
+        remote.Calls.Clear();
+
+        await Assert.ThrowsAsync<ObjectDisposedException>(
+            () => provider.CreatePreviewAsync(new SyncOptions()));
+        await Assert.ThrowsAsync<ObjectDisposedException>(
+            () => provider.ExecuteAsync(plan, new SyncOptions()));
+        await Assert.ThrowsAsync<ObjectDisposedException>(
+            () => provider.GetSyncLogAsync());
+
+        Assert.Empty(remote.Calls);
+    }
+
+    [Fact]
+    public async Task DisposedProvider_RefusesBeforeCheckingCancellation()
+    {
+        var remote = new RecordingProviderRemoteFileSystem();
+        ISyncProvider provider = Provider(remote);
+        provider.Dispose();
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAsync<ObjectDisposedException>(
+            () => provider.GetSyncLogAsync(cancellation.Token));
+
+        Assert.Empty(remote.Calls);
+    }
+
+    [Fact]
+    public void DriveFileSystem_StillHoldsNothingThatNeedsReleasing()
+    {
+        // Disposal is a no-op only because the Drive boundary owns no
+        // connection. If that ever changes, this fails and the provider must
+        // release it exactly once.
+        Assert.False(
+            typeof(GoogleDriveRemoteFileSystem).IsAssignableTo(typeof(IDisposable)));
+        Assert.False(
+            typeof(GoogleDriveRemoteFileSystem).IsAssignableTo(
+                typeof(IAsyncDisposable)));
+    }
+
+    [Fact]
     public void Wrapper_HoldsNothingButTheSharedEngine()
     {
         FieldInfo[] fields = typeof(GoogleDriveSyncProvider).GetFields(
             BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
 
         Assert.Equal(
-            new[] { typeof(SyncEngine), typeof(string) },
-            fields.Select(field => field.FieldType).ToArray());
+            new[] { typeof(bool), typeof(string), typeof(SyncEngine) },
+            fields.Select(field => field.FieldType)
+                .OrderBy(type => type.Name, StringComparer.Ordinal)
+                .ToArray());
     }
 
     [Fact]

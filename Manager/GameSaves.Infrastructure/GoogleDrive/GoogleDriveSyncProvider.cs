@@ -15,6 +15,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
     internal sealed class GoogleDriveSyncProvider : ISyncProvider
     {
         private readonly SyncEngine _engine;
+        private bool _disposed;
 
         internal GoogleDriveSyncProvider(
             IRemoteFileSystem fileSystem,
@@ -46,6 +47,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
             SyncOptions options,
             CancellationToken cancellationToken = default)
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
             return _engine.CreatePreviewAsync(options, cancellationToken);
         }
 
@@ -54,19 +56,25 @@ namespace GameSaves.Infrastructure.GoogleDrive
             SyncOptions options,
             CancellationToken cancellationToken = default)
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
             return _engine.ExecuteAsync(plan, options, cancellationToken);
         }
 
         public Task<IReadOnlyList<SyncLogEntry>> GetSyncLogAsync(
             CancellationToken cancellationToken = default)
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
             return _engine.GetSyncLogAsync(cancellationToken);
         }
 
-        public void Dispose()
-        {
-            // Each Google Drive operation owns its own short-lived authenticated
-            // context, so this provider holds no connection to release.
-        }
+        /// <summary>
+        /// Each Google Drive operation owns its own short-lived authenticated
+        /// context, so this provider holds no connection to release. Disposal
+        /// therefore only closes the provider to further use, and repeating it
+        /// changes nothing. A test asserts the Drive file system is still not
+        /// disposable, so making it disposable fails until a release is added
+        /// here.
+        /// </summary>
+        public void Dispose() => _disposed = true;
     }
 }
