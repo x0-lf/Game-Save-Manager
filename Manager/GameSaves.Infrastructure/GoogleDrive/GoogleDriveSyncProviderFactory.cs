@@ -1,4 +1,5 @@
 using GameSaves.Core.Sync;
+using GameSaves.Core.Transfers;
 
 namespace GameSaves.Infrastructure.GoogleDrive
 {
@@ -20,16 +21,25 @@ namespace GameSaves.Infrastructure.GoogleDrive
     internal sealed class GoogleDriveSyncProviderFactory
         : IGoogleDriveSyncProviderFactory
     {
-        private const string ProviderPendingMessage =
-            "The Google Drive sync provider is not available yet.";
-
         private readonly ISyncRemoteProfileRepository _profileRepository;
+        private readonly IGoogleDriveRemoteFileSystemFactory _fileSystemFactory;
+        private readonly IBackupHistoryService _backupHistoryService;
+        private readonly ITransferHistoryRepository _historyRepository;
 
         public GoogleDriveSyncProviderFactory(
-            ISyncRemoteProfileRepository profileRepository)
+            ISyncRemoteProfileRepository profileRepository,
+            IGoogleDriveRemoteFileSystemFactory fileSystemFactory,
+            IBackupHistoryService backupHistoryService,
+            ITransferHistoryRepository historyRepository)
         {
             _profileRepository = profileRepository ??
                 throw new ArgumentNullException(nameof(profileRepository));
+            _fileSystemFactory = fileSystemFactory ??
+                throw new ArgumentNullException(nameof(fileSystemFactory));
+            _backupHistoryService = backupHistoryService ??
+                throw new ArgumentNullException(nameof(backupHistoryService));
+            _historyRepository = historyRepository ??
+                throw new ArgumentNullException(nameof(historyRepository));
         }
 
         public ISyncProvider Create(Guid remoteProfileId)
@@ -54,10 +64,10 @@ namespace GameSaves.Infrastructure.GoogleDrive
             if (rejection is not null)
                 throw new GoogleDriveRemoteOperationException(rejection);
 
-            // The provider wrapper itself lands in the next Milestone T task.
-            // Until then a usable profile still stops here rather than
-            // returning a partially wired provider.
-            throw new NotSupportedException(ProviderPendingMessage);
+            return new GoogleDriveSyncProvider(
+                _fileSystemFactory.Create(remoteProfileId),
+                _backupHistoryService,
+                _historyRepository);
         }
     }
 }

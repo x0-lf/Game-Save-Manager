@@ -315,9 +315,14 @@ public sealed class GoogleDriveUploadIntegrationTests
         Assert.DoesNotContain(
             typeof(SyncProviderFactory).GetMethods(),
             method => method.Name.Contains("Google", StringComparison.Ordinal));
-        Assert.DoesNotContain(
+        // Milestone T added the wrapper itself, so the surviving invariant is
+        // that it stays internal and unactivated, not that it is absent.
+        Type wrapper = Assert.Single(
             typeof(GoogleDriveRemoteFileSystem).Assembly.GetTypes(),
             type => type.Name == "GoogleDriveSyncProvider");
+        Assert.False(wrapper.IsPublic);
+        Assert.False(new SyncProviderCatalog()
+            .GetDescriptor(SyncProviderKind.GoogleDrive).IsImplemented);
         Assert.Empty(harness.Media.Calls);
     }
 

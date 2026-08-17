@@ -171,8 +171,14 @@ public sealed class GoogleDriveObjectPathResolverIntegrationTests
                 StringComparison.Ordinal))
             .ToArray();
 
-        Assert.DoesNotContain(googleDriveTypes, type =>
-            type.Name == "GoogleDriveSyncProvider");
+        // Milestone T added the wrapper itself, so the surviving invariant is
+        // that it stays internal and unactivated, not that it is absent.
+        Type wrapper = Assert.Single(
+            googleDriveTypes,
+            type => type.Name == "GoogleDriveSyncProvider");
+        Assert.False(wrapper.IsPublic);
+        Assert.False(new SyncProviderCatalog()
+            .GetDescriptor(SyncProviderKind.GoogleDrive).IsImplemented);
         Assert.Collection(
             googleDriveTypes.Where(type =>
                 !type.IsInterface &&

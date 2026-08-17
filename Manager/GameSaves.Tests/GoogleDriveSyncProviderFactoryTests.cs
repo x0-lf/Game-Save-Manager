@@ -21,7 +21,7 @@ public sealed class GoogleDriveSyncProviderFactoryTests
     public void Create_RefusesAnEmptyProfileIdBeforeAnyLookup()
     {
         var repository = new CountingProfileRepository();
-        var factory = new GoogleDriveSyncProviderFactory(repository);
+        var factory = Factory(repository);
 
         Assert.Throws<ArgumentException>(() => factory.Create(Guid.Empty));
         Assert.Equal(0, repository.LookupCalls);
@@ -30,8 +30,7 @@ public sealed class GoogleDriveSyncProviderFactoryTests
     [Fact]
     public void Create_RefusesAnUnknownProfile()
     {
-        var factory = new GoogleDriveSyncProviderFactory(
-            new InMemorySyncRemoteProfileRepository());
+        var factory = Factory(new InMemorySyncRemoteProfileRepository());
 
         GoogleDriveRemoteOperationException failure =
             Assert.Throws<GoogleDriveRemoteOperationException>(
@@ -54,7 +53,7 @@ public sealed class GoogleDriveSyncProviderFactoryTests
         var status = (GoogleDriveRemoteValidationStatus)expectedStatus;
         var repository = new InMemorySyncRemoteProfileRepository();
         repository.Create(UnusableProfile(status));
-        var factory = new GoogleDriveSyncProviderFactory(repository);
+        var factory = Factory(repository);
 
         GoogleDriveRemoteOperationException failure =
             Assert.Throws<GoogleDriveRemoteOperationException>(
@@ -71,7 +70,7 @@ public sealed class GoogleDriveSyncProviderFactoryTests
         SyncRemoteProfile profile = UnusableProfile(
             GoogleDriveRemoteValidationStatus.UnsupportedScope);
         repository.Create(profile);
-        var factory = new GoogleDriveSyncProviderFactory(repository);
+        var factory = Factory(repository);
 
         GoogleDriveRemoteOperationException failure =
             Assert.Throws<GoogleDriveRemoteOperationException>(
@@ -86,13 +85,41 @@ public sealed class GoogleDriveSyncProviderFactoryTests
     }
 
     [Fact]
-    public void Create_StopsAtAUsableProfileUntilTheWrapperExists()
+    public void Create_BuildsAProviderForAUsableProfile()
     {
         var repository = new InMemorySyncRemoteProfileRepository();
         repository.Create(UsableProfile());
-        var factory = new GoogleDriveSyncProviderFactory(repository);
+        var fileSystems = new RecordingRemoteFileSystemFactory();
+        var factory = new GoogleDriveSyncProviderFactory(
+            repository,
+            fileSystems,
+            new EmptyBackupHistoryService(),
+            new RecordingHistoryRepository());
 
-        Assert.Throws<NotSupportedException>(() => factory.Create(ProfileId));
+        using ISyncProvider provider = factory.Create(ProfileId);
+
+        Assert.Equal("Google Drive", provider.ProviderName);
+        Assert.Equal(ProfileId, Assert.Single(fileSystems.RequestedProfileIds));
+    }
+
+    [Fact]
+    public void Create_BuildsOneProviderPerCallWithoutRemoteWork()
+    {
+        var repository = new InMemorySyncRemoteProfileRepository();
+        repository.Create(UsableProfile());
+        var fileSystems = new RecordingRemoteFileSystemFactory();
+        var factory = new GoogleDriveSyncProviderFactory(
+            repository,
+            fileSystems,
+            new EmptyBackupHistoryService(),
+            new RecordingHistoryRepository());
+
+        using ISyncProvider first = factory.Create(ProfileId);
+        using ISyncProvider second = factory.Create(ProfileId);
+
+        Assert.NotSame(first, second);
+        Assert.Equal(2, fileSystems.RequestedProfileIds.Count);
+        Assert.Empty(fileSystems.FileSystem.Calls);
     }
 
     [Fact]
@@ -101,7 +128,7 @@ public sealed class GoogleDriveSyncProviderFactoryTests
         var repository = new InMemorySyncRemoteProfileRepository();
         repository.Create(UnusableProfile(
             GoogleDriveRemoteValidationStatus.RootNotConfigured));
-        var factory = new GoogleDriveSyncProviderFactory(repository);
+        var factory = Factory(repository);
 
         GoogleDriveRemoteOperationException failure =
             Assert.Throws<GoogleDriveRemoteOperationException>(
@@ -159,6 +186,14 @@ public sealed class GoogleDriveSyncProviderFactoryTests
             method => method.Name.Contains(
                 "GoogleDrive", StringComparison.OrdinalIgnoreCase));
     }
+
+    private static GoogleDriveSyncProviderFactory Factory(
+        ISyncRemoteProfileRepository repository) =>
+        new(
+            repository,
+            new RecordingRemoteFileSystemFactory(),
+            new EmptyBackupHistoryService(),
+            new RecordingHistoryRepository());
 
     private static SyncRemoteProfile UsableProfile() =>
         new(
