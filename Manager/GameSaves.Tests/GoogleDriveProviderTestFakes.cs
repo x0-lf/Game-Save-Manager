@@ -16,6 +16,10 @@ internal sealed class RecordingProviderRemoteFileSystem : IRemoteFileSystem
 
     public string? ProviderMetadata { get; set; }
 
+    /// <summary>Failures to throw, keyed by the member that should fail.</summary>
+    public Dictionary<string, Exception> Failures { get; } =
+        new(StringComparer.Ordinal);
+
     public string DisplayRoot { get; init; } = DefaultDisplayRoot;
 
     public string GetDisplayPath(string relativePath) =>
@@ -29,9 +33,11 @@ internal sealed class RecordingProviderRemoteFileSystem : IRemoteFileSystem
         CancellationToken cancellationToken = default) =>
         Record(true, cancellationToken);
 
+    public IReadOnlyList<string> RunFolderNames { get; init; } = [];
+
     public Task<IReadOnlyList<string>> ListRunFolderNamesAsync(
         CancellationToken cancellationToken = default) =>
-        Record<IReadOnlyList<string>>([], cancellationToken);
+        Record(RunFolderNames, cancellationToken);
 
     public Task<bool> FolderExistsAsync(
         string relativeFolder,
@@ -84,6 +90,9 @@ internal sealed class RecordingProviderRemoteFileSystem : IRemoteFileSystem
     {
         Calls.Add(caller);
         cancellationToken.ThrowIfCancellationRequested();
+        if (Failures.TryGetValue(caller, out Exception? failure))
+            throw failure;
+
         return Task.FromResult(value);
     }
 }
