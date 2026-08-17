@@ -235,11 +235,14 @@ public sealed class GoogleDriveRemoteFileSystemTests
         Assert.Equal(0, validation.Calls);
         Assert.False(new SyncProviderCatalog()
             .GetDescriptor(SyncProviderKind.GoogleDrive).IsImplemented);
+        // Milestone T registers a provider construction boundary, so the guard
+        // is the provider wrapper itself, not every name that starts with it.
         Assert.DoesNotContain(
             services,
-            descriptor => descriptor.ImplementationType?.Name.Contains(
+            descriptor => string.Equals(
+                descriptor.ImplementationType?.Name,
                 "GoogleDriveSyncProvider",
-                StringComparison.Ordinal) == true);
+                StringComparison.Ordinal));
     }
 
     [Fact]

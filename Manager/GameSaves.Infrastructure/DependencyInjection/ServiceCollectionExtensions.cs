@@ -130,6 +130,8 @@ namespace GameSaves.Infrastructure.DependencyInjection
                 GoogleDriveRemoteValidationService>();
             services.AddSingleton<IGoogleDriveRemoteFileSystemFactory,
                 GoogleDriveRemoteFileSystemFactory>();
+            services.AddSingleton<IGoogleDriveSyncProviderFactory,
+                GoogleDriveSyncProviderFactory>();
             services.AddSingleton<GoogleDriveQueryBuilder>();
             services.AddSingleton<IGoogleDriveObjectClientFactory,
                 GoogleDriveObjectClientFactory>();
