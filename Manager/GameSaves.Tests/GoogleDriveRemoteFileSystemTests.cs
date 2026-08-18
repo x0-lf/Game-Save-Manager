@@ -821,6 +821,89 @@ public sealed class GoogleDriveRemoteFileSystemTests
             .GetDescriptor(SyncProviderKind.GoogleDrive).IsImplemented);
     }
 
+    // Milestone U required that secrets and identifiers never reach a display
+    // root. GetSafeDisplayRoot enforces it by falling back to a fixed label
+    // whenever the saved display name would carry the account address or the
+    // remote folder ID. Milestone V puts these roots on screen, so the scrub
+    // is pinned here before that happens.
+    [Theory]
+    [InlineData("private-root-id-marker")]
+    [InlineData("Backups (private-root-id-marker)")]
+    [InlineData("user@example.invalid")]
+    [InlineData("Backups for USER@EXAMPLE.INVALID")]
+    public void DisplayRoot_FallsBackWhenTheSavedNameWouldCarryASecretOrIdentifier(
+        string hostileDisplayName)
+    {
+        const string rootId = "private-root-id-marker";
+        const string accountEmail = "user@example.invalid";
+
+        var repository = new InMemorySyncRemoteProfileRepository();
+        Guid profileId = Guid.NewGuid();
+        repository.Create(DisplayRootProfile(
+            profileId, rootId, accountEmail, hostileDisplayName));
+
+        IRemoteFileSystem fileSystem = DisplayRootFactory(repository).Create(profileId);
+
+        Assert.Equal("Google Drive", fileSystem.DisplayRoot);
+        Assert.DoesNotContain(rootId, fileSystem.DisplayRoot, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            accountEmail, fileSystem.DisplayRoot, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void DisplayRoot_KeepsAnOrdinaryFolderNameSoTheScrubIsNotBlanket()
+    {
+        // Non-vacuity: a name carrying no identifier survives, so the theory
+        // above is proving a scrub rather than a constant.
+        var repository = new InMemorySyncRemoteProfileRepository();
+        Guid profileId = Guid.NewGuid();
+        repository.Create(DisplayRootProfile(
+            profileId,
+            "private-root-id-marker",
+            "user@example.invalid",
+            "GameSave Manager Backups"));
+
+        IRemoteFileSystem fileSystem = DisplayRootFactory(repository).Create(profileId);
+
+        Assert.Equal("GameSave Manager Backups", fileSystem.DisplayRoot);
+    }
+
+    private static GoogleDriveRemoteFileSystemFactory DisplayRootFactory(
+        ISyncRemoteProfileRepository repository) =>
+        new(
+            repository,
+            new RecordingValidationService(),
+            new RecordingRootExistenceService(),
+            new RecordingFolderExistenceService(),
+            new RecordingRunFolderNameService(),
+            new RecordingTextFileReadService(),
+            new RecordingProviderMetadataReadService(),
+            new RecordingProviderMetadataReplacementService(),
+            new RecordingCreateOnlyTextFileService(),
+            new RecordingRecursiveFileListingService(),
+            new FakeGoogleDriveBinaryUploadService(),
+            new FakeGoogleDriveBinaryDownloadService());
+
+    private static SyncRemoteProfile DisplayRootProfile(
+        Guid profileId,
+        string rootId,
+        string accountEmail,
+        string displayName) =>
+        new(
+            profileId,
+            "Profile name",
+            SyncProviderKind.GoogleDrive,
+            AccountDisplayName: accountEmail,
+            RemoteRootDisplayName: displayName,
+            ProviderSettings: new GoogleDriveSyncRemoteSettings(
+                accountEmail,
+                GoogleDriveAuthorizationScopes.DriveFile),
+            CreatedUtc: DateTimeOffset.Parse("2026-08-18T10:00:00Z"),
+            UpdatedUtc: DateTimeOffset.Parse("2026-08-18T10:00:00Z"),
+            LastUsedUtc: null,
+            LastSuccessfulConnectionUtc: null,
+            RemoteFolderId: rootId);
+
     private static IRemoteFileSystem Remote(
         RecordingValidationService validation,
         RecordingRootExistenceService? rootExistence = null,

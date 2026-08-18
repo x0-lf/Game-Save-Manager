@@ -694,8 +694,8 @@ Preview Sync and Sync Now remain disabled until Milestone V.
 * [x] Keep existing local and SFTP factory methods working
 * [x] Keep provider creation free of UI logic
 * [x] Receive dependencies through DI
-* [ ] Inject OAuth/token services and secret storage
-* [ ] Keep secrets and tokens out of display roots
+* [x] Inject OAuth/token services and secret storage
+* [x] Keep secrets and tokens out of display roots
 
 ### V — Sync tab provider selector
 
