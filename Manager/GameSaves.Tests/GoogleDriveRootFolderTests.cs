@@ -866,6 +866,23 @@ public sealed class GoogleDriveRootFolderTests
         Assert.DoesNotContain("IServiceProvider", factorySource, StringComparison.Ordinal);
         Assert.Contains(
             "CreateGoogleDriveProvider", factorySource, StringComparison.Ordinal);
+
+        // Milestone U wired the factory but must not make it reachable. The App
+        // still has no way to ask for a Google Drive provider; that is
+        // Milestone V. If this string ever appears here, the UI can construct
+        // one while the catalog still calls the provider unimplemented.
+        string syncViewModelSource = ReadRepositoryFile(
+            "GameSaves.App",
+            "ViewModels",
+            "SyncViewModel.cs");
+        Assert.DoesNotContain(
+            "CreateGoogleDriveProvider",
+            syncViewModelSource,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "SyncProviderKind.LocalFolder =>",
+            syncViewModelSource,
+            StringComparison.Ordinal);
     }
 
     [Fact]

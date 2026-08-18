@@ -262,6 +262,162 @@ public sealed class GoogleDriveSyncProviderFactoryTests
             .GetDescriptor(SyncProviderKind.GoogleDrive).IsImplemented);
     }
 
+    // ---- Milestone U Task 4: the Core seam adds nothing and hides nothing ----
+
+    [Theory]
+    [InlineData((int)GoogleDriveRemoteValidationStatus.WrongProviderKind)]
+    [InlineData((int)GoogleDriveRemoteValidationStatus.UnsupportedScope)]
+    [InlineData((int)GoogleDriveRemoteValidationStatus.RootNotConfigured)]
+    public void CoreSeam_RefusesAnUnusableProfileIdenticallyToTheInternalFactory(
+        int expectedStatus)
+    {
+        var status = (GoogleDriveRemoteValidationStatus)expectedStatus;
+
+        GoogleDriveRemoteOperationException viaInternal =
+            Assert.Throws<GoogleDriveRemoteOperationException>(
+                () => Factory(RepositoryWith(UnusableProfile(status)))
+                    .Create(ProfileId));
+
+        GoogleDriveRemoteOperationException viaCore =
+            Assert.Throws<GoogleDriveRemoteOperationException>(
+                () => CoreFactory(RepositoryWith(UnusableProfile(status)))
+                    .CreateGoogleDriveProvider(ProfileId));
+
+        AssertIdenticalRefusal(viaInternal, viaCore);
+    }
+
+    [Fact]
+    public void CoreSeam_RefusesAnUnknownProfileIdenticallyToTheInternalFactory()
+    {
+        GoogleDriveRemoteOperationException viaInternal =
+            Assert.Throws<GoogleDriveRemoteOperationException>(
+                () => Factory(new InMemorySyncRemoteProfileRepository())
+                    .Create(ProfileId));
+
+        GoogleDriveRemoteOperationException viaCore =
+            Assert.Throws<GoogleDriveRemoteOperationException>(
+                () => CoreFactory(new InMemorySyncRemoteProfileRepository())
+                    .CreateGoogleDriveProvider(ProfileId));
+
+        AssertIdenticalRefusal(viaInternal, viaCore);
+    }
+
+    [Fact]
+    public void CoreSeam_RefusesAnEmptyProfileIdBeforeAnyLookup()
+    {
+        var repository = new CountingProfileRepository();
+
+        Assert.Throws<ArgumentException>(
+            () => CoreFactory(repository).CreateGoogleDriveProvider(Guid.Empty));
+
+        Assert.Equal(0, repository.LookupCalls);
+    }
+
+    [Fact]
+    public void CoreSeam_BuildsTheSameProviderTheInternalFactoryWouldBuild()
+    {
+        var fileSystems = new RecordingRemoteFileSystemFactory();
+        ISyncProviderFactory core = new SyncProviderFactory(
+            new EmptyBackupHistoryService(),
+            new RecordingHistoryRepository(),
+            new TestDatabasePathProvider(
+                Path.Combine(Path.GetTempPath(), "gamesaves-u4.db")),
+            new GoogleDriveSyncProviderFactory(
+                RepositoryWith(UsableProfile()),
+                fileSystems,
+                new EmptyBackupHistoryService(),
+                new RecordingHistoryRepository()));
+
+        using ISyncProvider provider = core.CreateGoogleDriveProvider(ProfileId);
+
+        Assert.Equal("Google Drive", provider.ProviderName);
+        Assert.Equal(ProfileId, Assert.Single(fileSystems.RequestedProfileIds));
+        Assert.Empty(fileSystems.FileSystem.Calls);
+    }
+
+    [Fact]
+    public void CoreSeamRefusals_ExposeNoPrivateValue()
+    {
+        // WrongProviderKind is the status that still carries every private
+        // value, so the non-vacuity check below is honest. RootNotConfigured
+        // would have to fake the root marker back in, which would assert that
+        // the sweep guards something the profile no longer holds.
+        SyncRemoteProfile profile = UnusableProfile(
+            GoogleDriveRemoteValidationStatus.WrongProviderKind);
+
+        string[] markers =
+            [RootId, AccountEmail, ProfileName, RootDisplayName, ProfileId.ToString()];
+
+        // Non-vacuity: the sweep below only means something if these markers are
+        // genuinely carried by the profile being refused. If a future refactor
+        // stopped putting them there, the sweep would pass while proving nothing.
+        string profileState = string.Join(
+            "|",
+            profile.Id.ToString(),
+            profile.DisplayName,
+            profile.AccountDisplayName,
+            profile.RemoteRootDisplayName,
+            profile.RemoteFolderId);
+
+        foreach (string marker in markers)
+        {
+            Assert.False(string.IsNullOrWhiteSpace(marker));
+            Assert.Contains(marker, profileState, StringComparison.OrdinalIgnoreCase);
+        }
+
+        GoogleDriveRemoteOperationException failure =
+            Assert.Throws<GoogleDriveRemoteOperationException>(
+                () => CoreFactory(RepositoryWith(profile))
+                    .CreateGoogleDriveProvider(ProfileId));
+
+        string[] surfaces =
+        [
+            failure.Message,
+            failure.ToString(),
+            failure.Result.UserMessage,
+            failure.Result.ToSafeDiagnosticString()
+        ];
+
+        foreach (string surface in surfaces)
+        {
+            foreach (string marker in markers)
+            {
+                Assert.DoesNotContain(
+                    marker, surface, StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
+        Assert.Null(failure.InnerException);
+    }
+
+    private static void AssertIdenticalRefusal(
+        GoogleDriveRemoteOperationException viaInternal,
+        GoogleDriveRemoteOperationException viaCore)
+    {
+        Assert.Equal(viaInternal.Result.Status, viaCore.Result.Status);
+        Assert.Equal(viaInternal.Result.ErrorCode, viaCore.Result.ErrorCode);
+        Assert.Equal(viaInternal.Result.UserMessage, viaCore.Result.UserMessage);
+        Assert.Equal(viaInternal.Message, viaCore.Message);
+        Assert.Null(viaCore.InnerException);
+    }
+
+    private static InMemorySyncRemoteProfileRepository RepositoryWith(
+        SyncRemoteProfile profile)
+    {
+        var repository = new InMemorySyncRemoteProfileRepository();
+        repository.Create(profile);
+        return repository;
+    }
+
+    private static ISyncProviderFactory CoreFactory(
+        ISyncRemoteProfileRepository repository) =>
+        new SyncProviderFactory(
+            new EmptyBackupHistoryService(),
+            new RecordingHistoryRepository(),
+            new TestDatabasePathProvider(
+                Path.Combine(Path.GetTempPath(), "gamesaves-u4.db")),
+            Factory(repository));
+
     private static GoogleDriveSyncProviderFactory Factory(
         ISyncRemoteProfileRepository repository) =>
         new(
