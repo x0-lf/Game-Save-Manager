@@ -30,7 +30,7 @@ dependencies are added, removed, or upgraded.
 | System.Security.Cryptography.ProtectedData | 10.0.0 | MIT | Windows DPAPI access for current-user secret protection. |
 | System.Text.Json | 10.0.9 | MIT | JSON serialization used by sync settings and regression tests. |
 | ValveKeyValue | 0.20.0.417 | MIT | Selected .NET 8-compatible KeyValues1 parser used for Steam VDF files; referenced only by Infrastructure. |
-| SSH.NET | 2024.2.0 | MIT | SFTP/SSH client used by the SFTP sync provider. |
+| SSH.NET | 2026.0.0 | MIT | SFTP/SSH client used by the SFTP sync provider. |
 | Microsoft.NET.Test.Sdk | 17.14.1 | MIT | .NET test host and discovery support; test project only. |
 | xunit | 2.9.3 | Apache-2.0 | Regression test framework; test project only. |
 | xunit.runner.visualstudio | 3.1.5 | Apache-2.0 | VSTest adapter for xUnit; test project only. |

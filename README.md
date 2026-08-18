@@ -660,13 +660,29 @@ Sync Now remain disabled.
 
 Add a thin provider wrapper following the existing SFTP pattern.
 
-* [ ] Own the Google Drive remote filesystem lifetime
-* [ ] Create the existing `SyncEngine`
-* [ ] Forward preview to `SyncEngine`
-* [ ] Forward execution to `SyncEngine`
-* [ ] Forward sync-log reading to `SyncEngine`
-* [ ] Dispose provider-specific resources
-* [ ] Do not reimplement conflict detection, sync plans, selection logic, sync history, manifest comparison, or upload/download decisions
+* [x] Own the Google Drive remote filesystem lifetime
+* [x] Create the existing `SyncEngine`
+* [x] Forward preview to `SyncEngine`
+* [x] Forward execution to `SyncEngine`
+* [x] Forward sync-log reading to `SyncEngine`
+* [x] Dispose provider-specific resources
+* [x] Do not reimplement conflict detection, sync plans, selection logic, sync history, manifest comparison, or upload/download decisions
+
+Milestone T is implemented and automatically verified at the Infrastructure
+provider boundary, and its live development-account acceptance is still
+outstanding, so the milestone is not closed. `GoogleDriveSyncProvider` is an
+internal sealed wrapper built by an internal profile-scoped factory: it holds
+one `SyncEngine` over one profile-scoped remote file system, forwards preview,
+execution, and sync-log reading unchanged, reports the fixed provider name
+`Google Drive` and the sanitized profile display root, and refuses every
+operation after disposal. Driving the same run set through the Local Folder and
+Google Drive wrappers produces identical plans, results, file trees, rewritten
+manifests, and sync logs, so no engine policy is duplicated.
+
+Teaching the Core `ISyncProviderFactory` about Google Drive is itself a Core
+contract change and belongs to Milestone U, so Google Drive is still absent
+from `SyncProviderFactory` with `IsImplemented = false`, and Preview Sync and
+Sync Now remain disabled.
 
 ### U — Sync provider factory
 
