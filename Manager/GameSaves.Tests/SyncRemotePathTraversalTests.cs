@@ -140,15 +140,56 @@ public sealed class SyncRemotePathTraversalTests
         Assert.Equal("original user data", await File.ReadAllTextAsync(escapeTarget));
     }
 
+    [Fact]
+    public async Task AnUnsafeNameLateInTheListing_StillWritesNothing()
+    {
+        using var local = new TempDir();
+
+        // The safe entries come first, so a per-file check would already have
+        // written them before reaching the traversing one and would leave a
+        // folder carrying a manifest that passes for a complete run.
+        var remote = new TraversingRemoteFileSystem(
+            "run-2026-08-18",
+            "manifest.json",
+            "saves/profile.sav",
+            @"..\..\evil.txt");
+
+        var engine = new SyncEngine(
+            remote,
+            "Hostile",
+            "hostile://remote",
+            new TraversalBackupHistoryService(local.Path),
+            new RecordingHistoryRepository());
+
+        SyncPlan plan = await engine.CreatePreviewAsync(
+            new SyncOptions { Upload = false, Download = true });
+
+        SyncResult result = await engine.ExecuteAsync(
+            plan,
+            new SyncOptions
+            {
+                Upload = false,
+                Download = true,
+                DryRun = false,
+                ConfirmExecution = true
+            });
+
+        Assert.False(remote.DownloadFileCalled);
+        Assert.Equal(SyncItemStatus.Failed, Assert.Single(result.Items).Status);
+
+        // No run folder was created, so nothing can pass for a complete run.
+        Assert.Empty(Directory.GetDirectories(local.Path));
+    }
+
     private sealed class TraversingRemoteFileSystem : IRemoteFileSystem
     {
         private readonly string _runName;
-        private readonly string _traversingRelative;
+        private readonly IReadOnlyList<string> _relatives;
 
-        public TraversingRemoteFileSystem(string runName, string traversingRelative)
+        public TraversingRemoteFileSystem(string runName, params string[] relatives)
         {
             _runName = runName;
-            _traversingRelative = traversingRelative;
+            _relatives = relatives;
         }
 
         public bool DownloadFileCalled { get; private set; }
@@ -205,7 +246,7 @@ public sealed class SyncRemotePathTraversalTests
         public Task<IReadOnlyList<string>> ListFilesAsync(
             string relativeFolder,
             CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<string>>([_traversingRelative]);
+            Task.FromResult(_relatives);
 
         public Task<long> UploadFileAsync(
             string localFilePath,

@@ -483,33 +483,37 @@ namespace GameSaves.Infrastructure.Sync
 
                 long bytes = 0;
 
-                foreach (string relative in await _remote.ListFilesAsync(item.RunName, cancellationToken))
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
+                IReadOnlyList<string> remoteFiles =
+                    await _remote.ListFilesAsync(item.RunName, cancellationToken);
 
-                    // The remote controls this name. Refuse the whole run
-                    // rather than write outside the run folder, and refuse
-                    // before any byte is written so a partial run is not left
-                    // behind.
-                    if (!TransferPathGuard.IsSafeRemoteRelativePath(relative))
+                // The remote controls every one of these names. Check the whole
+                // listing before writing anything, so an unsafe name late in the
+                // run cannot leave a half-copied folder that still carries a
+                // manifest and therefore passes for a complete run.
+                foreach (string relative in remoteFiles)
+                {
+                    string candidate = Path.Combine(
+                        localTarget,
+                        relative.Replace('/', Path.DirectorySeparatorChar));
+
+                    // The second check is belt and braces: a name that passes
+                    // the first must still resolve inside the run folder.
+                    if (!TransferPathGuard.IsSafeRemoteRelativePath(relative) ||
+                        !TransferPathGuard.IsStrictlyUnderRoot(candidate, localTarget))
                     {
                         return new SyncItemResult(
-                            item, bytes, SyncItemStatus.Failed,
+                            item, 0, SyncItemStatus.Failed,
                             "The remote run contains a file name that is not safe to write locally.");
                     }
+                }
+
+                foreach (string relative in remoteFiles)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
 
                     string localFilePath = Path.Combine(
                         localTarget,
                         relative.Replace('/', Path.DirectorySeparatorChar));
-
-                    // Belt and braces: even a name that passed the check above
-                    // must resolve inside the run folder.
-                    if (!TransferPathGuard.IsStrictlyUnderRoot(localFilePath, localTarget))
-                    {
-                        return new SyncItemResult(
-                            item, bytes, SyncItemStatus.Failed,
-                            "The remote run contains a file name that is not safe to write locally.");
-                    }
 
                     long fileBytes = await _remote.DownloadFileAsync(
                         $"{item.RunName}/{relative}",
