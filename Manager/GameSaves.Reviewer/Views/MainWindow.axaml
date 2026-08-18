@@ -99,7 +99,7 @@
                                VerticalAlignment="Center" />
 
                     <TextBox Text="{Binding SearchText}"
-                             Watermark="AppID, game, platform, path, URL"
+                             PlaceholderText="AppID, game, platform, path, URL"
                              Width="300"
                              MinHeight="30" />
                 </StackPanel>
@@ -242,7 +242,7 @@
                                FontSize="12" />
 
                     <TextBox Text="{Binding ReviewNotes}"
-                             Watermark="Optional notes explaining this decision"
+                             PlaceholderText="Optional notes explaining this decision"
                              AcceptsReturn="True"
                              TextWrapping="Wrap"
                              Height="64" />
