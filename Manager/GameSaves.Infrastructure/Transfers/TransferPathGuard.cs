@@ -23,6 +23,49 @@ namespace GameSaves.Infrastructure.Transfers
             }
         }
 
+        /// <summary>
+        /// True when a remote-supplied name is safe to append to a local root.
+        /// A remote listing is untrusted input: a hostile or compromised server
+        /// can return any name it likes, and <see cref="Path.Combine"/> silently
+        /// discards its first argument when the second is rooted, so an
+        /// unchecked name can escape the backup base entirely.
+        /// </summary>
+        /// <param name="relativePath">
+        /// A forward-slash separated relative path, or a single name.
+        /// </param>
+        public static bool IsSafeRemoteRelativePath(string? relativePath)
+        {
+            if (string.IsNullOrWhiteSpace(relativePath))
+                return false;
+
+            // A backslash is a separator on Windows but an ordinary character
+            // over SFTP, so "..\\..\\x" reaches here as one segment.
+            if (relativePath.Contains('\\', StringComparison.Ordinal))
+                return false;
+
+            if (Path.IsPathRooted(relativePath))
+                return false;
+
+            foreach (string segment in relativePath.Split('/'))
+            {
+                if (string.IsNullOrWhiteSpace(segment))
+                    return false;
+
+                if (segment is "." or "..")
+                    return false;
+
+                if (segment.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+                    return false;
+
+                // Windows drops a trailing dot or space when it resolves a
+                // name, so "run." and "run" can address the same directory.
+                if (segment != segment.TrimEnd('.', ' '))
+                    return false;
+            }
+
+            return true;
+        }
+
         public static bool PathsEqual(string? left, string? right)
         {
             string? normalizedLeft = TryNormalize(left);
