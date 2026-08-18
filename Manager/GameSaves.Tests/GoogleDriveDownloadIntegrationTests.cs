@@ -211,7 +211,7 @@ public sealed class GoogleDriveDownloadIntegrationTests
             harness.LocalPath("save.bin"));
 
         Assert.Equal(3, bytes);
-        Assert.False(new SyncProviderCatalog()
+        Assert.True(new SyncProviderCatalog()
             .GetDescriptor(SyncProviderKind.GoogleDrive).IsImplemented);
         // Milestone T added the wrapper itself, so the surviving invariant is
         // that it stays internal and unactivated, not that it is absent.
@@ -219,7 +219,7 @@ public sealed class GoogleDriveDownloadIntegrationTests
             typeof(GoogleDriveRemoteFileSystem).Assembly.GetTypes(),
             type => type.Name == "GoogleDriveSyncProvider");
         Assert.False(wrapper.IsPublic);
-        Assert.False(new SyncProviderCatalog()
+        Assert.True(new SyncProviderCatalog()
             .GetDescriptor(SyncProviderKind.GoogleDrive).IsImplemented);
         // Milestone U added the factory case itself, so the surviving
         // invariant is that there is exactly one, of the agreed shape, and

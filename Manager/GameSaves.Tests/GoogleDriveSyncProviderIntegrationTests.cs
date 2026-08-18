@@ -150,12 +150,12 @@ public sealed class GoogleDriveSyncProviderIntegrationTests
     }
 
     [Fact]
-    public async Task TheProviderIsBuiltByTheRegisteredFactoryAndStaysInactive()
+    public async Task TheProviderIsBuiltByTheRegisteredFactory()
     {
         using var harness = new Harness();
 
         Assert.IsType<GoogleDriveSyncProvider>(harness.Provider);
-        Assert.False(new SyncProviderCatalog()
+        Assert.True(new SyncProviderCatalog()
             .GetDescriptor(SyncProviderKind.GoogleDrive).IsImplemented);
         // Milestone U added the factory case itself, so the surviving
         // invariant is that there is exactly one, of the agreed shape, and

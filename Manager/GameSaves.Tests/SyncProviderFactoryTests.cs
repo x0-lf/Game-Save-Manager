@@ -249,7 +249,7 @@ public sealed class SyncProviderFactoryTests
         var catalog = new SyncProviderCatalog();
 
         foreach (SyncProviderKind kind in
-                 new[] { SyncProviderKind.GoogleDrive, SyncProviderKind.WebDav })
+                 new[] { SyncProviderKind.WebDav, SyncProviderKind.OneDrive })
         {
             SyncProviderDescriptor descriptor = catalog.GetDescriptor(kind);
 
@@ -259,6 +259,7 @@ public sealed class SyncProviderFactoryTests
 
         Assert.True(catalog.GetDescriptor(SyncProviderKind.LocalFolder).IsImplemented);
         Assert.True(catalog.GetDescriptor(SyncProviderKind.Sftp).IsImplemented);
+        Assert.True(catalog.GetDescriptor(SyncProviderKind.GoogleDrive).IsImplemented);
     }
 
     [Fact]

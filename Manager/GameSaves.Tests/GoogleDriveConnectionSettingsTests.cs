@@ -410,8 +410,8 @@ public sealed class GoogleDriveConnectionSettingsTests
             new GoogleDriveSyncRemoteSettings(
                 null,
                 GoogleDriveAuthorizationScopes.DriveFile)));
-        Assert.False(catalog.GetDescriptor(SyncProviderKind.GoogleDrive).IsImplemented);
-        Assert.DoesNotContain(
+        Assert.True(catalog.GetDescriptor(SyncProviderKind.GoogleDrive).IsImplemented);
+        Assert.Contains(
             catalog.GetDescriptor(SyncProviderKind.GoogleDrive),
             catalog.GetAll().Where(descriptor => descriptor.IsImplemented));
     }

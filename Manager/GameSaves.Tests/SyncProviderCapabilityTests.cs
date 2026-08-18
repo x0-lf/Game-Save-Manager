@@ -33,10 +33,15 @@ public sealed class SyncProviderCapabilityTests
     }
 
     [Fact]
-    public void OnlyLocalFolderAndSftp_AreImplemented_GoogleIsConfigurationVisible()
+    public void LocalFolderSftpAndGoogleDrive_AreImplemented()
     {
         Assert.Equal(
-            new[] { SyncProviderKind.LocalFolder, SyncProviderKind.Sftp },
+            new[]
+            {
+                SyncProviderKind.LocalFolder,
+                SyncProviderKind.Sftp,
+                SyncProviderKind.GoogleDrive
+            },
             _catalog.GetAll()
                 .Where(descriptor => descriptor.IsImplemented)
                 .Select(descriptor => descriptor.Kind));
@@ -99,7 +104,6 @@ public sealed class SyncProviderCapabilityTests
     }
 
     [Theory]
-    [InlineData(SyncProviderKind.GoogleDrive)]
     [InlineData(SyncProviderKind.OneDrive)]
     public void PlannedCloudCapabilities_AreDeclaredButUnavailable(
         SyncProviderKind kind)
@@ -148,18 +152,22 @@ public sealed class SyncProviderCapabilityTests
         SyncViewModel viewModel = CreateViewModel();
         viewModel.SelectedProviderKind = SyncProviderKind.GoogleDrive;
 
+        // Milestone V activated the provider, so the declared capabilities now
+        // reach the UI instead of being suppressed by IsImplemented.
         Assert.True(viewModel.RequiresInteractiveLogin);
         Assert.True(viewModel.SupportsPersistentAuthentication);
         Assert.True(viewModel.SupportsConnectionTesting);
-        Assert.False(viewModel.CanCheckConnection);
-        Assert.False(viewModel.CanLogout);
-        Assert.False(viewModel.CanOpenRemoteLocation);
-        Assert.False(viewModel.CanShowQuota);
+        Assert.True(viewModel.CanCheckConnection);
+        Assert.True(viewModel.CanLogout);
+        Assert.True(viewModel.CanOpenRemoteLocation);
+        Assert.True(viewModel.CanShowQuota);
 
         await viewModel.PreviewSyncCommand.ExecuteAsync(null);
 
+        // Capability is not permission: with no saved profile the run is still
+        // refused and nothing is executable.
         Assert.False(viewModel.CanExecuteSync);
-        Assert.Contains("later milestones", viewModel.StatusMessage);
+        Assert.False(string.IsNullOrWhiteSpace(viewModel.StatusMessage));
     }
 
     [Fact]
@@ -199,23 +207,22 @@ public sealed class SyncProviderCapabilityTests
     }
 
     [Fact]
-    public async Task GoogleDriveStaysUnreachableWhileTheCatalogCallsItUnimplemented()
+    public async Task ActivatedGoogleDrive_StillBuildsNothingWithoutASavedProfile()
     {
-        // Milestone V Task 2 adds the selection case but must not activate the
-        // provider; Task 3 flips the catalog. Until then no path may construct
-        // a Drive provider, so an interrupted sequence cannot ship a reachable
-        // failure.
+        // Milestone V Task 3 activated the provider, so preview is now offered.
+        // The saved-profile guard, not the catalog, is what stops construction.
         var factory = new SyncProviderSelectionTests.RecordingSyncProviderFactory();
         SyncViewModel viewModel = CreateViewModel(factory);
         viewModel.SelectedProviderKind = SyncProviderKind.GoogleDrive;
 
-        Assert.False(
+        Assert.True(
             _catalog.GetDescriptor(SyncProviderKind.GoogleDrive).IsImplemented);
-        Assert.False(viewModel.CanPreviewSync);
+        Assert.True(viewModel.CanPreviewSync);
 
         await viewModel.PreviewSyncCommand.ExecuteAsync(null);
 
         Assert.Equal(0, factory.GoogleDriveCreateCount);
+        Assert.False(viewModel.CanExecuteSync);
     }
 
     [Fact]

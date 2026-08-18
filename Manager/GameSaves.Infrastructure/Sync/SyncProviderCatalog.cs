@@ -1,4 +1,4 @@
-using GameSaves.Core.Sync;
+﻿using GameSaves.Core.Sync;
 
 namespace GameSaves.Infrastructure.Sync
 {
@@ -53,10 +53,9 @@ namespace GameSaves.Infrastructure.Sync
                 new SyncProviderDescriptor(
                     SyncProviderKind.GoogleDrive,
                     "Google Drive",
-                    IsImplemented: false,
+                    IsImplemented: true,
                     CloudCapabilities(),
                     SyncProviderConfigurationSurface.InteractiveOAuth,
-                    "Google Drive account connection is available. Backup synchronization is implemented in later milestones.",
                     IsConfigurationAvailable: true),
                 new SyncProviderDescriptor(
                     SyncProviderKind.WebDav,

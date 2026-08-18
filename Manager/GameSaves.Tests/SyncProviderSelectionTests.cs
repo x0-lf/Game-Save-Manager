@@ -78,7 +78,6 @@ public sealed class SyncProviderSelectionTests
     }
 
     [Theory]
-    [InlineData(SyncProviderKind.GoogleDrive, "Google Drive account connection is available. Backup synchronization is implemented in later milestones.")]
     [InlineData(SyncProviderKind.WebDav, "WebDAV sync is not implemented yet.")]
     [InlineData(SyncProviderKind.OneDrive, "OneDrive sync is not implemented yet.")]
     public async Task UnimplementedProvider_BlocksBeforeFactoryCreation(

@@ -162,7 +162,7 @@ public sealed class GoogleDriveObjectPathResolverIntegrationTests
     }
 
     [Fact]
-    public void GoogleDriveArchitecture_RemainsInfrastructureOnlyAndDoesNotActivateSync()
+    public void GoogleDriveArchitecture_RemainsInfrastructureOnlyAfterActivation()
     {
         Type[] infrastructureTypes = typeof(GoogleDriveObjectPathResolver).Assembly.GetTypes();
         Type[] googleDriveTypes = infrastructureTypes
@@ -178,7 +178,7 @@ public sealed class GoogleDriveObjectPathResolverIntegrationTests
             googleDriveTypes,
             type => type.Name == "GoogleDriveSyncProvider");
         Assert.False(wrapper.IsPublic);
-        Assert.False(new SyncProviderCatalog()
+        Assert.True(new SyncProviderCatalog()
             .GetDescriptor(SyncProviderKind.GoogleDrive).IsImplemented);
         Assert.Collection(
             googleDriveTypes.Where(type =>

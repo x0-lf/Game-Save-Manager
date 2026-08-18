@@ -11,7 +11,7 @@ public sealed class GoogleDriveRootFolderViewModelTests
         DateTimeOffset.Parse("2026-07-24T12:00:00Z");
 
     [Fact]
-    public async Task ConnectedProfile_InspectsStoredFolderAndStillCannotSync()
+    public async Task ConnectedProfile_InspectsStoredFolderAndMayNowSync()
     {
         var repository = new InMemorySyncRemoteProfileRepository();
         SyncRemoteProfile profile = repository.Create(Profile(
@@ -47,8 +47,8 @@ public sealed class GoogleDriveRootFolderViewModelTests
         Assert.Equal(1, roots.InspectCalls);
         Assert.True(viewModel.CanCheckGoogleDriveRootFolder);
         Assert.False(viewModel.CanSetUpGoogleDriveRootFolder);
-        Assert.False(viewModel.CanUseGoogleDriveForSync);
-        Assert.False(viewModel.CanPreviewSync);
+        Assert.True(viewModel.CanUseGoogleDriveForSync);
+        Assert.True(viewModel.CanPreviewSync);
         Assert.False(viewModel.CanExecuteSync);
     }
 
@@ -128,7 +128,7 @@ public sealed class GoogleDriveRootFolderViewModelTests
             viewModel.SelectedRemoteProfile!.RemoteFolderId);
         Assert.Equal(GoogleDriveApplicationRoot.DisplayName,
             viewModel.SelectedRemoteProfile.RemoteRootDisplayName);
-        Assert.False(viewModel.CanUseGoogleDriveForSync);
+        Assert.True(viewModel.CanUseGoogleDriveForSync);
     }
 
     [Fact]
@@ -163,7 +163,7 @@ public sealed class GoogleDriveRootFolderViewModelTests
         Assert.Contains("still linked by ID",
             viewModel.GoogleDriveRootFolderStatusDisplayText,
             StringComparison.Ordinal);
-        Assert.False(viewModel.CanUseGoogleDriveForSync);
+        Assert.True(viewModel.CanUseGoogleDriveForSync);
     }
 
     [Fact]

@@ -175,7 +175,7 @@ public sealed class GoogleDriveSyncProviderFactoryTests
             factory,
             provider.GetRequiredService<IGoogleDriveSyncProviderFactory>());
         Assert.Equal(0, repository.LookupCalls);
-        Assert.False(new SyncProviderCatalog()
+        Assert.True(new SyncProviderCatalog()
             .GetDescriptor(SyncProviderKind.GoogleDrive).IsImplemented);
     }
 
@@ -200,7 +200,7 @@ public sealed class GoogleDriveSyncProviderFactoryTests
         // Core factory still resolves as the concrete infrastructure type.
         Assert.Equal(0, repository.LookupCalls);
         Assert.IsType<SyncProviderFactory>(coreFactory);
-        Assert.False(new SyncProviderCatalog()
+        Assert.True(new SyncProviderCatalog()
             .GetDescriptor(SyncProviderKind.GoogleDrive).IsImplemented);
     }
 
@@ -245,7 +245,7 @@ public sealed class GoogleDriveSyncProviderFactoryTests
     }
 
     [Fact]
-    public void CoreProviderFactory_StillExposesNoGoogleTypeAndActivatesNothing()
+    public void CoreProviderFactory_StillExposesNoGoogleTypeAfterActivation()
     {
         IEnumerable<Type> surfaceTypes = typeof(ISyncProviderFactory)
             .GetMethods()
@@ -258,7 +258,7 @@ public sealed class GoogleDriveSyncProviderFactoryTests
             surfaceTypes,
             type => type.FullName?.Contains("Google", StringComparison.Ordinal) == true);
 
-        Assert.False(new SyncProviderCatalog()
+        Assert.True(new SyncProviderCatalog()
             .GetDescriptor(SyncProviderKind.GoogleDrive).IsImplemented);
     }
 

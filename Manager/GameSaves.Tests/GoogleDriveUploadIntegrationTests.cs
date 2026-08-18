@@ -306,11 +306,11 @@ public sealed class GoogleDriveUploadIntegrationTests
     }
 
     [Fact]
-    public void Composition_KeepsProviderActivationUnavailable()
+    public void Composition_KeepsTheWrapperInternalAfterActivation()
     {
         using var harness = new Harness();
 
-        Assert.False(new SyncProviderCatalog()
+        Assert.True(new SyncProviderCatalog()
             .GetDescriptor(SyncProviderKind.GoogleDrive).IsImplemented);
         // Milestone U added the factory case itself, so the surviving
         // invariant is that there is exactly one, of the agreed shape, and
@@ -327,7 +327,7 @@ public sealed class GoogleDriveUploadIntegrationTests
             typeof(GoogleDriveRemoteFileSystem).Assembly.GetTypes(),
             type => type.Name == "GoogleDriveSyncProvider");
         Assert.False(wrapper.IsPublic);
-        Assert.False(new SyncProviderCatalog()
+        Assert.True(new SyncProviderCatalog()
             .GetDescriptor(SyncProviderKind.GoogleDrive).IsImplemented);
         Assert.Empty(harness.Media.Calls);
     }

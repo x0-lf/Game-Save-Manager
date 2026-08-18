@@ -113,15 +113,18 @@ public sealed class GoogleSdkBoundaryTests
     }
 
     [Fact]
-    public void GoogleDrive_RemainsUnavailable()
+    public void GoogleDrive_IsActivatedWithoutLeakingAnySdkType()
     {
         var catalog = new SyncProviderCatalog();
         SyncProviderDescriptor descriptor =
             catalog.GetDescriptor(SyncProviderKind.GoogleDrive);
 
-        Assert.False(descriptor.IsImplemented);
-        Assert.NotNull(descriptor.UnavailableMessage);
-        Assert.DoesNotContain(
+        // Milestone V activated the provider. The surviving boundary invariant
+        // is that activation carried no Google SDK type into Core or App, which
+        // the rest of this class asserts; the descriptor itself is now live.
+        Assert.True(descriptor.IsImplemented);
+        Assert.Null(descriptor.UnavailableMessage);
+        Assert.Contains(
             descriptor,
             catalog.GetAll().Where(candidate => candidate.IsImplemented));
         Assert.True(descriptor.IsConfigurationAvailable);

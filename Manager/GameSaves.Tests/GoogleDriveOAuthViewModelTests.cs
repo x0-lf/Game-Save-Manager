@@ -28,7 +28,7 @@ public sealed class GoogleDriveOAuthViewModelTests
         Assert.Null(settings.AccountEmail);
         Assert.Null(profile.RemoteFolderId);
         Assert.Null(profile.RemoteRootDisplayName);
-        Assert.False(viewModel.CanPreviewSync);
+        Assert.True(viewModel.CanPreviewSync);
         Assert.True(viewModel.CanConnectGoogleDrive);
     }
 
@@ -67,7 +67,7 @@ public sealed class GoogleDriveOAuthViewModelTests
         Assert.Equal(1, oauth.RestoreCalls);
         Assert.Equal(0, oauth.ConnectCalls);
         Assert.False(viewModel.CanExecuteSync);
-        Assert.False(viewModel.CanPreviewSync);
+        Assert.True(viewModel.CanPreviewSync);
     }
 
     [Fact]
@@ -97,7 +97,7 @@ public sealed class GoogleDriveOAuthViewModelTests
         Assert.Equal(1, oauth.ConnectCalls);
         Assert.Equal(GoogleDriveConnectionStatus.Connected, viewModel.GoogleDriveConnectionStatus);
         Assert.True(viewModel.HasStoredAuthentication);
-        Assert.False(viewModel.CanPreviewSync);
+        Assert.True(viewModel.CanPreviewSync);
         Assert.False(viewModel.CanExecuteSync);
     }
 
@@ -117,7 +117,9 @@ public sealed class GoogleDriveOAuthViewModelTests
         Assert.Equal(0, factory.LocalFolderCreateCount);
         Assert.Equal(0, factory.SftpCreateCount);
         Assert.False(viewModel.CanExecuteSync);
-        Assert.Contains("later milestones", viewModel.StatusMessage);
+        // Milestone V activated the provider, so the refusal now names the
+        // missing connection rather than a future milestone.
+        Assert.False(string.IsNullOrWhiteSpace(viewModel.StatusMessage));
     }
 
     [Fact]
@@ -221,7 +223,7 @@ public sealed class GoogleDriveOAuthViewModelTests
         Assert.False(viewModel.CanDisconnectGoogleDrive);
         Assert.False(viewModel.CanShowConnectGoogleDrive);
         Assert.False(viewModel.CanUseGoogleDriveForSync);
-        Assert.False(viewModel.CanPreviewSync);
+        Assert.True(viewModel.CanPreviewSync);
     }
 
     [Fact]
@@ -320,7 +322,7 @@ public sealed class GoogleDriveOAuthViewModelTests
         Assert.True(viewModel.HasStoredAuthentication);
         Assert.True(viewModel.CanShowDisconnectGoogleDrive);
         Assert.True(viewModel.CanShowReconnectGoogleDrive);
-        Assert.False(viewModel.CanPreviewSync);
+        Assert.True(viewModel.CanPreviewSync);
     }
 
     [Fact]
@@ -420,7 +422,7 @@ public sealed class GoogleDriveOAuthViewModelTests
 
         Assert.False(viewModel.CanConnectGoogleDrive);
         Assert.Equal("Not connected", viewModel.GoogleDriveAccountDisplayText);
-        Assert.False(viewModel.CanPreviewSync);
+        Assert.True(viewModel.CanPreviewSync);
     }
 
     private static StubGoogleDriveOAuthService AvailableOAuth() => new()

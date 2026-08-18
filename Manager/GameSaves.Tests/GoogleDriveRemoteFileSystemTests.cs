@@ -200,7 +200,7 @@ public sealed class GoogleDriveRemoteFileSystemTests
     }
 
     [Fact]
-    public void DependencyInjection_ResolvesUploadServicesWithoutActivation()
+    public void DependencyInjection_ResolvesUploadServicesWithoutRemoteWork()
     {
         var validation = new RecordingValidationService();
         var services = new ServiceCollection();
@@ -233,7 +233,7 @@ public sealed class GoogleDriveRemoteFileSystemTests
             uploadService,
             provider.GetRequiredService<IGoogleDriveBinaryUploadService>());
         Assert.Equal(0, validation.Calls);
-        Assert.False(new SyncProviderCatalog()
+        Assert.True(new SyncProviderCatalog()
             .GetDescriptor(SyncProviderKind.GoogleDrive).IsImplemented);
         // Milestone T registers a provider construction boundary, so the guard
         // is the provider wrapper itself, not every name that starts with it.
@@ -788,7 +788,7 @@ public sealed class GoogleDriveRemoteFileSystemTests
     }
 
     [Fact]
-    public void ProviderActivation_RemainsUnavailable()
+    public void ActivatedProvider_KeepsItsWrapperInternal()
     {
         var catalog = new SyncProviderCatalog();
         SyncProviderDescriptor google =
@@ -801,7 +801,7 @@ public sealed class GoogleDriveRemoteFileSystemTests
                 StringComparison.Ordinal))
             .ToArray();
 
-        Assert.False(google.IsImplemented);
+        Assert.True(google.IsImplemented);
         // Milestone U added the factory case itself, so the surviving
         // invariant is that there is exactly one, of the agreed shape, and
         // that having it activates nothing.
@@ -817,7 +817,7 @@ public sealed class GoogleDriveRemoteFileSystemTests
             googleTypes,
             type => type.Name == "GoogleDriveSyncProvider");
         Assert.False(wrapper.IsPublic);
-        Assert.False(new SyncProviderCatalog()
+        Assert.True(new SyncProviderCatalog()
             .GetDescriptor(SyncProviderKind.GoogleDrive).IsImplemented);
     }
 

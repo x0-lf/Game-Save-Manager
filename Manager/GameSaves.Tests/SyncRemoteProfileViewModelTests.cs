@@ -211,7 +211,10 @@ public sealed class SyncRemoteProfileViewModelTests
 
         Assert.Equal("Personal Google Drive", viewModel.SelectedRemoteProfile!.DisplayName);
         Assert.Equal("Profile unavailable", viewModel.RemoteProfileState);
-        Assert.Contains("later milestones", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
+        // Milestone V activated the provider, so the refusal no longer comes
+        // from the catalog. The surviving invariant is that an unusable saved
+        // profile is still refused and still builds nothing.
+        Assert.False(string.IsNullOrWhiteSpace(viewModel.StatusMessage));
         Assert.False(viewModel.CanExecuteSync);
         Assert.Equal(0, factory.CreateCount);
         Assert.Equal(0, factory.ExecuteCount);

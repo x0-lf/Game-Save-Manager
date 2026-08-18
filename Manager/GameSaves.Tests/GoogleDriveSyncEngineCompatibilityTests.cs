@@ -272,7 +272,7 @@ public sealed class GoogleDriveSyncEngineCompatibilityTests
         var catalog = new GameSaves.Infrastructure.Sync.SyncProviderCatalog();
         Assert.True(catalog.IsImplemented(SyncProviderKind.LocalFolder));
         Assert.True(catalog.IsImplemented(SyncProviderKind.Sftp));
-        Assert.False(catalog.IsImplemented(SyncProviderKind.GoogleDrive));
+        Assert.True(catalog.IsImplemented(SyncProviderKind.GoogleDrive));
     }
 
     [Fact]
