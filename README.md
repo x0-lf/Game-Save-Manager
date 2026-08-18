@@ -682,17 +682,18 @@ operation after disposal. Driving the same run set through the Local Folder and
 Google Drive wrappers produces identical plans, results, file trees, rewritten
 manifests, and sync logs, so no engine policy is duplicated.
 
-Teaching the Core `ISyncProviderFactory` about Google Drive is itself a Core
-contract change and belongs to Milestone U, so Google Drive is still absent
-from `SyncProviderFactory` with `IsImplemented = false`, and Preview Sync and
-Sync Now remain disabled.
+Milestone U is closed. The Core `ISyncProviderFactory` now declares
+`CreateGoogleDriveProvider(Guid remoteProfileId)`, and `SyncProviderFactory`
+forwards it to the internal profile-scoped factory. Google Drive is still
+absent from the application's provider switch with `IsImplemented = false`, and
+Preview Sync and Sync Now remain disabled until Milestone V.
 
 ### U — Sync provider factory
 
-* [ ] Extend the existing factory to create Google Drive providers
-* [ ] Keep existing local and SFTP factory methods working
-* [ ] Keep provider creation free of UI logic
-* [ ] Receive dependencies through DI
+* [x] Extend the existing factory to create Google Drive providers
+* [x] Keep existing local and SFTP factory methods working
+* [x] Keep provider creation free of UI logic
+* [x] Receive dependencies through DI
 * [ ] Inject OAuth/token services and secret storage
 * [ ] Keep secrets and tokens out of display roots
 

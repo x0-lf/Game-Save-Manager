@@ -37,6 +37,18 @@ namespace GameSaves.Infrastructure.Sync
 
         public ISyncProvider CreateLocalFolderProvider(string remoteRoot)
         {
+            // The Google Drive case refuses an empty identifier before doing any
+            // work; this case refused nothing, so a blank root produced a
+            // provider that failed later with an obscure IO error instead. The
+            // only production caller validates the selection first, so this
+            // guard changes no reachable behaviour.
+            if (string.IsNullOrWhiteSpace(remoteRoot))
+            {
+                throw new ArgumentException(
+                    "A remote folder path is required.",
+                    nameof(remoteRoot));
+            }
+
             return new LocalFolderSyncProvider(
                 remoteRoot,
                 _backupHistoryService,
