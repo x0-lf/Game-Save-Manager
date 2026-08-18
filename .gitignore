@@ -439,7 +439,6 @@ FodyWeavers.xsd
 *.msp
 
 *.7z
-.\Manager\.github\
 
 # Google OAuth / Drive developer-local configuration
 # Prefer storing these files outside the repository; these rules are a second line of defence.
