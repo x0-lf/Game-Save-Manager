@@ -668,9 +668,12 @@ Add a thin provider wrapper following the existing SFTP pattern.
 * [x] Dispose provider-specific resources
 * [x] Do not reimplement conflict detection, sync plans, selection logic, sync history, manifest comparison, or upload/download decisions
 
-Milestone T is implemented and automatically verified at the Infrastructure
-provider boundary, and its live development-account acceptance is still
-outstanding, so the milestone is not closed. `GoogleDriveSyncProvider` is an
+Milestone T is closed. It is implemented, automatically verified at the
+Infrastructure provider boundary, and live-accepted against a development
+account on 2026-08-18 with the result PASS and no sanitized failure categories.
+Google Drive nevertheless stays inactive in the application: the wrapper exists,
+but it is not registered as a sync provider and neither Preview Sync nor Sync
+Now can reach it. `GoogleDriveSyncProvider` is an
 internal sealed wrapper built by an internal profile-scoped factory: it holds
 one `SyncEngine` over one profile-scoped remote file system, forwards preview,
 execution, and sync-log reading unchanged, reports the fixed provider name

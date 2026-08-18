@@ -2,6 +2,7 @@
 using Microsoft.Win32;
 using System;
 using System.IO;
+using System.Runtime.Versioning;
 using System.Security;
 
 namespace GameSaves.Infrastructure.Registry
@@ -21,6 +22,7 @@ namespace GameSaves.Infrastructure.Registry
                 || TryReadRegistryPath(RegistryHive.CurrentUser, RegistryView.Registry64, out steamPath);
         }
 
+        [SupportedOSPlatform("windows")]
         private static bool TryReadRegistryPath(
             RegistryHive hive,
             RegistryView view,
