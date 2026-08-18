@@ -180,11 +180,73 @@ public sealed class SyncProviderCapabilityTests
         Assert.True(viewModel.RequiresServerCredentials);
     }
 
-    private SyncViewModel CreateViewModel()
+    // ---- Milestone V Task 2: Google Drive selection and validation ----
+
+    [Fact]
+    public async Task GoogleDriveWithNoSavedProfile_IsRefusedAndBuildsNoProvider()
+    {
+        var factory = new SyncProviderSelectionTests.RecordingSyncProviderFactory();
+        SyncViewModel viewModel = CreateViewModel(factory);
+        viewModel.SelectedProviderKind = SyncProviderKind.GoogleDrive;
+
+        await viewModel.PreviewSyncCommand.ExecuteAsync(null);
+
+        // The refusal happens before construction, so the factory is untouched
+        // and no profile ID was dereferenced.
+        Assert.Equal(0, factory.GoogleDriveCreateCount);
+        Assert.Null(factory.LastGoogleDriveProfileId);
+        Assert.False(string.IsNullOrWhiteSpace(viewModel.StatusMessage));
+    }
+
+    [Fact]
+    public async Task GoogleDriveStaysUnreachableWhileTheCatalogCallsItUnimplemented()
+    {
+        // Milestone V Task 2 adds the selection case but must not activate the
+        // provider; Task 3 flips the catalog. Until then no path may construct
+        // a Drive provider, so an interrupted sequence cannot ship a reachable
+        // failure.
+        var factory = new SyncProviderSelectionTests.RecordingSyncProviderFactory();
+        SyncViewModel viewModel = CreateViewModel(factory);
+        viewModel.SelectedProviderKind = SyncProviderKind.GoogleDrive;
+
+        Assert.False(
+            _catalog.GetDescriptor(SyncProviderKind.GoogleDrive).IsImplemented);
+        Assert.False(viewModel.CanPreviewSync);
+
+        await viewModel.PreviewSyncCommand.ExecuteAsync(null);
+
+        Assert.Equal(0, factory.GoogleDriveCreateCount);
+    }
+
+    [Fact]
+    public async Task LocalFolderAndSftpSelectionAreUnchangedByTheDriveCase()
+    {
+        // Regression: adding a Drive case must not alter the two providers that
+        // already worked.
+        var factory = new SyncProviderSelectionTests.RecordingSyncProviderFactory();
+        SyncViewModel viewModel = CreateViewModel(factory);
+
+        viewModel.SelectedProviderKind = SyncProviderKind.LocalFolder;
+        await viewModel.PreviewSyncCommand.ExecuteAsync(null);
+        Assert.Equal(0, factory.GoogleDriveCreateCount);
+
+        viewModel.SelectedProviderKind = SyncProviderKind.Sftp;
+        await viewModel.PreviewSyncCommand.ExecuteAsync(null);
+        Assert.Equal(0, factory.GoogleDriveCreateCount);
+
+        Assert.True(_catalog.GetDescriptor(SyncProviderKind.LocalFolder).IsImplemented);
+        Assert.True(_catalog.GetDescriptor(SyncProviderKind.Sftp).IsImplemented);
+    }
+
+    private SyncViewModel CreateViewModel() =>
+        CreateViewModel(new SyncProviderSelectionTests.RecordingSyncProviderFactory());
+
+    private SyncViewModel CreateViewModel(
+        SyncProviderSelectionTests.RecordingSyncProviderFactory factory)
     {
         var repository = new InMemorySyncRemoteProfileRepository();
         return new SyncViewModel(
-            new SyncProviderSelectionTests.RecordingSyncProviderFactory(),
+            factory,
             _catalog,
             new SyncProviderSelectionTests.NullFolderPickerService(),
             new SyncProviderSelectionTests.InMemorySyncSettingsStore(SyncUiSettings.Default),

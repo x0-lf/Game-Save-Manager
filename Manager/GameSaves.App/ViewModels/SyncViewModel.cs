@@ -2111,6 +2111,15 @@ namespace GameSaves.App.ViewModels
                 SyncProviderKind.Sftp =>
                     _syncProviderFactory.CreateSftpProvider(BuildSftpSettings()),
 
+                // Google Drive is keyed by the saved profile rather than by
+                // connection settings: its credentials live in the profile and
+                // its remote file system is assembled from provider-internal
+                // services. ValidateProviderSelection guarantees the profile is
+                // present and usable before this runs.
+                SyncProviderKind.GoogleDrive =>
+                    _syncProviderFactory.CreateGoogleDriveProvider(
+                        SelectedRemoteProfile!.Id),
+
                 _ => throw new NotSupportedException(
                     GetUnavailableProviderMessage(SelectedProviderKind)
                     ?? "The selected sync provider is unsupported.")
@@ -2162,8 +2171,43 @@ namespace GameSaves.App.ViewModels
 
                 SyncProviderKind.Sftp => ValidateSftpSelection(),
 
+                SyncProviderKind.GoogleDrive => ValidateGoogleDriveSelection(),
+
                 _ => GetUnavailableProviderMessage(SelectedProviderKind)
             };
+        }
+
+        /// <summary>
+        /// Refuses a Google Drive selection that <see cref="CreateConfiguredProvider"/>
+        /// could not build. The saved profile check is the one that method
+        /// depends on directly; everything else about readiness already lives in
+        /// <see cref="CanUseGoogleDriveForSync"/> and is not restated here.
+        /// </summary>
+        private string? ValidateGoogleDriveSelection()
+        {
+            // While the catalog still reports Google Drive unimplemented, that
+            // is the accurate answer and takes precedence over any advice about
+            // profiles. It also keeps this method inert until the catalog is
+            // activated, so the two halves can land in separate changes without
+            // a reachable failure in between.
+            string? unavailable =
+                GetUnavailableProviderMessage(SyncProviderKind.GoogleDrive);
+
+            if (unavailable is not null)
+                return unavailable;
+
+            if (SelectedRemoteProfile is not
+                { ProviderKind: SyncProviderKind.GoogleDrive })
+            {
+                return "Select a saved Google Drive profile first.";
+            }
+
+            if (!CanUseGoogleDriveForSync)
+            {
+                return "Connect Google Drive and set up its backup folder before syncing.";
+            }
+
+            return null;
         }
 
         private string? ValidateSftpSelection()

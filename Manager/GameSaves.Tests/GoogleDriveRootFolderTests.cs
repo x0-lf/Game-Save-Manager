@@ -867,20 +867,36 @@ public sealed class GoogleDriveRootFolderTests
         Assert.Contains(
             "CreateGoogleDriveProvider", factorySource, StringComparison.Ordinal);
 
-        // Milestone U wired the factory but must not make it reachable. The App
-        // still has no way to ask for a Google Drive provider; that is
-        // Milestone V. If this string ever appears here, the UI can construct
-        // one while the catalog still calls the provider unimplemented.
+        // Milestone V Task 2 gave the App its one way to ask for a Google Drive
+        // provider, so the Milestone U assertion that the call is absent became
+        // false by design. The surviving invariant is that there is exactly one
+        // such call and that it goes through the Core factory, not through a
+        // Drive service resolved in the view model.
         string syncViewModelSource = ReadRepositoryFile(
             "GameSaves.App",
             "ViewModels",
             "SyncViewModel.cs");
-        Assert.DoesNotContain(
-            "CreateGoogleDriveProvider",
+
+        Assert.Equal(
+            1,
+            CountOccurrences(syncViewModelSource, "CreateGoogleDriveProvider"));
+        Assert.Contains(
+            "_syncProviderFactory.CreateGoogleDriveProvider(",
             syncViewModelSource,
             StringComparison.Ordinal);
         Assert.Contains(
             "SyncProviderKind.LocalFolder =>",
+            syncViewModelSource,
+            StringComparison.Ordinal);
+
+        // No Google SDK type and no Drive service may be reached from the view
+        // model; construction stays behind the Core factory.
+        Assert.DoesNotContain(
+            "using Google.",
+            syncViewModelSource,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "IGoogleDriveSyncProviderFactory",
             syncViewModelSource,
             StringComparison.Ordinal);
     }
@@ -974,6 +990,20 @@ public sealed class GoogleDriveRootFolderTests
             foreach (Type nested in FlattenTypes(argument))
                 yield return nested;
         }
+    }
+
+    private static int CountOccurrences(string text, string value)
+    {
+        int count = 0;
+
+        for (int index = text.IndexOf(value, StringComparison.Ordinal);
+             index >= 0;
+             index = text.IndexOf(value, index + value.Length, StringComparison.Ordinal))
+        {
+            count++;
+        }
+
+        return count;
     }
 
     private static string ReadRepositoryFile(params string[] segments) =>
