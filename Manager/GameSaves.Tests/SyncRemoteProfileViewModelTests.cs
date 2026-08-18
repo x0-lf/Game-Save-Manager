@@ -362,6 +362,7 @@ public sealed class SyncRemoteProfileViewModelTests
         public int CreateCount { get; private set; }
         public int ExecuteCount { get; private set; }
         public bool ReturnValidationError { get; set; }
+        public Guid? LastGoogleDriveProfileId { get; private set; }
         public ISyncProvider? LastProvider { get; private set; }
 
         public ISyncProvider CreateLocalFolderProvider(string remoteRoot) =>
@@ -369,6 +370,12 @@ public sealed class SyncRemoteProfileViewModelTests
 
         public ISyncProvider CreateSftpProvider(SftpConnectionSettings settings) =>
             Create("SFTP", settings.DisplayRoot);
+
+        public ISyncProvider CreateGoogleDriveProvider(Guid remoteProfileId)
+        {
+            LastGoogleDriveProfileId = remoteProfileId;
+            return Create("Google Drive", "Google Drive");
+        }
 
         public void ForgetSftpHostKey(string host, int port)
         {

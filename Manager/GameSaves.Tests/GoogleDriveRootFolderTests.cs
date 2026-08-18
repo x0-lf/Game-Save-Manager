@@ -854,11 +854,18 @@ public sealed class GoogleDriveRootFolderTests
         SyncProviderDescriptor descriptor =
             new SyncProviderCatalog().GetDescriptor(SyncProviderKind.GoogleDrive);
         Assert.False(descriptor.IsImplemented);
+        // Milestone U added the Google Drive case to this factory. The
+        // surviving source-level invariant is that the factory still names no
+        // Google SDK type and still holds no service locator, not that the
+        // word is absent.
         string factorySource = ReadRepositoryFile(
             "GameSaves.Infrastructure",
             "Sync",
             "SyncProviderFactory.cs");
-        Assert.DoesNotContain("GoogleDrive", factorySource, StringComparison.Ordinal);
+        Assert.DoesNotContain("using Google.", factorySource, StringComparison.Ordinal);
+        Assert.DoesNotContain("IServiceProvider", factorySource, StringComparison.Ordinal);
+        Assert.Contains(
+            "CreateGoogleDriveProvider", factorySource, StringComparison.Ordinal);
     }
 
     [Fact]

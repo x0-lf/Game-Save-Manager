@@ -4,6 +4,7 @@ using GameSaves.Infrastructure.GoogleDrive;
 using GameSaves.Infrastructure.Sync;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using System.Reflection;
 
 namespace GameSaves.Tests;
 
@@ -179,12 +180,86 @@ public sealed class GoogleDriveSyncProviderFactoryTests
     }
 
     [Fact]
-    public void CoreProviderFactory_StillKnowsNothingAboutGoogleDrive()
+    public void CoreFactory_DelegatesGoogleDriveConstructionToTheInternalFactory()
     {
+        var repository = new CountingProfileRepository();
+        var services = new ServiceCollection();
+        services.AddGameSavesInfrastructure();
+        services.RemoveAll<ISyncRemoteProfileRepository>();
+        services.AddSingleton<ISyncRemoteProfileRepository>(repository);
+
+        using ServiceProvider provider = services.BuildServiceProvider();
+        var coreFactory = provider.GetRequiredService<ISyncProviderFactory>();
+
+        // The empty-ID rejection lives only in the internal factory, so seeing
+        // it here proves the Core seam reached it rather than answering itself.
+        Assert.Throws<ArgumentException>(
+            () => coreFactory.CreateGoogleDriveProvider(Guid.Empty));
+
+        // Delegation, not reimplementation: no profile lookup happened, and the
+        // Core factory still resolves as the concrete infrastructure type.
+        Assert.Equal(0, repository.LookupCalls);
+        Assert.IsType<SyncProviderFactory>(coreFactory);
+        Assert.False(new SyncProviderCatalog()
+            .GetDescriptor(SyncProviderKind.GoogleDrive).IsImplemented);
+    }
+
+    [Fact]
+    public void CoreFactory_HoldsNoServiceProviderAndKeepsItsDependencyExplicit()
+    {
+        ConstructorInfo constructor = Assert.Single(
+            typeof(SyncProviderFactory).GetConstructors(
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic));
+
+        Assert.False(constructor.IsPublic);
+        Assert.Contains(
+            constructor.GetParameters(),
+            parameter =>
+                parameter.ParameterType == typeof(IGoogleDriveSyncProviderFactory));
         Assert.DoesNotContain(
+            constructor.GetParameters(),
+            parameter => parameter.ParameterType == typeof(IServiceProvider));
+    }
+
+    // Milestone U replaced the Milestone T guard that asserted the Core factory
+    // had no Google Drive method at all. That became false by design, so the
+    // guard now pins the exact shape of the one case it is allowed to gain,
+    // and that gaining it still activates nothing.
+    [Fact]
+    public void CoreProviderFactory_ExposesExactlyOneGoogleDriveCaseOfTheAgreedShape()
+    {
+        MethodInfo driveMethod = Assert.Single(
             typeof(ISyncProviderFactory).GetMethods(),
             method => method.Name.Contains(
                 "GoogleDrive", StringComparison.OrdinalIgnoreCase));
+
+        Assert.Equal("CreateGoogleDriveProvider", driveMethod.Name);
+        Assert.Equal(typeof(ISyncProvider), driveMethod.ReturnType);
+
+        ParameterInfo parameter = Assert.Single(driveMethod.GetParameters());
+        Assert.Equal(typeof(Guid), parameter.ParameterType);
+
+        // A saved profile ID is the only thing that may cross. No connection
+        // settings record and no provider-specific type may follow it.
+        Assert.Equal("remoteProfileId", parameter.Name);
+    }
+
+    [Fact]
+    public void CoreProviderFactory_StillExposesNoGoogleTypeAndActivatesNothing()
+    {
+        IEnumerable<Type> surfaceTypes = typeof(ISyncProviderFactory)
+            .GetMethods()
+            .SelectMany(method => method
+                .GetParameters()
+                .Select(parameter => parameter.ParameterType)
+                .Append(method.ReturnType));
+
+        Assert.DoesNotContain(
+            surfaceTypes,
+            type => type.FullName?.Contains("Google", StringComparison.Ordinal) == true);
+
+        Assert.False(new SyncProviderCatalog()
+            .GetDescriptor(SyncProviderKind.GoogleDrive).IsImplemented);
     }
 
     private static GoogleDriveSyncProviderFactory Factory(

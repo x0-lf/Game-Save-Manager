@@ -312,9 +312,15 @@ public sealed class GoogleDriveUploadIntegrationTests
 
         Assert.False(new SyncProviderCatalog()
             .GetDescriptor(SyncProviderKind.GoogleDrive).IsImplemented);
-        Assert.DoesNotContain(
+        // Milestone U added the factory case itself, so the surviving
+        // invariant is that there is exactly one, of the agreed shape, and
+        // that having it activates nothing.
+        MethodInfo driveCase = Assert.Single(
             typeof(SyncProviderFactory).GetMethods(),
             method => method.Name.Contains("Google", StringComparison.Ordinal));
+        Assert.Equal("CreateGoogleDriveProvider", driveCase.Name);
+        Assert.Equal(typeof(Guid), Assert.Single(
+            driveCase.GetParameters()).ParameterType);
         // Milestone T added the wrapper itself, so the surviving invariant is
         // that it stays internal and unactivated, not that it is absent.
         Type wrapper = Assert.Single(

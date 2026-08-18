@@ -287,8 +287,10 @@ public sealed class SyncProviderSelectionTests
     {
         public int LocalFolderCreateCount { get; private set; }
         public int SftpCreateCount { get; private set; }
+        public int GoogleDriveCreateCount { get; private set; }
         public string? LastLocalFolderPath { get; private set; }
         public SftpConnectionSettings? LastSftpSettings { get; private set; }
+        public Guid? LastGoogleDriveProfileId { get; private set; }
         public ISyncProvider? LastProvider { get; private set; }
 
         public ISyncProvider CreateLocalFolderProvider(string remoteRoot)
@@ -303,6 +305,13 @@ public sealed class SyncProviderSelectionTests
             SftpCreateCount++;
             LastSftpSettings = settings;
             return LastProvider = new FakeSyncProvider("SFTP", settings.DisplayRoot);
+        }
+
+        public ISyncProvider CreateGoogleDriveProvider(Guid remoteProfileId)
+        {
+            GoogleDriveCreateCount++;
+            LastGoogleDriveProfileId = remoteProfileId;
+            return LastProvider = new FakeSyncProvider("Google Drive", "Google Drive");
         }
 
         public void ForgetSftpHostKey(string host, int port)

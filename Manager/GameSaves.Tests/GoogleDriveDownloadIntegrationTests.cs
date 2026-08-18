@@ -221,9 +221,15 @@ public sealed class GoogleDriveDownloadIntegrationTests
         Assert.False(wrapper.IsPublic);
         Assert.False(new SyncProviderCatalog()
             .GetDescriptor(SyncProviderKind.GoogleDrive).IsImplemented);
-        Assert.DoesNotContain(
+        // Milestone U added the factory case itself, so the surviving
+        // invariant is that there is exactly one, of the agreed shape, and
+        // that having it activates nothing.
+        MethodInfo driveCase = Assert.Single(
             typeof(SyncProviderFactory).GetMethods(),
             method => method.Name.Contains("Google", StringComparison.Ordinal));
+        Assert.Equal("CreateGoogleDriveProvider", driveCase.Name);
+        Assert.Equal(typeof(Guid), Assert.Single(
+            driveCase.GetParameters()).ParameterType);
     }
 
     private sealed class Harness : IDisposable

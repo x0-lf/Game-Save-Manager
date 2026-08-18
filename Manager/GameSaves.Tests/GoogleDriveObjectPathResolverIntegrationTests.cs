@@ -6,6 +6,7 @@ using Google.Apis.Auth.OAuth2;
 using Google.Apis.Auth.OAuth2.Flows;
 using Google.Apis.Auth.OAuth2.Responses;
 using Microsoft.Extensions.DependencyInjection;
+using System.Reflection;
 
 namespace GameSaves.Tests;
 
@@ -184,9 +185,15 @@ public sealed class GoogleDriveObjectPathResolverIntegrationTests
                 !type.IsInterface &&
                 typeof(IRemoteFileSystem).IsAssignableFrom(type)),
             type => Assert.Equal("GoogleDriveRemoteFileSystem", type.Name));
-        Assert.DoesNotContain(
+        // Milestone U added the factory case itself, so the surviving
+        // invariant is that there is exactly one, of the agreed shape, and
+        // that having it activates nothing.
+        MethodInfo driveCase = Assert.Single(
             typeof(SyncProviderFactory).GetMethods(),
             method => method.Name.Contains("Google", StringComparison.Ordinal));
+        Assert.Equal("CreateGoogleDriveProvider", driveCase.Name);
+        Assert.Equal(typeof(Guid), Assert.Single(
+            driveCase.GetParameters()).ParameterType);
         Assert.DoesNotContain(
             typeof(GoogleDriveObjectPathResolver).GetConstructors(
                 System.Reflection.BindingFlags.Instance |

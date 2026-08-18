@@ -44,7 +44,15 @@ namespace GameSaves.Infrastructure.DependencyInjection
             services.AddSingleton<IBackupCleanupService, BackupCleanupService>();
             services.AddSingleton<IBackupArchiveService, BackupArchiveService>();
             services.AddSingleton<ISyncProviderCatalog, SyncProviderCatalog>();
-            services.AddSingleton<ISyncProviderFactory, SyncProviderFactory>();
+            // Resolved through a lambda because SyncProviderFactory's
+            // constructor is internal: it takes the internal Google Drive
+            // provider factory. See D-028.
+            services.AddSingleton<ISyncProviderFactory>(provider =>
+                new SyncProviderFactory(
+                    provider.GetRequiredService<IBackupHistoryService>(),
+                    provider.GetRequiredService<ITransferHistoryRepository>(),
+                    provider.GetRequiredService<IAppDatabasePathProvider>(),
+                    provider.GetRequiredService<IGoogleDriveSyncProviderFactory>()));
             services.AddSingleton<IUtcClock, SystemUtcClock>();
             services.AddSingleton<SyncRemoteProfileSettingsSerializer>();
 

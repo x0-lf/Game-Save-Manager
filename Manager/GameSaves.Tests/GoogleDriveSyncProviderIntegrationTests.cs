@@ -10,6 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using System.Text;
 using System.Text.Json;
+using System.Reflection;
 
 namespace GameSaves.Tests;
 
@@ -156,9 +157,15 @@ public sealed class GoogleDriveSyncProviderIntegrationTests
         Assert.IsType<GoogleDriveSyncProvider>(harness.Provider);
         Assert.False(new SyncProviderCatalog()
             .GetDescriptor(SyncProviderKind.GoogleDrive).IsImplemented);
-        Assert.DoesNotContain(
+        // Milestone U added the factory case itself, so the surviving
+        // invariant is that there is exactly one, of the agreed shape, and
+        // that having it activates nothing.
+        MethodInfo driveCase = Assert.Single(
             typeof(SyncProviderFactory).GetMethods(),
             method => method.Name.Contains("Google", StringComparison.Ordinal));
+        Assert.Equal("CreateGoogleDriveProvider", driveCase.Name);
+        Assert.Equal(typeof(Guid), Assert.Single(
+            driveCase.GetParameters()).ParameterType);
 
         await Task.CompletedTask;
     }
