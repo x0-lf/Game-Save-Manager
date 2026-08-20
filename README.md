@@ -760,29 +760,29 @@ maintenance backlog rather than quietly dropped.
 
 Add automated tests where API calls can be mocked or abstracted, then run live manual verification with a development Google account.
 
-1. [ ] Connect one Google account
-2. [ ] Restart the app and remain connected
-3. [ ] Disconnect and remove the local token
-4. [ ] Create or find one application root folder
-5. [ ] Detect a local-only run
-6. [ ] Upload the selected run
-7. [ ] Verify the manifest is uploaded last
-8. [ ] Detect a remote-only run
-9. [ ] Download the selected run
-10. [ ] Restore the downloaded run — automated coverage added in Milestone Y Task 3 (`DownloadedRunRestoreTests`); the live confirmation is session C
-11. [ ] Identify identical runs as in sync
-12. [ ] Detect a same-name/different-manifest conflict
-13. [ ] Never overwrite remote files
-14. [ ] Never overwrite local runs
-15. [ ] Never delete local or remote runs
-16. [ ] Cancel an active upload
-17. [ ] Handle revoked access
-18. [ ] Handle a missing root folder
-19. [ ] Handle quota and network errors
-20. [ ] Record Google Drive sync in SQLite history
-21. [ ] App builds
-22. [ ] CLI builds
-23. [ ] Reviewer builds
+1. [x] Connect one Google account — live session A, 2026-08-20; the full Google consent screen was presented and confirmed after a revocation
+2. [x] Restart the app and remain connected — live session A, 2026-08-20; a fresh process restored the stored authentication with no interaction
+3. [x] Disconnect and remove the local token — live session A, 2026-08-20; the saved profile, its root metadata, and all Drive content were kept
+4. [x] Create or find one application root folder — live session A, 2026-08-20; found by its authoritative identifier and reused across inspections
+5. [x] Detect a local-only run — live session B, 2026-08-20
+6. [x] Upload the selected run — live session B, 2026-08-20
+7. [x] Verify the manifest is uploaded last — live session B, 2026-08-20 observed the outcome, a complete run with its manifest present; the ordering itself is pinned by two deterministic tests
+8. [x] Detect a remote-only run — live session C, 2026-08-20
+9. [x] Download the selected run — live session C, 2026-08-20
+10. [x] Restore the downloaded run — automated coverage added in Milestone Y Task 3 (`DownloadedRunRestoreTests`), confirmed live in session C, 2026-08-20; no earlier milestone had ever exercised this
+11. [x] Identify identical runs as in sync — live session C, 2026-08-20
+12. [x] Detect a same-name/different-manifest conflict — live session C, 2026-08-20; the manifests must differ, not just a payload byte
+13. [x] Never overwrite remote files — live session B, 2026-08-20; the local payload was changed first so an overwrite would have been detectable
+14. [x] Never overwrite local runs — live session C, 2026-08-20
+15. [x] Never delete local or remote runs — live session D, 2026-08-20
+16. [x] Cancel an active upload — live session D, 2026-08-20, cancelled mid-flight using the control Milestone Y Task 2 added; it was impossible before that
+17. [x] Handle revoked access — live session A, 2026-08-20; detected, the invalid local token dropped, profile and root metadata kept
+18. [x] Handle a missing root folder — live session A, 2026-08-20; reported without renaming, moving, or trashing the real root
+19. [ ] Handle quota and network errors — **unexecutable live** and recorded as such: neither can be produced on demand without exhausting a real quota or disconnecting the machine. Covered deterministically, including exactly which failures retry; what stays unproven is whether the mapper classifies what Google actually sends
+20. [x] Record Google Drive sync in SQLite history — live session B, 2026-08-20
+21. [x] App builds — 2026-08-20, 0 warnings, 0 errors
+22. [x] CLI builds — 2026-08-20, 0 warnings, 0 errors
+23. [x] Reviewer builds — 2026-08-20, 0 warnings, 0 errors
 
 ### Z — Documentation and next roadmap
 
