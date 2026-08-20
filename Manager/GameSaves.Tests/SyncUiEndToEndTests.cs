@@ -143,6 +143,103 @@ public sealed class SyncUiEndToEndTests
         Assert.True(File.Exists(workspace.LocalManifest(RemoteOnlyRun)));
     }
 
+    // ---- W Task 3: the same, through the hermetic Google Drive composition ----
+
+    [Fact]
+    public async Task DriveViewModelExecute_MovesBytesThroughTheRealDriveWrapper()
+    {
+        using var workspace = new Workspace();
+        SyncViewModel viewModel = workspace.CreateDriveViewModel();
+
+        await viewModel.GoogleAuthenticationInitializationTask;
+        await viewModel.GoogleRootFolderInitializationTask;
+
+        Assert.True(viewModel.CanUseGoogleDriveForSync);
+
+        await viewModel.PreviewSyncCommand.ExecuteAsync(null);
+        viewModel.ConfirmSync = true;
+        await viewModel.ExecuteSyncCommand.ExecuteAsync(null);
+
+        // Bytes on the far side, exactly as the Local Folder task asserts. The
+        // wrapper is the real GoogleDriveSyncProvider, built by the real
+        // internal factory from the saved profile.
+        Assert.Equal(
+            Workspace.PayloadFor(LocalOnlyRun),
+            File.ReadAllText(workspace.RemotePayload(LocalOnlyRun)));
+        Assert.Equal(
+            Workspace.PayloadFor(RemoteOnlyRun),
+            File.ReadAllText(workspace.LocalPayload(RemoteOnlyRun)));
+
+        // Construction was keyed by the saved profile ID, which is the whole
+        // point of the Drive case in CreateConfiguredProvider.
+        Assert.Equal(
+            new[] { workspace.DriveProfile.Id },
+            workspace.RequestedDriveProfileIds);
+    }
+
+    [Fact]
+    public async Task DriveAndLocalFolder_LeaveIdenticalStateThroughTheSameUiPath()
+    {
+        using var driveSide = new Workspace();
+        using var localSide = new Workspace();
+
+        SyncViewModel drive = driveSide.CreateDriveViewModel();
+        await drive.GoogleAuthenticationInitializationTask;
+        await drive.GoogleRootFolderInitializationTask;
+
+        UiRunState driveState = await RunAsync(drive);
+        UiRunState localState = await RunAsync(localSide.CreateViewModel());
+
+        // Non-vacuity: parity over a run that copied nothing would prove
+        // nothing at all.
+        Assert.Equal(3, localState.ItemCount);
+        Assert.Equal(2, localState.ExecutionResultCount);
+        Assert.Contains("Uploaded 1 run(s)", localState.ExecutionStatusMessage);
+
+        Assert.Equal(localState, driveState);
+
+        // And the same bytes on disk on both sides, not merely the same
+        // bound state.
+        Assert.Equal(localSide.RemoteTree(), driveSide.RemoteTree());
+        Assert.Equal(localSide.LocalTree(), driveSide.LocalTree());
+    }
+
+    /// <summary>
+    /// The bound state one sync run produces, with nothing provider-specific
+    /// in it. The provider name is deliberately excluded: it is the one field
+    /// that must differ.
+    /// </summary>
+    private sealed record UiRunState(
+        int ItemCount,
+        string SummaryDisplay,
+        bool CanExecuteSync,
+        int WarningCount,
+        int ExecutionResultCount,
+        string ExecutionStatusMessage,
+        // Joined rather than an array: a record compares array members by
+        // reference, so two equal sequences would never match.
+        string ResultRunNames);
+
+    private static async Task<UiRunState> RunAsync(SyncViewModel viewModel)
+    {
+        await viewModel.PreviewSyncCommand.ExecuteAsync(null);
+        viewModel.ConfirmSync = true;
+        await viewModel.ExecuteSyncCommand.ExecuteAsync(null);
+
+        return new UiRunState(
+            viewModel.Items.Count,
+            viewModel.SummaryDisplay,
+            viewModel.CanExecuteSync,
+            viewModel.Warnings.Count,
+            viewModel.ExecutionResults.Count,
+            viewModel.ExecutionStatusMessage,
+            string.Join(
+                "|",
+                viewModel.ExecutionResults
+                    .Select(row => row.RunName)
+                    .OrderBy(name => name, StringComparer.Ordinal)));
+    }
+
     // ---- helpers ----
 
     /// <summary>
@@ -152,7 +249,14 @@ public sealed class SyncUiEndToEndTests
     /// </summary>
     private sealed class Workspace : IDisposable
     {
+        private const string RootFolderId = "end-to-end-root-folder-id";
+
+        private static readonly DateTimeOffset Clock =
+            DateTimeOffset.Parse("2026-08-20T12:00:00Z");
+
         private readonly TemporaryDirectory _root = new();
+
+        private readonly WorkspaceRemoteFileSystemFactory _driveFileSystems;
 
         public Workspace()
         {
@@ -164,17 +268,58 @@ public sealed class SyncUiEndToEndTests
             WriteRun(LocalBase, SharedRun);
             WriteRun(RemoteRoot, SharedRun);
 
+            _driveFileSystems = new WorkspaceRemoteFileSystemFactory(
+                RemoteRoot, LocalBase);
+
+            DriveProfile = Profiles.Create(new SyncRemoteProfile(
+                Guid.NewGuid(),
+                "end-to-end-profile",
+                SyncProviderKind.GoogleDrive,
+                "Example User",
+                GoogleDriveApplicationRoot.DisplayName,
+                new GoogleDriveSyncRemoteSettings(
+                    "end-to-end@example.invalid",
+                    GoogleDriveAuthorizationScopes.DriveFile),
+                Clock,
+                Clock,
+                null,
+                Clock,
+                RootFolderId));
+
             Factory = new SyncProviderFactory(
                 new WorkspaceHistoryService(LocalBase),
                 new RecordingHistoryRepository(),
                 new WorkspaceDatabasePathProvider(
                     Path.Combine(_root.Path, "gamesaves.db")),
                 new GoogleDriveSyncProviderFactory(
-                    new InMemorySyncRemoteProfileRepository(),
-                    new RecordingRemoteFileSystemFactory(),
+                    Profiles,
+                    // The Drive wrapper is handed the same local-folder-backed
+                    // remote boundary GoogleDriveSyncProviderParityTests uses,
+                    // so the composition is real and hermetic at once: no
+                    // network, no account, no Google SDK type in this test's
+                    // own surface.
+                    _driveFileSystems,
                     new WorkspaceHistoryService(LocalBase),
                     new RecordingHistoryRepository()));
         }
+
+        public InMemorySyncRemoteProfileRepository Profiles { get; } = new();
+
+        public IReadOnlyList<Guid> RequestedDriveProfileIds =>
+            _driveFileSystems.RequestedProfileIds;
+
+        public string[] RemoteTree() => Tree(RemoteRoot);
+
+        public string[] LocalTree() => Tree(LocalBase);
+
+        private static string[] Tree(string root) =>
+            Directory.GetFiles(root, "*", SearchOption.AllDirectories)
+                .Select(path => Path.GetRelativePath(root, path)
+                    .Replace(Path.DirectorySeparatorChar, '/'))
+                .OrderBy(path => path, StringComparer.Ordinal)
+                .ToArray();
+
+        public SyncRemoteProfile DriveProfile { get; }
 
         /// <summary>
         /// The real concrete factory, built with its internal constructor
@@ -200,6 +345,62 @@ public sealed class SyncUiEndToEndTests
         public string RemoteManifest(string runName) =>
             Path.Combine(RemoteRoot, runName, "manifest.json");
 
+        public SyncViewModel CreateDriveViewModel()
+        {
+            SyncUiSettings settings = SyncUiSettings.Default with
+            {
+                SelectedProviderKind = SyncProviderKind.GoogleDrive,
+                SelectedRemoteProfileId = DriveProfile.Id
+            };
+
+            var oauth = new StubGoogleDriveOAuthService
+            {
+                ConfigurationState = new GoogleDriveOAuthClientConfigurationState(
+                    GoogleDriveOAuthClientConfigurationStatus.Available),
+                RestoreResult = Connected(),
+                ConnectResult = Connected(),
+                ReconnectResult = Connected()
+            };
+
+            var roots = new StubGoogleDriveRootFolderService
+            {
+                InspectResult = new GoogleDriveRootFolderResult(
+                    GoogleDriveRootFolderStatus.Ready,
+                    DriveProfile.Id,
+                    RootFolderId,
+                    GoogleDriveApplicationRoot.DisplayName,
+                    WasValidatedById: true,
+                    Message: "The Google Drive backup folder is ready.")
+            };
+
+            return new SyncViewModel(
+                Factory,
+                new SyncProviderCatalog(),
+                new SyncProviderSelectionTests.NullFolderPickerService(),
+                new SyncProviderSelectionTests.InMemorySyncSettingsStore(settings),
+                Profiles,
+                new SyncRemoteProfileService(Profiles, new InMemorySecretStore()),
+                new StubSyncRemoteProfileMigrationService(settings),
+                new FixedUtcClock(Clock),
+                oauth,
+                roots);
+        }
+
+        private GoogleDriveAuthenticationResult Connected() =>
+            new(
+                GoogleDriveAuthenticationStatus.Connected,
+                new GoogleDriveConnectionSettings(
+                    DriveProfile.Id,
+                    DriveProfile.AccountDisplayName,
+                    (DriveProfile.ProviderSettings as GoogleDriveSyncRemoteSettings)
+                        ?.AccountEmail,
+                    DriveProfile.RemoteFolderId,
+                    DriveProfile.RemoteRootDisplayName,
+                    GoogleDriveAuthorizationScopes.DriveFile,
+                    GoogleDriveConnectionStatus.Connected,
+                    hasStoredToken: true),
+                Message: "Google Drive account connected.");
+
         public SyncViewModel CreateViewModel()
         {
             SyncUiSettings settings = SyncUiSettings.Default with
@@ -218,7 +419,7 @@ public sealed class SyncUiEndToEndTests
                 repository,
                 new SyncRemoteProfileService(repository, new InMemorySecretStore()),
                 new StubSyncRemoteProfileMigrationService(settings),
-                new FixedUtcClock(DateTimeOffset.Parse("2026-08-20T12:00:00Z")),
+                new FixedUtcClock(Clock),
                 new StubGoogleDriveOAuthService())
             {
                 RemoteRootPath = RemoteRoot
@@ -272,6 +473,24 @@ public sealed class SyncUiEndToEndTests
         }
 
         public string GetBackupBasePath() => basePath;
+    }
+
+    /// <summary>
+    /// Hands the Drive wrapper a local-folder-backed remote boundary, which is
+    /// the hermetic backend the parity tests already use. The profile ID is
+    /// recorded so a test can prove the view model keyed construction by the
+    /// saved profile rather than by anything else.
+    /// </summary>
+    private sealed class WorkspaceRemoteFileSystemFactory(
+        string remoteRoot, string localBase) : IGoogleDriveRemoteFileSystemFactory
+    {
+        public List<Guid> RequestedProfileIds { get; } = [];
+
+        public IRemoteFileSystem Create(Guid remoteProfileId)
+        {
+            RequestedProfileIds.Add(remoteProfileId);
+            return new LocalFolderRemoteFileSystem(remoteRoot, localBase);
+        }
     }
 
     private sealed class WorkspaceDatabasePathProvider(string databasePath)
