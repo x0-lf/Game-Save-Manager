@@ -54,6 +54,10 @@ namespace GameSaves.Infrastructure.DependencyInjection
                     provider.GetRequiredService<IAppDatabasePathProvider>(),
                     provider.GetRequiredService<IGoogleDriveSyncProviderFactory>()));
             services.AddSingleton<IUtcClock, SystemUtcClock>();
+
+            // Registered beside the clock and for the same reason: so a test
+            // can substitute time rather than spend it. See Milestone X.
+            services.AddSingleton<IDelayProvider, SystemDelayProvider>();
             services.AddSingleton<SyncRemoteProfileSettingsSerializer>();
 
             services.AddSingleton<ISavePathMappingRepository>(provider =>
