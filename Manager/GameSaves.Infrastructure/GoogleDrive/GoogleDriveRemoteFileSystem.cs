@@ -34,6 +34,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
             _recursiveFileListingService;
         private readonly IGoogleDriveBinaryUploadService _binaryUploadService;
         private readonly IGoogleDriveBinaryDownloadService _binaryDownloadService;
+        private readonly IDelayProvider _delay;
 
         public GoogleDriveRemoteFileSystemFactory(
             ISyncRemoteProfileRepository profileRepository,
@@ -48,7 +49,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
             IGoogleDriveCreateOnlyTextFileService createOnlyTextFileService,
             IGoogleDriveRecursiveFileListingService recursiveFileListingService,
             IGoogleDriveBinaryUploadService binaryUploadService,
-            IGoogleDriveBinaryDownloadService binaryDownloadService)
+            IGoogleDriveBinaryDownloadService binaryDownloadService,
+            IDelayProvider delay)
         {
             _profileRepository = profileRepository ??
                 throw new ArgumentNullException(nameof(profileRepository));
@@ -76,6 +78,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 throw new ArgumentNullException(nameof(binaryUploadService));
             _binaryDownloadService = binaryDownloadService ??
                 throw new ArgumentNullException(nameof(binaryDownloadService));
+            _delay = delay ?? throw new ArgumentNullException(nameof(delay));
         }
 
         public IRemoteFileSystem Create(Guid remoteProfileId)
@@ -88,21 +91,33 @@ namespace GameSaves.Infrastructure.GoogleDrive
             }
 
             SyncRemoteProfile? profile = _profileRepository.GetById(remoteProfileId);
-            return new GoogleDriveRemoteFileSystem(
-                remoteProfileId,
-                GetSafeDisplayRoot(profile),
-                _validationService,
-                _rootExistenceService,
-                _folderExistenceService,
-                _runFolderNameService,
-                _textFileReadService,
-                _providerMetadataReadService,
-                _providerMetadataReplacementService,
-                _createOnlyTextFileService,
-                _recursiveFileListingService,
-                _binaryUploadService,
-                _binaryDownloadService);
+
+            // The retry wrapper is provider-neutral and knows nothing about
+            // Google Drive; this is where the Drive-specific answer to "is this
+            // worth retrying" is supplied. The classification is not re-derived
+            // here: GoogleDriveApiFailure already decided, and a second opinion
+            // at the call site is what Milestone X's constraints forbid.
+            return new RetryingRemoteFileSystem(
+                new GoogleDriveRemoteFileSystem(
+                    remoteProfileId,
+                    GetSafeDisplayRoot(profile),
+                    _validationService,
+                    _rootExistenceService,
+                    _folderExistenceService,
+                    _runFolderNameService,
+                    _textFileReadService,
+                    _providerMetadataReadService,
+                    _providerMetadataReplacementService,
+                    _createOnlyTextFileService,
+                    _recursiveFileListingService,
+                    _binaryUploadService,
+                    _binaryDownloadService),
+                _delay,
+                IsRetryableDriveFailure);
         }
+
+        private static bool IsRetryableDriveFailure(Exception exception) =>
+            exception is GoogleDriveRemoteOperationException { Result.Retryable: true };
 
         private static string GetSafeDisplayRoot(SyncRemoteProfile? profile)
         {

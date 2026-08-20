@@ -115,10 +115,12 @@ public sealed class DelayProviderTests
     }
 
     [Fact]
-    public void TheSeam_IsNotYetUsedByAnyProductionCode()
+    public void TheSeam_IsUsedOnlyWhereRetryIsComposed()
     {
-        // Task 2 adds a seam and changes no behaviour. When Task 3 starts using
-        // it, rewrite this test to pin where it is used; do not delete it.
+        // Task 2 added the seam and Task 3 started using it, so this test was
+        // rewritten rather than deleted: it now pins where the seam is reached
+        // instead of pinning that it is unused. Waiting stays confined to the
+        // retry decorator and the two places that hand it its dependency.
         string[] sources =
         [
             .. Directory.EnumerateFiles(
@@ -134,11 +136,14 @@ public sealed class DelayProviderTests
             .OrderBy(name => name, StringComparer.Ordinal)
             .ToArray()!;
 
-        // Only the declaration, the implementation, and the registration.
+        // The declaration, the implementation, the registration, the one
+        // decorator that waits, and the one factory that supplies it.
         Assert.Equal(
             new[]
             {
+                "GoogleDriveRemoteFileSystem.cs",
                 "IDelayProvider.cs",
+                "RetryingRemoteFileSystem.cs",
                 "ServiceCollectionExtensions.cs",
                 "SystemDelayProvider.cs"
             },

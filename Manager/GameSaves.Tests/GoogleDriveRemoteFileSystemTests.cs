@@ -37,13 +37,18 @@ public sealed class GoogleDriveRemoteFileSystemTests
             new RecordingCreateOnlyTextFileService(),
             new RecordingRecursiveFileListingService(),
             new FakeGoogleDriveBinaryUploadService(),
-            new FakeGoogleDriveBinaryDownloadService());
+            new FakeGoogleDriveBinaryDownloadService(),
+            new RecordingDelayProvider());
 
         IRemoteFileSystem first = factory.Create(ProfileId);
         IRemoteFileSystem second = factory.Create(ProfileId);
 
-        Assert.IsType<GoogleDriveRemoteFileSystem>(first);
-        Assert.IsType<GoogleDriveRemoteFileSystem>(second);
+        // Milestone X wrapped every Drive remote boundary in bounded retry, so
+        // the factory no longer returns the bare file system. The surviving
+        // invariant is that each call still produces a distinct, profile-scoped
+        // boundary and that the wrapper is the only thing added.
+        Assert.IsType<RetryingRemoteFileSystem>(first);
+        Assert.IsType<RetryingRemoteFileSystem>(second);
         Assert.NotSame(first, second);
         Assert.Equal("GameSave Manager Backups", first.DisplayRoot);
         Assert.Equal("GameSave Manager Backups/nested/run", first.GetDisplayPath("nested/run"));
@@ -75,7 +80,8 @@ public sealed class GoogleDriveRemoteFileSystemTests
             new RecordingCreateOnlyTextFileService(),
             new RecordingRecursiveFileListingService(),
             new FakeGoogleDriveBinaryUploadService(),
-            new FakeGoogleDriveBinaryDownloadService());
+            new FakeGoogleDriveBinaryDownloadService(),
+            new RecordingDelayProvider());
 
         await factory.Create(ProfileId).ValidateAsync();
         await factory.Create(secondProfileId).ValidateAsync();
@@ -110,7 +116,8 @@ public sealed class GoogleDriveRemoteFileSystemTests
             new RecordingCreateOnlyTextFileService(),
             new RecordingRecursiveFileListingService(),
             new FakeGoogleDriveBinaryUploadService(),
-            new FakeGoogleDriveBinaryDownloadService());
+            new FakeGoogleDriveBinaryDownloadService(),
+            new RecordingDelayProvider());
 
         IRemoteFileSystem remote = factory.Create(ProfileId);
 
@@ -137,7 +144,8 @@ public sealed class GoogleDriveRemoteFileSystemTests
             new RecordingCreateOnlyTextFileService(),
             new RecordingRecursiveFileListingService(),
             new FakeGoogleDriveBinaryUploadService(),
-            new FakeGoogleDriveBinaryDownloadService());
+            new FakeGoogleDriveBinaryDownloadService(),
+            new RecordingDelayProvider());
 
         IRemoteFileSystem missing = factory.Create(ProfileId);
         repository.Create(Profile() with
@@ -191,7 +199,10 @@ public sealed class GoogleDriveRemoteFileSystemTests
         IRemoteFileSystem remote = factory.Create(ProfileId);
 
         Assert.IsType<GoogleDriveRemoteFileSystemFactory>(factory);
-        Assert.IsType<GoogleDriveRemoteFileSystem>(remote);
+        // Rewritten by Milestone X: the boundary is now retry-wrapped. What
+        // this test is about, the resolved composition reaching the real Drive
+        // file system without performing remote work, is unchanged.
+        Assert.IsType<RetryingRemoteFileSystem>(remote);
         Assert.Equal(0, validation.Calls);
         Assert.DoesNotContain(
             services,
@@ -882,7 +893,8 @@ public sealed class GoogleDriveRemoteFileSystemTests
             new RecordingCreateOnlyTextFileService(),
             new RecordingRecursiveFileListingService(),
             new FakeGoogleDriveBinaryUploadService(),
-            new FakeGoogleDriveBinaryDownloadService());
+            new FakeGoogleDriveBinaryDownloadService(),
+            new RecordingDelayProvider());
 
     private static SyncRemoteProfile DisplayRootProfile(
         Guid profileId,
