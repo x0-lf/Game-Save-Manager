@@ -35,6 +35,13 @@ namespace GameSaves.App.ViewModels
         private long _googleAuthenticationGeneration;
         private bool _googleDriveInteractiveOperation;
         private CancellationTokenSource? _googleRootFolderCancellation;
+
+        // Owned by ExecuteSyncAsync for the lifetime of one run. Until
+        // Milestone Y every layer beneath this view model honoured a
+        // cancellation token and this one never created it, so the token they
+        // all respected was always default and a running sync could not be
+        // stopped at all.
+        private CancellationTokenSource? _syncCancellation;
         private long _googleRootFolderGeneration;
 
         private enum GoogleDriveInteractiveOperation
@@ -166,7 +173,12 @@ namespace GameSaves.App.ViewModels
         private string selectedSummaryDisplay = "";
 
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(CanCancelSync))]
         private bool isSyncRunning;
+
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(CanCancelSync))]
+        private bool isCancellingSync;
 
         [ObservableProperty]
         private double progressValue;
@@ -1355,6 +1367,24 @@ namespace GameSaves.App.ViewModels
             }
         }
 
+        /// <summary>
+        /// Visible only while a sync is running, so the control cannot be
+        /// pressed when there is nothing to stop.
+        /// </summary>
+        public bool CanCancelSync => IsSyncRunning && !IsCancellingSync;
+
+        [RelayCommand]
+        private void CancelSync()
+        {
+            if (!CanCancelSync)
+                return;
+
+            IsCancellingSync = true;
+            _syncCancellation?.Cancel();
+            ExecutionStatusMessage =
+                "Cancelling the sync. Files already copied are kept; nothing is deleted.";
+        }
+
         [RelayCommand]
         private void CancelGoogleDriveConnection()
         {
@@ -2509,6 +2539,9 @@ namespace GameSaves.App.ViewModels
             {
                 IsLoading = true;
                 IsSyncRunning = true;
+                IsCancellingSync = false;
+                _syncCancellation?.Dispose();
+                _syncCancellation = new CancellationTokenSource();
                 TryUpdateLastUsed();
                 ResultsSectionExpanded = true;
                 ProgressValue = 0;
@@ -2536,7 +2569,8 @@ namespace GameSaves.App.ViewModels
                         Download = DownloadEnabled,
                         OnlyRunNames = selectedRunNames,
                         Progress = progress
-                    });
+                    },
+                    _syncCancellation.Token);
 
                 ExecutionResults.Clear();
 
@@ -2556,6 +2590,16 @@ namespace GameSaves.App.ViewModels
 
                 await RefreshSyncLogAsync(_lastProvider);
             }
+            catch (OperationCanceledException)
+            {
+                // Whatever was already copied stays. Upload is create-only and
+                // download never overwrites, so a cancelled run leaves a partial
+                // run rather than damage, and nothing is cleaned up.
+                ExecutionStatusMessage =
+                    "Sync cancelled. Files already copied are kept, nothing was " +
+                    "deleted or replaced, and running the sync again is safe.";
+                ProgressText = "";
+            }
             catch (Exception ex)
             {
                 ExecutionStatusMessage = $"Sync failed: {ex.Message}";
@@ -2565,6 +2609,9 @@ namespace GameSaves.App.ViewModels
             {
                 IsLoading = false;
                 IsSyncRunning = false;
+                IsCancellingSync = false;
+                _syncCancellation?.Dispose();
+                _syncCancellation = null;
             }
         }
 

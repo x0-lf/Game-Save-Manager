@@ -896,6 +896,79 @@ public sealed class GoogleDriveRemoteFileSystemTests
             new FakeGoogleDriveBinaryDownloadService(),
             new RecordingDelayProvider());
 
+    [Theory]
+    [InlineData(GoogleDriveRemoteValidationStatus.RateLimited, true)]
+    [InlineData(GoogleDriveRemoteValidationStatus.Unavailable, true)]
+    [InlineData(GoogleDriveRemoteValidationStatus.AuthenticationUnavailable, true)]
+    [InlineData(GoogleDriveRemoteValidationStatus.QuotaExceeded, false)]
+    [InlineData(GoogleDriveRemoteValidationStatus.AuthorizationRevoked, false)]
+    [InlineData(GoogleDriveRemoteValidationStatus.RootMissing, false)]
+    internal async Task TheWiredRetryPredicate_MatchesRealDriveFailuresAndOnlyTheRightOnes(
+        GoogleDriveRemoteValidationStatus status,
+        bool expectRetry)
+    {
+        // Milestone X. Every other retry test uses a synthetic exception, so
+        // nothing proved that the predicate the Drive factory wires up matches
+        // the exception production actually throws. A predicate that named the
+        // wrong type would leave retry silently doing nothing while every one of
+        // those tests still passed.
+        Guid profileId = Guid.Parse("6d1f0f3f-6b1a-4f0e-9a5f-9d3c2a1b4e77");
+        var repository = new InMemorySyncRemoteProfileRepository();
+        repository.Create(DisplayRootProfile(
+            profileId, "root-id", "user@example.invalid", "GameSave Manager Backups"));
+
+        var roots = new ThrowingRootExistenceService(status);
+        var delay = new RecordingDelayProvider();
+
+        IRemoteFileSystem remote = new GoogleDriveRemoteFileSystemFactory(
+            repository,
+            new RecordingValidationService(),
+            roots,
+            new RecordingFolderExistenceService(),
+            new RecordingRunFolderNameService(),
+            new RecordingTextFileReadService(),
+            new RecordingProviderMetadataReadService(),
+            new RecordingProviderMetadataReplacementService(),
+            new RecordingCreateOnlyTextFileService(),
+            new RecordingRecursiveFileListingService(),
+            new FakeGoogleDriveBinaryUploadService(),
+            new FakeGoogleDriveBinaryDownloadService(),
+            delay).Create(profileId);
+
+        await Assert.ThrowsAsync<GoogleDriveRemoteOperationException>(
+            () => remote.RootExistsAsync());
+
+        if (expectRetry)
+        {
+            Assert.Equal(4, roots.Attempts);
+            Assert.Equal(3, delay.Requested.Count);
+        }
+        else
+        {
+            Assert.Equal(1, roots.Attempts);
+            Assert.Empty(delay.Requested);
+        }
+    }
+
+    /// <summary>
+    /// Throws what production throws, carrying the retryable flag the real
+    /// validation mapper assigns to the given status.
+    /// </summary>
+    private sealed class ThrowingRootExistenceService(
+        GoogleDriveRemoteValidationStatus status) : IGoogleDriveRootExistenceService
+    {
+        public int Attempts { get; private set; }
+
+        public Task<bool> ExistsAsync(
+            Guid remoteProfileId,
+            CancellationToken cancellationToken = default)
+        {
+            Attempts++;
+            throw new GoogleDriveRemoteOperationException(
+                GoogleDriveRemoteValidationMapper.FromStatus(status));
+        }
+    }
+
     private static SyncRemoteProfile DisplayRootProfile(
         Guid profileId,
         string rootId,

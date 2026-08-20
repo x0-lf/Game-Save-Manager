@@ -699,7 +699,10 @@ Preview Sync and Sync Now remain disabled until Milestone V.
 
 ### V — Sync tab provider selector
 
-Replace the two-provider Sync UI with a selector that initially shows:
+**Complete. Closed on 2026-08-20** after controlled live acceptance; see
+`docs/google-drive-developer-setup.md`.
+
+Replace the two-provider Sync UI with a selector that shows:
 
 ```text
 Local folder
@@ -707,45 +710,51 @@ SFTP server
 Google Drive
 ```
 
-* [ ] Change provider-specific connection fields with the selected provider
-* [ ] For Google Drive, show connection status and the connected account
-* [ ] Add **Connect Google Drive** and **Disconnect**
-* [ ] Show the remote folder name
-* [ ] Add **Open in Google Drive/browser** later if safe
-* [ ] Keep **Check Connection & Sync Status**
-* [ ] Keep upload enabled, download enabled, preview, per-run selection, Select All, Select None, explicit confirmation, Sync Now, live progress, warnings, execution results, and sync history shared by every provider
-* [ ] Keep Google Drive in the existing Sync tab
+* [x] Change provider-specific connection fields with the selected provider
+* [x] For Google Drive, show connection status and the connected account
+* [x] Add **Connect Google Drive** and **Disconnect**
+* [x] Show the remote folder name
+* [ ] Add **Open in Google Drive/browser** later if safe — still deferred; the capability is declared but no control is bound, and a test pins that
+* [x] Keep **Check Connection & Sync Status**
+* [x] Keep upload enabled, download enabled, preview, per-run selection, Select All, Select None, explicit confirmation, Sync Now, live progress, warnings, execution results, and sync history shared by every provider
+* [x] Keep Google Drive in the existing Sync tab
 
 ### W — Google Drive sync integration
 
-Connect Google Drive to the existing Sync tab workflow:
+**Complete. Closed on 2026-08-20**, hermetically; see the "End-to-end sync UI
+integration" section of `docs/sync-providers.md`. Milestone W added no product
+behaviour: it pinned the path from a UI command through the Core factory into
+the real engine, which until then no test had exercised.
 
-* [ ] Local-only run → upload
-* [ ] Remote-only run → download
-* [ ] Matching run → in sync
-* [ ] Same run name with different content → conflict
-* [ ] Never copy a conflict automatically
-* [ ] Keep deselected runs pending
-* [ ] Never overwrite an existing remote run
-* [ ] Never overwrite an existing local run
-* [ ] Introduce no delete operation
-* [ ] Make downloaded runs appear in Backups and remain restorable
-* [ ] Record every executed sync in SQLite history
-* [ ] Update the shared `sync-log.json`
+* [x] Local-only run → upload
+* [x] Remote-only run → download
+* [x] Matching run → in sync
+* [x] Same run name with different content → conflict
+* [x] Never copy a conflict automatically
+* [x] Keep deselected runs pending
+* [x] Never overwrite an existing remote run
+* [x] Never overwrite an existing local run
+* [x] Introduce no delete operation
+* [x] Make downloaded runs appear in Backups and remain restorable
+* [x] Record every executed sync in SQLite history
+* [x] Update the shared `sync-log.json`
 
 ### X — Retry, cancellation, and incomplete uploads
 
-Add provider-neutral hardening where possible:
+**Complete. Closed on 2026-08-20**, hermetically; see the "Bounded retry and
+incomplete-transfer reporting" section of `docs/sync-providers.md`. Two items
+below are deliberately unticked, and both are recorded in the roadmap
+maintenance backlog rather than quietly dropped.
 
-* [ ] Expose a Cancel Sync button
-* [ ] Cancel the current operation through existing cancellation tokens
-* [ ] Retry transient Google API and network failures with bounded retries
-* [ ] Respect server retry instructions
-* [ ] Do not endlessly retry authentication or permission failures
-* [ ] Do not upload the manifest when payload upload fails
-* [ ] Identify incomplete remote folders that have no manifest
-* [ ] Do not treat incomplete folders as backup runs
-* [ ] Initially report incomplete folders without deleting them automatically
+* [x] Expose a Cancel Sync button — built in Milestone Y Task 2, after this section recorded it as missing. Until then `SyncViewModel.ExecuteSyncAsync` never created a token and no control was bound, so a running sync could not be cancelled from the UI at all
+* [x] Cancel the current operation through existing cancellation tokens — at every layer below the view model
+* [x] Retry transient Google API and network failures with bounded retries
+* [ ] Respect server retry instructions — **not built.** `Retry-After` lives on the HTTP response and nothing in the repository reads it; bounded exponential backoff is used instead
+* [x] Do not endlessly retry authentication or permission failures
+* [x] Do not upload the manifest when payload upload fails
+* [x] Identify incomplete remote folders that have no manifest
+* [x] Do not treat incomplete folders as backup runs
+* [x] Initially report incomplete folders without deleting them automatically
 
 ### Y — Google Drive acceptance verification
 

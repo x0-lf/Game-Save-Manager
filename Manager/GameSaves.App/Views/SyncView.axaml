@@ -129,6 +129,16 @@
                                FontSize="11"
                                TextTrimming="CharacterEllipsis"
                                ToolTip.Tip="{Binding ProgressText}" />
+
+                    <!-- Inside the running-sync panel, so it exists only while
+                         there is something to cancel. -->
+                    <Button Content="Cancel Sync"
+                            Command="{Binding CancelSyncCommand}"
+                            IsEnabled="{Binding CanCancelSync}"
+                            HorizontalAlignment="Left"
+                            Height="28"
+                            FontSize="11"
+                            ToolTip.Tip="Stop the sync. Files already copied are kept and nothing is deleted." />
                 </StackPanel>
             </StackPanel>
         </Border>
