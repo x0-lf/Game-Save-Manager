@@ -13,6 +13,25 @@ The long-term goal is a cross-platform Steam save manager with backup profiles, 
 
 ## Current status
 
+**Google Drive synchronisation is complete.** It was accepted end to end against
+a real development account on 2026-08-20, across four live sessions and nine
+runs, with no sanitized failure categories. Twenty-two of the twenty-three
+acceptance items passed live; the twenty-third is recorded as unexecutable live
+with its reason, in [What is not proven](#what-is-not-proven) below. The full
+result is the "Milestone Y final acceptance result" section of
+[docs/sync-providers.md](docs/sync-providers.md).
+
+All three sync providers are usable: **Local folder, SFTP, and Google Drive.**
+WebDAV and OneDrive are declared in the capability catalog but are not
+implemented.
+
+> **Reading the roadmap below.** The [Development roadmap](#development-roadmap)
+> records what each milestone did *at the time it was done*, and several of its
+> sections say things like "Google Drive synchronisation remains unavailable".
+> Those statements were true at that milestone and are false now. They are kept
+> as history rather than rewritten. **This section, not the roadmap, is the
+> current status.**
+
 ### Implemented - desktop app (Avalonia)
 
 * Dashboard with Steam root, library count, installed games, Steam profiles, and mapping counts.
@@ -77,6 +96,41 @@ The long-term goal is a cross-platform Steam save manager with backup profiles, 
 * Save-path template expansion (environment tokens, Steam tokens, wildcards) and verification with confidence scores.
 * Verified-path backups with SHA-256 hashing and backup run/item records.
 * Steam catalog fetching and PCGamingWiki harvesting workflows.
+
+## What is not proven
+
+Google Drive synchronisation is complete and accepted, and three specific things
+are still not proven. They are listed here rather than only in the roadmap,
+because a reader deciding whether to trust this with their save files deserves to
+know what the acceptance did not cover.
+
+**The shape of a real Google quota or network error.** Acceptance item 19 could
+not be executed live: provoking a quota error means deliberately exhausting a
+real account's storage or a real project's API quota, and provoking a network
+error means disconnecting the machine mid-transfer, which produces a failure
+chosen by the operating system rather than by Google. Failure classification is
+covered deterministically and is precise about which failures are retried and
+which are not, but whether the classifier recognises what Google actually sends
+in those two cases has never been observed. If it does not, the effect is a
+retryable failure treated as permanent or the reverse; **no data is at risk
+either way**, because every write is create-only and no delete operation exists.
+
+**A server-supplied retry instruction is never honoured.** Google can send a
+`Retry-After` header telling a client how long to wait. Nothing in this
+application reads it. Retries use bounded exponential backoff instead, four
+attempts over at most thirty seconds. Against a rate-limited account this is
+less polite than it could be; it is not a correctness problem.
+
+**The SFTP provider has no behavioural test coverage.** Its transfer behaviour
+cannot be exercised without a real SSH server, because it constructs its own
+connection rather than accepting an injectable one. The path-traversal fix from
+the 2026-08-18 security audit lives in the shared sync engine, is covered, and is
+proved to apply to SFTP, but the provider's own upload and download paths are
+verified only by inspection. **Google Drive and Local folder are unaffected.**
+
+Each of these is recorded in the maintenance backlog of
+[docs/roadmap.md](docs/roadmap.md) with the reasoning and what closing it would
+take.
 
 ## Safety model
 
@@ -315,6 +369,14 @@ Harvested data is candidate data: save locations can be wrong, incomplete, outda
 ---
 
 ## Development roadmap
+
+> **This section is history, not current status.** Each milestone entry describes
+> what was true when that milestone closed. Statements such as "Google Drive
+> synchronisation remains unavailable" or "`IsImplemented = false`" were accurate
+> then and are not accurate now: Google Drive was completed in Milestone V and
+> accepted in Milestone Y. For what is true today, see
+> [Current status](#current-status). Entries are kept unedited so the sequence of
+> decisions stays legible.
 
 ### A — Baseline and regression protection
 
@@ -788,18 +850,34 @@ Add automated tests where API calls can be mocked or abstracted, then run live m
 
 After Google Drive is verified:
 
-* [ ] Update README current status
-* [ ] Mark Google Drive sync complete
-* [ ] Document Google Cloud setup
-* [ ] Document the requested OAuth scope
-* [ ] Document where tokens are stored
-* [ ] Document connect/disconnect behavior
-* [ ] Document the visible Drive folder structure
-* [ ] Document the copy-only safety model
-* [ ] Update `THIRD-PARTY-NOTICES.md`
+* [x] Update README current status — Milestone Z, 2026-08-20
+* [x] Mark Google Drive sync complete — Milestone Z, 2026-08-20
+* [x] Document Google Cloud setup — `docs/google-drive-developer-setup.md`, verified in Milestone Z
+* [x] Document the requested OAuth scope — `drive.file`, verified against `GoogleDriveAuthorizationScopes.DriveFile`
+* [x] Document where tokens are stored — the protected secret store, `WindowsDpapiSecretStore` on Windows
+* [x] Document connect/disconnect behavior — verified live in Milestone Y session A
+* [x] Document the visible Drive folder structure — `My Drive/GameSave Manager Backups`, verified against `GoogleDriveApplicationRoot.DisplayName`
+* [x] Document the copy-only safety model — verified live in Milestone Y session D, item 15
+* [x] Update `THIRD-PARTY-NOTICES.md` — Milestone Z corrected a stale Google package note, added the missing `Avalonia.Controls.DataGrid`, and recorded the two Avalonia versions in use
 * [ ] Add screenshots later if useful
 
-Then continue with these future milestones in order:
+### After Google Drive
+
+Google Drive was accepted on 2026-08-20 and the pre-Drive future list below was
+written before any of it existed. What the project now knows it needs, ordered by
+evidence rather than ambition:
+
+1. **Give `SftpSyncProvider` an injectable remote boundary.** It is the only provider whose transfer behaviour has no test at all, and it is the provider a security audit already found a defect in. Google Drive gets this for free because its provider accepts an `IRemoteFileSystem`; SFTP builds its own. Everything Milestone W proved about the sync UI transfers to SFTP the moment the seam exists. **This is the highest item because it closes a known gap rather than adding surface.**
+2. **Migrate off the deprecated xUnit 2.9.3.** The only remaining dependency-hygiene item. It changes the runner and the suite baseline, so it belongs between milestones rather than inside one.
+3. **Capture `Retry-After`.** Politeness against a rate-limited account, not correctness. It needs an HTTP-layer observer across the nine Drive service constructions plus a carrier to the retry decorator, which is why Milestone X did not do it.
+4. **Then, and only then, a second cloud provider.** WebDAV and OneDrive are already declared in the capability catalog. The Google Drive work produced a provider-neutral remote boundary, a provider-neutral retry decorator, and a provider-neutral engine, so a second cloud provider should be a fraction of Drive's cost. **That claim is untested, and adding SFTP's seam first is the cheap way to test it**: if the second provider is genuinely easy, the seams are right.
+
+Deliberately not on this list: resumable upload recovery across restarts, a retry
+policy engine, quota display, the Drive Picker, shared drives, and
+`appDataFolder`. Each was considered during Milestones Q to Y and none has
+evidence behind it yet.
+
+The pre-Drive future list, kept for continuity:
 
 1. [ ] WebDAV/Nextcloud provider
 2. [ ] OneDrive provider

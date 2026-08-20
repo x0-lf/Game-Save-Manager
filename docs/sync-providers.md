@@ -14,7 +14,7 @@ The capability catalog describes provider behavior; the provider factory remains
 |---|---:|---:|---|---|
 | Local or mounted folder | Yes | Yes | Folder path | Folder selection, connection testing, open in native file manager |
 | SFTP server (SSH) | Yes | Yes | Session credentials | Server credentials, connection testing |
-| Google Drive | No | Yes | Interactive desktop OAuth | Account/root configuration, internal recursive file listing, create-only file upload, and no-overwrite file download; sync unavailable |
+| Google Drive | No | Yes | Interactive desktop OAuth | Account/root configuration, internal recursive file listing, create-only file upload, no-overwrite file download, and an internal provider wrapper; sync unavailable |
 | WebDAV | No | No | Planned server credentials | Planned persistent authentication, connection testing, logout, open location |
 | OneDrive | No | No | Planned interactive OAuth | Same planned high-level capabilities as Google Drive |
 
@@ -306,7 +306,399 @@ Provider metadata replacement validates the exact `.gamesave-sync/sync-log.json`
 
 The parent-ID/name create lock and profile/path metadata lock coordinate only this application process. Google Drive does not enforce globally unique names, so cross-process duplicate names remain possible; a later authoritative lookup reports that state as ambiguity instead of choosing or deleting an object.
 
-Milestone P did not activate Google Drive synchronization. Milestone Q subsequently made `ListFilesAsync` available at the Infrastructure remote-filesystem boundary, Milestone R added create-only `UploadFileAsync`, and Milestone S added no-overwrite `DownloadFileAsync`. `GoogleDriveSyncProvider` does not exist, and Google Drive remains absent from `SyncProviderFactory` with `IsImplemented = false`. It is configuration-only and Preview Sync and Sync Now remain disabled.
+## Google Drive provider wrapper
+
+Milestone T adds `GoogleDriveSyncProvider`, an internal sealed wrapper over the
+existing shared `SyncEngine`, and the internal profile-scoped factory that
+builds it. The milestone is closed: its live development-account acceptance ran
+on 2026-08-18 and passed, driving a complete upload, a complete download back
+with identical bytes, an idempotent re-run, a no-overwrite re-run, sync-log
+records in both directions, and cancellation leaving no manifest without its
+content. Google Drive is still not registered as a selectable sync provider.
+
+The wrapper is pure delegation. It holds one engine over one profile-scoped
+remote file system and forwards `CreatePreviewAsync`, `ExecuteAsync`, and
+`GetSyncLogAsync` unchanged; run enumeration, comparison, conflict reporting,
+manifest rewriting, restore verification, sync-log policy, and progress all stay
+in the engine. `ProviderName` is the fixed string `Google Drive`, and
+`RemoteRoot` is the sanitized profile display root, which is what reaches sync
+plans and persisted transfer history, so no account address, object ID, or Drive
+URL can appear there.
+
+Construction performs no authentication and no Drive request. An empty,
+unknown, or unusable profile is refused before any Drive work through the same
+validator the rest of the Drive boundary uses. Disposal is idempotent, and a
+disposed provider refuses every operation before reaching the engine.
+
+The wrapper is built by an internal dependency-injection factory keyed by saved
+profile ID. Milestone U then lifted that boundary into the Core
+contract: `ISyncProviderFactory` declares
+`CreateGoogleDriveProvider(Guid remoteProfileId)`, and `SyncProviderFactory`
+forwards the profile ID to the internal factory without adding a validation,
+lookup, or message of its own. Its constructor is internal and takes the Drive
+factory explicitly, so no service locator is involved. Google Drive
+is nevertheless still inactive, with `IsImplemented = false`, no case in the
+application's provider switch, and Preview Sync and Sync Now disabled until
+Milestone V.
+
+Milestone P did not activate Google Drive synchronization. Milestone Q subsequently made `ListFilesAsync` available at the Infrastructure remote-filesystem boundary, Milestone R added create-only `UploadFileAsync`, Milestone S added no-overwrite `DownloadFileAsync`, Milestone T added `GoogleDriveSyncProvider`, and Milestone U added the Core factory case. Google Drive is still `IsImplemented = false` with no case in the application's provider switch, so it stays configuration-only and Preview Sync and Sync Now remain disabled.
+
+## End-to-end sync UI integration
+
+Milestone W, closed on 2026-08-20. It added no product behaviour: every
+requirement below is a test over code that already existed.
+
+The gap it closed was structural. Until W, **no test constructed `SyncViewModel`
+with a real provider factory.** All five view-model test files built it with
+`SyncProviderSelectionTests.RecordingSyncProviderFactory`, whose fake provider
+returns a fixed one-item plan and copies nothing, so the path from a UI command,
+through the Core factory, into the real engine and back into bound state was
+pinned only by the Milestone V live acceptance, which is a one-off manual run
+rather than something CI can fail on. Forty-one facts already covered the
+provider and engine level; none of them started at a command.
+
+All coverage below is hermetic. Local Folder runs against temporary directories
+the test creates and deletes; Google Drive runs through the same
+`LocalFolderRemoteFileSystem` backend `GoogleDriveSyncProviderParityTests` uses,
+so the wrapper and the internal factory are real while the network is absent.
+No account, no SSH server, and no browser is involved.
+
+### Automated requirement coverage
+
+Every method below is in `SyncUiEndToEndTests` unless another class is named.
+
+| Requirement | Deterministic coverage |
+| --- | --- |
+| The view model builds and drives the real Local Folder provider | `ViewModelPreview_UsesTheRealLocalFolderProvider` |
+| A view-model-driven run moves bytes in both directions | `ViewModelExecute_ActuallyMovesBytesInBothDirections` |
+| Upload stays create-only and download never overwrites, through the UI | `ViewModelExecute_LeavesTheAlreadySyncedRunUntouched` |
+| The confirmation gate holds against a real engine | `ViewModelExecute_WithoutConfirmation_CopiesNothing` |
+| The view model builds and drives the real Google Drive provider, keyed by the saved profile | `DriveViewModelExecute_MovesBytesThroughTheRealDriveWrapper` |
+| Google Drive and Local Folder leave identical bound state and identical bytes | `DriveAndLocalFolder_LeaveIdenticalStateThroughTheSameUiPath` |
+| An unticked run is not copied, and is reported as deliberately skipped | `UntickedRun_IsLeftAloneByTheRealEngine` |
+| Progress advances against real bytes and ends complete, carrying nothing private | `Progress_AdvancesAgainstRealBytesAndEndsComplete` |
+| A real engine warning reaches the bound warnings, and nothing is deleted | `AnEngineWarning_ReachesTheBoundWarningsAndDeletesNothing` |
+| The same warning carries no folder identifier on the Drive path | `TheSameEngineWarning_CarriesNoIdentifierOnTheDrivePath` |
+| A confirmed run is recorded in transfer history; a preview is not | `AViewModelDrivenRun_IsRecordedInTransferHistory` |
+| A blocked run records nothing, and the same plan confirmed does record | `ABlockedRun_RecordsNothing` |
+| A validated Drive preview advances the profile metadata it should | `ADriveRun_AdvancesTheProfileMetadataItShould` |
+| A refused selection advances no metadata and records no run | `ARefusedSelection_AdvancesNoProfileMetadata` |
+| The sync log round-trips through the view model and carries nothing private | `TheSyncLog_RoundTripsThroughTheViewModelAndCarriesNothingPrivate` |
+| The SFTP provider is built by the real factory without touching the network, and its display root carries no secret | `TheSftpProvider_IsBuiltByTheRealFactoryWithoutTouchingTheNetwork` |
+| The SFTP provider has no seam for a hermetic remote file system | `TheSftpProvider_HasNoSeamForAHermeticRemoteFileSystem` |
+| The traversal guard is in the engine every provider shares | `TheTraversalGuardProtectingSftp_LivesInTheSharedEngine`, `SyncRemotePathTraversalTests.UnsafeRemoteNames_AreRejected`, `SyncRemotePathTraversalTests.DownloadingARunWithATraversingFileName_WritesNothingOutsideTheRunFolder`, `SyncRemotePathTraversalTests.AnUnsafeNameLateInTheListing_StillWritesNothing` |
+| An incomplete SFTP form is refused before any provider is built | `SelectingSftpInTheUi_BuildsOnlyTheSftpProvider` |
+
+All twenty-two cited methods and every cited class were verified to exist in the
+repository rather than assumed.
+
+### The standing check this milestone added
+
+Every view-model test in the file must fail when the real
+`SyncProviderFactory` is swapped for
+`SyncProviderSelectionTests.RecordingSyncProviderFactory`. If one still passes,
+it is asserting something a provider that copies nothing already satisfies, and
+it is not testing the composition.
+
+**That check caught vacuous tests twice.** Create-only and
+confirmation tests both asserted only that nothing had been copied, which
+the fake satisfies trivially; both now assert the positive result first. In Task
+5 both profile-metadata tests passed under the swap, because
+`TryUpdateLastSuccessfulConnection` fires on any plan reporting validation
+succeeded; both now also assert that the internal Drive factory was asked for a
+remote boundary, which only the real path does.
+
+The check has one recorded exception. Three tests pass under the swap by design:
+`TheSftpProvider_IsBuiltByTheRealFactoryWithoutTouchingTheNetwork`,
+`TheSftpProvider_HasNoSeamForAHermeticRemoteFileSystem`, and
+`TheTraversalGuardProtectingSftp_LivesInTheSharedEngine`. None of them goes
+through the view model; they assert type shape and factory construction
+directly.
+
+### What Milestone W did not cover, and why
+
+**`SftpSyncProvider` has no behavioural coverage, and W did not add the seam
+that would allow it.** Its constructor takes `SftpConnectionSettings` and builds
+its own `SftpRemoteFileSystem`, which builds its own `SftpClient`. Unlike
+`GoogleDriveSyncProvider`, which is handed an `IRemoteFileSystem` and is
+therefore testable offline, there is nowhere to inject a fake, so its transfer
+behaviour cannot be exercised without a real SSH server. Milestone W adds no
+product behaviour, so this was reported rather than fixed.
+
+It matters more than it looks: SFTP is the provider the 2026-08-18 security
+audit found an arbitrary local file write in. That
+particular defect is fixed in `SyncEngine` and is covered, and the tests above
+pin that SFTP really runs on that engine, so the fix demonstrably applies. But
+the provider's own behaviour remains untested.
+
+Adding the seam is a separate, user-gated task. It is recorded in the roadmap
+maintenance backlog. Until then,
+`TheSftpProvider_HasNoSeamForAHermeticRemoteFileSystem` pins the absence, and
+when a seam appears that test is rewritten to use it rather than deleted.
+
+### Recorded Milestone W verification
+
+```text
+Date: 2026-08-20
+Tested tree: ef3c070 plus the uncommitted Task 7 documentation
+Release suite: 1,780 passed, 0 failed, 0 skipped
+Release build: succeeded, 0 warnings, 0 errors, from a full
+               --no-incremental rebuild
+Direct package baseline: unchanged, 21 unique direct packages
+Transitive entries: 248
+Vulnerable: none in any of the six projects
+Deprecated: xUnit 2.9.3 (Legacy)
+Live acceptance: not applicable; Milestone W is hermetic by design and the
+                 Milestone V live acceptance already covered the real path
+```
+
+## Bounded retry and incomplete-transfer reporting
+
+Milestone X, closed on 2026-08-20. It is the first milestone since V to change
+behaviour on the real transfer path.
+
+The gap it closed was narrower than its title suggests. The Drive stack already
+classified every failure as retryable or not, and already had thorough
+cancellation and incomplete-run coverage. **What it had never done was act on
+the classification:** `IsRetryable` is true for exactly `RateLimited` and
+`Unavailable`, and all eleven readers of that flag only copied it into another
+failure record. Nothing retried anything.
+
+All coverage below is hermetic. A fake remote boundary fails a chosen number of
+times, and a recording delay reports what the backoff asked for without spending
+it, so a suite that finishes in about a second still exercises a thirty-second
+backoff ceiling.
+
+### Automated requirement coverage
+
+| Requirement | Deterministic coverage |
+| --- | --- |
+| Waiting is injected, never called directly, and the composition root supplies the real one | `DelayProviderTests.TheCompositionRoot_ResolvesTheProductionDelay`, `DelayProviderTests.TheSeam_IsUsedOnlyWhereRetryIsComposed` |
+| The production delay actually waits, abandons a cancelled wait, and refuses an already-cancelled token | `DelayProviderTests.TheSystemDelay_ActuallyWaits`, `DelayProviderTests.TheSystemDelay_ReturnsPromptlyWhenCancelledDuringTheWait`, `DelayProviderTests.TheSystemDelay_RefusesAnAlreadyCancelledToken` |
+| A test double can record a delay without spending it, and still honours cancellation | `DelayProviderTests.TheRecordingDelay_RecordsWhatWasRequestedWithoutSpendingIt`, `DelayProviderTests.TheRecordingDelay_StillHonoursCancellation` |
+| A retryable failure is retried until it succeeds | `RetryingRemoteFileSystemTests.ARetryableFailure_IsRetriedUntilItSucceeds` |
+| A non-retryable failure fails on the first attempt, with no delay requested | `RetryingRemoteFileSystemTests.ANonRetryableFailure_FailsOnTheFirstAttempt` |
+| Retry is bounded in attempts and in total delay | `RetryingRemoteFileSystemTests.RetryIsBounded_InAttemptsAndInTotalDelay`, `RetryingRemoteFileSystemTests.AnUnreasonableBaseDelay_StillCannotExceedTheCeiling` |
+| Retry never converts create-only into overwrite | `RetryingRemoteFileSystemTests.ARetriedCreate_StillRefusesAnExistingRemoteObject`, `RetryingRemoteFileSystemTests.ARetriedUpload_UploadsTheSameFileOnceItSucceeds` |
+| Members that perform no remote work are not wrapped, and an impossible configuration is refused | `RetryingRemoteFileSystemTests.ThePassThroughMembers_AreNotWrapped`, `RetryingRemoteFileSystemTests.TheDecorator_RefusesAnImpossibleConfiguration` |
+| The application is the only retry authority, so its bound is the real bound | `RetryAuthorityTests.EveryDriveServiceInitializer_DisablesTheLibraryBackoff`, `RetryAuthorityTests.TheRetryBound_IsTheOnlyBoundThatApplies` |
+| No server-supplied retry instruction is captured anywhere | `RetryAuthorityTests.NoServerSuppliedRetryInstruction_IsCapturedAnywhere` |
+| An interrupted run is reported as incomplete, with the bytes it really copied | `IncompleteTransferReportingTests.AnInterruptedUpload_IsReportedAsIncompleteWithTheBytesItCopied` |
+| A run that copied nothing is still reported as failed | `IncompleteTransferReportingTests.ARunThatCopiedNothing_IsStillReportedAsFailed` |
+| An incomplete run is not a clean result | `IncompleteTransferReportingTests.AnIncompleteRun_IsNotACleanResult` |
+| An incomplete run is left exactly as it was, with no cleanup and no invented manifest | `IncompleteTransferReportingTests.AnIncompleteRun_IsLeftExactlyAsItWas` |
+| The new status reaches the results list as its own value | `IncompleteTransferReportingTests.TheUiRow_ShowsIncompleteAsItsOwnStatus` |
+| Cancellation during a backoff is honoured, and a cancellation is never a retryable failure | `RetryingRemoteFileSystemTests.CancellationDuringABackoff_IsHonouredAndStopsTheWork`, `RetryingRemoteFileSystemTests.ACancelledOperation_IsNeverTreatedAsARetryableFailure` |
+| A real backoff is abandoned rather than slept through | `RetryCancellationTests.ARealBackoff_IsAbandonedRatherThanSleptThrough` |
+| A cancelled retry during a sync copies nothing and records no run | `RetryCancellationTests.ACancelledRetryDuringASync_CopiesNothingAndRecordsNoRun` |
+| The wired Drive predicate retries the three retryable validation statuses and no others | `GoogleDriveRemoteFileSystemTests.TheWiredRetryPredicate_MatchesRealDriveFailuresAndOnlyTheRightOnes` |
+| The engine still keeps payloads, writes no manifest, and repairs nothing when a run stops partway | `GoogleDriveSyncEngineCompatibilityTests.ManifestFailure_KeepsPayloadsAndNeverRepairsTheRun`, `GoogleDriveSyncEngineCompatibilityTests.InterruptedDownload_LeavesNoRunPresentedAsComplete` |
+
+All thirty cited methods and every cited class were verified to exist in the
+repository rather than assumed.
+
+**One of them was added after the milestone was first written up.** Every retry
+test used a synthetic exception, so nothing proved that the predicate the Drive
+factory wires up matches the exception production actually throws. A predicate
+naming the wrong type would have left retry silently doing nothing while every
+retry test still passed. The theory drives the real
+`GoogleDriveRemoteFileSystemFactory` with a service that throws the real
+`GoogleDriveRemoteOperationException`, and checks all three retryable validation
+statuses retry four times and three non-retryable ones fail on the first
+attempt.
+
+### Two findings carried out of the milestone
+
+**No server-supplied retry instruction is reachable.** `Retry-After` lives on the
+HTTP response. The failure mapper is handed a `GoogleApiException` and takes only
+the status code and a safe reason string from it; the header never reaches that
+far, and the failure record has nowhere to carry a delay even if it did.
+Capturing one means observing the HTTP response at all nine Drive service
+constructions and carrying the observed delay to the point where the decorator
+decides how long to wait. That is its own task, and Milestone X did not do it.
+`NoServerSuppliedRetryInstruction_IsCapturedAnywhere` pins the absence and is to
+be rewritten, never deleted, when it is built.
+
+**A second retry layer was in force and nobody had stated it.** The nine
+`BaseClientService.Initializer` constructions set only `HttpClientInitializer`
+and `ApplicationName`, so whatever backoff the client library applies by default
+was running underneath the decorator added one task earlier. Two retry layers
+compose by multiplication, so the thirty-second ceiling would have been the
+decorator's share of the wait rather than the whole of it. All nine now disable
+the library backoff.
+
+### What the guard measurement showed
+
+Retry changes call counts, and 116 call-count assertions exist across at least
+twelve test files. **The measured blast radius was three tests, then two**, and
+none of the five was a call-count assertion. Choosing to decorate
+`IRemoteFileSystem` rather than each backend service is what kept it there. 
+Both figures were measured by implementing and running, not predicted.
+
+### Recorded Milestone X verification
+
+```text
+Date: 2026-08-20
+Tested tree: bfbed98 plus the uncommitted Task 7 documentation
+Release suite: 1,813 passed, 0 failed, 0 skipped
+Release build: succeeded, 0 warnings, 0 errors, from a full
+               --no-incremental rebuild
+Direct package baseline: unchanged, 21 unique direct packages
+Transitive entries: 248
+Vulnerable: none in any of the six projects
+Deprecated: xUnit 2.9.3 (Legacy)
+Live acceptance: not performed; hermetic fault injection only. See below.
+```
+
+### On the live gate, and what was not done
+
+**Milestone X closes on hermetic acceptance, and no live run was performed.**
+The reasoning, offered as a recommendation before the milestone closed and not
+overridden: X's subject is failure handling, and the failures cannot be produced
+on demand against a real account. Nobody can make Drive return `429` to order, so
+a live run would exercise the happy path Milestone V already accepted and would
+prove nothing new about retry. Fault injection is the only way to reach these
+paths at all, and it is hermetic by nature.
+
+What that leaves open, stated plainly rather than implied: **the retry and
+incomplete-reporting paths have never run against a real Google account.** A
+short live regression re-run of the Milestone V path would confirm the happy path
+still works with the decorator in place, and it remains available at any time.
+The Milestone Y final acceptance covers it regardless.
+
+## Milestone Y acceptance coverage map
+
+Milestone Y Task 3, 2026-08-20. Every one of the twenty-three README acceptance
+items for Milestone Y, mapped to what already proves it and what only a real
+account can.
+
+**Automated** means the suite proves it and the live session only confirms it
+against a real account. **Live-only** means no test can prove it, because the
+thing being tested is the real service's behaviour. Most items are both: the
+mechanism is automated and the live run confirms Google behaves as the fakes
+assume.
+
+| # | Acceptance item | Automated coverage | Live |
+| --- | --- | --- | --- |
+| 1 | Connect one Google account | `GoogleDriveOAuthTests`, `GoogleDriveOAuthViewModelTests` | A, and only live can prove the real consent flow |
+| 2 | Restart the app and remain connected | `GoogleDriveAccountLifecycleTests`, `GoogleDriveOAuthViewModelTests` | A |
+| 3 | Disconnect and remove the local token | `GoogleDriveAccountLifecycleTests` | A |
+| 4 | Create or find one application root folder | `GoogleDriveRootFolderTests`, `GoogleDriveRootFolderViewModelTests`, `GoogleDriveFolderPathEnsureTests` | A |
+| 5 | Detect a local-only run | `SyncEngineTests`, `SyncUiEndToEndTests.ViewModelPreview_UsesTheRealLocalFolderProvider` | B |
+| 6 | Upload the selected run | `GoogleDriveUploadIntegrationTests`, `SyncUiEndToEndTests.ViewModelExecute_ActuallyMovesBytesInBothDirections` | B |
+| 7 | Verify the manifest is uploaded last | `GoogleDriveSyncEngineCompatibilityTests.Upload_CreatesEveryPayloadBeforeTheRootManifest`, `SyncEngineTests.Upload_UsesTheSharedEngine_UploadsManifestLast_AndRecordsHistory` | B |
+| 8 | Detect a remote-only run | `GoogleDriveSyncProviderParityTests.Preview_MatchesLocalFolderItemForItem` | C |
+| 9 | Download the selected run | `GoogleDriveDownloadIntegrationTests`, `GoogleDriveSyncEngineCompatibilityTests.Download_RewritesTheManifestExactlyLikeLocalFolderDoes` | C |
+| 10 | **Restore the downloaded run** | `DownloadedRunRestoreTests.ARunDownloadedFromTheRemote_CanBeRestoredToItsOriginalLocation`, `DownloadedRunRestoreTests.ADownloadedRunWhoseContentWasTampered_IsRefusedByRestore` | C |
+| 11 | Identify identical runs as in sync | `GoogleDriveSyncProviderParityTests.Preview_MatchesLocalFolderItemForItem`, `SyncUiEndToEndTests.ViewModelExecute_LeavesTheAlreadySyncedRunUntouched` | C |
+| 12 | Detect a same-name/different-manifest conflict | `SyncEngineTests.Preview_ReportsConflictAndIgnoresIncompleteRemoteFolders` | C |
+| 13 | Never overwrite remote files | `GoogleDriveSyncProviderIntegrationTests.Execute_NeverOverwritesAnExistingRemoteRun`, `RetryingRemoteFileSystemTests.ARetriedCreate_StillRefusesAnExistingRemoteObject` | B |
+| 14 | Never overwrite local runs | `GoogleDriveSyncProviderIntegrationTests.Execute_NeverOverwritesExistingLocalData` | C |
+| 15 | Never delete local or remote runs | `GoogleDriveSyncProviderIntegrationTests.TheProviderPath_IssuesNoForbiddenDriveOperation`, `IncompleteTransferReportingTests.AnIncompleteRun_IsLeftExactlyAsItWas` | D |
+| 16 | Cancel an active upload | `CancelSyncTests`, `GoogleDriveSyncProviderCancellationTests.CancellingDuringAnUpload_CopiesNothingAndRecordsNoRun` | D |
+| 17 | Handle revoked access | `GoogleDriveAccountLifecycleTests`, `GoogleDriveRemoteValidationServiceTests` | A, and only live can prove Google's real revocation response |
+| 18 | Handle a missing root folder | `GoogleDriveRemoteFileSystemTests`, `GoogleDriveRootFolderViewModelTests` | A |
+| 19 | Handle quota and network errors | `GoogleDriveDownloadFailureMapperTests`, `RetryingRemoteFileSystemTests`, `GoogleDriveRemoteFileSystemTests.TheWiredRetryPredicate_MatchesRealDriveFailuresAndOnlyTheRightOnes` | D, and **only live can prove the real error shapes** |
+| 20 | Record Google Drive sync in SQLite history | `SyncUiEndToEndTests.AViewModelDrivenRun_IsRecordedInTransferHistory` | B |
+| 21 | App builds | Release build | 8 |
+| 22 | CLI builds | Release build | 8 |
+| 23 | Reviewer builds | Release build | 8 |
+
+Every cited class and method was verified to exist in the repository rather than
+assumed.
+
+### What the mapping found
+
+**Item 10 had no coverage at all, and was not live-only.** A downloaded run was
+proved discoverable and hash-valid, and the restore service was proved to work on
+a locally created run, but nothing joined the two. The last link in the chain a
+user actually cares about, getting a save back off Drive, rested on inference.
+Both halves are hermetic, so it was closed in this task rather than deferred to a
+live session: `DownloadedRunRestoreTests` downloads through the real engine and
+restores through the real `BackupRestoreService`, and also proves a downloaded
+run whose content was tampered with afterwards is refused, because the SHA-256
+manifest stays the authoritative content identity.
+
+**Three items are genuinely live-only in part, and the live sessions exist for
+them.** The real OAuth consent flow (1), Google's real response to a revoked
+authorization (17), and the real shapes of quota and network errors (19). A fake
+can only assert what it was told to return; whether Google actually returns that
+is a question no test can answer.
+
+**Everything else is automated, and the live sessions confirm rather than
+discover.** That is the correct division: a live run is expensive, manual, and
+unrepeatable in CI, so it should carry only what nothing else can.
+
+## Milestone Y final acceptance result
+
+Milestone Y closed on 2026-08-20. Google Drive synchronisation has been accepted
+end to end against a real development account.
+
+All twenty-three README acceptance items are resolved: twenty-two passed, and one
+is recorded as unexecutable live with its reason. The mapping of every item to
+its coverage is the "Milestone Y acceptance coverage map" section above.
+
+### The four live sessions
+
+| Session | Items | Result |
+| --- | --- | --- |
+| A, three runs | regression, 1, 2, 3, 4, 17, 18 | PASS |
+| B | 5, 6, 7, 13, 20 | PASS |
+| C | 8, 9, 10, 11, 12, 14 | PASS |
+| D | 15, 16 | PASS; item 19 unexecutable live |
+
+```text
+Date: 2026-08-20
+Tested commit: b73493386c398e64a60bc872bfacf765d662cedc
+Result: PASS
+Sanitized failure categories: none, in any session
+Release suite: 1,820 passed, 0 failed, 0 skipped
+Release build: succeeded, 0 warnings, 0 errors, --no-incremental
+App, CLI, and Reviewer: each built individually, 0 warnings, 0 errors
+Direct package baseline: unchanged, 21 unique direct packages
+Transitive entries: 248
+Vulnerable: none in any of the six projects
+Deprecated: xUnit 2.9.3 (Legacy)
+Harnesses: one per session, each deleted afterwards, none committed
+```
+
+### What the live sessions proved that no test could
+
+Three things, and only three. Everything else was automated first and confirmed
+live, which is the right division: a live run is expensive, manual, and
+unrepeatable in CI.
+
+- **The real OAuth consent flow.** Item 1 is evidenced by the operator's reconnect after revoking the grant, not by session A's stage A6. A6 completed in ten seconds because disconnect deliberately does not revoke the Google Account grant, so Google had nothing to ask about. After the revocation Google presented the full consent screen, requiring sign-in and explicit confirmation.
+- **Google's real response to a revoked authorization.** Item 17. The application detected it, stopped reporting connected, and kept the saved profile, its root metadata, and all Drive content.
+- **That the Milestone W and X changes did not break the happy path.** Session A opened with the regression Milestone X closed without: the Milestone V path previews and syncs against a real account with the retry decorator wrapping every remote operation and the client library's own backoff disabled.
+
+### What is still not proven, stated plainly
+
+**The shape of a real Google quota or network error.** Item 19 is unexecutable
+live: provoking a quota error means deliberately exhausting a real account's
+storage or a real project's API quota, and provoking a network error means
+disconnecting the machine mid-transfer, which produces a failure chosen by the
+operating system rather than by Google. Both are covered deterministically, and
+`GoogleDriveRemoteFileSystemTests.TheWiredRetryPredicate_MatchesRealDriveFailuresAndOnlyTheRightOnes`
+is precise about which failures retry and which do not. What remains unproven is
+whether the mapper classifies what Google actually sends. No amount of hermetic
+testing removes that, and it is the same residual risk Milestone X recorded.
+
+### What the live sessions cost, and what that bought
+
+Nine live runs across four sessions, and **five of them failed first on a defect
+in the procedure rather than in the product.** That ratio is the
+useful number, because each one was a claim that would otherwise have been made
+on inference:
+
+- A brand-new profile cannot reach Drive at all, because stored authentication is keyed by profile identifier. Session A's missing-root stage now mutates the real connected profile and restores it in a `finally`.
+- A stage that observes an absent state must run while the state is absent. Session A's revoked-access stage failed twice because the operator revoked and then reconnected before it ran; the application was right both times.
+- A conflict needs two **manifests** to differ, not a payload byte, because the manifest is the authoritative content identity. Session C's first draft edited a payload and the preview correctly reported the run in sync.
+- The original path a manifest records must outlive the context that seeded the run, or a restore writes somewhere the test is not looking.
+- `TestData.CreateBackupRun` records an original path without creating a file there, so a non-vacuity step must assert the absence rather than delete the file.
+
+None of the five was a product defect. All five were assertions that would have
+passed vacuously or failed misleadingly if written more loosely.
 
 ## Saved profiles and secrets
 

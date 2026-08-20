@@ -14,13 +14,14 @@ dependencies are added, removed, or upgraded.
 
 | Package | Version used | License | Notes |
 |---|---:|---|---|
-| Avalonia | 12.0.5 | MIT | Cross-platform UI framework. |
-| Avalonia.Desktop | 12.0.5 | MIT | Desktop application support for Avalonia. |
-| Avalonia.Themes.Fluent | 12.0.5 | MIT | Fluent theme package for Avalonia. |
-| Avalonia.Fonts.Inter | 12.0.5 | MIT | Inter font package used by Avalonia. |
+| Avalonia | 12.0.5 (app), 12.1.0 (Reviewer) | MIT | Cross-platform UI framework. The desktop app and the Reviewer tool are on different versions. |
+| Avalonia.Desktop | 12.0.5 (app), 12.1.0 (Reviewer) | MIT | Desktop application support for Avalonia. |
+| Avalonia.Themes.Fluent | 12.0.5 (app), 12.1.0 (Reviewer) | MIT | Fluent theme package for Avalonia. |
+| Avalonia.Fonts.Inter | 12.0.5 (app), 12.1.0 (Reviewer) | MIT | Inter font package used by Avalonia. |
+| Avalonia.Controls.DataGrid | 12.1.0 | MIT | Data grid control; referenced only by the Reviewer tool. |
 | AvaloniaUI.DiagnosticsSupport | 2.2.3 | MIT | Avalonia diagnostics support package used for development/debug builds. |
 | CommunityToolkit.Mvvm | 8.4.2 | MIT | MVVM helpers, observable objects, and relay commands. |
-| Google.Apis.Auth | 1.75.0 | Apache-2.0 | Official OAuth 2.0 authorization and credential primitives; referenced only by Infrastructure for later Google provider milestones. |
+| Google.Apis.Auth | 1.75.0 | Apache-2.0 | Official OAuth 2.0 authorization and credential primitives; referenced only by Infrastructure. |
 | Google.Apis.Drive.v3 | 1.75.0.4210 | Apache-2.0 | Official generated Google Drive API v3 client library; referenced only by Infrastructure. |
 | Microsoft.Extensions.DependencyInjection | 10.0.9 | MIT | Dependency injection container and service registration helpers. |
 | Microsoft.Extensions.DependencyInjection.Abstractions | 10.0.9 | MIT | Dependency injection abstractions. |

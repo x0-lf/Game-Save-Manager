@@ -595,6 +595,351 @@ The temporary harness used for the run was deleted afterwards and never
 committed. Controlled objects remain in the development account; the
 application never removes them. Milestone S is closed.
 
+## Verify Milestone T provider wrapper
+
+Milestone T adds `GoogleDriveSyncProvider`, a thin wrapper over the shared
+`SyncEngine`, and the internal profile-scoped factory that builds it. The
+default automated suite is hermetic: fake authentication, a fake Drive object
+client, fake media clients, and fake text APIs, with no real account, browser,
+token, or network.
+
+### Automated requirement coverage
+
+| Milestone T requirement | Deterministic coverage |
+| --- | --- |
+| Construction refuses an empty, unknown, or unusable profile before any Drive work | `GoogleDriveSyncProviderFactoryTests.Create_RefusesAnEmptyProfileIdBeforeAnyLookup`, `GoogleDriveSyncProviderFactoryTests.Create_RefusesAnUnknownProfile`, `GoogleDriveSyncProviderFactoryTests.Create_RefusesAProfileThatCannotBeUsed` |
+| Profile validation is the shared one, not a second copy | `GoogleDriveSyncProviderFactoryTests.Create_ReusesTheSharedProfileValidatorRatherThanItsOwnRules` |
+| Registration performs no authentication, Drive request, or provider activation | `GoogleDriveSyncProviderFactoryTests.DependencyInjection_ResolvesTheFactoryWithoutRemoteWork`, `GoogleDriveSyncProviderFactoryTests.Create_BuildsOneProviderPerCallWithoutRemoteWork` |
+| The Core provider factory still knows nothing about Google Drive | `GoogleDriveSyncProviderFactoryTests.CoreProviderFactory_StillKnowsNothingAboutGoogleDrive` |
+| Fixed provider name and a sanitized remote root | `GoogleDriveSyncProviderTests.Provider_UsesTheFixedNameAndTheSanitizedDisplayRoot` |
+| Construction issues no remote call | `GoogleDriveSyncProviderTests.Construction_IssuesNoRemoteCall` |
+| Preview, execute, and sync log forward to the shared engine unchanged | `GoogleDriveSyncProviderTests.CreatePreviewAsync_RunsThroughTheSharedEngine`, `GoogleDriveSyncProviderTests.ExecuteAsync_RunsThroughTheSharedEngineAndItsHistory`, `GoogleDriveSyncProviderTests.GetSyncLogAsync_ReturnsWhatTheSharedEngineParses` |
+| The wrapper holds and declares nothing beyond the engine surface | `GoogleDriveSyncProviderTests.Wrapper_HoldsNothingButTheSharedEngine`, `GoogleDriveSyncProviderTests.Wrapper_DeclaresNoOperationBeyondTheProviderContract` |
+| Disposal is idempotent and the Drive boundary needs no release | `GoogleDriveSyncProviderTests.Dispose_IsIdempotent`, `GoogleDriveSyncProviderTests.DriveFileSystem_StillHoldsNothingThatNeedsReleasing` |
+| A disposed provider refuses every operation without remote work | `GoogleDriveSyncProviderTests.DisposedProvider_RefusesEveryOperationWithoutRemoteWork`, `GoogleDriveSyncProviderTests.DisposedProvider_RefusesBeforeCheckingCancellation` |
+| Drive failures cross the boundary unchanged and sanitized | `GoogleDriveSyncProviderBoundaryTests.DriveFailures_CrossTheBoundaryUnchangedAndSanitized`, `GoogleDriveSyncProviderBoundaryTests.ListingFailures_AlsoCrossTheBoundarySanitized` |
+| Failed runs and preview warnings expose no private value | `GoogleDriveSyncProviderBoundaryTests.AFailedRunReportsOnlyTheSanitizedDriveMessage`, `GoogleDriveSyncProviderBoundaryTests.AnUnreadableRemoteRunReportsAFixedWarningOnly` |
+| The privacy sweep is not vacuous, and the boundary relies on failures already being safe | `GoogleDriveSyncProviderBoundaryTests.TheBoundaryDoesNotScrub_SoDriveFailuresMustArriveSanitized` |
+| Core and App see no Google or Infrastructure type through the wrapper | `GoogleDriveSyncProviderBoundaryTests.TheProviderSurfaceExposesOnlyCoreTypes`, `GoogleDriveSyncProviderBoundaryTests.CoreAndAppStillReferenceNoGoogleAssembly` |
+| The caller token reaches every remote call | `GoogleDriveSyncProviderCancellationTests.Preview_ForwardsTheCallerTokenToEveryRemoteCall`, `GoogleDriveSyncProviderCancellationTests.Execute_ForwardsTheCallerTokenToEveryRemoteCall`, `GoogleDriveSyncProviderCancellationTests.SyncLog_ForwardsTheCallerTokenToEveryRemoteCall` |
+| Cancelling leaves no partial local or remote state | `GoogleDriveSyncProviderCancellationTests.APreCancelledToken_ReachesTheRemoteBeforeAnyWork`, `GoogleDriveSyncProviderCancellationTests.CancellingDuringPreview_ProducesNoPlan`, `GoogleDriveSyncProviderCancellationTests.CancellingDuringAnUpload_CopiesNothingAndRecordsNoRun`, `GoogleDriveSyncProviderCancellationTests.CancellingDuringADownload_WritesNothingLocally` |
+| Plans, results, bytes, manifests, and sync logs match Local Folder exactly | `GoogleDriveSyncProviderParityTests.Preview_MatchesLocalFolderItemForItem`, `GoogleDriveSyncProviderParityTests.Execute_MatchesLocalFolderResultForResult`, `GoogleDriveSyncProviderParityTests.Execute_LeavesTheSameBytesOnBothSides`, `GoogleDriveSyncProviderParityTests.Execute_RewritesTheDownloadedManifestIdentically`, `GoogleDriveSyncProviderParityTests.SyncLog_IsAppendedAndReadIdentically` |
+| Both wrappers expose the same operation surface | `GoogleDriveSyncProviderParityTests.BothWrappers_ExposeTheSameOperationSurface` |
+| The whole composition runs through real dependency injection | `GoogleDriveSyncProviderIntegrationTests.Preview_TravelsTheWholeCompositionThroughRealRegistration`, `GoogleDriveSyncProviderIntegrationTests.Execute_UploadsAndDownloadsThroughTheRealComposition`, `GoogleDriveSyncProviderIntegrationTests.SyncLog_IsAppendedAndReadBackThroughProviderMetadata` |
+| Copy-only and no-overwrite hold on both sides at provider level | `GoogleDriveSyncProviderIntegrationTests.Execute_NeverOverwritesAnExistingRemoteRun`, `GoogleDriveSyncProviderIntegrationTests.Execute_NeverOverwritesExistingLocalData` |
+| The provider path issues no forbidden Drive operation | `GoogleDriveSyncProviderIntegrationTests.TheProviderPath_IssuesNoForbiddenDriveOperation` |
+| Google Drive stays inactive as a sync provider | `GoogleDriveSyncProviderIntegrationTests.TheProviderIsBuiltByTheRegisteredFactoryAndStaysInactive`, `GoogleDriveRemoteFileSystemTests.ProviderActivation_RemainsUnavailable` |
+| Existing Milestones A-S, Local Folder, and SFTP behaviour | Full `Manager/Manager.sln` regression suite |
+
+### Recorded Milestone T automated verification
+
+```text
+Date: 2026-08-17
+Tested tree: Milestone T Tasks 1-8 on top of 91a1064
+Release suite: 1,684 passed, 0 failed, 0 skipped
+Release build: succeeded, 0 errors, 5 known pre-existing backlog warnings
+               (3x CA1416 in RegistrySteamLocator.cs, 2x obsolete Avalonia
+               TextBox.Watermark in the Reviewer), from a full
+               --no-incremental rebuild
+Direct package baseline: unchanged
+Banned legacy packages: none present
+Vulnerable: SSH.NET 2024.2.0, High, GHSA-q939-rpr3-3284
+Deprecated: xUnit 2.9.3 (Legacy)
+```
+
+The `SSH.NET` line above is the state at the time of that run. The advisory was
+resolved on 2026-08-18 by the separate dependency task that upgraded `SSH.NET`
+to 2026.0.0, so re-run the package audit for the Milestone T close-out instead
+of reusing these numbers.
+
+### Live provider acceptance, performed and passed
+
+This checklist needs explicit user authorization before any agent acts on it,
+because it drives a complete sync against a real development account. It is
+**not** part of the automated suite. The operator ran it on 2026-08-18 and it
+passed on the first attempt; the recorded result is below. Keep the checklist
+for future re-verification.
+
+```text
+Date: 2026-08-18
+Tested commit: 9b53d2235e6cfbee7499cd48de293c50997e8584
+Result: PASS
+Sanitized failure categories: none
+Duration: 1 minute 44 seconds, all nine stages in one run
+```
+
+This is the most invasive live acceptance so far: unlike Milestone R, which
+only created objects, and Milestone S, which only read them, a provider run
+both uploads and downloads complete backup runs. Use only an explicitly
+authorized development test account and controlled synthetic runs.
+
+1. Restore the selected profile silently and confirm no browser opens and the requested scope remains exactly `https://www.googleapis.com/auth/drive.file`.
+2. Preview with one local-only run and one remote-only controlled run, and confirm the plan reports one upload, one download, and no conflict.
+3. Execute the plan and confirm the local-only run appears remotely with identical bytes, and the remote-only run appears locally with identical bytes.
+4. Confirm the downloaded run's manifest was rewritten to this machine and that the run appears in the Backups list and passes SHA-256 verification.
+5. Re-run preview and execute, and confirm both runs now report as in sync, that nothing is copied again, and that nothing is overwritten on either side.
+6. Read the sync log through the provider and confirm it records exactly the two executed copies.
+7. Cancel one execution in progress and confirm no partial run is presented as complete on either side, and no local data was overwritten or deleted.
+8. Inspect Drive activity and confirm only metadata reads, media reads, folder creates, file creates, and one sync-log replacement occurred: no delete, trash, rename, move, share, permission, or provider-activation request.
+9. Confirm Google Drive is still absent from the sync provider selection UI, with Preview Sync and Sync Now disabled.
+10. Review sanitized output and confirm it contains no account value, object or parent ID, page token, query, media URL, local path, remote name, token, or raw provider response.
+
+Stages, each reported only as a sanitized category on failure:
+
+| Stage | Proves |
+| --- | --- |
+| `T9_SILENT_RESTORE` | Silent authentication restore and successful remote validation |
+| `T9_PREVIEW_UPLOAD` | The synthetic run is planned as an upload |
+| `T9_EXECUTE_UPLOAD` | It uploads through the provider with no error |
+| `T9_IDEMPOTENT` | A second run copies nothing |
+| `T9_DOWNLOAD_BACK` | Removing it locally downloads it back with identical bytes and a restored manifest |
+| `T9_NO_OVERWRITE` | A further run copies nothing and changes no existing local byte |
+| `T9_SYNC_LOG` | The sync log records both the upload and the download |
+| `T9_CANCELLATION` | A cancelled run never leaves a manifest without its content |
+| `T9_STILL_INACTIVE` | Google Drive stays unimplemented with no Core factory case |
+
+Run it in one window:
+
+```powershell
+$env:GAMESAVES_T9_LIVE = "1"
+dotnet test Manager/GameSaves.Tests --filter FullyQualifiedName~T9Live -p:UsedAvaloniaProducts= --logger "console;verbosity=detailed"
+Remove-Item Env:GAMESAVES_T9_LIVE
+```
+
+Set `GAMESAVES_T9_PROFILE_ID` as well only when more than one saved Google Drive
+profile exists. Delete the file afterwards. The synthetic run stays in
+Drive; the application never removes it, so deleting it is a manual Drive-UI
+action.
+
+Remove the controlled objects manually afterwards; the application never
+removes them. Record only the date, tested commit, pass or fail, and
+sanitized failure categories. This run was performed on 2026-08-18 and passed;
+the recorded result is at the top of this section, and Milestone T is closed.
+
+## Verify Milestone U provider factory
+
+Milestone U added exactly one Core contract change,
+`ISyncProviderFactory.CreateGoogleDriveProvider(Guid remoteProfileId)`, and
+wired it to the internal profile-scoped factory Milestone T built. It added no
+remote behaviour, so there is nothing here a real account could exercise that
+Milestone T's live acceptance did not already cover. Every requirement below is
+verified by a named deterministic test; see "On the live gate" in the Milestone U
+roadmap section for why this milestone closes without a live run.
+
+| Requirement | Deterministic coverage |
+| --- | --- |
+| The Core contract gains exactly one Google Drive case, of the agreed shape | `GoogleDriveSyncProviderFactoryTests.CoreProviderFactory_ExposesExactlyOneGoogleDriveCaseOfTheAgreedShape` |
+| No Google type reaches the Core factory surface, and the catalog stays inactive | `GoogleDriveSyncProviderFactoryTests.CoreProviderFactory_StillExposesNoGoogleTypeAndActivatesNothing` |
+| The concrete factory keeps its dependency explicit and holds no service locator | `GoogleDriveSyncProviderFactoryTests.CoreFactory_HoldsNoServiceProviderAndKeepsItsDependencyExplicit` |
+| The composition root resolves the Core factory and reaches the internal one | `GoogleDriveSyncProviderFactoryTests.CoreFactory_DelegatesGoogleDriveConstructionToTheInternalFactory` |
+| Resolution performs no authentication, Drive request, or profile lookup | `GoogleDriveSyncProviderFactoryTests.DependencyInjection_ResolvesTheFactoryWithoutRemoteWork` |
+| An unusable profile is refused identically through both paths, in all three validator states | `GoogleDriveSyncProviderFactoryTests.CoreSeam_RefusesAnUnusableProfileIdenticallyToTheInternalFactory` |
+| An unknown profile is refused identically through both paths | `GoogleDriveSyncProviderFactoryTests.CoreSeam_RefusesAnUnknownProfileIdenticallyToTheInternalFactory` |
+| An empty profile ID is refused before any repository lookup | `GoogleDriveSyncProviderFactoryTests.CoreSeam_RefusesAnEmptyProfileIdBeforeAnyLookup` |
+| A usable profile builds the same provider the internal factory would build, with no remote work | `GoogleDriveSyncProviderFactoryTests.CoreSeam_BuildsTheSameProviderTheInternalFactoryWouldBuild` |
+| No credential, account value, name, root ID, or profile ID escapes a refusal, proved against markers the profile really carries | `GoogleDriveSyncProviderFactoryTests.CoreSeamRefusals_ExposeNoPrivateValue` |
+| The factory names no Google SDK type, holds no `IServiceProvider`, and the App still cannot call the new method | `GoogleDriveRootFolderTests.ProductionBoundary_ForbidsHiddenStorageAndKeepsConstructionBehindTheCoreFactory` |
+| Google Drive stays unimplemented with exactly one factory case, across the inherited Q/R/S/T boundaries | `GoogleDriveDownloadIntegrationTests.DownloadAndUpload_ShareOneRemoteBoundaryWithoutInterfering`, `GoogleDriveObjectPathResolverIntegrationTests.GoogleDriveArchitecture_RemainsInfrastructureOnlyAndDoesNotActivateSync`, `GoogleDriveRemoteFileSystemTests.ProviderActivation_RemainsUnavailable`, `GoogleDriveSyncProviderIntegrationTests.TheProviderIsBuiltByTheRegisteredFactoryAndStaysInactive`, `GoogleDriveUploadIntegrationTests.Composition_KeepsProviderActivationUnavailable` |
+
+All sixteen cited methods and every cited class were verified to exist in the
+repository rather than assumed.
+
+Two properties are worth stating because they are easy to lose later. The
+rejection-parity tests run both paths and compare the results, rather than
+restating the expected status and message; if the seam ever grows its own rule,
+the two stop matching and the test fails. The privacy sweep asserts that each
+marker it guards is genuinely carried by the profile being refused before it
+sweeps, so it cannot pass by guarding values that are no longer in play.
+
+### Recorded Milestone U automated verification
+
+```text
+Date: 2026-08-18
+Tested tree: Milestone U Tasks 1-5 on top of ffb644a
+Release suite: 1,694 passed, 0 failed, 0 skipped
+Release build: succeeded, 0 warnings, 0 errors, from a full
+               --no-incremental rebuild
+Direct package baseline: unchanged, 21 unique direct packages
+Transitive entries: 248
+Banned legacy packages: none present
+Vulnerable: none in any of the six projects
+Deprecated: xUnit 2.9.3 (Legacy)
+Live acceptance: not applicable; see "On the live gate" in the roadmap
+```
+
+## Verify Milestone V sync UI activation
+
+Milestone V made Google Drive reachable from the Sync tab. It added no remote
+behaviour: the provider, its remote file system, and every upload and download
+primitive were built and live-accepted across Milestones Q to U. V added one
+`SyncProviderKind.GoogleDrive` case to `SyncViewModel.CreateConfiguredProvider`,
+one Drive case to `ValidateProviderSelection`, and `IsImplemented: true` in
+`SyncProviderCatalog`.
+
+Because activation is what makes every earlier milestone reachable at all, V
+still needs a controlled-account live acceptance; see "On the live gate" in the
+Milestone V roadmap section.
+
+### Automated requirement coverage
+
+| Requirement | Deterministic coverage |
+| --- | --- |
+| The provider is built only through the Core factory, keyed by the saved profile ID | `SyncUiProviderParityTests.AllThreeProviders_ReachPreviewAndExecutionThroughTheSameSharedState`, `GoogleDriveRootFolderTests.ProductionBoundary_ForbidsHiddenStorageAndKeepsConstructionBehindTheCoreFactory` |
+| The view model resolves no Drive service and names no Google SDK type | `GoogleDriveRootFolderTests.ProductionBoundary_ForbidsHiddenStorageAndKeepsConstructionBehindTheCoreFactory`, `GoogleSdkBoundaryTests.CoreAndAppSource_HaveNoGoogleUsingDirectives`, `GoogleSdkBoundaryTests.PublicAppViewModelApi_ExposesNoGoogleSdkTypes` |
+| A Drive selection with no saved profile is refused before any provider is built | `SyncProviderCapabilityTests.GoogleDriveWithNoSavedProfile_IsRefusedAndBuildsNoProvider`, `SyncProviderCapabilityTests.ActivatedGoogleDrive_StillBuildsNothingWithoutASavedProfile` |
+| Activation permits sync only for a connected profile with a ready root | `GoogleDriveRootFolderViewModelTests.ConnectedProfile_InspectsStoredFolderAndMayNowSync`, `GoogleDriveRootFolderViewModelTests.ConnectedProfileWithoutRoot_ShowsExplicitSetup`, `GoogleDriveRootFolderViewModelTests.Disconnect_PreservesRootMetadataAndDisablesRootActions` |
+| The catalog descriptor is implemented and nothing else about it moved | `SyncProviderCapabilityTests.GoogleDriveCapabilities_AreUnchangedByActivation` |
+| Google Drive joins the implemented set everywhere that set is enumerated | `SyncProviderCapabilityTests.LocalFolderSftpAndGoogleDrive_AreImplemented`, `GoogleDriveConnectionSettingsTests.GoogleDrive_IsPersistableAndImplemented`, `GoogleSdkBoundaryTests.GoogleDrive_IsActivatedWithoutLeakingAnySdkType` |
+| Capability is not permission: the declared flags reach the UI, execution stays gated | `SyncProviderCapabilityTests.ImplementedCapabilities_ReachTheUiWithoutGrantingExecution` |
+| No declared capability offers a control the code cannot honour | `SyncProviderCapabilityTests.ActivatedDriveCapabilities_OfferNoControlTheCodeCannotHonour` |
+| Local Folder and SFTP selection, and their refusal messages, are unchanged | `SyncUiProviderParityTests.UsableDriveProfile_LeavesLocalFolderAndSftpSelectionUnchanged`, `SyncUiProviderParityTests.DriveActivation_LeavesTheRefusalMessagesOfTheOtherProvidersIntact`, `SyncProviderCapabilityTests.LocalFolderAndSftpSelectionAreUnchangedByTheDriveCase` |
+| Preview, execution, history, and the sync log are one shared path with no provider branch | `SyncUiProviderParityTests.AllThreeProviders_ReachPreviewAndExecutionThroughTheSameSharedState`, `SyncUiProviderParityTests.SharedSyncPath_ContainsNoProviderSpecificBranch` |
+| No newly visible UI state carries a folder identifier | `SyncUiProviderParityTests.ActivatedDriveUi_NeverExposesTheRootFolderIdentifier`, `GoogleDriveRootFolderViewModelTests.SyncView_DefinesRootActionsWithoutDisplayingRawFolderId`, `GoogleDriveRemoteFileSystemTests.DisplayRoot_FallsBackWhenTheSavedNameWouldCarryASecretOrIdentifier` |
+| The account address stays confined, and no token reaches the presentation layer | `SyncUiProviderParityTests.ActivatedDriveUi_ConfinesTheAccountAddressToThePreExistingAccountFields`, `SyncUiProviderParityTests.StoredAuthentication_ReachesTheViewModelAsAFlagRatherThanAToken` |
+| `D-026` and `D-028` survive activation: no service locator, dependency stays explicit | `GoogleDriveSyncProviderFactoryTests.CoreFactory_HoldsNoServiceProviderAndKeepsItsDependencyExplicit`, `SyncProviderFactoryTests.UnimplementedProviders_StayUnavailableInTheCatalog` |
+
+All twenty-six cited methods and every cited class were verified to exist in
+the repository rather than assumed.
+
+### Two gaps this mapping found
+
+Step 5a is a mapping exercise, and mapping is what exposes a claim nothing
+backs. Two things were wrong before this section could be written honestly.
+
+**Nothing pinned the Google Drive capability record.** The roadmap's Task 3
+notes claimed `SyncProviderCapabilityTests` pinned it "by comparing the full
+capability record". It did not. Activation removed Google Drive from the
+planned-cloud theory that had been doing that comparison, and no replacement
+took its place, so between Task 3 and here the capability flags and the
+configuration surface were unguarded.
+`SyncProviderCapabilityTests.GoogleDriveCapabilities_AreUnchangedByActivation`
+now compares the whole record, the configuration surface, the display name, and
+the absent unavailable message, and cross-checks the record against the one
+OneDrive still declares.
+
+**Two declared capabilities describe features Milestone V does not build.**
+Google Drive declares `SupportsRemoteQuota` and `SupportsOpenRemoteLocation`,
+so activation makes `CanShowQuota` and `CanOpenRemoteLocation` true. That is the
+half-activation the milestone entry file warned about: a control the code behind
+it cannot honour. Both turn out to be safe, and now say so in a test rather than
+by inspection. No quota control is bound anywhere in `SyncView.axaml`, the Open
+Folder button lives inside the Local folder panel and is therefore never shown
+for Google Drive, and `OpenRemoteLocation` refuses anything but a Local Folder
+selection with a sanitized message, so the guarantee does not rest on layout
+alone.
+
+Three test names were also renamed, with no change to what they assert, because
+activation had made them claim the opposite of their own bodies:
+`ProductionBoundary_ForbidsHiddenStorageAndKeepsSyncUnavailable`,
+`GoogleDrive_RemainsPersistableButUnavailableForExecution`, and
+`UnavailableCapabilities_DoNotEnableActionsOrExecution`. Milestone V Task 3
+renamed seven such names and missed these three.
+
+### Live sync UI acceptance, performed and passed
+
+**Run on 2026-08-20 against `e924de496868306388eb5571aaf397569137cac6` plus the
+uncommitted Task 5 test changes. PASS, no sanitized failure categories.** The
+operator procedure is the "Milestone V Task 5 step 5c live sync UI acceptance"
+section of `note.md`.
+
+The subject of this acceptance is `SyncViewModel`, not the provider. Milestone T
+already accepted the provider against a real account, and Milestone V added no
+remote behaviour; what has never run against a real account is provider
+selection, validation, and construction from the saved profile, followed by
+preview and Sync Now through the shared controls.
+
+| Stage | What must hold |
+| --- | --- |
+| Refusal before selection | With no saved profile, preview is refused with the sanitized profile message and no provider is built |
+| Refusal without a ready root | Covered deterministically, not live: forcing a real profile's root into a not-ready state would mutate real Drive state |
+| Selection accepted | With a connected profile and a ready root, sync and preview are permitted and execution is still gated |
+| Composition root | The container-resolved `ISyncProviderFactory` is the concrete factory and builds a Drive provider, performing no transfer |
+| Preview | Preview Sync produces a real plan reporting the synthetic run, execution becomes permitted, no warning is an error |
+| Confirmation gate | Sync Now without confirmation is refused |
+| Upload | Sync Now with confirmation uploads the one synthetic run, create-only, replacing no existing remote object |
+| Download | A second run downloads the synthetic remote run into a temporary backup base, replacing no existing local file |
+| Sync log | The log refreshes through the same shared call and contains no identifier |
+| Privacy | No bound property, message, warning, result row, or log row carries an account address, folder identifier, token, URL, page token, or raw response |
+| Nothing else moved | Local Folder selection still builds only the local provider in the same view model instance |
+
+Two observations need a human and are recorded as observations rather than as
+proof, because both are structural guarantees already: whether a browser opened
+during an ordinary run, and whether the account showed any operation other than
+creates and reads.
+
+### Recorded Milestone V live acceptance result
+
+```text
+Date: 2026-08-20
+Tested tree: e924de496868306388eb5571aaf397569137cac6 plus the uncommitted
+             Milestone V Task 5 test changes
+Result: PASS
+Sanitized failure categories: none
+Attempts: three; the first two failed and operator-input defects,
+          both corrected, neither a product defect
+Interactive authorization required: no; stored authentication restored silently
+Non-allowed Drive operation observed: none
+```
+
+### What the three attempts cost, and what they bought
+
+The run passed on the third attempt. Neither earlier failure was a product
+defect, and both are worth recording because both were caught by assertions that
+had to be written deliberately.
+
+1. `V5_SYNTHETIC_RUN_ABSENT_FROM_PLAN`. Created its synthetic run one
+   directory above the real backup base: `GetBackupBasePath` appends a
+   `TransferBackups` segment that had recomputed by hand and got
+   wrong. Fixed by asking the service where its base is instead of restating the
+   rule.
+2. `V5_REMOTE_RUN_NOT_IN_PLAN`. The configured download run name matched no row.
+   A read-only diagnostic reported coarse buckets and three match modes without
+   printing a name, and wrote the candidate names to a local file the operator
+   opened directly, so no remote name entered the session transcript.
+
+A third defect was found and fixed before the first attempt, while answering an
+operator question rather than by running anything: the download stage originally
+asserted only that the status message did not begin with `Sync failed`. A name
+matching nothing would have left every row unticked, returned early with "No
+runs are selected", and reported PASS having downloaded nothing. The stage now
+requires the name to match a selectable download row before executing and
+requires a result row for that run afterwards. Attempt two failed on exactly that
+guard, so the milestone would otherwise have closed on a vacuous download.
+
+A fourth surfaced on the third attempt: a fixed synthetic run name is only an
+upload once. After the first successful upload the run exists remotely, the plan
+reports it in sync, and the upload stage executes nothing while still looking
+healthy. `V5_UPLOAD_PRODUCED_NO_RESULT` caught it, and the synthetic run name is
+now unique per attempt.
+
+Controlled objects from the successful attempt and from the second attempt's
+upload remain in the development account. The application never removes them;
+deleting them is a manual Drive-UI action. It keeps the Milestone T
+data-safety design: the real local backup base is never read, enumerated, or
+written, only one self-created synthetic run is transferred, and nothing is
+deleted from Drive.
+
+### Recorded Milestone V automated verification
+
+```text
+Date: 2026-08-20
+Tested tree: Milestone V Task 5 steps 5a-5b on top of e924de4
+Release suite: 1,761 passed, 0 failed, 0 skipped
+Release build: succeeded, 0 warnings, 0 errors, from a full
+               --no-incremental rebuild
+Direct package baseline: unchanged, 21 unique direct packages
+Transitive entries: 248
+Vulnerable: none in any of the six projects
+Deprecated: xUnit 2.9.3 (Legacy)
+Live acceptance: not yet performed; step 5c is pending user authorization
+```
+
+## End-to-end sync UI integration
+
+Milestone W's coverage is provider-neutral, so it is documented in
+[docs/sync-providers.md](sync-providers.md#end-to-end-sync-ui-integration)
+rather than here. It is hermetic and needs no account.
+
 ## Handle downloaded credential files
 
 If Google offers a downloaded OAuth client JSON:
