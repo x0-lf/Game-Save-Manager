@@ -830,7 +830,7 @@ public sealed class GoogleDriveRootFolderTests
     }
 
     [Fact]
-    public void ProductionBoundary_ForbidsHiddenStorageAndKeepsSyncUnavailable()
+    public void ProductionBoundary_ForbidsHiddenStorageAndKeepsConstructionBehindTheCoreFactory()
     {
         string googleSource = string.Join(
             Environment.NewLine,

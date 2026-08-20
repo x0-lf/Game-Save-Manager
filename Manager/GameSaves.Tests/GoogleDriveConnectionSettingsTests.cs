@@ -400,7 +400,7 @@ public sealed class GoogleDriveConnectionSettingsTests
     }
 
     [Fact]
-    public void GoogleDrive_RemainsPersistableButUnavailableForExecution()
+    public void GoogleDrive_IsPersistableAndImplemented()
     {
         var catalog = new SyncProviderCatalog();
         var serializer = new SyncRemoteProfileSettingsSerializer(catalog);

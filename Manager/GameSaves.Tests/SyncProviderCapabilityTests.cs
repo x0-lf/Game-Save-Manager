@@ -147,7 +147,7 @@ public sealed class SyncProviderCapabilityTests
     }
 
     [Fact]
-    public async Task UnavailableCapabilities_DoNotEnableActionsOrExecution()
+    public async Task ImplementedCapabilities_ReachTheUiWithoutGrantingExecution()
     {
         SyncViewModel viewModel = CreateViewModel();
         viewModel.SelectedProviderKind = SyncProviderKind.GoogleDrive;
@@ -168,6 +168,79 @@ public sealed class SyncProviderCapabilityTests
         // refused and nothing is executable.
         Assert.False(viewModel.CanExecuteSync);
         Assert.False(string.IsNullOrWhiteSpace(viewModel.StatusMessage));
+    }
+
+    [Fact]
+    public void GoogleDriveCapabilities_AreUnchangedByActivation()
+    {
+        // Milestone V flipped IsImplemented and dropped the unavailable
+        // message. Nothing else about the descriptor was allowed to move, and
+        // until this test existed nothing pinned that: activation removed
+        // Google Drive from the planned-cloud theory that had been comparing
+        // the full record, and no replacement comparison took its place.
+        SyncProviderDescriptor descriptor =
+            _catalog.GetDescriptor(SyncProviderKind.GoogleDrive);
+
+        Assert.True(descriptor.IsImplemented);
+        Assert.Null(descriptor.UnavailableMessage);
+        Assert.True(descriptor.IsConfigurationAvailable);
+        Assert.Equal(
+            SyncProviderConfigurationSurface.InteractiveOAuth,
+            descriptor.ConfigurationSurface);
+        Assert.Equal("Google Drive", descriptor.DisplayName);
+        Assert.Equal(
+            new SyncProviderCapabilities(
+                RequiresInteractiveLogin: true,
+                RequiresServerCredentials: false,
+                SupportsResumableUpload: true,
+                SupportsRemoteQuota: true,
+                SupportsRemoteFolderSelection: true,
+                SupportsPersistentAuthentication: true,
+                SupportsConnectionTesting: true,
+                SupportsLogout: true,
+                SupportsOpenRemoteLocation: true),
+            descriptor.Capabilities);
+
+        // The same record OneDrive still declares, which is what "unchanged by
+        // activation" means: the flags describe the provider, not its state.
+        Assert.Equal(
+            _catalog.GetDescriptor(SyncProviderKind.OneDrive).Capabilities,
+            descriptor.Capabilities);
+    }
+
+    [Fact]
+    public void ActivatedDriveCapabilities_OfferNoControlTheCodeCannotHonour()
+    {
+        // Two declared capabilities describe features Milestone V does not
+        // implement: remote quota and opening the remote location. Activation
+        // makes both properties true, so the guarantee that matters is that
+        // neither reaches a control a user can press.
+        SyncViewModel viewModel = CreateViewModel();
+        viewModel.SelectedProviderKind = SyncProviderKind.GoogleDrive;
+
+        Assert.True(viewModel.CanShowQuota);
+        Assert.True(viewModel.CanOpenRemoteLocation);
+
+        // No quota control is bound at all, and the Open Folder button lives
+        // inside the Local folder panel, so Google Drive never shows it.
+        string view = ReadSyncView();
+        Assert.DoesNotContain("CanShowQuota", view, StringComparison.Ordinal);
+        Assert.Contains(
+            "IsVisible=\"{Binding CanOpenRemoteLocation}\"",
+            view,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "IsVisible=\"{Binding IsLocalFolderSelected}\"",
+            view,
+            StringComparison.Ordinal);
+
+        // And the command refuses anyway, with a sanitized message, so the
+        // guarantee does not rest on layout alone.
+        viewModel.OpenRemoteLocationCommand.Execute(null);
+
+        Assert.Equal(
+            "Opening the selected provider location is unavailable.",
+            viewModel.StatusMessage);
     }
 
     [Fact]
@@ -243,6 +316,27 @@ public sealed class SyncProviderCapabilityTests
 
         Assert.True(_catalog.GetDescriptor(SyncProviderKind.LocalFolder).IsImplemented);
         Assert.True(_catalog.GetDescriptor(SyncProviderKind.Sftp).IsImplemented);
+    }
+
+    private static string ReadSyncView()
+    {
+        DirectoryInfo? directory = new(AppContext.BaseDirectory);
+
+        while (directory is not null)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "Manager.sln")))
+            {
+                return File.ReadAllText(Path.Combine(
+                    directory.FullName,
+                    "GameSaves.App",
+                    "Views",
+                    "SyncView.axaml"));
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Manager.sln was not found.");
     }
 
     private SyncViewModel CreateViewModel() =>
