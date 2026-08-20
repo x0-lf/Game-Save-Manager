@@ -224,7 +224,11 @@ public sealed class SyncRemotePathTraversalTests
 
             return Task.FromResult<string?>(
                 """
-                {"Game":"Hostile","FileCount":1,"TotalBytes":4,"Files":[]}
+                {"SchemaVersion":1,"Kind":"backup","Game":"Hostile","SteamAppId":"1",
+                 "SourceAccountId":"s","TargetAccountId":"t",
+                 "StartedUtc":"2026-08-18T12:00:00+00:00",
+                 "CompletedUtc":"2026-08-18T12:00:01+00:00",
+                 "FileCount":1,"TotalBytes":4,"Items":[]}
                 """);
         }
 

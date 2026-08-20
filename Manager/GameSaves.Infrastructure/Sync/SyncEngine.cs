@@ -231,8 +231,31 @@ namespace GameSaves.Infrastructure.Sync
                     TransferBackupManifest? manifest =
                         JsonSerializer.Deserialize<TransferBackupManifest>(manifestText);
 
-                    if (manifest is not null)
-                        runs[name] = manifest;
+                    // A remote manifest is untrusted JSON. Deserialization does
+                    // not enforce the record's non-nullable members, so an
+                    // interrupted upload can leave a file that parses into a
+                    // manifest whose members are null. Comparing such a manifest
+                    // used to throw and break every later preview.
+                    if (manifest is null)
+                        continue;
+
+                    if (!IsUsableManifest(manifest))
+                    {
+                        // Name the folder, exactly as the conflict warning names
+                        // its run. A warning the operator cannot act on is worse
+                        // than none, and this one persists until the folder is
+                        // removed, so it has to say which folder to remove.
+                        warnings.Add(new TransferPreviewWarning(
+                            "RemoteManifestUnreadable",
+                            $"Remote folder \"{name}\" has an incomplete or unreadable manifest, " +
+                            "so it is not treated as a backup run. This usually means an upload was " +
+                            "interrupted. Nothing is deleted automatically, and unticking runs does not " +
+                            "clear this: delete that folder in the remote, then run the check again.",
+                            TransferWarningSeverity.Warning));
+                        continue;
+                    }
+
+                    runs[name] = manifest;
                 }
                 catch
                 {
@@ -688,10 +711,44 @@ namespace GameSaves.Infrastructure.Sync
 
         // Equivalence ignores backup-file paths (they are machine-specific)
         // and compares identity, counts, and per-file content hashes.
+        /// <summary>
+        /// True when a deserialized manifest can be compared and reported
+        /// without dereferencing a null. `System.Text.Json` does not enforce a
+        /// record's non-nullable reference members, so any manifest read from a
+        /// remote, or from a local file written by an older or interrupted run,
+        /// can arrive with null members.
+        /// </summary>
+        private static bool IsUsableManifest(TransferBackupManifest? manifest)
+        {
+            if (manifest is null ||
+                manifest.Kind is null ||
+                manifest.Game is null ||
+                manifest.SteamAppId is null ||
+                manifest.Items is null)
+            {
+                return false;
+            }
+
+            foreach (TransferOverwriteBackupItem item in manifest.Items)
+            {
+                if (item is null || item.OriginalFile is null || item.Sha256 is null)
+                    return false;
+            }
+
+            return true;
+        }
+
         private static bool ManifestsEquivalent(
             TransferBackupManifest left,
             TransferBackupManifest right)
         {
+            // Either side can come from a file on disk or from a remote, so
+            // neither is trusted to be fully populated. An unusable manifest is
+            // never "equivalent"; the run is reported as a conflict instead,
+            // which is the safe outcome because conflicts are never copied.
+            if (!IsUsableManifest(left) || !IsUsableManifest(right))
+                return false;
+
             if (!left.Kind.Equals(right.Kind, StringComparison.OrdinalIgnoreCase) ||
                 !left.SteamAppId.Equals(right.SteamAppId, StringComparison.OrdinalIgnoreCase) ||
                 left.StartedUtc != right.StartedUtc ||

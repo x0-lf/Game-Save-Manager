@@ -24,6 +24,43 @@ public sealed class GoogleDriveUploadIntegrationTests
     private static readonly Guid ProfileId =
         Guid.Parse("6f0e5f61-6c4a-4a1f-9a6a-9e3e2b0f77aa");
 
+    // Characterization test for a known performance defect, measured on
+    // 2026-08-18. Every uploaded file rebuilds the whole authorized session: a
+    // profile read, a DPAPI decrypt, a credential restore, and an account round
+    // trip, and then builds a fresh DriveService. A real run uploads roughly 325
+    // files per backup folder, so a single sync pays thousands of avoidable
+    // network round trips and TLS handshakes.
+    //
+    // This test asserts the CURRENT behaviour on purpose, so the cost is visible
+    // and measured rather than argued about. When session and client reuse land,
+    // this test will fail; that failure is the signal to change the assertion to
+    // "fewer than fileCount" rather than to relax it.
+    [Fact]
+    public async Task UploadingManyFiles_CurrentlyRebuildsTheSessionForEveryFile()
+    {
+        const int fileCount = 40;
+
+        using var harness = new Harness();
+
+        for (int index = 0; index < fileCount; index++)
+        {
+            using var source = new TemporaryUploadFile([1, 2, 3]);
+            await harness.Remote.UploadFileAsync(
+                source.Path,
+                $"Run 42/saves/file-{index}.sav");
+        }
+
+        // Non-vacuity: the uploads really happened.
+        string runId = harness.Drive.GetRequiredFolderId("Run 42", RootId);
+        string savesId = harness.Drive.GetRequiredFolderId("saves", runId);
+        Assert.Equal(fileCount, harness.Drive.FindChildren(savesId).Count);
+
+        // Measured: one full session restore per file, exactly 1:1. In
+        // production each one carries an account round trip that dominates the
+        // transfer of a small file.
+        Assert.Equal(fileCount, harness.Sessions.Credentials.Count);
+    }
+
     [Fact]
     public async Task Upload_TravelsTheWholeCompositionAndCreatesNestedParents()
     {
