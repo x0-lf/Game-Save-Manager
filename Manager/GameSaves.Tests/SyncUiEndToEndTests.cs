@@ -1,4 +1,5 @@
 using System.Text.Json;
+using GameSaves.App.Models;
 using GameSaves.App.Services;
 using GameSaves.App.ViewModels;
 using GameSaves.Core.Platform;
@@ -28,6 +29,8 @@ public sealed class SyncUiEndToEndTests
     private const string LocalOnlyRun = "2026-08-20_09-00-00_manual";
     private const string RemoteOnlyRun = "2026-08-20_10-00-00_manual";
     private const string SharedRun = "2026-08-20_11-00-00_manual";
+    private const string SecondLocalOnlyRun = "2026-08-20_12-00-00_manual";
+    private const string UnreadableRemoteRun = "2026-08-20_13-00-00_manual";
 
     [Fact]
     public async Task ViewModelPreview_UsesTheRealLocalFolderProvider()
@@ -240,7 +243,162 @@ public sealed class SyncUiEndToEndTests
                     .OrderBy(name => name, StringComparer.Ordinal)));
     }
 
+    // ---- W Task 4: selection, progress, and warnings against a real engine ----
+
+    [Fact]
+    public async Task UntickedRun_IsLeftAloneByTheRealEngine()
+    {
+        using var workspace = new Workspace();
+        workspace.AddLocalRun(SecondLocalOnlyRun);
+
+        SyncViewModel viewModel = workspace.CreateViewModel();
+        await viewModel.PreviewSyncCommand.ExecuteAsync(null);
+
+        // Two runs are now waiting to upload. Untick one.
+        Assert.Equal(2, viewModel.Items.Count(row =>
+            row.IsSelectable && row.Item.Action == SyncItemAction.UploadToRemote));
+
+        foreach (var row in viewModel.Items)
+        {
+            row.IncludeInSync = row.IsSelectable &&
+                !string.Equals(row.RunName, SecondLocalOnlyRun, StringComparison.Ordinal);
+        }
+
+        viewModel.ConfirmSync = true;
+        await viewModel.ExecuteSyncCommand.ExecuteAsync(null);
+
+        // Non-vacuity: the ticked run really was copied, so the untouched
+        // assertion below is about selection rather than about a run that
+        // did nothing.
+        Assert.True(File.Exists(workspace.RemoteManifest(LocalOnlyRun)));
+
+        Assert.False(Directory.Exists(
+            Path.Combine(workspace.RemoteRoot, SecondLocalOnlyRun)));
+
+        // The unticked run is not silently absent from the results: the engine
+        // reports it as deliberately skipped, having copied nothing. That is
+        // better than omitting it, because a user who unticked by accident can
+        // still see what happened.
+        SyncItemResultRowViewModel skipped = Assert.Single(
+            viewModel.ExecutionResults,
+            row => string.Equals(
+                row.RunName, SecondLocalOnlyRun, StringComparison.Ordinal));
+
+        Assert.Equal("SkippedDeselected", skipped.Status);
+        Assert.Equal(0, skipped.Result.Bytes);
+    }
+
+    [Fact]
+    public async Task Progress_AdvancesAgainstRealBytesAndEndsComplete()
+    {
+        using var workspace = new Workspace();
+        SyncViewModel viewModel = workspace.CreateViewModel();
+
+        await viewModel.PreviewSyncCommand.ExecuteAsync(null);
+        viewModel.ConfirmSync = true;
+        await viewModel.ExecuteSyncCommand.ExecuteAsync(null);
+
+        // Progress<T> marshals its callbacks, so the last report can still be
+        // queued when ExecuteAsync returns. Wait for it rather than racing it;
+        // a bare assertion here would be intermittently green.
+        Assert.True(
+            await WaitUntilAsync(() =>
+                viewModel.ProgressMax > 1 &&
+                viewModel.ProgressValue >= viewModel.ProgressMax),
+            "progress never reached its maximum");
+
+        // The completion text is set synchronously after the engine returns,
+        // so it needs no wait.
+        Assert.StartsWith("Done:", viewModel.ProgressText, StringComparison.Ordinal);
+        Assert.False(viewModel.IsSyncRunning);
+
+        // Nothing private reaches the progress line.
+        Assert.DoesNotContain("://", viewModel.ProgressText, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            workspace.RemoteRoot, viewModel.ProgressText, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(
+            workspace.LocalBase, viewModel.ProgressText, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task AnEngineWarning_ReachesTheBoundWarningsAndDeletesNothing()
+    {
+        using var workspace = new Workspace();
+        string ignored = workspace.AddUnreadableRemoteRun(UnreadableRemoteRun);
+
+        SyncViewModel viewModel = workspace.CreateViewModel();
+        await viewModel.PreviewSyncCommand.ExecuteAsync(null);
+
+        // The warning is produced by SyncEngine while reading the remote side,
+        // not by anything this test wrote into the view model. The code is
+        // RemoteRunUnreadable rather than RemoteManifestUnreadable: the engine
+        // has both, and this is the branch a folder with a safe run name and a
+        // corrupt manifest takes.
+        TransferWarningRowViewModel warning = Assert.Single(
+            viewModel.Warnings,
+            row => string.Equals(
+                row.Code, "RemoteRunUnreadable", StringComparison.Ordinal));
+
+        Assert.Equal(TransferWarningSeverity.Warning, warning.Severity);
+
+        // Non-vacuity: the plan is otherwise healthy and still executable, so
+        // the warning is an additional finding rather than a failed preview.
+        Assert.True(viewModel.CanExecuteSync);
+        Assert.Equal(3, viewModel.Items.Count);
+
+        viewModel.ConfirmSync = true;
+        await viewModel.ExecuteSyncCommand.ExecuteAsync(null);
+
+        // "Nothing is deleted automatically" is the promise the warning itself
+        // makes. Hold the engine to it.
+        Assert.True(File.Exists(ignored));
+    }
+
+    [Fact]
+    public async Task TheSameEngineWarning_CarriesNoIdentifierOnTheDrivePath()
+    {
+        using var workspace = new Workspace();
+        workspace.AddUnreadableRemoteRun(UnreadableRemoteRun);
+
+        SyncViewModel viewModel = workspace.CreateDriveViewModel();
+        await viewModel.GoogleAuthenticationInitializationTask;
+        await viewModel.GoogleRootFolderInitializationTask;
+
+        await viewModel.PreviewSyncCommand.ExecuteAsync(null);
+
+        // Non-vacuity: the same warning really is raised on this path too.
+        TransferWarningRowViewModel warning = Assert.Single(
+            viewModel.Warnings,
+            row => string.Equals(
+                row.Code, "RemoteRunUnreadable", StringComparison.Ordinal));
+
+        // The Local Folder wording embeds the remote display path, which is the
+        // user's own folder and is fine there. On the Drive path the same
+        // sentence must not carry the folder identifier.
+        Assert.DoesNotContain(
+            Workspace.DriveRootFolderId, warning.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("://", warning.Message, StringComparison.Ordinal);
+    }
+
     // ---- helpers ----
+
+    /// <summary>
+    /// Polls a condition briefly. Used only where the production code marshals
+    /// a callback, so the value is correct but not yet applied when the awaited
+    /// command returns.
+    /// </summary>
+    private static async Task<bool> WaitUntilAsync(Func<bool> condition)
+    {
+        for (int attempt = 0; attempt < 100; attempt++)
+        {
+            if (condition())
+                return true;
+
+            await Task.Delay(20);
+        }
+
+        return condition();
+    }
 
     /// <summary>
     /// A local backup base and a remote folder, both inside one temporary
@@ -249,7 +407,9 @@ public sealed class SyncUiEndToEndTests
     /// </summary>
     private sealed class Workspace : IDisposable
     {
-        private const string RootFolderId = "end-to-end-root-folder-id";
+        public const string DriveRootFolderId = "end-to-end-root-folder-id";
+
+        private const string RootFolderId = DriveRootFolderId;
 
         private static readonly DateTimeOffset Clock =
             DateTimeOffset.Parse("2026-08-20T12:00:00Z");
@@ -424,6 +584,28 @@ public sealed class SyncUiEndToEndTests
             {
                 RemoteRootPath = RemoteRoot
             };
+        }
+
+        /// <summary>
+        /// Adds one more local-only run, so a test can tick one upload and
+        /// untick another.
+        /// </summary>
+        public void AddLocalRun(string runName) => WriteRun(LocalBase, runName);
+
+        /// <summary>
+        /// Adds a remote folder with a safe run name and an unreadable
+        /// manifest, which is what an interrupted upload leaves behind. Returns
+        /// the manifest path so a test can prove nothing deleted it.
+        /// </summary>
+        public string AddUnreadableRemoteRun(string runName)
+        {
+            string runRoot = Path.Combine(RemoteRoot, runName);
+            Directory.CreateDirectory(Path.Combine(runRoot, "files"));
+            File.WriteAllText(Path.Combine(runRoot, "files", "save.dat"), "partial");
+
+            string manifestPath = Path.Combine(runRoot, "manifest.json");
+            File.WriteAllText(manifestPath, "{ this is not valid json");
+            return manifestPath;
         }
 
         public void Dispose() => _root.Dispose();
