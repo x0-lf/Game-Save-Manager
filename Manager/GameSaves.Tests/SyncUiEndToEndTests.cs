@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Text.Json;
 using GameSaves.App.Models;
 using GameSaves.App.Services;
@@ -31,6 +32,22 @@ public sealed class SyncUiEndToEndTests
     private const string SharedRun = "2026-08-20_11-00-00_manual";
     private const string SecondLocalOnlyRun = "2026-08-20_12-00-00_manual";
     private const string UnreadableRemoteRun = "2026-08-20_13-00-00_manual";
+
+    private const string SftpPassword = "end-to-end-sftp-password";
+    private const string SftpPassphrase = "end-to-end-sftp-passphrase";
+    private const string SftpKeyPath = @"C:\private\end-to-end-key\id_rsa";
+
+    private static SftpConnectionSettings SftpSettings() =>
+        new(
+            Host: "sftp.example.invalid",
+            Port: 2222,
+            Username: "backup-user",
+            AuthMethod: SftpAuthMethod.PrivateKey,
+            Password: SftpPassword,
+            PrivateKeyPath: SftpKeyPath,
+            PrivateKeyPassphrase: SftpPassphrase,
+            RemotePath: "/srv/game-saves",
+            TrustNewHostKey: false);
 
     [Fact]
     public async Task ViewModelPreview_UsesTheRealLocalFolderProvider()
@@ -380,6 +397,246 @@ public sealed class SyncUiEndToEndTests
         Assert.DoesNotContain("://", warning.Message, StringComparison.Ordinal);
     }
 
+    // ---- W Task 5: history and sync-log effects of a view-model-driven run ----
+
+    [Fact]
+    public async Task AViewModelDrivenRun_IsRecordedInTransferHistory()
+    {
+        using var workspace = new Workspace();
+        SyncViewModel viewModel = workspace.CreateViewModel();
+
+        Assert.Equal(0, workspace.History.CountRuns());
+
+        await viewModel.PreviewSyncCommand.ExecuteAsync(null);
+
+        // A preview is a dry run and must record nothing.
+        Assert.Equal(0, workspace.History.CountRuns());
+
+        viewModel.ConfirmSync = true;
+        await viewModel.ExecuteSyncCommand.ExecuteAsync(null);
+
+        Assert.Equal(1, workspace.History.CountRuns());
+
+        TransferRunRecord run = Assert.Single(workspace.History.Records);
+
+        Assert.False(run.DryRun);
+        Assert.True(run.BytesCopied > 0);
+        Assert.True(run.FilesCopied > 0);
+        Assert.Equal(0, run.FilesFailed);
+        Assert.Null(run.BlockedReason);
+
+        // Read back through the repository rather than off the list, so the
+        // recorded identifier is the one a caller would use.
+        Assert.NotEmpty(workspace.History.GetRunItems(1));
+    }
+
+    [Fact]
+    public async Task ABlockedRun_RecordsNothing()
+    {
+        using var workspace = new Workspace();
+        SyncViewModel viewModel = workspace.CreateViewModel();
+
+        await viewModel.PreviewSyncCommand.ExecuteAsync(null);
+        viewModel.ConfirmSync = false;
+        await viewModel.ExecuteSyncCommand.ExecuteAsync(null);
+
+        Assert.Equal(0, workspace.History.CountRuns());
+
+        // Non-vacuity: the same view model and plan, confirmed, does record.
+        viewModel.ConfirmSync = true;
+        await viewModel.ExecuteSyncCommand.ExecuteAsync(null);
+
+        Assert.Equal(1, workspace.History.CountRuns());
+    }
+
+    [Fact]
+    public async Task ADriveRun_AdvancesTheProfileMetadataItShould()
+    {
+        using var workspace = new Workspace();
+        SyncViewModel viewModel = workspace.CreateDriveViewModel();
+
+        await viewModel.GoogleAuthenticationInitializationTask;
+        await viewModel.GoogleRootFolderInitializationTask;
+
+        SyncRemoteProfile before =
+            workspace.Profiles.GetById(workspace.DriveProfile.Id)!;
+        Assert.Null(before.LastSuccessfulConnectionUtc);
+
+        await viewModel.PreviewSyncCommand.ExecuteAsync(null);
+
+        SyncRemoteProfile after =
+            workspace.Profiles.GetById(workspace.DriveProfile.Id)!;
+
+        // A preview that reached the remote and validated it is exactly the
+        // event LastSuccessfulConnection records.
+        Assert.NotNull(after.LastSuccessfulConnectionUtc);
+        Assert.Equal(Workspace.ClockUtc, after.LastUsedUtc);
+
+        // Tie the claim to the real composition. Without this the test passes
+        // against any provider that reports a validated plan, because the
+        // update itself is view-model logic; only the real Drive path asks the
+        // internal factory for a remote boundary.
+        Assert.Equal(
+            new[] { workspace.DriveProfile.Id },
+            workspace.RequestedDriveProfileIds);
+    }
+
+    [Fact]
+    public async Task ARefusedSelection_AdvancesNoProfileMetadata()
+    {
+        using var workspace = new Workspace();
+        SyncViewModel viewModel = workspace.CreateDriveViewModel();
+
+        await viewModel.GoogleAuthenticationInitializationTask;
+        await viewModel.GoogleRootFolderInitializationTask;
+
+        // Refused before any provider is built, so nothing connected and
+        // nothing should be recorded as having connected.
+        viewModel.UploadEnabled = false;
+        viewModel.DownloadEnabled = false;
+
+        await viewModel.PreviewSyncCommand.ExecuteAsync(null);
+
+        Assert.Null(workspace.Profiles
+            .GetById(workspace.DriveProfile.Id)!.LastSuccessfulConnectionUtc);
+        Assert.Equal(0, workspace.History.CountRuns());
+        Assert.Empty(workspace.RequestedDriveProfileIds);
+
+        // Non-vacuity: the same view model, with a direction enabled, does
+        // reach the real remote boundary and does advance the metadata.
+        viewModel.UploadEnabled = true;
+        await viewModel.PreviewSyncCommand.ExecuteAsync(null);
+
+        Assert.NotNull(workspace.Profiles
+            .GetById(workspace.DriveProfile.Id)!.LastSuccessfulConnectionUtc);
+        Assert.Equal(
+            new[] { workspace.DriveProfile.Id },
+            workspace.RequestedDriveProfileIds);
+    }
+
+    [Fact]
+    public async Task TheSyncLog_RoundTripsThroughTheViewModelAndCarriesNothingPrivate()
+    {
+        using var workspace = new Workspace();
+        SyncViewModel viewModel = workspace.CreateViewModel();
+
+        await viewModel.PreviewSyncCommand.ExecuteAsync(null);
+        viewModel.ConfirmSync = true;
+        await viewModel.ExecuteSyncCommand.ExecuteAsync(null);
+
+        // Written by the run just executed and read back through the same
+        // shared RefreshSyncLogAsync call the preview uses.
+        Assert.NotEmpty(viewModel.SyncLog);
+
+        foreach (var entry in viewModel.SyncLog)
+        {
+            Assert.DoesNotContain("://", entry.SummaryDisplay, StringComparison.Ordinal);
+            Assert.DoesNotContain(
+                workspace.RemoteRoot, entry.SummaryDisplay, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(
+                workspace.LocalBase, entry.SummaryDisplay, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    // ---- W Task 6: the SFTP provider, and what can honestly be covered ----
+
+    [Fact]
+    public void TheSftpProvider_IsBuiltByTheRealFactoryWithoutTouchingTheNetwork()
+    {
+        using var workspace = new Workspace();
+
+        // Construction is inert: SftpRemoteFileSystem only normalises the
+        // remote path in its constructor, and the known-hosts store only
+        // remembers a file path, so nothing connects and nothing is written.
+        using ISyncProvider provider =
+            workspace.Factory.CreateSftpProvider(SftpSettings());
+
+        SftpSyncProvider sftp = Assert.IsType<SftpSyncProvider>(provider);
+
+        Assert.Equal("SFTP", sftp.ProviderName);
+        Assert.Equal(SftpSettings().DisplayRoot, sftp.RemoteRoot);
+
+        // The display root is the one piece of SFTP identity that reaches the
+        // UI, so it must carry no secret even though the settings hold three.
+        Assert.DoesNotContain(SftpPassword, sftp.RemoteRoot, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(SftpPassphrase, sftp.RemoteRoot, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(SftpKeyPath, sftp.RemoteRoot, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void TheSftpProvider_HasNoSeamForAHermeticRemoteFileSystem()
+    {
+        // This is a finding pinned as a test rather than a defect fixed here.
+        // SftpSyncProvider constructs its own SftpRemoteFileSystem from the
+        // connection settings, so unlike GoogleDriveSyncProvider it cannot be
+        // handed a fake IRemoteFileSystem, and its transfer behaviour cannot be
+        // exercised without a real SSH server. Milestone W adds no product
+        // behaviour, so the seam is not added here.
+        //
+        // When a seam is added, rewrite this test to use it. Do not delete it.
+        ConstructorInfo[] constructors = typeof(SftpSyncProvider).GetConstructors(
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+
+        ConstructorInfo only = Assert.Single(constructors);
+
+        Assert.False(only.IsPublic);
+        Assert.Contains(
+            only.GetParameters(),
+            parameter => parameter.ParameterType == typeof(SftpConnectionSettings));
+        Assert.DoesNotContain(
+            only.GetParameters(),
+            parameter => parameter.ParameterType == typeof(IRemoteFileSystem));
+    }
+
+    [Fact]
+    public void TheTraversalGuardProtectingSftp_LivesInTheSharedEngine()
+    {
+        // `D-030` fixed an arbitrary local file write reachable from a hostile
+        // SFTP directory listing. The fix is in SyncEngine, which every
+        // provider shares, and it is already covered by
+        // SyncRemotePathTraversalTests. Rather than restate those assertions,
+        // pin the structural fact that makes citing them valid: the SFTP
+        // provider really does run on that engine.
+        FieldInfo[] fields = typeof(SftpSyncProvider).GetFields(
+            BindingFlags.Instance | BindingFlags.NonPublic);
+
+        Assert.Contains(fields, field => field.FieldType == typeof(SyncEngine));
+
+        // And so does the provider this milestone has been driving, which is
+        // why the end-to-end coverage above transfers to SFTP the moment a
+        // seam exists.
+        Assert.Contains(
+            typeof(LocalFolderSyncProvider).GetFields(
+                BindingFlags.Instance | BindingFlags.NonPublic),
+            field => field.FieldType == typeof(SyncEngine));
+    }
+
+    [Fact]
+    public async Task SelectingSftpInTheUi_BuildsOnlyTheSftpProvider()
+    {
+        using var workspace = new Workspace();
+        SyncViewModel viewModel = workspace.CreateViewModel();
+
+        // Non-vacuity: the Local Folder path in this same view model really
+        // does reach the engine and copy bytes.
+        await viewModel.PreviewSyncCommand.ExecuteAsync(null);
+        viewModel.ConfirmSync = true;
+        await viewModel.ExecuteSyncCommand.ExecuteAsync(null);
+        Assert.True(File.Exists(workspace.RemoteManifest(LocalOnlyRun)));
+
+        // Switching to SFTP with an incomplete form is refused by the shared
+        // validation before any provider is built, so no connection is
+        // attempted and the previous plan is discarded.
+        viewModel.SelectedProviderKind = SyncProviderKind.Sftp;
+        viewModel.SftpHost = "";
+
+        await viewModel.PreviewSyncCommand.ExecuteAsync(null);
+
+        Assert.Equal("Enter the SFTP host first.", viewModel.StatusMessage);
+        Assert.False(viewModel.CanExecuteSync);
+        Assert.Empty(viewModel.Items);
+    }
+
     // ---- helpers ----
 
     /// <summary>
@@ -408,6 +665,8 @@ public sealed class SyncUiEndToEndTests
     private sealed class Workspace : IDisposable
     {
         public const string DriveRootFolderId = "end-to-end-root-folder-id";
+
+        public static DateTimeOffset ClockUtc => Clock;
 
         private const string RootFolderId = DriveRootFolderId;
 
@@ -442,13 +701,16 @@ public sealed class SyncUiEndToEndTests
                     GoogleDriveAuthorizationScopes.DriveFile),
                 Clock,
                 Clock,
+                // LastUsedUtc and LastSuccessfulConnectionUtc, both unset, so
+                // a test can prove a run advances them. They are adjacent in
+                // the record and easy to fill in the wrong order.
                 null,
-                Clock,
+                null,
                 RootFolderId));
 
             Factory = new SyncProviderFactory(
                 new WorkspaceHistoryService(LocalBase),
-                new RecordingHistoryRepository(),
+                History,
                 new WorkspaceDatabasePathProvider(
                     Path.Combine(_root.Path, "gamesaves.db")),
                 new GoogleDriveSyncProviderFactory(
@@ -460,8 +722,14 @@ public sealed class SyncUiEndToEndTests
                     // own surface.
                     _driveFileSystems,
                     new WorkspaceHistoryService(LocalBase),
-                    new RecordingHistoryRepository()));
+                    History));
         }
+
+        /// <summary>
+        /// The one transfer-history repository both providers write through, so
+        /// a test can read a view-model-driven run back out of it.
+        /// </summary>
+        public RecordingHistoryRepository History { get; } = new();
 
         public InMemorySyncRemoteProfileRepository Profiles { get; } = new();
 
