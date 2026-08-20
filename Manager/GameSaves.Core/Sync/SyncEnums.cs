@@ -35,6 +35,13 @@ namespace GameSaves.Core.Sync
         Failed = 6,
 
         // The user deselected this run in the plan; it was not copied
-        SkippedDeselected = 7
+        SkippedDeselected = 7,
+
+        // Some content was transferred and then the run stopped partway, so
+        // what exists on the far side is a partial run rather than nothing.
+        // Distinct from Failed because the two need different actions: nothing
+        // was deleted, nothing was overwritten, and retrying is safe, because
+        // upload is create-only and download never replaces an existing file.
+        Incomplete = 8
     }
 }

@@ -54,9 +54,12 @@ namespace GameSaves.Core.Sync
         IReadOnlyList<SyncItemResult> Items,
         IReadOnlyList<TransferPreviewWarning> Warnings)
     {
+        // An incomplete run counts, because a partial run left on the far
+        // side is not a clean result even though it destroyed nothing.
         public bool HasErrors =>
             Warnings.Any(warning => warning.Severity == TransferWarningSeverity.Error) ||
-            Items.Any(item => item.Status == SyncItemStatus.Failed);
+            Items.Any(item =>
+                item.Status is SyncItemStatus.Failed or SyncItemStatus.Incomplete);
     }
 
     /// <summary>Live progress of a running sync, reported after every file.</summary>

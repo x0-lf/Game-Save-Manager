@@ -401,8 +401,18 @@ public sealed class GoogleDriveSyncEngineCompatibilityTests
         SyncPlan plan = await engine.CreatePreviewAsync(new SyncOptions());
         SyncResult result = await engine.ExecuteAsync(plan, ExecuteOptions());
 
-        SyncItemResult failed = Assert.Single(result.Items);
-        Assert.Equal(SyncItemStatus.Failed, failed.Status);
+        // Milestone X: a run that transferred content and then stopped is
+        // reported as Incomplete rather than Failed, and carries the bytes it
+        // actually copied instead of zero. What this test is about, payloads
+        // kept and the run never repaired, is unchanged.
+        SyncItemResult partial = Assert.Single(result.Items);
+        Assert.Equal(SyncItemStatus.Incomplete, partial.Status);
+        Assert.True(partial.Bytes > 0);
+        Assert.Contains("running the sync again is safe", partial.Error);
+
+        // An incomplete run is still not a clean result.
+        Assert.True(result.HasErrors);
+
         MediaUploadCall payload = Assert.Single(fixture.MediaUploads.Calls);
         Assert.Equal("data.bin", payload.FileName);
         Assert.Equal(
@@ -629,7 +639,14 @@ public sealed class GoogleDriveSyncEngineCompatibilityTests
         SyncPlan plan = await engine.CreatePreviewAsync(new SyncOptions());
         SyncResult result = await engine.ExecuteAsync(plan, ExecuteOptions());
 
-        Assert.Equal(SyncItemStatus.Failed, Assert.Single(result.Items).Status);
+        // Milestone X: reported as Incomplete rather than Failed, because
+        // files were written before the interruption. Everything else this
+        // test pins is unchanged.
+        SyncItemResult partial = Assert.Single(result.Items);
+        Assert.Equal(SyncItemStatus.Incomplete, partial.Status);
+        Assert.True(partial.Bytes > 0);
+        Assert.True(result.HasErrors);
+
         string runRoot = Path.Combine(backupBase, "Run 53");
         Assert.False(
             File.Exists(Path.Combine(runRoot, "manifest.json")),

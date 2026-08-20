@@ -401,6 +401,10 @@ namespace GameSaves.Infrastructure.Sync
             ProgressState progressState,
             CancellationToken cancellationToken)
         {
+            // Declared outside the try so a failure can report what was
+            // actually transferred before it stopped.
+            long bytes = 0;
+
             try
             {
                 string localRoot = item.LocalPath!;
@@ -440,7 +444,6 @@ namespace GameSaves.Infrastructure.Sync
                     .OrderBy(file => IsRunManifest(localRoot, file) ? 1 : 0)
                     .ToList();
 
-                long bytes = 0;
 
                 foreach (string localFile in files)
                 {
@@ -467,7 +470,18 @@ namespace GameSaves.Infrastructure.Sync
             }
             catch (Exception ex)
             {
-                return new SyncItemResult(item, 0, SyncItemStatus.Failed, ex.Message);
+                // Reporting zero bytes here would tell the user nothing was
+                // copied while a partial run sits on the remote. Say what
+                // actually happened, and say it without the exception text,
+                // which can carry a path.
+                return bytes > 0
+                    ? new SyncItemResult(
+                        item, bytes, SyncItemStatus.Incomplete,
+                        "The upload stopped partway. Some files were copied and " +
+                        "the run has no manifest, so it is not offered for " +
+                        "download. Nothing was deleted or replaced, and running " +
+                        "the sync again is safe.")
+                    : new SyncItemResult(item, 0, SyncItemStatus.Failed, ex.Message);
             }
         }
 
@@ -477,6 +491,10 @@ namespace GameSaves.Infrastructure.Sync
             ProgressState progressState,
             CancellationToken cancellationToken)
         {
+            // Declared outside the try so a failure can report what was
+            // actually transferred before it stopped.
+            long bytes = 0;
+
             try
             {
                 string localTarget = item.LocalPath!;
@@ -504,7 +522,6 @@ namespace GameSaves.Infrastructure.Sync
                         "Would be copied to the local backup base.");
                 }
 
-                long bytes = 0;
 
                 IReadOnlyList<string> remoteFiles =
                     await _remote.ListFilesAsync(item.RunName, cancellationToken);
@@ -580,7 +597,14 @@ namespace GameSaves.Infrastructure.Sync
             }
             catch (Exception ex)
             {
-                return new SyncItemResult(item, 0, SyncItemStatus.Failed, ex.Message);
+                return bytes > 0
+                    ? new SyncItemResult(
+                        item, bytes, SyncItemStatus.Incomplete,
+                        "The download stopped partway. Some files were written " +
+                        "and the run has no usable manifest, so it is not " +
+                        "presented as a restorable backup. Nothing was deleted " +
+                        "or replaced, and running the sync again is safe.")
+                    : new SyncItemResult(item, 0, SyncItemStatus.Failed, ex.Message);
             }
         }
 
