@@ -769,7 +769,7 @@ Add automated tests where API calls can be mocked or abstracted, then run live m
 7. [ ] Verify the manifest is uploaded last
 8. [ ] Detect a remote-only run
 9. [ ] Download the selected run
-10. [ ] Restore the downloaded run
+10. [ ] Restore the downloaded run — automated coverage added in Milestone Y Task 3 (`DownloadedRunRestoreTests`); the live confirmation is session C
 11. [ ] Identify identical runs as in sync
 12. [ ] Detect a same-name/different-manifest conflict
 13. [ ] Never overwrite remote files
