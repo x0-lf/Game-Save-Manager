@@ -1,4 +1,5 @@
 using Google.Apis.Drive.v3;
+using Google.Apis.Http;
 using Google.Apis.Services;
 using Google.Apis.Upload;
 using DriveFile = Google.Apis.Drive.v3.Data.File;
@@ -112,7 +113,13 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 new BaseClientService.Initializer
                 {
                     HttpClientInitializer = credential.Credential,
-                    ApplicationName = GoogleDriveRequestContract.ApplicationName
+                    ApplicationName = GoogleDriveRequestContract.ApplicationName,
+
+                    // Retry lives in exactly one place, RetryingRemoteFileSystem. The
+                    // library would otherwise apply a backoff policy this codebase never
+                    // states, so a failing call could wait for the decorator bound plus
+                    // however long the library chose. See D-032 and D-033.
+                    DefaultExponentialBackOffPolicy = ExponentialBackOffPolicy.None
                 }));
         }
     }
