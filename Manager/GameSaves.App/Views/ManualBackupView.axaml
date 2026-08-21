@@ -97,7 +97,7 @@
                     <TextBlock Text="Profile"
                                Foreground="{DynamicResource SecondaryTextBrush}"
                                FontSize="12"
-                               FontWeight="Bold" />
+                               FontWeight="SemiBold" />
 
                     <Panel>
                         <ComboBox ItemsSource="{Binding Profiles}"
@@ -116,7 +116,7 @@
                     <TextBlock Text="Installed game"
                                Foreground="{DynamicResource SecondaryTextBrush}"
                                FontSize="12"
-                               FontWeight="Bold"
+                               FontWeight="SemiBold"
                                Margin="0,4,0,0" />
 
                     <Panel>
@@ -139,7 +139,7 @@
                     <TextBlock Text="Backup destination"
                                Foreground="{DynamicResource SecondaryTextBrush}"
                                FontSize="12"
-                               FontWeight="Bold" />
+                               FontWeight="SemiBold" />
 
                     <StackPanel Spacing="6">
 
@@ -177,7 +177,7 @@
                     <TextBlock Text="Backup source"
                                Foreground="{DynamicResource SecondaryTextBrush}"
                                FontSize="12"
-                               FontWeight="Bold" />
+                               FontWeight="SemiBold" />
 
                     <CheckBox Content="Include Steam userdata game folder"
                               IsChecked="{Binding IncludeSteamUserDataGameFolder}"
@@ -201,7 +201,7 @@
                     <TextBlock Text="Backup preset"
                                Foreground="{DynamicResource SecondaryTextBrush}"
                                FontSize="12"
-                               FontWeight="Bold" />
+                               FontWeight="SemiBold" />
 
                     <Panel>
                     <ComboBox ItemsSource="{Binding Presets}"
@@ -388,38 +388,38 @@
                                     BorderThickness="0,0,0,1"
                                     IsVisible="{Binding !!Items.Count}">
 
-                                <Grid ColumnDefinitions="160,2*,70,90,120"
+                                <Grid ColumnDefinitions="130,2*,60,80,100"
                                       ColumnSpacing="10">
 
                                     <TextBlock Grid.Column="0"
                                                Text="Source type"
                                                Foreground="{DynamicResource SecondaryTextBrush}"
                                                FontSize="12"
-                                               FontWeight="Bold" />
+                                               FontWeight="SemiBold" />
 
                                     <TextBlock Grid.Column="1"
                                                Text="Source path"
                                                Foreground="{DynamicResource SecondaryTextBrush}"
                                                FontSize="12"
-                                               FontWeight="Bold" />
+                                               FontWeight="SemiBold" />
 
                                     <TextBlock Grid.Column="2"
                                                Text="Source"
                                                Foreground="{DynamicResource SecondaryTextBrush}"
                                                FontSize="12"
-                                               FontWeight="Bold" />
+                                               FontWeight="SemiBold" />
 
                                     <TextBlock Grid.Column="3"
                                                Text="Files"
                                                Foreground="{DynamicResource SecondaryTextBrush}"
                                                FontSize="12"
-                                               FontWeight="Bold" />
+                                               FontWeight="SemiBold" />
 
                                     <TextBlock Grid.Column="4"
                                                Text="Status"
                                                Foreground="{DynamicResource SecondaryTextBrush}"
                                                FontSize="12"
-                                               FontWeight="Bold" />
+                                               FontWeight="SemiBold" />
                                 </Grid>
                             </Border>
 
@@ -438,7 +438,7 @@
                                                 BorderThickness="0,0,0,1">
 
                                             <StackPanel Spacing="3">
-                                                <Grid ColumnDefinitions="160,2*,70,90,120"
+                                                <Grid ColumnDefinitions="130,2*,60,80,100"
                                                       ColumnSpacing="10">
 
                                                     <TextBlock Grid.Column="0"
@@ -569,38 +569,38 @@
                                     BorderThickness="0,0,0,1"
                                     IsVisible="{Binding !!ExecutionResults.Count}">
 
-                                <Grid ColumnDefinitions="2*,2*,80,130,*"
+                                <Grid ColumnDefinitions="2*,2*,70,100,*"
                                       ColumnSpacing="10">
 
                                     <TextBlock Grid.Column="0"
                                                Text="Source file"
                                                Foreground="{DynamicResource SecondaryTextBrush}"
                                                FontSize="12"
-                                               FontWeight="Bold" />
+                                               FontWeight="SemiBold" />
 
                                     <TextBlock Grid.Column="1"
                                                Text="Backup file"
                                                Foreground="{DynamicResource SecondaryTextBrush}"
                                                FontSize="12"
-                                               FontWeight="Bold" />
+                                               FontWeight="SemiBold" />
 
                                     <TextBlock Grid.Column="2"
                                                Text="Size"
                                                Foreground="{DynamicResource SecondaryTextBrush}"
                                                FontSize="12"
-                                               FontWeight="Bold" />
+                                               FontWeight="SemiBold" />
 
                                     <TextBlock Grid.Column="3"
                                                Text="Status"
                                                Foreground="{DynamicResource SecondaryTextBrush}"
                                                FontSize="12"
-                                               FontWeight="Bold" />
+                                               FontWeight="SemiBold" />
 
                                     <TextBlock Grid.Column="4"
                                                Text="Details"
                                                Foreground="{DynamicResource SecondaryTextBrush}"
                                                FontSize="12"
-                                               FontWeight="Bold" />
+                                               FontWeight="SemiBold" />
                                 </Grid>
                             </Border>
 
@@ -618,7 +618,7 @@
                                                 BorderBrush="{DynamicResource SubtleBorderBrush}"
                                                 BorderThickness="0,0,0,1">
 
-                                            <Grid ColumnDefinitions="2*,2*,80,130,*"
+                                            <Grid ColumnDefinitions="2*,2*,70,100,*"
                                                   ColumnSpacing="10">
 
                                                 <TextBlock Grid.Column="0"

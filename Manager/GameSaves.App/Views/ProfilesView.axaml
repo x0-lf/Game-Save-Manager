@@ -66,7 +66,7 @@
                             Margin="16,12">
                     <TextBlock Text="Source profile"
                                Foreground="{DynamicResource PrimaryTextBrush}"
-                               FontSize="15"
+                               FontSize="14"
                                FontWeight="SemiBold" />
 
                     <Panel>
@@ -120,7 +120,7 @@
                             Margin="16,12">
                     <TextBlock Text="Target profile"
                                Foreground="{DynamicResource PrimaryTextBrush}"
-                               FontSize="15"
+                               FontSize="14"
                                FontWeight="SemiBold" />
 
                     <Panel>

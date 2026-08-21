@@ -209,8 +209,8 @@
                                 Background="{DynamicResource WarningTintBrush}"
                                 BorderBrush="{DynamicResource WarningEdgeBrush}"
                                 BorderThickness="1"
-                                CornerRadius="12"
-                                Padding="14,12">
+                                CornerRadius="10"
+                                Padding="12,8">
 							<Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
 								<TextBlock Grid.Column="0"
                                            Text="&#xE7BA;"

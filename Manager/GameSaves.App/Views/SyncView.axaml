@@ -106,289 +106,313 @@
         <ScrollViewer Grid.Row="1">
             <StackPanel Spacing="10">
 
-                <!-- Sync target and connection -->
+                <!-- Remote profile card -->
                 <Border Background="{DynamicResource CardBackgroundBrush}"
                         BorderBrush="{DynamicResource CardBorderBrush}"
                         BorderThickness="1"
                         CornerRadius="14"
                         Padding="14,10">
-                  <StackPanel Spacing="8">
-                    <TextBlock Text="Sync target &amp; connection"
-                               Foreground="{DynamicResource PrimaryTextBrush}"
-                               FontSize="14"
-                               FontWeight="SemiBold" />
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="Remote profile"
+                                   Foreground="{DynamicResource PrimaryTextBrush}"
+                                   FontSize="14"
+                                   FontWeight="SemiBold" />
 
-                    <WrapPanel ItemSpacing="14" LineSpacing="6">
-                        <CheckBox Content="Upload local runs"
-                                  IsChecked="{Binding UploadEnabled}"
-                                  FontSize="12" />
+                        <StackPanel Spacing="6">
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="Saved profile"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                           FontSize="12"
+                                           FontWeight="SemiBold" />
 
-                        <CheckBox Content="Download remote runs"
-                                  IsChecked="{Binding DownloadEnabled}"
-                                  FontSize="12" />
-                    </WrapPanel>
-
-                    <Border Height="1" Background="{DynamicResource SubtleBorderBrush}" />
-                  <StackPanel>
-
-                    <StackPanel Spacing="6"
-                                Margin="0,6,0,0">
-
-                        <StackPanel Spacing="4">
-                            <TextBlock Text="Remote profile"
-                                       Foreground="{DynamicResource SecondaryTextBrush}"
-                                       FontSize="12"
-                                       FontWeight="Bold" />
-
-                            <ComboBox MaxWidth="560"
-                                      HorizontalAlignment="Left"
-                                      ItemsSource="{Binding RemoteProfileOptions}"
-                                      SelectedItem="{Binding SelectedRemoteProfileOption}"
-                                      MinHeight="32">
-                                <ComboBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <TextBlock Text="{Binding DisplayName}" />
-                                    </DataTemplate>
-                                </ComboBox.ItemTemplate>
-                            </ComboBox>
-                        </StackPanel>
-
-                        <StackPanel Spacing="4">
-                            <Panel Width="520" HorizontalAlignment="Left">
-                                <TextBox Text="{Binding RemoteProfileDisplayName}"
-                                         MaxLength="100"
-                                         MinHeight="32" />
-                                <TextBlock Text="Profile name, for example Home SFTP Server"
-                                           Foreground="{DynamicResource MutedTextBrush}"
-                                           FontSize="13"
-                                           Margin="12,0"
-                                           VerticalAlignment="Center"
-                                           IsHitTestVisible="False"
-                                           IsVisible="{Binding !RemoteProfileDisplayName.Length}" />
-                            </Panel>
-
-                            <TextBlock Text="{Binding RemoteProfileState}"
-                                       Foreground="{DynamicResource MutedTextBrush}"
-                                       FontSize="12" />
-                        </StackPanel>
-
-                        <StackPanel Orientation="Horizontal"
-                                    Spacing="6">
-                            <Button Content="New"
-                                    Command="{Binding NewRemoteProfileCommand}"
-                                    Height="30" />
-                            <Button Content="Save"
-                                    Command="{Binding SaveRemoteProfileCommand}"
-                                    Height="30" />
-                            <Button Height="32"
-                                    Content="More…"
-                                    ToolTip.Tip="More profile actions">
-                                <Button.Flyout>
-                                    <MenuFlyout>
-                                        <MenuItem Header="Save as new profile"
-                                                  Command="{Binding SaveRemoteProfileAsCommand}" />
-                                        <MenuItem Header="Rename"
-                                                  Command="{Binding RenameRemoteProfileCommand}"
-                                                  IsEnabled="{Binding SelectedRemoteProfile, Converter={x:Static ObjectConverters.IsNotNull}}" />
-                                    </MenuFlyout>
-                                </Button.Flyout>
-                            </Button>
-                            <Button Content="Delete"
-                                    Classes="danger"
-                                    IsEnabled="{Binding SelectedRemoteProfile, Converter={x:Static ObjectConverters.IsNotNull}}"
-                                    Height="30">
-                                <Button.Flyout>
-                                    <Flyout Placement="Bottom">
-                                        <StackPanel Spacing="8" MaxWidth="560"
-                                      HorizontalAlignment="Stretch" Margin="4">
-                                            <TextBlock Text="Delete this profile?"
-                                                       Foreground="{DynamicResource PrimaryTextBrush}"
-                                                       FontSize="13"
-                                                       FontWeight="SemiBold" />
-                                            <TextBlock Text="Only the selected profile configuration is deleted. Backup runs, remote files, sync history, archives and save files are never removed."
-                                                       Foreground="{DynamicResource SecondaryTextBrush}"
-                                                       FontSize="12"
-                                                       TextWrapping="Wrap" />
-                                            <CheckBox Content="I understand"
-                                                      IsChecked="{Binding ConfirmDeleteRemoteProfile}"
-                                                      FontSize="12" />
-                                            <Button Content="Delete profile"
-                                                    Classes="danger"
-                                                    Command="{Binding DeleteRemoteProfileCommand}"
-                                                    HorizontalAlignment="Right"
-                                                    Height="30" />
-                                        </StackPanel>
-                                    </Flyout>
-                                </Button.Flyout>
-                            </Button>
-                        </StackPanel>
-
-                        <StackPanel Spacing="4">
-                            <TextBlock Text="Provider"
-                                       Foreground="{DynamicResource SecondaryTextBrush}"
-                                       FontSize="12"
-                                       FontWeight="Bold" />
-
-                            <ComboBox ItemsSource="{Binding ProviderOptions}"
-                                      SelectedValue="{Binding SelectedProviderKind}"
-                                      SelectedValueBinding="{Binding Kind}"
-                                      MaxWidth="560"
-                                      HorizontalAlignment="Left"
-                                      Width="520"
-                                      MinHeight="32"
-                                      ToolTip.Tip="{Binding ProviderCapabilitySummary}">
-                                <ComboBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <TextBlock Text="{Binding DisplayName}" />
-                                    </DataTemplate>
-                                </ComboBox.ItemTemplate>
-                            </ComboBox>
-                        </StackPanel>
-
-                        <!-- Local folder target -->
-                        <StackPanel Spacing="4"
-                                    IsVisible="{Binding IsLocalFolderSelected}">
-                            <Grid ColumnDefinitions="*,Auto,Auto"
-                                  ColumnSpacing="6">
-
-                                <TextBox Grid.Column="0"
-                                         Text="{Binding RemoteRootPath}"
-                                         PlaceholderText="Folder to sync backup runs with (NAS share, USB drive, cloud-synced folder)"
-                                         ToolTip.Tip="{Binding RemoteRootPath}"
-                                         MinHeight="32" />
-
-                                <Button Grid.Column="1"
-                                        Content="Choose folder..."
-                                        Command="{Binding ChooseRemoteFolderCommand}"
-                                        IsEnabled="{Binding CanSelectRemoteFolder}"
-                                        Height="32"
-                                        VerticalAlignment="Top" />
-
-                                <Button Grid.Column="2"
-                                        Content="Open Folder"
-                                        Command="{Binding OpenRemoteLocationCommand}"
-                                        IsVisible="{Binding CanOpenRemoteLocation}"
-                                        Height="32"
-                                        VerticalAlignment="Top" />
-                            </Grid>
-                        </StackPanel>
-
-                        <!-- SFTP target -->
-                        <StackPanel Spacing="4"
-                                    IsVisible="{Binding IsSftpSelected}">
-
-                            <Grid ColumnDefinitions="2*,90,*"
-                                  ColumnSpacing="6">
-
-                                <TextBox Grid.Column="0"
-                                         Text="{Binding SftpHost}"
-                                         PlaceholderText="Host name or IP address"
-                                         MinHeight="30" />
-
-                                <TextBox Grid.Column="1"
-                                         Text="{Binding SftpPort}"
-                                         PlaceholderText="22"
-                                         ToolTip.Tip="SSH port (default 22)"
-                                         MinHeight="30" />
-
-                                <TextBox Grid.Column="2"
-                                         Text="{Binding SftpUsername}"
-                                         PlaceholderText="Username"
-                                         MinHeight="30" />
-                            </Grid>
-
-                            <StackPanel Orientation="Horizontal"
-                                        Spacing="14">
-                                <RadioButton Content="Password"
-                                             GroupName="SftpAuth"
-                                             IsChecked="{Binding SftpUsePassword}"
-                                             FontSize="12" />
-
-                                <RadioButton Content="Private key file"
-                                             GroupName="SftpAuth"
-                                             IsChecked="{Binding SftpUsePrivateKey}"
-                                             FontSize="12" />
+                                <ComboBox MaxWidth="560"
+                                          HorizontalAlignment="Left"
+                                          ItemsSource="{Binding RemoteProfileOptions}"
+                                          SelectedItem="{Binding SelectedRemoteProfileOption}"
+                                          MinHeight="32">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding DisplayName}" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
                             </StackPanel>
 
-                            <TextBox Text="{Binding SftpPassword}"
-                                     PasswordChar="●"
-                                     PlaceholderText="Password (kept in memory only, never stored)"
-                                     IsVisible="{Binding SftpUsePassword}"
-                                     MinHeight="30" />
+                            <StackPanel Spacing="4">
+                                <Panel Width="520" HorizontalAlignment="Left">
+                                    <TextBox Text="{Binding RemoteProfileDisplayName}"
+                                             MaxLength="100"
+                                             MinHeight="32" />
+                                    <TextBlock Text="Profile name, for example Home SFTP Server"
+                                               Foreground="{DynamicResource MutedTextBrush}"
+                                               FontSize="13"
+                                               Margin="12,0"
+                                               VerticalAlignment="Center"
+                                               IsHitTestVisible="False"
+                                               IsVisible="{Binding !RemoteProfileDisplayName.Length}" />
+                                </Panel>
 
-                            <StackPanel Spacing="4"
-                                        IsVisible="{Binding SftpUsePrivateKey}">
-                                <Grid ColumnDefinitions="*,Auto"
+                                <TextBlock Text="{Binding RemoteProfileState}"
+                                           Foreground="{DynamicResource MutedTextBrush}"
+                                           FontSize="12" />
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal"
+                                        Spacing="6">
+                                <Button Content="New"
+                                        Command="{Binding NewRemoteProfileCommand}"
+                                        Height="30" />
+                                <Button Content="Save"
+                                        Command="{Binding SaveRemoteProfileCommand}"
+                                        Height="30" />
+                                <Button Height="30"
+                                        Content="More…"
+                                        ToolTip.Tip="More profile actions">
+                                    <Button.Flyout>
+                                        <MenuFlyout>
+                                            <MenuItem Header="Save as new profile"
+                                                      Command="{Binding SaveRemoteProfileAsCommand}" />
+                                            <MenuItem Header="Rename"
+                                                      Command="{Binding RenameRemoteProfileCommand}"
+                                                      IsEnabled="{Binding SelectedRemoteProfile, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                                        </MenuFlyout>
+                                    </Button.Flyout>
+                                </Button>
+                                <Button Content="Delete"
+                                        Classes="danger"
+                                        IsEnabled="{Binding SelectedRemoteProfile, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                        Height="30">
+                                    <Button.Flyout>
+                                        <Flyout Placement="Bottom">
+                                            <StackPanel Spacing="8" MaxWidth="560"
+                                                        HorizontalAlignment="Stretch" Margin="4">
+                                                <TextBlock Text="Delete this profile?"
+                                                           Foreground="{DynamicResource PrimaryTextBrush}"
+                                                           FontSize="13"
+                                                           FontWeight="SemiBold" />
+                                                <TextBlock Text="Only the selected profile configuration is deleted. Backup runs, remote files, sync history, archives and save files are never removed."
+                                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                                           FontSize="12"
+                                                           TextWrapping="Wrap" />
+                                                <CheckBox Content="I understand"
+                                                          IsChecked="{Binding ConfirmDeleteRemoteProfile}"
+                                                          FontSize="12" />
+                                                <Button Content="Delete profile"
+                                                        Classes="danger"
+                                                        Command="{Binding DeleteRemoteProfileCommand}"
+                                                        HorizontalAlignment="Right"
+                                                        Height="30" />
+                                            </StackPanel>
+                                        </Flyout>
+                                    </Button.Flyout>
+                                </Button>
+                            </StackPanel>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Sync target and connection card -->
+                <Border Background="{DynamicResource CardBackgroundBrush}"
+                        BorderBrush="{DynamicResource CardBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="14"
+                        Padding="14,10">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="Sync target &amp; connection"
+                                   Foreground="{DynamicResource PrimaryTextBrush}"
+                                   FontSize="14"
+                                   FontWeight="SemiBold" />
+
+                        <StackPanel Spacing="8">
+                            <!-- Provider selector -->
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="Provider"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                           FontSize="12"
+                                           FontWeight="SemiBold" />
+
+                                <ComboBox ItemsSource="{Binding ProviderOptions}"
+                                          SelectedValue="{Binding SelectedProviderKind}"
+                                          SelectedValueBinding="{Binding Kind}"
+                                          MaxWidth="560"
+                                          HorizontalAlignment="Left"
+                                          Width="520"
+                                          MinHeight="32"
+                                          ToolTip.Tip="{Binding ProviderCapabilitySummary}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding DisplayName}" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                            </StackPanel>
+
+                            <!-- Sync behaviour / Direction group below provider -->
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="Sync behaviour"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                           FontSize="12"
+                                           FontWeight="SemiBold" />
+
+                                <WrapPanel ItemSpacing="14" LineSpacing="6">
+                                    <CheckBox Content="Upload local runs"
+                                              IsChecked="{Binding UploadEnabled}"
+                                              FontSize="12" />
+
+                                    <CheckBox Content="Download remote runs"
+                                              IsChecked="{Binding DownloadEnabled}"
+                                              FontSize="12" />
+                                </WrapPanel>
+                            </StackPanel>
+
+                            <Border Height="1" Background="{DynamicResource SubtleBorderBrush}" Margin="0,2" />
+
+                            <!-- Local folder target -->
+                            <StackPanel Spacing="6"
+                                        IsVisible="{Binding IsLocalFolderSelected}">
+                                <TextBlock Text="Folder location"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                           FontSize="12"
+                                           FontWeight="SemiBold" />
+
+                                <Grid ColumnDefinitions="*,Auto,Auto"
                                       ColumnSpacing="6">
 
                                     <TextBox Grid.Column="0"
-                                             Text="{Binding SftpKeyFilePath}"
-                                             PlaceholderText="Path to the private key file (e.g. C:\Users\you\.ssh\id_ed25519)"
-                                             ToolTip.Tip="{Binding SftpKeyFilePath}"
-                                             MinHeight="30" />
+                                             Text="{Binding RemoteRootPath}"
+                                             PlaceholderText="Folder to sync backup runs with (NAS share, USB drive, cloud-synced folder)"
+                                             ToolTip.Tip="{Binding RemoteRootPath}"
+                                             MinHeight="32" />
 
                                     <Button Grid.Column="1"
-                                            Content="Browse..."
-                                            Command="{Binding ChooseKeyFileCommand}"
-                                            Height="30"
+                                            Content="Choose folder…"
+                                            Command="{Binding ChooseRemoteFolderCommand}"
+                                            IsEnabled="{Binding CanSelectRemoteFolder}"
+                                            Height="32"
+                                            VerticalAlignment="Top" />
+
+                                    <Button Grid.Column="2"
+                                            Content="Open Folder"
+                                            Command="{Binding OpenRemoteLocationCommand}"
+                                            IsVisible="{Binding CanOpenRemoteLocation}"
+                                            Height="32"
                                             VerticalAlignment="Top" />
                                 </Grid>
-
-                                <TextBox Text="{Binding SftpKeyPassphrase}"
-                                         PasswordChar="●"
-                                         PlaceholderText="Key passphrase, if any (kept in memory only, never stored)"
-                                         MinHeight="30" />
                             </StackPanel>
 
-                            <TextBox Text="{Binding SftpRemotePath}"
-                                     PlaceholderText="Remote folder path, e.g. /srv/gamesave-sync"
-                                     MinHeight="30" />
-
-                            <CheckBox Content="Trust this server's host key on first connect"
-                                      IsChecked="{Binding SftpTrustNewHostKey}"
-                                      FontSize="12"
-                                      ToolTip.Tip="On the first connection the server's key fingerprint is stored (like SSH known_hosts). If it ever changes later, the sync fails loudly. Leave unchecked to see the fingerprint first without trusting it." />
-
-                            <StackPanel Orientation="Horizontal"
-                                        Spacing="10">
-                                <Button Content="Forget Stored Host Key"
-                                        Command="{Binding ForgetSftpHostKeyCommand}"
-                                        FontSize="12"
-                                        Height="28"
-                                        ToolTip.Tip="Removes the stored fingerprint for this host and port, e.g. after a planned server reinstall." />
-
-                                <TextBlock Text="Passwords and passphrases are never saved to disk."
-                                           Foreground="{DynamicResource WarningBrush}"
+                            <!-- SFTP target -->
+                            <StackPanel Spacing="8"
+                                        IsVisible="{Binding IsSftpSelected}">
+                                <TextBlock Text="SFTP connection"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
                                            FontSize="12"
-                                           VerticalAlignment="Center" />
+                                           FontWeight="SemiBold" />
+
+                                <Grid ColumnDefinitions="2*,90,*"
+                                      ColumnSpacing="6">
+
+                                    <TextBox Grid.Column="0"
+                                             Text="{Binding SftpHost}"
+                                             PlaceholderText="Host name or IP address"
+                                             MinHeight="30" />
+
+                                    <TextBox Grid.Column="1"
+                                             Text="{Binding SftpPort}"
+                                             PlaceholderText="22"
+                                             ToolTip.Tip="SSH port (default 22)"
+                                             MinHeight="30" />
+
+                                    <TextBox Grid.Column="2"
+                                             Text="{Binding SftpUsername}"
+                                             PlaceholderText="Username"
+                                             MinHeight="30" />
+                                </Grid>
+
+                                <StackPanel Orientation="Horizontal"
+                                            Spacing="14">
+                                    <RadioButton Content="Password"
+                                                 GroupName="SftpAuth"
+                                                 IsChecked="{Binding SftpUsePassword}"
+                                                 FontSize="12" />
+
+                                    <RadioButton Content="Private key file"
+                                                 GroupName="SftpAuth"
+                                                 IsChecked="{Binding SftpUsePrivateKey}"
+                                                 FontSize="12" />
+                                </StackPanel>
+
+                                <TextBox Text="{Binding SftpPassword}"
+                                         PasswordChar="●"
+                                         PlaceholderText="Password (kept in memory only, never stored)"
+                                         IsVisible="{Binding SftpUsePassword}"
+                                         MinHeight="30" />
+
+                                <StackPanel Spacing="4"
+                                            IsVisible="{Binding SftpUsePrivateKey}">
+                                    <Grid ColumnDefinitions="*,Auto"
+                                          ColumnSpacing="6">
+
+                                        <TextBox Grid.Column="0"
+                                                 Text="{Binding SftpKeyFilePath}"
+                                                 PlaceholderText="Path to the private key file (e.g. C:\Users\you\.ssh\id_ed25519)"
+                                                 ToolTip.Tip="{Binding SftpKeyFilePath}"
+                                                 MinHeight="30" />
+
+                                        <Button Grid.Column="1"
+                                                Content="Browse…"
+                                                Command="{Binding ChooseKeyFileCommand}"
+                                                Height="30"
+                                                VerticalAlignment="Top" />
+                                    </Grid>
+
+                                    <TextBox Text="{Binding SftpKeyPassphrase}"
+                                             PasswordChar="●"
+                                             PlaceholderText="Key passphrase, if any (kept in memory only, never stored)"
+                                             MinHeight="30" />
+                                </StackPanel>
+
+                                <TextBox Text="{Binding SftpRemotePath}"
+                                         PlaceholderText="Remote folder path, e.g. /srv/gamesave-sync"
+                                         MinHeight="30" />
+
+                                <CheckBox Content="Trust this server's host key on first connect"
+                                          IsChecked="{Binding SftpTrustNewHostKey}"
+                                          FontSize="12"
+                                          ToolTip.Tip="On the first connection the server's key fingerprint is stored (like SSH known_hosts). If it ever changes later, the sync fails loudly. Leave unchecked to see the fingerprint first without trusting it." />
+
+                                <WrapPanel ItemSpacing="10" LineSpacing="6">
+                                    <Button Content="Forget Stored Host Key"
+                                            Command="{Binding ForgetSftpHostKeyCommand}"
+                                            FontSize="12"
+                                            Height="28"
+                                            ToolTip.Tip="Removes the stored fingerprint for this host and port, e.g. after a planned server reinstall." />
+
+                                    <TextBlock Text="Passwords and passphrases are never saved to disk."
+                                               Foreground="{DynamicResource WarningBrush}"
+                                               FontSize="12"
+                                               VerticalAlignment="Center" />
+                                </WrapPanel>
                             </StackPanel>
-                        </StackPanel>
 
-                        <!-- Google Drive account configuration only. Sync stays disabled. -->
-                        <StackPanel IsVisible="{Binding IsGoogleDriveSelected}"
-                                    Spacing="6">
-                            <Border Height="1"
-                                    Background="{DynamicResource SubtleBorderBrush}"
-                                    Margin="0,4" />
+                            <!-- Google Drive account configuration -->
+                            <StackPanel IsVisible="{Binding IsGoogleDriveSelected}"
+                                        Spacing="8">
 
-                            <TextBlock Text="Google Drive"
-                                       Foreground="{DynamicResource SecondaryTextBrush}"
-                                       FontSize="12"
-                                       FontWeight="Bold" />
-
-                            <StackPanel Spacing="6"
-                                        Margin="0,0,0,0">
+                                <TextBlock Text="Google Drive account"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                           FontSize="12"
+                                           FontWeight="SemiBold" />
 
                                 <Grid ColumnDefinitions="110,*"
                                       RowDefinitions="Auto,Auto,Auto"
                                       ColumnSpacing="10"
                                       RowSpacing="3">
-                                    <TextBlock Grid.Row="0" Text="{Binding GoogleDriveAccountLabel}" Foreground="{DynamicResource MutedTextBrush}" />
-                                    <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding GoogleDriveAccountDisplayText}" Foreground="{DynamicResource PrimaryTextBrush}" />
-                                    <TextBlock Grid.Row="1" Text="Email" Foreground="{DynamicResource MutedTextBrush}" />
-                                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding GoogleDriveEmailDisplayText}" Foreground="{DynamicResource PrimaryTextBrush}" />
-                                    <TextBlock Grid.Row="2" Text="Status" Foreground="{DynamicResource MutedTextBrush}" />
-                                    <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding GoogleDriveStatusDisplayText}" Foreground="{DynamicResource PrimaryTextBrush}" />
+                                    <TextBlock Grid.Row="0" Text="{Binding GoogleDriveAccountLabel}" Foreground="{DynamicResource MutedTextBrush}" FontSize="12" />
+                                    <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding GoogleDriveAccountDisplayText}" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="12" />
+                                    <TextBlock Grid.Row="1" Text="Email" Foreground="{DynamicResource MutedTextBrush}" FontSize="12" />
+                                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding GoogleDriveEmailDisplayText}" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="12" />
+                                    <TextBlock Grid.Row="2" Text="Status" Foreground="{DynamicResource MutedTextBrush}" FontSize="12" />
+                                    <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding GoogleDriveStatusDisplayText}" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="12" />
                                 </Grid>
 
                                 <TextBlock Text="Scope: only files created or opened by Game Save Manager"
@@ -397,7 +421,7 @@
                                            FontSize="12"
                                            TextWrapping="Wrap" />
 
-                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                <WrapPanel ItemSpacing="8" LineSpacing="6">
                                     <Button Content="Connect Google Drive"
                                             Command="{Binding ConnectGoogleDriveCommand}"
                                             IsEnabled="{Binding CanConnectGoogleDrive}"
@@ -417,7 +441,7 @@
                                             Command="{Binding CancelGoogleDriveConnectionCommand}"
                                             IsVisible="{Binding CanCancelGoogleDriveConnection}"
                                             Height="30" />
-                                </StackPanel>
+                                </WrapPanel>
 
                                 <CheckBox Content="Confirm removing locally stored Google Drive authentication"
                                           IsChecked="{Binding ConfirmDisconnectGoogleDrive}"
@@ -442,128 +466,128 @@
                                 <TextBlock Text="Application backup folder"
                                            Foreground="{DynamicResource SecondaryTextBrush}"
                                            FontSize="12"
-                                           FontWeight="Bold" />
+                                           FontWeight="SemiBold" />
 
-                                <StackPanel Spacing="6"
-                                            Margin="0,0,0,0">
-                                        <Grid ColumnDefinitions="Auto,*"
-                                              RowDefinitions="Auto,Auto"
-                                              ColumnSpacing="10"
-                                              RowSpacing="3">
-                                            <TextBlock Grid.Row="0"
-                                                       Text="Backup folder"
-                                                       Foreground="{DynamicResource MutedTextBrush}" />
-                                            <TextBlock Grid.Row="0"
-                                                       Grid.Column="1"
-                                                       Text="{Binding GoogleDriveRootFolderDisplayText}"
-                                                       Foreground="{DynamicResource SecondaryTextBrush}" />
-                                            <TextBlock Grid.Row="1"
-                                                       Text="Folder status"
-                                                       Foreground="{DynamicResource MutedTextBrush}" />
-                                            <TextBlock Grid.Row="1"
-                                                       Grid.Column="1"
-                                                       Text="{Binding GoogleDriveRootFolderStatusDisplayText}"
-                                                       Foreground="{DynamicResource SecondaryTextBrush}"
-                                                       TextWrapping="Wrap" />
-                                        </Grid>
+                                <Grid ColumnDefinitions="110,*"
+                                      RowDefinitions="Auto,Auto"
+                                      ColumnSpacing="10"
+                                      RowSpacing="3">
+                                    <TextBlock Grid.Row="0"
+                                               Text="Backup folder"
+                                               Foreground="{DynamicResource MutedTextBrush}"
+                                               FontSize="12" />
+                                    <TextBlock Grid.Row="0"
+                                               Grid.Column="1"
+                                               Text="{Binding GoogleDriveRootFolderDisplayText}"
+                                               Foreground="{DynamicResource PrimaryTextBrush}"
+                                               FontSize="12" />
+                                    <TextBlock Grid.Row="1"
+                                               Text="Folder status"
+                                               Foreground="{DynamicResource MutedTextBrush}"
+                                               FontSize="12" />
+                                    <TextBlock Grid.Row="1"
+                                               Grid.Column="1"
+                                               Text="{Binding GoogleDriveRootFolderStatusDisplayText}"
+                                               Foreground="{DynamicResource PrimaryTextBrush}"
+                                               FontSize="12"
+                                               TextWrapping="Wrap" />
+                                </Grid>
 
-                                        <StackPanel Orientation="Horizontal"
-                                                    Spacing="8">
-                                            <Button Content="Set Up Drive Folder"
-                                                    Command="{Binding SetUpGoogleDriveRootFolderCommand}"
-                                                    IsEnabled="{Binding CanSetUpGoogleDriveRootFolder}"
-                                                    IsVisible="{Binding CanSetUpGoogleDriveRootFolder}"
-                                                    Height="30" />
-                                            <Button Content="Check Drive Folder"
-                                                    Command="{Binding CheckGoogleDriveRootFolderCommand}"
-                                                    IsEnabled="{Binding CanCheckGoogleDriveRootFolder}"
-                                                    IsVisible="{Binding CanCheckGoogleDriveRootFolder}"
-                                                    Height="30" />
-                                            <Button Content="Recreate Drive Folder"
-                                                    Command="{Binding RecreateGoogleDriveRootFolderCommand}"
-                                                    IsEnabled="{Binding CanRecreateGoogleDriveRootFolder}"
-                                                    IsVisible="{Binding CanShowRecreateGoogleDriveRootFolder}"
-                                                    Height="30" />
-                                            <Button Content="Cancel Folder Operation"
-                                                    Command="{Binding CancelGoogleDriveRootFolderCommand}"
-                                                    IsVisible="{Binding CanCancelGoogleDriveRootFolderOperation}"
-                                                    Height="30" />
-                                        </StackPanel>
+                                <WrapPanel ItemSpacing="8" LineSpacing="6">
+                                    <Button Content="Set Up Drive Folder"
+                                            Command="{Binding SetUpGoogleDriveRootFolderCommand}"
+                                            IsEnabled="{Binding CanSetUpGoogleDriveRootFolder}"
+                                            IsVisible="{Binding CanSetUpGoogleDriveRootFolder}"
+                                            Height="30" />
+                                    <Button Content="Check Drive Folder"
+                                            Command="{Binding CheckGoogleDriveRootFolderCommand}"
+                                            IsEnabled="{Binding CanCheckGoogleDriveRootFolder}"
+                                            IsVisible="{Binding CanCheckGoogleDriveRootFolder}"
+                                            Height="30" />
+                                    <Button Content="Recreate Drive Folder"
+                                            Command="{Binding RecreateGoogleDriveRootFolderCommand}"
+                                            IsEnabled="{Binding CanRecreateGoogleDriveRootFolder}"
+                                            IsVisible="{Binding CanShowRecreateGoogleDriveRootFolder}"
+                                            Height="30" />
+                                    <Button Content="Cancel Folder Operation"
+                                            Command="{Binding CancelGoogleDriveRootFolderCommand}"
+                                            IsVisible="{Binding CanCancelGoogleDriveRootFolderOperation}"
+                                            Height="30" />
+                                </WrapPanel>
 
-                                        <CheckBox Content="Confirm creating or selecting a replacement Google Drive root folder"
-                                                  IsChecked="{Binding ConfirmRecreateGoogleDriveRootFolder}"
-                                                  IsVisible="{Binding CanShowRecreateGoogleDriveRootFolder}"
-                                                  ToolTip.Tip="The old Drive object, remote files, local backups, and saved profile remain. A new folder is created only when no unique existing candidate is available." />
+                                <CheckBox Content="Confirm creating or selecting a replacement Google Drive root folder"
+                                          IsChecked="{Binding ConfirmRecreateGoogleDriveRootFolder}"
+                                          IsVisible="{Binding CanShowRecreateGoogleDriveRootFolder}"
+                                          ToolTip.Tip="The old Drive object, remote files, local backups, and saved profile remain. A new folder is created only when no unique existing candidate is available." />
 
-                                        <TextBlock Text="{Binding GoogleDriveRootFolderMessage}"
-                                                   Foreground="{DynamicResource SecondaryTextBrush}"
-                                                   FontSize="12"
-                                                   TextWrapping="Wrap" />
-                                </StackPanel>
+                                <TextBlock Text="{Binding GoogleDriveRootFolderMessage}"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                           FontSize="12"
+                                           TextWrapping="Wrap" />
 
                                 <TextBlock Text="Backups sync into this folder in your My Drive. Uploads only create files, downloads never overwrite local files, and nothing is ever deleted remotely."
                                            Foreground="{DynamicResource SecondaryTextBrush}"
                                            FontSize="12"
                                            TextWrapping="Wrap" />
                             </StackPanel>
-                        </StackPanel>
 
-                        <StackPanel Orientation="Horizontal"
-                                    Spacing="10"
-                                    IsVisible="{Binding CanLogout}">
-                            <TextBlock Text="Stored authentication available"
-                                       IsVisible="{Binding HasStoredAuthentication}"
-                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                            <StackPanel Orientation="Horizontal"
+                                        Spacing="10"
+                                        IsVisible="{Binding CanLogout}">
+                                <TextBlock Text="Stored authentication available"
+                                           IsVisible="{Binding HasStoredAuthentication}"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                           FontSize="12"
+                                           VerticalAlignment="Center" />
+                                <Button Content="Disconnect"
+                                        Command="{Binding DisconnectAuthenticationCommand}"
+                                        IsEnabled="{Binding HasStoredAuthentication}"
+                                        Height="28"
+                                        FontSize="12"
+                                        ToolTip.Tip="Removes encrypted authentication only. The saved profile and backup data are kept." />
+                            </StackPanel>
+
+                            <WrapPanel ItemSpacing="10" LineSpacing="6" Margin="0,4,0,0">
+                                <Button Content="Check connection"
+                                        Command="{Binding CheckSyncStatusCommand}"
+                                        IsVisible="{Binding CanCheckConnection}"
+                                        Height="28"
+                                        FontSize="12"
+                                        ToolTip.Tip="Connects to the sync target and reports whether the backup runs are in sync — without copying anything. Preview Sync (Dry Run) performs the same check automatically." />
+
+                                <TextBlock Text="{Binding ConnectionCheckMessage}"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                           FontSize="12"
+                                           VerticalAlignment="Center"
+                                           TextWrapping="Wrap" />
+                            </WrapPanel>
+
+                            <TextBlock Text="Sync copies whole backup runs both ways. A run missing on one side is copied there — nothing is ever deleted or overwritten. Runs that differ on both sides are reported as conflicts and never copied automatically."
+                                       Foreground="{DynamicResource MutedTextBrush}"
                                        FontSize="12"
-                                       VerticalAlignment="Center" />
-                            <Button Content="Disconnect"
-                                    Command="{Binding DisconnectAuthenticationCommand}"
-                                    IsEnabled="{Binding HasStoredAuthentication}"
-                                    Height="28"
-                                    FontSize="12"
-                                    ToolTip.Tip="Removes encrypted authentication only. The saved profile and backup data are kept." />
+                                       TextWrapping="Wrap"
+                                       MaxWidth="560"
+                                       HorizontalAlignment="Left" />
                         </StackPanel>
 
-                        <Button Content="Check connection"
-                                Command="{Binding CheckSyncStatusCommand}"
-                                IsVisible="{Binding CanCheckConnection}"
-                                Height="28"
-                                FontSize="12"
-                                Margin="0,4,0,0"
-                                ToolTip.Tip="Connects to the sync target and reports whether the backup runs are in sync - without copying anything. Preview Sync (Dry Run) performs the same check automatically." />
+                        <Border Height="1" Background="{DynamicResource SubtleBorderBrush}" />
 
-                        <TextBlock Text="{Binding ConnectionCheckMessage}"
-                                   Foreground="{DynamicResource SecondaryTextBrush}"
-                                   FontSize="12"
-                                   TextWrapping="Wrap" />
-
-                        <TextBlock Text="Sync copies whole backup runs both ways. A run missing on one side is copied there — nothing is ever deleted or overwritten. Runs that differ on both sides are reported as conflicts and never copied automatically."
-                                   Foreground="{DynamicResource MutedTextBrush}"
-                                   FontSize="12"
-                                   TextWrapping="Wrap"
-                   MaxWidth="560"
-                   HorizontalAlignment="Left" />
+                        <WrapPanel ItemSpacing="10" LineSpacing="6">
+                            <Border Background="{DynamicResource InsetBackgroundBrush}"
+                                    CornerRadius="8"
+                                    Padding="10,6"
+                                    VerticalAlignment="Center">
+                                <CheckBox Content="I understand this will copy backup runs"
+                                          IsChecked="{Binding ConfirmSync}"
+                                          FontSize="12" />
+                            </Border>
+                            <Button Content="Sync now"
+                                    Command="{Binding ExecuteSyncCommand}"
+                                    IsEnabled="{Binding CanExecuteSync}"
+                                    Height="34"
+                                    VerticalAlignment="Center" />
+                        </WrapPanel>
                     </StackPanel>
-                </StackPanel>
-
-                    <Border Height="1" Background="{DynamicResource SubtleBorderBrush}" />
-
-                    <WrapPanel ItemSpacing="10" LineSpacing="6">
-                        <Border Background="{DynamicResource InsetBackgroundBrush}"
-                                CornerRadius="8"
-                                Padding="10,6"
-                                VerticalAlignment="Center">
-                            <CheckBox Content="I understand this will copy backup runs"
-                                      IsChecked="{Binding ConfirmSync}"
-                                      FontSize="12" />
-                        </Border>
-                        <Button Content="Sync now"
-                                Command="{Binding ExecuteSyncCommand}"
-                                IsEnabled="{Binding CanExecuteSync}"
-                                Height="34"
-                                VerticalAlignment="Center" />
-                    </WrapPanel>
-                  </StackPanel>
                 </Border>
 
                 <!-- Sync plan -->
