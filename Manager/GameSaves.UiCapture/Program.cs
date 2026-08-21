@@ -5,9 +5,11 @@ using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using GameSaves.App;
+using GameSaves.App.Models;
 using GameSaves.App.Services;
 using GameSaves.App.ViewModels;
 using GameSaves.Core.Platform;
+using GameSaves.Core.Save;
 using GameSaves.Core.Steam;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -123,9 +125,11 @@ namespace GameSaves.UiCapture
                     new UiSettingsStore("ui-settings.json"));
             });
 
+            MainWindowViewModel viewModel =
+                provider.GetRequiredService<MainWindowViewModel>();
             var window = new GameSaves.App.Views.MainWindow
             {
-                DataContext = provider.GetRequiredService<MainWindowViewModel>(),
+                DataContext = viewModel,
             };
             // Subpixel (LCD) text antialiasing writes coloured fringes into
             // the PNGs, which review agents then report as words changing
@@ -181,7 +185,93 @@ namespace GameSaves.UiCapture
                 }
             }
 
+            PopulateInstalledGames(viewModel.InstalledGames);
+            tabs.SelectedIndex = 1;
+
+            foreach (ThemeVariant theme in new[]
+                { ThemeVariant.Light, ThemeVariant.Dark })
+            {
+                window.RequestedThemeVariant = theme;
+                string themeSlug = theme == ThemeVariant.Dark ? "dark" : "light";
+
+                foreach ((string sizeSlug, int width, int height) in Sizes)
+                {
+                    window.Width = width;
+                    window.Height = height;
+                    Dispatcher.UIThread.RunJobs();
+
+                    string fileName =
+                        $"01-installed-games_{themeSlug}_{sizeSlug}_populated.png";
+                    using var frame = window.CaptureRenderedFrame();
+                    if (frame is null)
+                    {
+                        throw new InvalidOperationException(
+                            "Headless rendering produced no populated frame.");
+                    }
+
+                    frame.Save(
+                        Path.Combine(outputDirectory, fileName),
+                        new Avalonia.Media.Imaging.PngBitmapEncoderOptions());
+                    written++;
+                }
+            }
+
             return written;
+        }
+
+        private static void PopulateInstalledGames(InstalledGamesViewModel viewModel)
+        {
+            viewModel.Games.Clear();
+            viewModel.Games.Add(Game(
+                "107410", "Arma 3", "SteamLibrary/steamapps/common/Arma 3",
+                "SteamLibrary", 3, 0, 0, true, 42, 157286400, "Ready"));
+            viewModel.Games.Add(Game(
+                "220", "Half-Life 2", "SteamLibrary/steamapps/common/Half-Life 2",
+                "SteamLibrary", 1, 1, 0, true, 8, 4194304, "Review pending"));
+            viewModel.Games.Add(Game(
+                "999001", "A Long Game Title Used To Prove Column Alignment",
+                "ArchiveLibrary/steamapps/common/A Long Game Title",
+                "ArchiveLibrary", 0, 2, 1, false, 0, 0, "Needs attention"));
+            viewModel.Games.Add(Game(
+                "730", "Counter-Strike 2", "FastLibrary/steamapps/common/Counter-Strike 2",
+                "FastLibrary", 2, 0, 0, true, 16, 67108864, "Ready"));
+            viewModel.SelectedGame = viewModel.Games[0];
+            viewModel.StatusMessage = "4 installed games found.";
+        }
+
+        private static InstalledGameRowViewModel Game(
+            string appId,
+            string name,
+            string gamePath,
+            string libraryPath,
+            int approved,
+            int pending,
+            int needsFix,
+            bool savePathExists,
+            int fileCount,
+            long totalBytes,
+            string status)
+        {
+            return new InstalledGameRowViewModel(new InstalledGameSaveStatus(
+                new SteamGame(
+                    appId,
+                    name,
+                    name,
+                    libraryPath,
+                    $"manifests/{appId}.acf",
+                    gamePath,
+                    FolderExists: true,
+                    SteamDiscoveryConfidence.High),
+                needsFix > 0 ? GameSaveStatusKind.NeedsFixOnly : GameSaveStatusKind.Ready,
+                status,
+                approved,
+                pending,
+                needsFix,
+                savePathExists,
+                fileCount,
+                totalBytes,
+                Array.Empty<SavePathVerificationResult>(),
+                Error: null));
         }
 
         private sealed class FixedDatabasePathProvider : IAppDatabasePathProvider

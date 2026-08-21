@@ -1,27 +1,102 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 
 namespace GameSaves.App.Services
 {
     /// <summary>
-    /// Non-secret appearance settings remembered between sessions. Follows
+    /// Non-secret UI settings remembered between sessions. Follows
     /// the same forgiving-load pattern as <see cref="SyncSettingsStore"/>:
     /// a missing or malformed file yields defaults rather than an error.
     /// </summary>
     public sealed record AppUiSettings(
         int SchemaVersion,
-        string ThemeChoice)
+        string ThemeChoice,
+        IReadOnlyList<string> InstalledGameColumnOrder,
+        IReadOnlyList<string> HiddenInstalledGameColumns)
     {
-        public const int CurrentSchemaVersion = 1;
+        public const int CurrentSchemaVersion = 2;
 
         public const string ThemeSystem = "system";
         public const string ThemeLight = "light";
         public const string ThemeDark = "dark";
 
+        public const string GameColumn = "game";
+        public const string AppIdColumn = "appId";
+        public const string InstallPathColumn = "installPath";
+        public const string LibraryColumn = "library";
+        public const string ApprovedColumn = "approved";
+        public const string PendingColumn = "pending";
+        public const string NeedsFixColumn = "needsFix";
+        public const string ExistsColumn = "exists";
+        public const string FilesColumn = "files";
+        public const string StatusColumn = "status";
+
+        public static IReadOnlyList<string> DefaultInstalledGameColumnOrder { get; } =
+            new[]
+            {
+                GameColumn,
+                AppIdColumn,
+                InstallPathColumn,
+                LibraryColumn,
+                ApprovedColumn,
+                PendingColumn,
+                NeedsFixColumn,
+                ExistsColumn,
+                FilesColumn,
+                StatusColumn,
+            };
+
         public static AppUiSettings Default { get; } = new(
             SchemaVersion: CurrentSchemaVersion,
-            ThemeChoice: ThemeSystem);
+            ThemeChoice: ThemeSystem,
+            InstalledGameColumnOrder: DefaultInstalledGameColumnOrder,
+            HiddenInstalledGameColumns: Array.Empty<string>());
+
+        public static IReadOnlyList<string> NormalizeInstalledGameColumnOrder(
+            IEnumerable<string> columnKeys)
+        {
+            var normalized = NormalizeInstalledGameColumns(columnKeys);
+
+            foreach (string key in DefaultInstalledGameColumnOrder)
+            {
+                if (!normalized.Contains(key))
+                    normalized.Add(key);
+            }
+
+            return normalized;
+        }
+
+        public static IReadOnlyList<string> NormalizeHiddenInstalledGameColumns(
+            IEnumerable<string> columnKeys) =>
+            NormalizeInstalledGameColumns(columnKeys);
+
+        private static List<string> NormalizeInstalledGameColumns(
+            IEnumerable<string> columnKeys)
+        {
+            var normalized = new List<string>();
+
+            foreach (string key in columnKeys)
+            {
+                if (IsInstalledGameColumn(key) && !normalized.Contains(key))
+                    normalized.Add(key);
+            }
+
+            return normalized;
+        }
+
+        private static bool IsInstalledGameColumn(string key) => key is
+            GameColumn or
+            AppIdColumn or
+            InstallPathColumn or
+            LibraryColumn or
+            ApprovedColumn or
+            PendingColumn or
+            NeedsFixColumn or
+            ExistsColumn or
+            FilesColumn or
+            StatusColumn;
     }
 
     public interface IUiSettingsStore
@@ -77,7 +152,20 @@ namespace GameSaves.App.Services
                     }
                 }
 
-                return AppUiSettings.Default with { ThemeChoice = theme };
+                IReadOnlyList<string> order = ReadInstalledGameColumns(
+                    document.RootElement,
+                    nameof(AppUiSettings.InstalledGameColumnOrder),
+                    appendMissing: true);
+                IReadOnlyList<string> hidden = ReadInstalledGameColumns(
+                    document.RootElement,
+                    nameof(AppUiSettings.HiddenInstalledGameColumns),
+                    appendMissing: false);
+
+                return new AppUiSettings(
+                    SchemaVersion: AppUiSettings.CurrentSchemaVersion,
+                    ThemeChoice: theme,
+                    InstalledGameColumnOrder: order,
+                    HiddenInstalledGameColumns: hidden);
             }
             catch (Exception exception) when (
                 exception is IOException or JsonException or UnauthorizedAccessException)
@@ -98,6 +186,28 @@ namespace GameSaves.App.Services
                 JsonSerializer.Serialize(
                     settings,
                     new JsonSerializerOptions { WriteIndented = true }));
+        }
+
+        private static IReadOnlyList<string> ReadInstalledGameColumns(
+            JsonElement root,
+            string propertyName,
+            bool appendMissing)
+        {
+            var values = new List<string>();
+
+            if (root.TryGetProperty(propertyName, out JsonElement property) &&
+                property.ValueKind == JsonValueKind.Array)
+            {
+                foreach (JsonElement item in property.EnumerateArray())
+                {
+                    if (item.ValueKind == JsonValueKind.String && item.GetString() is string value)
+                        values.Add(value);
+                }
+            }
+
+            return appendMissing
+                ? AppUiSettings.NormalizeInstalledGameColumnOrder(values)
+                : AppUiSettings.NormalizeHiddenInstalledGameColumns(values);
         }
 
         private static string GetDefaultFilePath()

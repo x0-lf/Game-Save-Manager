@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:GameSaves.App.ViewModels"
+        xmlns:models="using:GameSaves.App.Models"
         xmlns:views="using:GameSaves.App.Views"
         x:Class="GameSaves.App.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
@@ -118,7 +119,9 @@
                                Foreground="{DynamicResource SecondaryTextBrush}" />
 					<Button.Flyout>
 						<Flyout Placement="BottomEdgeAlignedRight">
-							<StackPanel Spacing="10" Width="240" Margin="4">
+							<ScrollViewer MaxHeight="500"
+                                              VerticalScrollBarVisibility="Auto">
+								<StackPanel Spacing="10" Width="240" Margin="4">
 								<TextBlock Text="Appearance"
                                            Foreground="{DynamicResource PrimaryTextBrush}"
                                            FontSize="13"
@@ -139,6 +142,26 @@
                                                  IsCheckedChanged="OnThemeChoiceChanged" />
 								</StackPanel>
 								<Border Height="1" Background="{DynamicResource SubtleBorderBrush}" />
+								<StackPanel Spacing="4">
+									<TextBlock Text="Installed games columns"
+                                           Foreground="{DynamicResource PrimaryTextBrush}"
+                                           FontSize="13"
+                                           FontWeight="SemiBold" />
+									<TextBlock Text="Drag table headers to reorder them."
+                                           Foreground="{DynamicResource MutedTextBrush}"
+                                           FontSize="12"
+                                           TextWrapping="Wrap" />
+									<ItemsControl ItemsSource="{Binding InstalledGames.ColumnOptions}">
+										<ItemsControl.ItemTemplate>
+											<DataTemplate x:DataType="models:InstalledGameColumnOption">
+												<CheckBox Content="{Binding Header}"
+                                                          IsChecked="{Binding IsVisible, Mode=TwoWay}"
+                                                          AutomationProperties.Name="{Binding Header, StringFormat='Show {0} column'}" />
+											</DataTemplate>
+										</ItemsControl.ItemTemplate>
+									</ItemsControl>
+								</StackPanel>
+								<Border Height="1" Background="{DynamicResource SubtleBorderBrush}" />
 								<StackPanel Spacing="2">
 									<TextBlock Text="About"
                                            Foreground="{DynamicResource PrimaryTextBrush}"
@@ -152,7 +175,8 @@
                                            FontSize="12"
                                            TextWrapping="Wrap" />
 								</StackPanel>
-							</StackPanel>
+								</StackPanel>
+							</ScrollViewer>
 						</Flyout>
 					</Button.Flyout>
 				</Button>
