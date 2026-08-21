@@ -81,8 +81,7 @@ namespace GameSaves.UiCapture
                     .GetAwaiter()
                     .GetResult();
 
-                Console.WriteLine(
-                    $"Wrote {written} captures to {Path.GetFullPath(outputDirectory)}");
+                Console.WriteLine($"Wrote {written} captures.");
                 return 0;
             }
             finally

@@ -2,8 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <!-- Button hierarchy. Default Fluent buttons are the secondary tier;
-         "primary" marks the one safe headline action per surface (in this
-         application that is always a preview or scan, never an execution);
+         "primary" marks the one safe, non-destructive headline action per surface;
          "danger" marks destructive actions with an outline treatment so it
          warns without shouting. All colours come from the token dictionary,
          so both themes and any future accent theme get these for free. -->

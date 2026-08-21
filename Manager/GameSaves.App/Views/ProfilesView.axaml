@@ -13,7 +13,7 @@
           MaxWidth="1100">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="180" MinHeight="120" MaxHeight="420" />
+            <RowDefinition Height="150" MinHeight="120" MaxHeight="420" />
             <RowDefinition Height="8" />
             <RowDefinition Height="*" MinHeight="160" />
         </Grid.RowDefinitions>
@@ -37,6 +37,11 @@
                     <TextBlock Text="Source and target profiles for save transfers."
                                Foreground="{DynamicResource SecondaryTextBrush}"
                                FontSize="12" />
+
+                    <TextBlock Text="{Binding StatusMessage}"
+                               Foreground="{DynamicResource MutedTextBrush}"
+                               FontSize="12"
+                               TextWrapping="Wrap" />
                 </StackPanel>
 
                 <Button Grid.Column="1"

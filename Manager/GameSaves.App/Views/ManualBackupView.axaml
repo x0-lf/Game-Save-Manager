@@ -33,6 +33,11 @@
                                Foreground="{DynamicResource SecondaryTextBrush}"
                                FontSize="12"
                                TextWrapping="Wrap" />
+
+                    <TextBlock Text="{Binding StatusMessage}"
+                               Foreground="{DynamicResource MutedTextBrush}"
+                               FontSize="12"
+                               TextWrapping="Wrap" />
                 </StackPanel>
 
                 <Button Grid.Column="1"
@@ -85,15 +90,14 @@
                 BorderBrush="{DynamicResource CardBorderBrush}"
                 BorderThickness="1"
                 CornerRadius="14"
-                Padding="14,10">
+                Padding="14,8">
 
             <Grid ColumnDefinitions="*,*"
-                  RowDefinitions="Auto,Auto"
-                  ColumnSpacing="14"
-                  RowSpacing="12">
+                  ColumnSpacing="14">
 
-                <StackPanel Grid.Row="0" Grid.Column="0"
-                            Spacing="4">
+                <StackPanel Grid.Column="0"
+                            Spacing="10">
+                  <StackPanel Spacing="3">
                     <TextBlock Text="Profile"
                                Foreground="{DynamicResource SecondaryTextBrush}"
                                FontSize="12"
@@ -103,7 +107,7 @@
                         <ComboBox ItemsSource="{Binding Profiles}"
                               SelectedItem="{Binding SelectedProfile}"
                               HorizontalAlignment="Stretch"
-                              MinHeight="32" />
+                              MinHeight="30" />
                         <TextBlock Text="Select a profile"
                                    Foreground="{DynamicResource MutedTextBrush}"
                                    FontSize="13"
@@ -117,13 +121,13 @@
                                Foreground="{DynamicResource SecondaryTextBrush}"
                                FontSize="12"
                                FontWeight="SemiBold"
-                               Margin="0,4,0,0" />
+                               Margin="0,2,0,0" />
 
                     <Panel>
                         <ComboBox ItemsSource="{Binding Games}"
                               SelectedItem="{Binding SelectedGame}"
                               HorizontalAlignment="Stretch"
-                              MinHeight="32" />
+                              MinHeight="30" />
                         <TextBlock Text="Select a game"
                                    Foreground="{DynamicResource MutedTextBrush}"
                                    FontSize="13"
@@ -132,48 +136,9 @@
                                    IsHitTestVisible="False"
                                    IsVisible="{Binding SelectedGame, Converter={x:Static ObjectConverters.IsNull}}" />
                     </Panel>
-                </StackPanel>
+                  </StackPanel>
 
-                <StackPanel Grid.Row="0" Grid.Column="1"
-                            Spacing="4">
-                    <TextBlock Text="Backup destination"
-                               Foreground="{DynamicResource SecondaryTextBrush}"
-                               FontSize="12"
-                               FontWeight="SemiBold" />
-
-                    <StackPanel Spacing="6">
-
-                        <TextBox Text="{Binding DestinationPath}"
-                                 PlaceholderText="Select where this backup should be stored."
-                                 ToolTip.Tip="{Binding DestinationPath}"
-                                 MinHeight="32" />
-
-                      <WrapPanel ItemSpacing="6" LineSpacing="6">
-                        <Button Content="Choose folder…"
-                                Command="{Binding ChooseDestinationFolderCommand}"
-                                ToolTip.Tip="Select where this backup should be stored."
-                                Height="32"
-                                VerticalAlignment="Top" />
-
-                        <Button Content="Reset to default"
-                                Command="{Binding UseDefaultDestinationCommand}"
-                                FontSize="12"
-                                Height="32" />
-                      </WrapPanel>
-                    </StackPanel>
-
-
-
-                    <TextBlock Text="Each backup creates a new timestamped folder here. You can pick a folder or edit the path directly. Backups in the default location appear in the Backups tab and can be restored from there."
-                               MaxWidth="560"
-                               HorizontalAlignment="Left"
-                               Foreground="{DynamicResource MutedTextBrush}"
-                               FontSize="12"
-                               TextWrapping="Wrap" />
-                </StackPanel>
-
-                <StackPanel Grid.Row="1" Grid.Column="0"
-                            Spacing="4">
+                  <StackPanel Spacing="3">
                     <TextBlock Text="Backup source"
                                Foreground="{DynamicResource SecondaryTextBrush}"
                                FontSize="12"
@@ -194,22 +159,56 @@
                                Foreground="{DynamicResource WarningBrush}"
                                FontSize="12"
                                TextWrapping="Wrap" />
+                  </StackPanel>
                 </StackPanel>
 
-                <StackPanel Grid.Row="1" Grid.Column="1"
-                            Spacing="4">
+                <StackPanel Grid.Column="1"
+                            Spacing="8">
+                  <StackPanel Spacing="3">
+                    <TextBlock Text="Backup destination"
+                               Foreground="{DynamicResource SecondaryTextBrush}"
+                               FontSize="12"
+                               FontWeight="SemiBold" />
+
+                    <TextBox Text="{Binding DestinationPath}"
+                             PlaceholderText="Select where this backup should be stored."
+                             ToolTip.Tip="{Binding DestinationPath}"
+                             MinHeight="30" />
+
+                      <WrapPanel ItemSpacing="6" LineSpacing="4">
+                        <Button Content="Choose folder…"
+                                Command="{Binding ChooseDestinationFolderCommand}"
+                                ToolTip.Tip="Select where this backup should be stored."
+                                FontSize="12"
+                                Height="30" />
+
+                        <Button Content="Reset to default"
+                                Command="{Binding UseDefaultDestinationCommand}"
+                                FontSize="12"
+                                Height="30" />
+                      </WrapPanel>
+
+                    <TextBlock Text="Each run creates a timestamped folder here. Backups in the default location also appear in Backups."
+                               MaxWidth="560"
+                               HorizontalAlignment="Left"
+                               Foreground="{DynamicResource MutedTextBrush}"
+                               FontSize="12"
+                               TextWrapping="Wrap" />
+                  </StackPanel>
+
+                  <StackPanel Spacing="3">
                     <TextBlock Text="Backup preset"
                                Foreground="{DynamicResource SecondaryTextBrush}"
                                FontSize="12"
                                FontWeight="SemiBold" />
 
                     <Panel>
-                    <ComboBox ItemsSource="{Binding Presets}"
+                        <ComboBox ItemsSource="{Binding Presets}"
                               SelectedItem="{Binding SelectedPreset}"
                               HorizontalAlignment="Stretch"
-                              MinHeight="32"
+                              MinHeight="30"
                               ToolTip.Tip="Applying a preset fills the destination and backup sources. Presets never start a backup by themselves." />
-                    <TextBlock Text="Apply a saved preset…"
+                        <TextBlock Text="Apply a saved preset…"
                                Foreground="{DynamicResource MutedTextBrush}"
                                FontSize="13"
                                Margin="12,0,32,0"
@@ -220,7 +219,7 @@
 
                     <Panel>
                         <TextBox Text="{Binding PresetName}"
-                                 MinHeight="32" />
+                                 MinHeight="30" />
                         <TextBlock Text="Preset name"
                                    Foreground="{DynamicResource MutedTextBrush}"
                                    FontSize="13"
@@ -230,27 +229,27 @@
                                    IsVisible="{Binding !PresetName.Length}" />
                     </Panel>
 
-                    <WrapPanel ItemSpacing="6" LineSpacing="6">
+                    <WrapPanel ItemSpacing="6" LineSpacing="4">
                         <Button Content="Save preset"
                                 IsEnabled="{Binding !!PresetName.Length}"
                                 Command="{Binding SavePresetCommand}"
                                 FontSize="12"
-                                Height="32"
+                                Height="30"
                                 ToolTip.Tip="Saves the current destination and backup sources under this name. Saving an existing name updates that preset." />
 
                         <Button Content="Delete preset"
-                            Classes="danger"
+                                Classes="danger"
                                 IsEnabled="{Binding SelectedPreset, Converter={x:Static ObjectConverters.IsNotNull}}"
                                 Command="{Binding DeletePresetCommand}"
                                 FontSize="12"
-                                Height="32"
+                                Height="30"
                                 ToolTip.Tip="Deletes the selected preset. Backups already created are not affected." />
 
                         <Button Content="Clear preset"
                                 IsEnabled="{Binding SelectedPreset, Converter={x:Static ObjectConverters.IsNotNull}}"
                                 Command="{Binding ClearPresetSelectionCommand}"
                                 FontSize="12"
-                                Height="32"
+                                Height="30"
                                 ToolTip.Tip="Clears the preset selection. The current settings are kept and the backup runs without a preset." />
                     </WrapPanel>
 
@@ -258,6 +257,7 @@
                                Foreground="{DynamicResource MutedTextBrush}"
                                FontSize="12"
                                TextWrapping="Wrap" />
+                  </StackPanel>
                 </StackPanel>
             </Grid>
         </Border>
@@ -293,14 +293,6 @@
                             <TextBlock Grid.Row="1" Text="Total size" Foreground="{DynamicResource MutedTextBrush}" FontSize="12" />
                             <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding TotalSizeDisplay, StringFormat='{}{0}'}" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="12" FontWeight="SemiBold" />
                         </Grid>
-                        <TextBlock IsVisible="False" Text="{Binding TotalFiles, StringFormat='Files to back up: {0}'}"
-                                   FontSize="12"
-                                   Foreground="{DynamicResource SecondaryTextBrush}" />
-
-                        <TextBlock IsVisible="False" Text="{Binding TotalSizeDisplay, StringFormat='Total size: {0}'}"
-                                   FontSize="12"
-                                   Foreground="{DynamicResource SecondaryTextBrush}" />
-
                         <TextBlock Text="Backup only. Source files are never deleted or modified. Every run is a new timestamped folder with a SHA-256 manifest — nothing existing is overwritten."
                                    Foreground="{DynamicResource SecondaryTextBrush}"
                                    FontSize="12"

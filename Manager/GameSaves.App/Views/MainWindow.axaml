@@ -185,14 +185,12 @@
 							<Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
 								<StackPanel Grid.Column="0" Spacing="2">
 									<TextBlock Text="Dashboard" Classes="h1" />
-									<TextBlock Text="Your Steam library and save mappings at a glance."
-                                               Foreground="{DynamicResource SecondaryTextBrush}"
+									<TextBlock Foreground="{DynamicResource SecondaryTextBrush}"
                                                FontSize="12"
-                                               IsVisible="{Binding !IsLoading}" />
-								<TextBlock Text="{Binding StatusMessage}"
-                                               Foreground="{DynamicResource SecondaryTextBrush}"
-                                               FontSize="12"
-                                               IsVisible="{Binding IsLoading}" />
+                                               TextWrapping="Wrap">
+                                        <Run Text="Your Steam library and save mappings at a glance. " />
+                                        <Run Text="{Binding StatusMessage}" />
+                                    </TextBlock>
 								</StackPanel>
 								<Button Grid.Column="1"
                                         Content="Scan Steam library"
@@ -244,7 +242,7 @@
 							<StackPanel Spacing="14">
 								<TextBlock MaxWidth="640" HorizontalAlignment="Left" Text="Get set up"
                                            Foreground="{DynamicResource PrimaryTextBrush}"
-                                           FontSize="16"
+                                           FontSize="{DynamicResource FontSizeBodyLarge}"
                                            FontWeight="SemiBold" />
 								<StackPanel Spacing="10" MaxWidth="640" HorizontalAlignment="Left">
 									<Grid ColumnDefinitions="Auto,*" ColumnSpacing="10" MinHeight="32">

@@ -104,7 +104,8 @@
 
         <!-- Collapsible sections; the whole area scrolls as one -->
         <ScrollViewer Grid.Row="1">
-            <StackPanel Spacing="10">
+            <StackPanel Spacing="10"
+                        Margin="0,0,0,14">
 
                 <!-- Remote profile card -->
                 <Border Background="{DynamicResource CardBackgroundBrush}"
@@ -163,6 +164,7 @@
                                         Command="{Binding NewRemoteProfileCommand}"
                                         Height="30" />
                                 <Button Content="Save"
+                                        Classes="primary"
                                         Command="{Binding SaveRemoteProfileCommand}"
                                         Height="30" />
                                 <Button Height="30"
@@ -245,6 +247,13 @@
                                         </DataTemplate>
                                     </ComboBox.ItemTemplate>
                                 </ComboBox>
+
+                                <TextBlock Text="{Binding ProviderCapabilitySummary}"
+                                           Foreground="{DynamicResource MutedTextBrush}"
+                                           FontSize="12"
+                                           TextWrapping="Wrap"
+                                           MaxWidth="560"
+                                           HorizontalAlignment="Left" />
                             </StackPanel>
 
                             <!-- Sync behaviour / Direction group below provider -->
