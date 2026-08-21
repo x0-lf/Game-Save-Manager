@@ -22,6 +22,7 @@
   <ItemGroup>
     <ProjectReference Include="..\GameSaves.App\GameSaves.App.csproj" />
     <ProjectReference Include="..\GameSaves.Core\GameSaves.Core.csproj" />
+    <ProjectReference Include="..\GameSaves\GameSaves.csproj" />
     <ProjectReference Include="..\GameSaves.Infrastructure\GameSaves.Infrastructure.csproj" />
   </ItemGroup>
 

@@ -14,7 +14,7 @@ namespace GameSaves.External
             RegexOptions.Compiled);
 
         private static readonly Regex PathCandidateRegex = new(
-            @"(?i)(%APPDATA%|%LOCALAPPDATA%|%USERPROFILE%|%PROGRAMDATA%|%DOCUMENTS%|\{UserProfile\}|\{AppData\}|\{LocalAppData\}|\{ProgramData\}|\{Documents\}|\{SavedGames\}|\{SteamRoot\}|\{SteamUserData\}|\{GameInstallPath\}|\{LibraryRoot\}|\$HOME|\$XDG_CONFIG_HOME|~/|[A-Z]:\\)[^|\r\n<>\]]*",
+            @"(?i)(%APPDATA%|%LOCALAPPDATA%|%USERPROFILE%|%PROGRAMDATA%|%DOCUMENTS%|\{UserProfile\}|\{AppData\}|\{LocalAppData\}|\{ProgramData\}|\{Documents\}|\{SavedGames\}|\{SteamRoot\}|\{SteamUserData\}|\{GameInstallPath\}|\{LibraryRoot\}|\$HOME|\$XDG_CONFIG_HOME|\$XDG_DATA_HOME|~/|[A-Z]:\\)[^|\r\n<>\]]*",
             RegexOptions.Compiled);
 
         public List<SavePathImportItem> ExtractCandidates(
@@ -114,7 +114,10 @@ namespace GameSaves.External
             result = ReplacePathTemplate(result, "path-to-game", "{GameInstallPath}");
             result = ReplacePathTemplate(result, "linuxhome", "$HOME");
             result = ReplacePathTemplate(result, "xdgconfig", "$XDG_CONFIG_HOME");
+            result = ReplacePathTemplate(result, "xdgconfighome", "$XDG_CONFIG_HOME");
+            result = ReplacePathTemplate(result, "xdgdatahome", "$XDG_DATA_HOME");
             result = ReplacePathTemplate(result, "macoshome", "$HOME");
+            result = ReplacePathTemplate(result, "osxhome", "$HOME");
             result = ReplacePathTemplate(result, "macosappsupport", "$HOME/Library/Application Support");
 
             result = result.Replace("<path-to-game>", "{GameInstallPath}", StringComparison.OrdinalIgnoreCase);
@@ -159,10 +162,18 @@ namespace GameSaves.External
             string pcgwToken,
             string replacement)
         {
+            // The wiki writes both the bare token, {{p|userprofile}}, and a
+            // compound form carrying the rest of the path inside the same
+            // template, {{p|userprofile\Documents\My Games}}. The 2026-08-20
+            // measurement (docs/pcgw-measurement.md) found the compound form
+            // alone on 1,888 cached pages, 82% of all genuine parser
+            // failures. The trailing segment must start with a separator so
+            // that a shorter token never swallows a longer one ("steam" must
+            // not match "steamapps").
             return Regex.Replace(
                 value,
-                @"\{\{\s*p\s*\|\s*" + Regex.Escape(pcgwToken) + @"\s*\}\}",
-                replacement,
+                @"\{\{\s*p\s*\|\s*" + Regex.Escape(pcgwToken) + @"\s*([\\/][^}|]*)?\}\}",
+                replacement + "$1",
                 RegexOptions.IgnoreCase);
         }
 

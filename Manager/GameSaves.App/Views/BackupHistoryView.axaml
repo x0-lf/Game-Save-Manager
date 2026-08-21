@@ -2,30 +2,21 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:GameSaves.App.ViewModels"
              xmlns:models="using:GameSaves.App.Models"
+             xmlns:views="using:GameSaves.App.Views"
              x:Class="GameSaves.App.Views.BackupHistoryView"
              x:DataType="vm:BackupHistoryViewModel"
-             Background="#111217">
+             Background="{DynamicResource PageBackgroundBrush}">
 
-    <UserControl.Resources>
-        <SolidColorBrush x:Key="CardBackgroundBrush" Color="#1A1B22" />
-        <SolidColorBrush x:Key="CardBorderBrush" Color="#2A2C36" />
-        <SolidColorBrush x:Key="PrimaryTextBrush" Color="#F4F4F5" />
-        <SolidColorBrush x:Key="SecondaryTextBrush" Color="#A7AAB4" />
-        <SolidColorBrush x:Key="MutedTextBrush" Color="#777B86" />
-        <SolidColorBrush x:Key="AccentBrush" Color="#7C9CFF" />
-        <SolidColorBrush x:Key="SuccessBrush" Color="#6EE7A8" />
-        <SolidColorBrush x:Key="WarningBrush" Color="#FACC6B" />
-        <SolidColorBrush x:Key="SplitterBrush" Color="#2A2C36" />
-    </UserControl.Resources>
 
     <Grid RowDefinitions="Auto,*"
           RowSpacing="10"
-          Margin="0,12,0,0">
+          Margin="0,12,0,14"
+          MaxWidth="1100">
 
         <!-- Header -->
         <Border Grid.Row="0"
-                Background="{StaticResource CardBackgroundBrush}"
-                BorderBrush="{StaticResource CardBorderBrush}"
+                Background="{DynamicResource CardBackgroundBrush}"
+                BorderBrush="{DynamicResource CardBorderBrush}"
                 BorderThickness="1"
                 CornerRadius="14"
                 Padding="14,10">
@@ -35,19 +26,16 @@
 
                 <StackPanel Grid.Column="0"
                             Spacing="2">
-                    <TextBlock Text="Backup History &amp; Restore"
-                               Foreground="{StaticResource PrimaryTextBrush}"
-                               FontSize="18"
-                               FontWeight="Bold" />
+                    <TextBlock Text="Backups" Classes="h1" />
 
-                    <TextBlock Text="{Binding StatusMessage}"
-                               Foreground="{StaticResource SecondaryTextBrush}"
+                    <TextBlock Text="Restore points for your save files."
+                               Foreground="{DynamicResource SecondaryTextBrush}"
                                FontSize="12"
                                TextWrapping="Wrap" />
                 </StackPanel>
 
                 <Button Grid.Column="1"
-                        Content="Refresh Backups"
+                        Content="Refresh"
                         Command="{Binding RefreshRunsCommand}"
                         Height="34"
                         VerticalAlignment="Center" />
@@ -55,7 +43,25 @@
         </Border>
 
         <!-- Runs / details (resizable) -->
-        <Grid Grid.Row="1">
+        <Border Grid.Row="1"
+                Background="{DynamicResource CardBackgroundBrush}"
+                BorderBrush="{DynamicResource CardBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="14"
+                IsVisible="{Binding !Runs.Count}">
+            <views:EmptyState Glyph="&#xE8F1;"
+                              Title="No backups yet"
+                              Message="Backups are created automatically before files are overwritten, or on demand from the Manual backup section.">
+                <views:EmptyState.ActionContent>
+                    <Button Content="Create a backup"
+                            Classes="primary"
+                            Click="OnCreateBackupClick" />
+                </views:EmptyState.ActionContent>
+            </views:EmptyState>
+        </Border>
+
+        <Grid Grid.Row="1" x:Name="SplitGrid"
+              IsVisible="{Binding !!Runs.Count}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="340" MinWidth="240" MaxWidth="620" />
                 <ColumnDefinition Width="8" />
@@ -64,8 +70,8 @@
 
             <!-- Runs list -->
             <Border Grid.Column="0"
-                    Background="{StaticResource CardBackgroundBrush}"
-                    BorderBrush="{StaticResource CardBorderBrush}"
+                    Background="{DynamicResource CardBackgroundBrush}"
+                    BorderBrush="{DynamicResource CardBorderBrush}"
                     BorderThickness="1"
                     CornerRadius="14"
                     Padding="0">
@@ -74,11 +80,11 @@
 
                     <Border Grid.Row="0"
                             Padding="12,8"
-                            BorderBrush="{StaticResource CardBorderBrush}"
+                            BorderBrush="{DynamicResource CardBorderBrush}"
                             BorderThickness="0,0,0,1">
 
-                        <TextBlock Text="Backup runs (drag the divider to resize)"
-                                   Foreground="{StaticResource PrimaryTextBrush}"
+                        <TextBlock Text="Backup runs"
+                                   Foreground="{DynamicResource PrimaryTextBrush}"
                                    FontSize="14"
                                    FontWeight="SemiBold" />
                     </Border>
@@ -86,6 +92,7 @@
                     <ListBox Grid.Row="1"
                              ItemsSource="{Binding Runs}"
                              SelectedItem="{Binding SelectedRun}"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto"
                              Background="Transparent">
                         <ListBox.ItemTemplate>
                             <DataTemplate x:DataType="models:BackupRunRowViewModel">
@@ -93,68 +100,83 @@
                                             Margin="4">
 
                                     <TextBlock Text="{Binding GameName}"
-                                               Foreground="{StaticResource PrimaryTextBrush}"
+                                               Foreground="{DynamicResource PrimaryTextBrush}"
                                                FontWeight="SemiBold" />
 
                                     <TextBlock Text="{Binding StartedDisplay}"
-                                               Foreground="{StaticResource SecondaryTextBrush}"
+                                               Foreground="{DynamicResource SecondaryTextBrush}"
                                                FontSize="12" />
 
                                     <StackPanel Orientation="Horizontal"
                                                 Spacing="8">
                                         <TextBlock Text="{Binding KindText}"
-                                                   Foreground="{StaticResource AccentBrush}"
-                                                   FontSize="11" />
+                                                   Foreground="{DynamicResource AccentBrush}"
+                                                   FontSize="12" />
 
                                         <TextBlock Text="{Binding FileCount, StringFormat='{}{0} file(s)'}"
-                                                   Foreground="{StaticResource MutedTextBrush}"
-                                                   FontSize="11" />
+                                                   Foreground="{DynamicResource MutedTextBrush}"
+                                                   FontSize="12" />
 
                                         <TextBlock Text="{Binding TotalSizeDisplay}"
-                                                   Foreground="{StaticResource MutedTextBrush}"
-                                                   FontSize="11" />
+                                                   Foreground="{DynamicResource MutedTextBrush}"
+                                                   FontSize="12" />
                                     </StackPanel>
 
                                     <TextBlock Text="{Binding ProfilesDisplay}"
-                                               Foreground="{StaticResource MutedTextBrush}"
-                                               FontSize="11" />
+                                               Foreground="{DynamicResource MutedTextBrush}"
+                                               FontSize="12" />
                                 </StackPanel>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
+
                 </Grid>
             </Border>
 
             <GridSplitter Grid.Column="1"
                           Width="8"
                           Margin="1,0"
-                          Background="{StaticResource SplitterBrush}"
+                          Background="Transparent"
                           ResizeDirection="Columns" />
 
             <!-- Selected run details -->
-            <ScrollViewer Grid.Column="2">
+            <ScrollViewer Grid.Column="2"
+                          VerticalScrollBarVisibility="Auto">
                 <StackPanel Spacing="10">
 
                     <!-- Restore controls -->
-                    <Border Background="{StaticResource CardBackgroundBrush}"
-                            BorderBrush="{StaticResource CardBorderBrush}"
+                    <Border Background="{DynamicResource CardBackgroundBrush}"
+                            BorderBrush="{DynamicResource CardBorderBrush}"
                             BorderThickness="1"
                             CornerRadius="14"
                             Padding="14,10">
+                      <Panel>
+                        <views:EmptyState Glyph="&#xE777;"
+                                          Title="Nothing selected to restore"
+                                          Message="Select a backup run to configure a restore."
+                                          IsVisible="{Binding SelectedRun, Converter={x:Static ObjectConverters.IsNull}}" />
 
-                        <StackPanel Spacing="6">
+                        <StackPanel Spacing="6"
+                                    IsVisible="{Binding SelectedRun, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                    IsEnabled="{Binding SelectedRun, Converter={x:Static ObjectConverters.IsNotNull}}">
                             <TextBlock Text="Restore"
-                                       Foreground="{StaticResource PrimaryTextBrush}"
+                                       Foreground="{DynamicResource PrimaryTextBrush}"
                                        FontSize="15"
                                        FontWeight="SemiBold" />
 
+                            <TextBlock Text="Select a backup run to enable restore."
+                                       IsVisible="{Binding SelectedRun, Converter={x:Static ObjectConverters.IsNull}}"
+                                       Foreground="{DynamicResource MutedTextBrush}"
+                                       FontSize="12"
+                                       TextWrapping="Wrap" />
+
                             <TextBlock Text="Restore copies backup files to the target you choose below. Nothing is deleted. Files whose current version differs are only replaced when overwrite is enabled, and every replaced file is backed up first."
-                                       Foreground="{StaticResource WarningBrush}"
-                                       FontSize="11"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                       FontSize="12"
                                        TextWrapping="Wrap" />
 
                             <TextBlock Text="Restore target"
-                                       Foreground="{StaticResource SecondaryTextBrush}"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
                                        FontSize="12"
                                        FontWeight="Bold"
                                        Margin="0,4,0,0" />
@@ -174,7 +196,7 @@
                             <StackPanel Spacing="4"
                                         IsVisible="{Binding RestoreToSelectedProfile}">
                                 <TextBlock Text="Target profile"
-                                           Foreground="{StaticResource SecondaryTextBrush}"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
                                            FontSize="12" />
 
                                 <ComboBox ItemsSource="{Binding Profiles}"
@@ -192,7 +214,7 @@
                             <StackPanel Spacing="4"
                                         IsVisible="{Binding RestoreToMappingLocation}">
                                 <TextBlock Text="Mapping"
-                                           Foreground="{StaticResource SecondaryTextBrush}"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
                                            FontSize="12" />
 
                                 <ComboBox ItemsSource="{Binding MappingOptions}"
@@ -202,8 +224,8 @@
                             </StackPanel>
 
                             <TextBlock Text="{Binding ResolvedTargetDisplay}"
-                                       Foreground="{StaticResource AccentBrush}"
-                                       FontSize="11"
+                                       Foreground="{DynamicResource AccentBrush}"
+                                       FontSize="12"
                                        TextWrapping="Wrap" />
 
                             <CheckBox Content="Overwrite current files that differ from the backup"
@@ -214,44 +236,46 @@
 
                             <StackPanel Orientation="Horizontal"
                                         Spacing="10">
-                                <Button Content="Preview Restore (Dry Run)"
+                                <Button Content="Preview restore"
                                         Command="{Binding PreviewRestoreCommand}"
                                         Height="36" />
 
-                                <Button Content="Restore to Target"
+                                <Button Content="Restore to target"
                                         Command="{Binding ExecuteRestoreCommand}"
                                         Height="36" />
                             </StackPanel>
 
                             <TextBlock Text="{Binding RestoreStatusMessage}"
-                                       Foreground="{StaticResource SecondaryTextBrush}"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
                                        TextWrapping="Wrap" />
 
                             <StackPanel Orientation="Horizontal"
-                                        Spacing="16">
+                                        Spacing="16"
+                                        IsVisible="{Binding !!RestoreResults.Count}">
                                 <TextBlock Text="{Binding FilesRestored, StringFormat='Restored: {0} file(s)'}"
-                                           Foreground="{StaticResource SuccessBrush}" />
+                                           Foreground="{DynamicResource SuccessBrush}" />
 
                                 <TextBlock Text="{Binding FilesSkipped, StringFormat='Skipped: {0} file(s)'}"
-                                           Foreground="{StaticResource MutedTextBrush}" />
+                                           Foreground="{DynamicResource MutedTextBrush}" />
 
                                 <TextBlock Text="{Binding BytesRestoredDisplay, StringFormat='Bytes restored: {0}'}"
-                                           Foreground="{StaticResource MutedTextBrush}" />
+                                           Foreground="{DynamicResource MutedTextBrush}" />
 
                                 <TextBlock Text="{Binding FilesBackedUp, StringFormat='Backed up first: {0} file(s)'}"
-                                           Foreground="{StaticResource AccentBrush}" />
+                                           Foreground="{DynamicResource AccentBrush}" />
                             </StackPanel>
 
                             <TextBlock Text="{Binding PreRestoreBackupMessage}"
-                                       Foreground="{StaticResource MutedTextBrush}"
-                                       FontSize="11"
+                                       Foreground="{DynamicResource MutedTextBrush}"
+                                       FontSize="12"
                                        TextWrapping="Wrap" />
                         </StackPanel>
+                      </Panel>
                     </Border>
 
                     <!-- Files in the selected run -->
-                    <Border Background="{StaticResource CardBackgroundBrush}"
-                            BorderBrush="{StaticResource CardBorderBrush}"
+                    <Border Background="{DynamicResource CardBackgroundBrush}"
+                            BorderBrush="{DynamicResource CardBorderBrush}"
                             BorderThickness="1"
                             CornerRadius="14"
                             Padding="0">
@@ -260,46 +284,53 @@
 
                             <Border Grid.Row="0"
                                     Padding="12,8"
-                                    BorderBrush="{StaticResource CardBorderBrush}"
+                                    BorderBrush="{DynamicResource CardBorderBrush}"
                                     BorderThickness="0,0,0,1">
 
                                 <TextBlock Text="Files in this backup run"
-                                           Foreground="{StaticResource PrimaryTextBrush}"
+                                           Foreground="{DynamicResource PrimaryTextBrush}"
                                            FontSize="14"
                                            FontWeight="SemiBold" />
                             </Border>
 
                             <Border Grid.Row="1"
                                     Padding="10,6"
-                                    BorderBrush="{StaticResource CardBorderBrush}"
-                                    BorderThickness="0,0,0,1">
+                                    BorderBrush="{DynamicResource CardBorderBrush}"
+                                    BorderThickness="0,0,0,1"
+                                    IsVisible="{Binding !!RunItems.Count}">
 
                                 <Grid ColumnDefinitions="2*,90,120"
                                       ColumnSpacing="12">
 
                                     <TextBlock Grid.Column="0"
                                                Text="Original location"
-                                               Foreground="{StaticResource SecondaryTextBrush}"
+                                               Foreground="{DynamicResource SecondaryTextBrush}"
                                                FontWeight="Bold" />
 
                                     <TextBlock Grid.Column="1"
                                                Text="Size"
-                                               Foreground="{StaticResource SecondaryTextBrush}"
+                                               Foreground="{DynamicResource SecondaryTextBrush}"
                                                FontWeight="Bold" />
 
                                     <TextBlock Grid.Column="2"
                                                Text="SHA-256"
-                                               Foreground="{StaticResource SecondaryTextBrush}"
+                                               Foreground="{DynamicResource SecondaryTextBrush}"
                                                FontWeight="Bold" />
                                 </Grid>
                             </Border>
+
+                            <views:EmptyState Grid.Row="2"
+                                              Glyph="&#xE7C3;"
+                                              Title="No files to show"
+                                              Message="Select a backup run to see the files it contains."
+                                              IsVisible="{Binding !RunItems.Count}" />
 
                             <ItemsControl Grid.Row="2"
                                           ItemsSource="{Binding RunItems}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="models:BackupItemRowViewModel">
                                         <Border Padding="12"
-                                                BorderBrush="#252733"
+                                                BorderBrush="{DynamicResource SubtleBorderBrush}"
                                                 BorderThickness="0,0,0,1">
 
                                             <Grid ColumnDefinitions="2*,90,120"
@@ -307,17 +338,17 @@
 
                                                 <TextBlock Grid.Column="0"
                                                            Text="{Binding OriginalFile}"
-                                                           Foreground="{StaticResource SecondaryTextBrush}"
+                                                           Foreground="{DynamicResource SecondaryTextBrush}"
                                                            ToolTip.Tip="{Binding BackupFile}"
                                                            TextTrimming="CharacterEllipsis" />
 
                                                 <TextBlock Grid.Column="1"
                                                            Text="{Binding SizeDisplay}"
-                                                           Foreground="{StaticResource MutedTextBrush}" />
+                                                           Foreground="{DynamicResource MutedTextBrush}" />
 
                                                 <TextBlock Grid.Column="2"
                                                            Text="{Binding Sha256Short}"
-                                                           Foreground="{StaticResource MutedTextBrush}"
+                                                           Foreground="{DynamicResource MutedTextBrush}"
                                                            ToolTip.Tip="{Binding Sha256}"
                                                            FontFamily="Consolas,monospace" />
                                             </Grid>
@@ -329,8 +360,8 @@
                     </Border>
 
                     <!-- Restore results -->
-                    <Border Background="{StaticResource CardBackgroundBrush}"
-                            BorderBrush="{StaticResource CardBorderBrush}"
+                    <Border Background="{DynamicResource CardBackgroundBrush}"
+                            BorderBrush="{DynamicResource CardBorderBrush}"
                             BorderThickness="1"
                             CornerRadius="14"
                             Padding="0">
@@ -339,58 +370,65 @@
 
                             <Border Grid.Row="0"
                                     Padding="12,8"
-                                    BorderBrush="{StaticResource CardBorderBrush}"
+                                    BorderBrush="{DynamicResource CardBorderBrush}"
                                     BorderThickness="0,0,0,1">
 
                                 <StackPanel Spacing="2">
                                     <TextBlock Text="Restore results"
-                                               Foreground="{StaticResource PrimaryTextBrush}"
+                                               Foreground="{DynamicResource PrimaryTextBrush}"
                                                FontSize="14"
                                                FontWeight="SemiBold" />
 
                                     <TextBlock Text="Exactly what was restored, skipped, or failed during the last restore or preview."
-                                               Foreground="{StaticResource MutedTextBrush}"
-                                               FontSize="11"
+                                               Foreground="{DynamicResource MutedTextBrush}"
+                                               FontSize="12"
                                                TextWrapping="Wrap" />
                                 </StackPanel>
                             </Border>
 
                             <Border Grid.Row="1"
                                     Padding="10,6"
-                                    BorderBrush="{StaticResource CardBorderBrush}"
-                                    BorderThickness="0,0,0,1">
+                                    BorderBrush="{DynamicResource CardBorderBrush}"
+                                    BorderThickness="0,0,0,1"
+                                    IsVisible="{Binding !!RestoreResults.Count}">
 
                                 <Grid ColumnDefinitions="2*,90,170,*"
                                       ColumnSpacing="12">
 
                                     <TextBlock Grid.Column="0"
                                                Text="Restore to"
-                                               Foreground="{StaticResource SecondaryTextBrush}"
+                                               Foreground="{DynamicResource SecondaryTextBrush}"
                                                FontWeight="Bold" />
 
                                     <TextBlock Grid.Column="1"
                                                Text="Size"
-                                               Foreground="{StaticResource SecondaryTextBrush}"
+                                               Foreground="{DynamicResource SecondaryTextBrush}"
                                                FontWeight="Bold" />
 
                                     <TextBlock Grid.Column="2"
                                                Text="Status"
-                                               Foreground="{StaticResource SecondaryTextBrush}"
+                                               Foreground="{DynamicResource SecondaryTextBrush}"
                                                FontWeight="Bold" />
 
                                     <TextBlock Grid.Column="3"
                                                Text="Details"
-                                               Foreground="{StaticResource SecondaryTextBrush}"
+                                               Foreground="{DynamicResource SecondaryTextBrush}"
                                                FontWeight="Bold" />
                                 </Grid>
                             </Border>
+
+                            <views:EmptyState Grid.Row="2"
+                                              Glyph="&#xE7A7;"
+                                              Title="No restore results yet"
+                                              Message="Run a restore preview to see exactly what would change."
+                                              IsVisible="{Binding !RestoreResults.Count}" />
 
                             <ItemsControl Grid.Row="2"
                                           ItemsSource="{Binding RestoreResults}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="models:BackupRestoreItemResultRowViewModel">
                                         <Border Padding="12"
-                                                BorderBrush="#252733"
+                                                BorderBrush="{DynamicResource SubtleBorderBrush}"
                                                 BorderThickness="0,0,0,1">
 
                                             <StackPanel Spacing="4">
@@ -399,29 +437,29 @@
 
                                                     <TextBlock Grid.Column="0"
                                                                Text="{Binding TargetFile}"
-                                                               Foreground="{StaticResource SecondaryTextBrush}"
+                                                               Foreground="{DynamicResource SecondaryTextBrush}"
                                                                ToolTip.Tip="{Binding TargetFile}"
                                                                TextTrimming="CharacterEllipsis" />
 
                                                     <TextBlock Grid.Column="1"
                                                                Text="{Binding SizeDisplay}"
-                                                               Foreground="{StaticResource MutedTextBrush}" />
+                                                               Foreground="{DynamicResource MutedTextBrush}" />
 
                                                     <TextBlock Grid.Column="2"
                                                                Text="{Binding Status}"
-                                                               Foreground="{StaticResource PrimaryTextBrush}"
+                                                               Foreground="{DynamicResource PrimaryTextBrush}"
                                                                FontWeight="SemiBold" />
 
                                                     <TextBlock Grid.Column="3"
                                                                Text="{Binding Error}"
-                                                               Foreground="{StaticResource WarningBrush}"
+                                                               Foreground="{DynamicResource WarningBrush}"
                                                                TextWrapping="Wrap" />
                                                 </Grid>
 
                                                 <TextBlock Text="{Binding PreRestoreBackupDisplay}"
                                                            IsVisible="{Binding HasPreRestoreBackup}"
-                                                           Foreground="{StaticResource AccentBrush}"
-                                                           FontSize="11"
+                                                           Foreground="{DynamicResource AccentBrush}"
+                                                           FontSize="12"
                                                            TextTrimming="CharacterEllipsis" />
                                             </StackPanel>
                                         </Border>
@@ -432,21 +470,21 @@
                     </Border>
 
                     <!-- Archive (ZIP export / import) -->
-                    <Border Background="{StaticResource CardBackgroundBrush}"
-                            BorderBrush="{StaticResource CardBorderBrush}"
+                    <Border Background="{DynamicResource CardBackgroundBrush}"
+                            BorderBrush="{DynamicResource CardBorderBrush}"
                             BorderThickness="1"
                             CornerRadius="14"
                             Padding="14,10">
 
                         <StackPanel Spacing="6">
                             <TextBlock Text="Archive (ZIP)"
-                                       Foreground="{StaticResource PrimaryTextBrush}"
+                                       Foreground="{DynamicResource PrimaryTextBrush}"
                                        FontSize="15"
                                        FontWeight="SemiBold" />
 
                             <TextBlock Text="Export packs the selected run (files + manifest) into one ZIP for cold storage or another machine. Import brings such a ZIP back into the backup base, where it appears in this list and can be restored. Nothing is ever overwritten."
-                                       Foreground="{StaticResource MutedTextBrush}"
-                                       FontSize="11"
+                                       Foreground="{DynamicResource MutedTextBrush}"
+                                       FontSize="12"
                                        TextWrapping="Wrap" />
 
                             <StackPanel Orientation="Horizontal"
@@ -463,32 +501,32 @@
                             </StackPanel>
 
                             <TextBlock Text="{Binding ArchiveStatusMessage}"
-                                       Foreground="{StaticResource SecondaryTextBrush}"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
                                        FontSize="12"
                                        TextWrapping="Wrap" />
                         </StackPanel>
                     </Border>
 
                     <!-- Cleanup (the only delete in the app) -->
-                    <Border Background="{StaticResource CardBackgroundBrush}"
-                            BorderBrush="{StaticResource CardBorderBrush}"
+                    <Border Background="{DynamicResource CardBackgroundBrush}"
+                            BorderBrush="{DynamicResource CardBorderBrush}"
                             BorderThickness="1"
                             CornerRadius="14"
                             Padding="14,10">
 
                         <StackPanel Spacing="6">
                             <TextBlock Text="Cleanup (deletes backup runs)"
-                                       Foreground="{StaticResource PrimaryTextBrush}"
+                                       Foreground="{DynamicResource PrimaryTextBrush}"
                                        FontSize="15"
                                        FontWeight="SemiBold" />
 
-                            <TextBlock Text="This is the only place the app deletes anything. Only backup run folders inside the application backup base are deleted - save files and backups in custom destinations are never touched. Always preview first."
-                                       Foreground="{StaticResource WarningBrush}"
-                                       FontSize="11"
+                            <TextBlock Text="This is the only place the app deletes anything. Only backup run folders inside the application backup base are deleted — save files and backups in custom destinations are never touched. Always preview first."
+                                       Foreground="{DynamicResource WarningBrush}"
+                                       FontSize="12"
                                        TextWrapping="Wrap" />
 
                             <TextBlock Text="Delete the selected run"
-                                       Foreground="{StaticResource SecondaryTextBrush}"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
                                        FontSize="12"
                                        FontWeight="Bold"
                                        Margin="0,4,0,0" />
@@ -503,7 +541,7 @@
                                     ToolTip.Tip="Permanently deletes the backup run selected in the list on the left. Save files are never touched." />
 
                             <TextBlock Text="Retention policy"
-                                       Foreground="{StaticResource SecondaryTextBrush}"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
                                        FontSize="12"
                                        FontWeight="Bold"
                                        Margin="0,6,0,0" />
@@ -511,7 +549,7 @@
                             <StackPanel Orientation="Horizontal"
                                         Spacing="6">
                                 <TextBlock Text="Keep newest"
-                                           Foreground="{StaticResource SecondaryTextBrush}"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
                                            FontSize="12"
                                            VerticalAlignment="Center" />
 
@@ -520,7 +558,7 @@
                                          MinHeight="28" />
 
                                 <TextBlock Text="run(s), delete the rest. Only runs older than"
-                                           Foreground="{StaticResource SecondaryTextBrush}"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
                                            FontSize="12"
                                            VerticalAlignment="Center" />
 
@@ -530,7 +568,7 @@
                                          MinHeight="28" />
 
                                 <TextBlock Text="day(s)."
-                                           Foreground="{StaticResource SecondaryTextBrush}"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
                                            FontSize="12"
                                            VerticalAlignment="Center" />
                             </StackPanel>
@@ -551,7 +589,7 @@
                             </StackPanel>
 
                             <TextBlock Text="{Binding CleanupStatusMessage}"
-                                       Foreground="{StaticResource SecondaryTextBrush}"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
                                        FontSize="12"
                                        TextWrapping="Wrap" />
 
@@ -559,7 +597,7 @@
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="models:BackupCleanupItemRowViewModel">
                                         <Border Padding="10,6"
-                                                BorderBrush="#252733"
+                                                BorderBrush="{DynamicResource SubtleBorderBrush}"
                                                 BorderThickness="0,0,0,1">
 
                                             <StackPanel Spacing="2">
@@ -568,30 +606,30 @@
 
                                                     <TextBlock Grid.Column="0"
                                                                Text="{Binding RunDisplay}"
-                                                               Foreground="{StaticResource SecondaryTextBrush}"
+                                                               Foreground="{DynamicResource SecondaryTextBrush}"
                                                                FontSize="12"
                                                                TextTrimming="CharacterEllipsis" />
 
                                                     <TextBlock Grid.Column="1"
                                                                Text="{Binding SizeDisplay}"
-                                                               Foreground="{StaticResource MutedTextBrush}"
+                                                               Foreground="{DynamicResource MutedTextBrush}"
                                                                FontSize="12" />
 
                                                     <TextBlock Grid.Column="2"
                                                                Text="{Binding Status}"
-                                                               Foreground="{StaticResource PrimaryTextBrush}"
+                                                               Foreground="{DynamicResource PrimaryTextBrush}"
                                                                FontSize="12"
                                                                FontWeight="SemiBold" />
 
                                                     <TextBlock Grid.Column="3"
                                                                Text="{Binding Error}"
-                                                               Foreground="{StaticResource WarningBrush}"
+                                                               Foreground="{DynamicResource WarningBrush}"
                                                                FontSize="12"
                                                                TextWrapping="Wrap" />
                                                 </Grid>
 
                                                 <TextBlock Text="{Binding BackupRootPath}"
-                                                           Foreground="{StaticResource MutedTextBrush}"
+                                                           Foreground="{DynamicResource MutedTextBrush}"
                                                            FontSize="10"
                                                            ToolTip.Tip="{Binding BackupRootPath}"
                                                            TextTrimming="CharacterEllipsis" />

@@ -215,7 +215,7 @@ public sealed class GoogleDriveOAuthViewModelTests
         await viewModel.GoogleAuthenticationInitializationTask;
 
         Assert.Equal(GoogleDriveConnectionStatus.Connected, viewModel.GoogleDriveConnectionStatus);
-        Assert.Equal("Account:", viewModel.GoogleDriveAccountLabel);
+        Assert.Equal("Account", viewModel.GoogleDriveAccountLabel);
         Assert.Equal("Example User", viewModel.GoogleDriveAccountDisplayText);
         Assert.True(viewModel.CanShowReconnectGoogleDrive);
         Assert.True(viewModel.CanReconnectGoogleDrive);
@@ -288,7 +288,7 @@ public sealed class GoogleDriveOAuthViewModelTests
         SyncViewModel viewModel = CreateViewModel(repository, oauth, id);
         await viewModel.GoogleAuthenticationInitializationTask;
 
-        Assert.Equal("Previously connected account:", viewModel.GoogleDriveAccountLabel);
+        Assert.Equal("Previously connected account", viewModel.GoogleDriveAccountLabel);
         Assert.Equal("Authorization expired or revoked", viewModel.GoogleDriveStatusDisplayText);
         Assert.True(viewModel.CanShowReconnectGoogleDrive);
 
@@ -422,7 +422,9 @@ public sealed class GoogleDriveOAuthViewModelTests
 
         Assert.False(viewModel.CanConnectGoogleDrive);
         Assert.Equal("Not connected", viewModel.GoogleDriveAccountDisplayText);
-        Assert.True(viewModel.CanPreviewSync);
+        // Corrupted settings are not a plausible sync target, so the UI no
+        // longer offers a preview that could only fail.
+        Assert.False(viewModel.CanPreviewSync);
     }
 
     private static StubGoogleDriveOAuthService AvailableOAuth() => new()

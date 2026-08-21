@@ -1,0 +1,135 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Button hierarchy. Default Fluent buttons are the secondary tier;
+         "primary" marks the one safe headline action per surface (in this
+         application that is always a preview or scan, never an execution);
+         "danger" marks destructive actions with an outline treatment so it
+         warns without shouting. All colours come from the token dictionary,
+         so both themes and any future accent theme get these for free. -->
+
+    <!-- Secondary (default) buttons: bordered ghost on the card surface,
+         so enabled state has a visible edge and disabled state is
+         unmistakably faded rather than another identical grey slab. -->
+    <Style Selector="Button">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource InsetBackgroundBrush}" />
+    </Style>
+    <!-- Disabled tiers: buttons keep their anatomy (border, height, radius)
+         with muted-but-legible labels; a disabled primary drops its accent
+         fill entirely so it can never read as enabled in either theme. -->
+    <Style Selector="Button:disabled /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="{DynamicResource SubtleBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
+    </Style>
+
+    <Style Selector="TextBox:disabled">
+        <Setter Property="Background" Value="{DynamicResource InsetBackgroundBrush}" />
+    </Style>
+    <Style Selector="ComboBox:disabled">
+        <Setter Property="Background" Value="{DynamicResource InsetBackgroundBrush}" />
+    </Style>
+    <Style Selector="Button:disabled">
+        <Setter Property="Opacity" Value="0.6" />
+    </Style>
+    <Style Selector="CheckBox:disabled">
+        <Setter Property="Opacity" Value="0.85" />
+    </Style>
+    <Style Selector="CheckBox:checked:disabled">
+        <Setter Property="Opacity" Value="0.95" />
+    </Style>
+
+    <!-- Inputs are inset-filled so they can never be mistaken for the
+         ghost-outline buttons, including when a button is disabled. -->
+    <Style Selector="TextBox">
+        <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}" />
+        <Setter Property="CornerRadius" Value="6" />
+    </Style>
+    <Style Selector="ComboBox">
+        <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="PlaceholderForeground" Value="{DynamicResource PlaceholderInkBrush}" />
+    </Style>
+
+    <!-- Scrollbars: slim, inset from card edges, rounded thumb, so a
+         resting scrollbar reads as a designed element instead of a stray
+         hairline crossing rounded corners. -->
+    <!-- One page-title treatment for every view. -->
+    <Style Selector="TextBlock.h1">
+        <Setter Property="FontSize" Value="18" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
+    </Style>
+
+    <Style Selector="ScrollBar:vertical">
+        <Setter Property="Width" Value="12" />
+        <Setter Property="Margin" Value="0,6,3,6" />
+    </Style>
+    <Style Selector="ScrollBar:horizontal">
+        <Setter Property="Height" Value="12" />
+        <Setter Property="Margin" Value="6,0,6,3" />
+    </Style>
+    <Style Selector="ScrollBar /template/ Thumb">
+        <Setter Property="Background" Value="{DynamicResource SubtleBorderBrush}" />
+        <Setter Property="CornerRadius" Value="4" />
+    </Style>
+    <Style Selector="ScrollBar">
+        <Setter Property="Opacity" Value="0" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <DoubleTransition Property="Opacity" Duration="0:0:0.15" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="ScrollViewer:pointerover /template/ ScrollBar">
+        <Setter Property="Opacity" Value="1" />
+    </Style>
+    <Style Selector="ScrollBar:pointerover">
+        <Setter Property="Opacity" Value="1" />
+    </Style>
+
+    <Style Selector="Button.primary">
+        <Setter Property="Background" Value="{DynamicResource PrimaryButtonBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource OnAccentBrush}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="CornerRadius" Value="8" />
+    </Style>
+    <Style Selector="Button.primary:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource PrimaryButtonHoverBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource OnAccentBrush}" />
+    </Style>
+    <Style Selector="Button.primary:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource PrimaryButtonPressedBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource OnAccentBrush}" />
+    </Style>
+
+    <Style Selector="Button.danger">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource DangerBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource DangerBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="8" />
+    </Style>
+    <Style Selector="Button.danger:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource DangerBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource CardBackgroundBrush}" />
+    </Style>
+
+    <Style Selector="Button.primary:disabled /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="{DynamicResource SubtleBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
+    </Style>
+
+</Styles>

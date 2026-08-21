@@ -23,7 +23,11 @@ namespace GameSaves.Infrastructure.DependencyInjection
         public static IServiceCollection AddGameSavesInfrastructure(
             this IServiceCollection services)
         {
-            services.AddSingleton<IAppDatabasePathProvider, DefaultAppDatabasePathProvider>();
+            // Wrapped so the schema is guaranteed before the first connection;
+            // the desktop app has no other bootstrap path. See the decorator.
+            services.AddSingleton<IAppDatabasePathProvider>(
+                new SchemaInitializingAppDatabasePathProvider(
+                    new DefaultAppDatabasePathProvider()));
             services.AddSingleton<ICurrentPlatformProvider, CurrentPlatformProvider>();
 
             services.AddSingleton<ISteamRootLocator, RegistrySteamLocator>();

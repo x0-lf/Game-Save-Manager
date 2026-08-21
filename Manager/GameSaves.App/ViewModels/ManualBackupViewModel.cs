@@ -113,7 +113,7 @@ namespace GameSaves.App.ViewModels
         }
 
         public string PresetStatusDisplay => SelectedPreset is null
-            ? "No preset selected - the backup uses the settings exactly as shown."
+            ? "No preset selected — the backup uses the settings exactly as shown."
             : $"Preset \"{SelectedPreset.Name}\" is selected.";
 
         partial void OnSelectedPresetChanged(BackupPresetRowViewModel? value)
@@ -345,7 +345,9 @@ namespace GameSaves.App.ViewModels
                 SelectedProfile ??= Profiles.FirstOrDefault();
                 SelectedGame ??= Games.FirstOrDefault();
 
-                StatusMessage = "Inputs refreshed.";
+                StatusMessage = Profiles.Count == 0
+                    ? "No profiles found. Scan for profiles first."
+                    : "Profiles and games are up to date.";
             }
             catch (Exception ex)
             {

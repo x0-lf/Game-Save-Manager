@@ -1,27 +1,19 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:views="using:GameSaves.App.Views"
              xmlns:vm="using:GameSaves.App.ViewModels"
              xmlns:models="using:GameSaves.App.Models"
              x:Class="GameSaves.App.Views.TransferPreviewView"
              x:DataType="vm:TransferPreviewViewModel"
-             Background="#111217">
+             Background="{DynamicResource PageBackgroundBrush}">
 
     <UserControl.Resources>
-        <SolidColorBrush x:Key="CardBackgroundBrush" Color="#1A1B22" />
-        <SolidColorBrush x:Key="CardBorderBrush" Color="#2A2C36" />
-        <SolidColorBrush x:Key="PrimaryTextBrush" Color="#F4F4F5" />
-        <SolidColorBrush x:Key="SecondaryTextBrush" Color="#A7AAB4" />
-        <SolidColorBrush x:Key="MutedTextBrush" Color="#777B86" />
-        <SolidColorBrush x:Key="AccentBrush" Color="#7C9CFF" />
-        <SolidColorBrush x:Key="SuccessBrush" Color="#6EE7A8" />
-        <SolidColorBrush x:Key="WarningBrush" Color="#FACC6B" />
-        <SolidColorBrush x:Key="SplitterBrush" Color="#2A2C36" />
 
         <!-- Shared row template for both preview groups -->
         <DataTemplate x:Key="PreviewItemRowTemplate"
                       x:DataType="models:TransferPreviewItemRowViewModel">
             <Border Padding="10,8"
-                    BorderBrush="#252733"
+                    BorderBrush="{DynamicResource SubtleBorderBrush}"
                     BorderThickness="0,0,0,1">
 
                 <StackPanel Spacing="3">
@@ -30,14 +22,14 @@
 
                         <TextBlock Grid.Column="0"
                                    Text="{Binding SourcePath}"
-                                   Foreground="{StaticResource SecondaryTextBrush}"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
                                    ToolTip.Tip="{Binding SourcePath}"
                                    FontSize="12"
                                    TextTrimming="CharacterEllipsis" />
 
                         <TextBlock Grid.Column="1"
                                    Text="{Binding TargetPath}"
-                                   Foreground="{StaticResource SecondaryTextBrush}"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
                                    ToolTip.Tip="{Binding TargetPath}"
                                    FontSize="12"
                                    TextTrimming="CharacterEllipsis" />
@@ -45,33 +37,33 @@
                         <TextBlock Grid.Column="2"
                                    Text="{Binding SourceExistsText}"
                                    FontSize="12"
-                                   Foreground="{StaticResource AccentBrush}" />
+                                   Foreground="{DynamicResource AccentBrush}" />
 
                         <TextBlock Grid.Column="3"
                                    Text="{Binding TargetExistsText}"
                                    FontSize="12"
-                                   Foreground="{StaticResource WarningBrush}" />
+                                   Foreground="{DynamicResource WarningBrush}" />
 
                         <StackPanel Grid.Column="4">
                             <TextBlock Text="{Binding FileCount}"
                                        FontSize="12"
-                                       Foreground="{StaticResource PrimaryTextBrush}" />
+                                       Foreground="{DynamicResource PrimaryTextBrush}" />
 
                             <TextBlock Text="{Binding TotalSizeDisplay}"
-                                       Foreground="{StaticResource MutedTextBrush}"
+                                       Foreground="{DynamicResource MutedTextBrush}"
                                        FontSize="10" />
                         </StackPanel>
 
                         <TextBlock Grid.Column="5"
                                    Text="{Binding StatusText}"
-                                   Foreground="{StaticResource PrimaryTextBrush}"
+                                   Foreground="{DynamicResource PrimaryTextBrush}"
                                    FontSize="12"
                                    FontWeight="SemiBold" />
                     </Grid>
 
                     <TextBlock Text="{Binding ActionText}"
-                               Foreground="{StaticResource MutedTextBrush}"
-                               FontSize="11"
+                               Foreground="{DynamicResource MutedTextBrush}"
+                               FontSize="12"
                                TextWrapping="Wrap" />
                 </StackPanel>
             </Border>
@@ -84,51 +76,52 @@
 
                 <TextBlock Grid.Column="0"
                            Text="Source path"
-                           Foreground="{StaticResource SecondaryTextBrush}"
+                           Foreground="{DynamicResource SecondaryTextBrush}"
                            FontSize="12"
                            FontWeight="Bold" />
 
                 <TextBlock Grid.Column="1"
                            Text="Target path"
-                           Foreground="{StaticResource SecondaryTextBrush}"
+                           Foreground="{DynamicResource SecondaryTextBrush}"
                            FontSize="12"
                            FontWeight="Bold" />
 
                 <TextBlock Grid.Column="2"
                            Text="Source"
-                           Foreground="{StaticResource SecondaryTextBrush}"
+                           Foreground="{DynamicResource SecondaryTextBrush}"
                            FontSize="12"
                            FontWeight="Bold" />
 
                 <TextBlock Grid.Column="3"
                            Text="Target"
-                           Foreground="{StaticResource SecondaryTextBrush}"
+                           Foreground="{DynamicResource SecondaryTextBrush}"
                            FontSize="12"
                            FontWeight="Bold" />
 
                 <TextBlock Grid.Column="4"
                            Text="Files"
-                           Foreground="{StaticResource SecondaryTextBrush}"
+                           Foreground="{DynamicResource SecondaryTextBrush}"
                            FontSize="12"
                            FontWeight="Bold" />
 
                 <TextBlock Grid.Column="5"
                            Text="Status"
-                           Foreground="{StaticResource SecondaryTextBrush}"
+                           Foreground="{DynamicResource SecondaryTextBrush}"
                            FontSize="12"
                            FontWeight="Bold" />
             </Grid>
         </DataTemplate>
     </UserControl.Resources>
 
-    <Grid RowDefinitions="Auto,Auto,*"
+    <Grid RowDefinitions="Auto,Auto,Auto,*"
           RowSpacing="10"
-          Margin="0,12,0,0">
+          Margin="0,12,0,14"
+          MaxWidth="1100">
 
         <!-- Header -->
         <Border Grid.Row="0"
-                Background="{StaticResource CardBackgroundBrush}"
-                BorderBrush="{StaticResource CardBorderBrush}"
+                Background="{DynamicResource CardBackgroundBrush}"
+                BorderBrush="{DynamicResource CardBorderBrush}"
                 BorderThickness="1"
                 CornerRadius="14"
                 Padding="14,10">
@@ -139,25 +132,25 @@
                 <StackPanel Grid.Column="0"
                             Spacing="2"
                             VerticalAlignment="Center">
-                    <TextBlock Text="Copy Saves Between Profiles"
-                               Foreground="{StaticResource PrimaryTextBrush}"
-                               FontSize="18"
-                               FontWeight="Bold" />
+                    <TextBlock Text="Transfer preview" Classes="h1" />
 
-                    <TextBlock Text="{Binding StatusMessage}"
-                               Foreground="{StaticResource SecondaryTextBrush}"
+                    <TextBlock Text="Copy saves between two Steam profiles, preview first."
+                               Foreground="{DynamicResource SecondaryTextBrush}"
                                FontSize="12"
                                TextWrapping="Wrap" />
                 </StackPanel>
 
                 <Button Grid.Column="1"
-                        Content="Refresh Inputs"
+                        Content="Refresh"
                         Command="{Binding RefreshInputsCommand}"
                         Height="34"
                         VerticalAlignment="Center" />
 
                 <Button Grid.Column="2"
-                        Content="Preview Copy (Dry Run)"
+                        Content="Preview copy"
+                        ToolTip.Tip="Dry run: nothing is copied until you confirm."
+                        IsEnabled="{Binding !!Profiles.Count}"
+                            Classes="primary"
                         Command="{Binding PreviewTransferCommand}"
                         Height="34"
                         VerticalAlignment="Center" />
@@ -165,56 +158,116 @@
         </Border>
 
         <!-- Selectors -->
+        
         <Border Grid.Row="1"
-                Background="{StaticResource CardBackgroundBrush}"
-                BorderBrush="{StaticResource CardBorderBrush}"
+                Background="{DynamicResource WarningTintBrush}"
+                BorderBrush="{DynamicResource WarningEdgeBrush}"
+                BorderThickness="1"
+                CornerRadius="10"
+                Padding="12,8"
+                Margin="0,0,0,0"
+                IsVisible="{Binding !Profiles.Count}">
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <TextBlock Text="&#xE7BA;"
+                           FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                           FontSize="14"
+                           VerticalAlignment="Center"
+                           Foreground="{DynamicResource WarningBrush}" />
+                <TextBlock Text="No profiles found — scan for profiles first."
+                           Foreground="{DynamicResource PrimaryTextBrush}"
+                           FontSize="12"
+                           VerticalAlignment="Center" />
+                <Button Content="Go to Profiles"
+                        Click="OnGoToProfilesClick"
+                        FontSize="12"
+                        Height="26"
+                        VerticalAlignment="Center" />
+            </StackPanel>
+        </Border>
+
+        <Border Grid.Row="2"
+                Background="{DynamicResource CardBackgroundBrush}"
+                BorderBrush="{DynamicResource CardBorderBrush}"
                 BorderThickness="1"
                 CornerRadius="14"
                 Padding="14,10">
 
             <Grid ColumnDefinitions="*,*,*"
-                  ColumnSpacing="14">
+                  RowDefinitions="Auto,Auto"
+                  ColumnSpacing="14"
+                  RowSpacing="8">
 
                 <StackPanel Grid.Column="0"
                             Spacing="4">
-                    <TextBlock Text="Source Profile"
-                               Foreground="{StaticResource SecondaryTextBrush}"
+                    <TextBlock Text="Source profile"
+                               Foreground="{DynamicResource SecondaryTextBrush}"
                                FontSize="12"
                                FontWeight="Bold" />
 
-                    <ComboBox ItemsSource="{Binding Profiles}"
+                    <Panel>
+                        <ComboBox ItemsSource="{Binding Profiles}"
                               SelectedItem="{Binding SelectedSourceProfile}"
                               HorizontalAlignment="Stretch"
                               MinHeight="32" />
+                        <TextBlock Text="Select a source profile"
+                                   Foreground="{DynamicResource MutedTextBrush}"
+                                   FontSize="13"
+                                   Margin="12,0,32,0"
+                                   VerticalAlignment="Center"
+                                   IsHitTestVisible="False"
+                                   IsVisible="{Binding SelectedSourceProfile, Converter={x:Static ObjectConverters.IsNull}}" />
+                    </Panel>
                 </StackPanel>
 
                 <StackPanel Grid.Column="1"
                             Spacing="4">
-                    <TextBlock Text="Target Profile"
-                               Foreground="{StaticResource SecondaryTextBrush}"
+                    <TextBlock Text="Target profile"
+                               Foreground="{DynamicResource SecondaryTextBrush}"
                                FontSize="12"
                                FontWeight="Bold" />
 
-                    <ComboBox ItemsSource="{Binding Profiles}"
+                    <Panel>
+                        <ComboBox ItemsSource="{Binding Profiles}"
                               SelectedItem="{Binding SelectedTargetProfile}"
                               HorizontalAlignment="Stretch"
                               MinHeight="32" />
+                        <TextBlock Text="Select a target profile"
+                                   Foreground="{DynamicResource MutedTextBrush}"
+                                   FontSize="13"
+                                   Margin="12,0,32,0"
+                                   VerticalAlignment="Center"
+                                   IsHitTestVisible="False"
+                                   IsVisible="{Binding SelectedTargetProfile, Converter={x:Static ObjectConverters.IsNull}}" />
+                    </Panel>
                 </StackPanel>
 
                 <StackPanel Grid.Column="2"
                             Spacing="4">
-                    <TextBlock Text="Installed Game"
-                               Foreground="{StaticResource SecondaryTextBrush}"
+                    <TextBlock Text="Installed game"
+                               Foreground="{DynamicResource SecondaryTextBrush}"
                                FontSize="12"
                                FontWeight="Bold" />
 
-                    <ComboBox ItemsSource="{Binding Games}"
+                    <Panel>
+                        <ComboBox ItemsSource="{Binding Games}"
                               SelectedItem="{Binding SelectedGame}"
                               HorizontalAlignment="Stretch"
                               MinHeight="32" />
+                        <TextBlock Text="Select a game"
+                                   Foreground="{DynamicResource MutedTextBrush}"
+                                   FontSize="13"
+                                   Margin="12,0,32,0"
+                                   VerticalAlignment="Center"
+                                   IsHitTestVisible="False"
+                                   IsVisible="{Binding SelectedGame, Converter={x:Static ObjectConverters.IsNull}}" />
+                    </Panel>
 
+                </StackPanel>
+
+                <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3"
+                            Spacing="4">
                     <TextBlock Text="Transfer source"
-                               Foreground="{StaticResource SecondaryTextBrush}"
+                               Foreground="{DynamicResource SecondaryTextBrush}"
                                FontSize="12"
                                FontWeight="Bold"
                                Margin="0,4,0,0" />
@@ -231,15 +284,15 @@
 
                     <TextBlock Text="Select at least one transfer source."
                                IsVisible="{Binding !HasAnyTransferSource}"
-                               Foreground="{StaticResource WarningBrush}"
-                               FontSize="11"
+                               Foreground="{DynamicResource WarningBrush}"
+                               FontSize="12"
                                TextWrapping="Wrap" />
                 </StackPanel>
             </Grid>
         </Border>
 
         <!-- Main area: resizable summary | (warnings over preview groups) -->
-        <Grid Grid.Row="2">
+        <Grid Grid.Row="3" x:Name="SplitGrid">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="290" MinWidth="220" MaxWidth="520" />
                 <ColumnDefinition Width="8" />
@@ -248,8 +301,9 @@
 
             <!-- Summary (full height, scrolls on its own) -->
             <Border Grid.Column="0"
-                    Background="{StaticResource CardBackgroundBrush}"
-                    BorderBrush="{StaticResource CardBorderBrush}"
+                    VerticalAlignment="Top"
+                    Background="{DynamicResource CardBackgroundBrush}"
+                    BorderBrush="{DynamicResource CardBorderBrush}"
                     BorderThickness="1"
                     CornerRadius="14"
                     Padding="0">
@@ -258,34 +312,46 @@
                     <StackPanel Spacing="6"
                                 Margin="14">
                         <TextBlock Text="Summary"
-                                   Foreground="{StaticResource PrimaryTextBrush}"
-                                   FontSize="15"
+                                   Foreground="{DynamicResource PrimaryTextBrush}"
+                                   FontSize="14"
                                    FontWeight="SemiBold" />
 
-                        <TextBlock Text="{Binding TotalFiles, StringFormat='Files to consider: {0}'}"
+                        <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" RowSpacing="2" ColumnSpacing="16" MaxWidth="420" HorizontalAlignment="Left">
+                            <TextBlock Text="Files to consider" Foreground="{DynamicResource MutedTextBrush}" FontSize="12" />
+                            <TextBlock Grid.Column="1" Text="{Binding TotalFiles, StringFormat='{}{0}'}" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="12" FontWeight="SemiBold" />
+                            <TextBlock Grid.Row="1" Text="Total size" Foreground="{DynamicResource MutedTextBrush}" FontSize="12" />
+                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding TotalSizeDisplay, StringFormat='{}{0}'}" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="12" FontWeight="SemiBold" />
+                        </Grid>
+                        <TextBlock IsVisible="False" Text="{Binding TotalFiles, StringFormat='Files to consider: {0}'}"
                                    FontSize="12"
-                                   Foreground="{StaticResource SecondaryTextBrush}" />
+                                   Foreground="{DynamicResource SecondaryTextBrush}" />
 
-                        <TextBlock Text="{Binding TotalSizeDisplay, StringFormat='Total size: {0}'}"
+                        <TextBlock IsVisible="False" Text="{Binding TotalSizeDisplay, StringFormat='Total size: {0}'}"
                                    FontSize="12"
-                                   Foreground="{StaticResource SecondaryTextBrush}" />
+                                   Foreground="{DynamicResource SecondaryTextBrush}" />
 
-                        <TextBlock Text="{Binding CanExecuteCopy, StringFormat='Safe to copy: {0}'}"
+                        <TextBlock Text="Ready to copy"
+                                   IsVisible="{Binding CanExecuteCopy}"
                                    FontSize="12"
-                                   Foreground="{StaticResource MutedTextBrush}" />
+                                   Foreground="{DynamicResource SuccessBrush}" />
+
+                        <TextBlock Text="Not ready to copy — run a preview first"
+                                   IsVisible="{Binding !CanExecuteCopy}"
+                                   FontSize="12"
+                                   Foreground="{DynamicResource MutedTextBrush}" />
 
                         <TextBlock Text="{Binding SteamUserDataSourceText, StringFormat='Steam userdata: {0}'}"
                                    FontSize="12"
-                                   Foreground="{StaticResource SecondaryTextBrush}" />
+                                   Foreground="{DynamicResource SecondaryTextBrush}" />
 
                         <TextBlock Text="{Binding ApprovedMappingsSourceText, StringFormat='Approved mappings: {0}'}"
                                    FontSize="12"
-                                   Foreground="{StaticResource SecondaryTextBrush}" />
+                                   Foreground="{DynamicResource SecondaryTextBrush}" />
 
                         <TextBlock Text="{Binding BlockedItemCount, StringFormat='Blocked items: {0}'}"
                                    IsVisible="{Binding HasBlockedItemsInPreview}"
                                    FontSize="12"
-                                   Foreground="{StaticResource WarningBrush}" />
+                                   Foreground="{DynamicResource WarningBrush}" />
 
                         <CheckBox Content="Skip blocked items and copy the rest"
                                   IsChecked="{Binding SkipBlockedItems}"
@@ -294,55 +360,64 @@
                                   ToolTip.Tip="Items with errors (for example a save location that resolves to the same path for both profiles) are never copied. Enable this to copy the remaining safe items anyway; each blocked item is reported as skipped in the execution results." />
 
                         <TextBlock Text="Copy only. Source files are never deleted or modified. Existing target files are skipped unless overwrite is enabled."
-                                   Foreground="{StaticResource WarningBrush}"
-                                   FontSize="11"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                   FontSize="12"
                                    TextWrapping="Wrap" />
 
-                        <CheckBox Content="I understand this will copy files into the target profile"
+                        <Border Background="{DynamicResource InsetBackgroundBrush}"
+                                CornerRadius="8"
+                                Padding="10,6">
+                            <CheckBox Content="I understand this will copy files into the target profile"
                                   IsChecked="{Binding ConfirmRealTransfer}"
                                   FontSize="12" />
+                        </Border>
 
                         <CheckBox Content="Overwrite existing target files"
                                   IsChecked="{Binding OverwriteExisting}"
                                   FontSize="12" />
 
-                        <CheckBox Content="Back up files before overwriting (recommended)"
+                        <CheckBox Margin="24,0,0,0"
+                                  Content="Back up files before overwriting (recommended)"
                                   IsChecked="{Binding BackupBeforeOverwrite}"
                                   IsEnabled="{Binding OverwriteExisting}"
                                   FontSize="12"
                                   ToolTip.Tip="Safe Mode: before a target file is overwritten, a copy of it is stored in the app's TransferBackups folder with a SHA-256 manifest. If a backup fails, that file is not overwritten." />
 
-                        <Button Content="Copy to Target Profile"
+                        <Button Content="Copy to target profile"
                                 Command="{Binding ExecuteTransferCommand}"
                                 IsEnabled="{Binding CanExecuteCopy}"
                                 HorizontalAlignment="Stretch"
                                 Height="34" />
 
                         <TextBlock Text="{Binding ExecutionStatusMessage}"
-                                   Foreground="{StaticResource SecondaryTextBrush}"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
                                    FontSize="12"
                                    TextWrapping="Wrap" />
 
-                        <TextBlock Text="{Binding FilesCopied, StringFormat='Copied: {0} file(s)'}"
-                                   FontSize="12"
-                                   Foreground="{StaticResource SuccessBrush}" />
+                        <StackPanel Spacing="6"
+                                    IsVisible="{Binding !!ExecutionResults.Count}">
 
-                        <TextBlock Text="{Binding FilesSkipped, StringFormat='Skipped: {0} file(s)'}"
-                                   FontSize="12"
-                                   Foreground="{StaticResource MutedTextBrush}" />
+                            <TextBlock Text="{Binding FilesCopied, StringFormat='Files copied: {0}'}"
+                                       FontSize="12"
+                                       Foreground="{DynamicResource SuccessBrush}" />
 
-                        <TextBlock Text="{Binding BytesCopiedDisplay, StringFormat='Bytes copied: {0}'}"
-                                   FontSize="12"
-                                   Foreground="{StaticResource MutedTextBrush}" />
+                            <TextBlock Text="{Binding FilesSkipped, StringFormat='Files skipped: {0}'}"
+                                       FontSize="12"
+                                       Foreground="{DynamicResource MutedTextBrush}" />
 
-                        <TextBlock Text="{Binding FilesBackedUp, StringFormat='Backed up before overwrite: {0} file(s)'}"
-                                   FontSize="12"
-                                   Foreground="{StaticResource AccentBrush}" />
+                            <TextBlock Text="{Binding BytesCopiedDisplay, StringFormat='Data copied: {0}'}"
+                                       FontSize="12"
+                                       Foreground="{DynamicResource MutedTextBrush}" />
 
-                        <TextBlock Text="{Binding BackupLocationMessage}"
-                                   Foreground="{StaticResource MutedTextBrush}"
-                                   FontSize="11"
-                                   TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding FilesBackedUp, StringFormat='Files backed up before overwrite: {0}'}"
+                                       FontSize="12"
+                                       Foreground="{DynamicResource AccentBrush}" />
+
+                            <TextBlock Text="{Binding BackupLocationMessage}"
+                                       Foreground="{DynamicResource MutedTextBrush}"
+                                       FontSize="12"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
             </Border>
@@ -350,21 +425,22 @@
             <GridSplitter Grid.Column="1"
                           Width="8"
                           Margin="1,0"
-                          Background="{StaticResource SplitterBrush}"
+                          Background="Transparent"
                           ResizeDirection="Columns" />
 
             <!-- Warnings over preview groups, resizable -->
             <Grid Grid.Column="2">
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="140" MinHeight="70" />
-                    <RowDefinition Height="8" />
-                    <RowDefinition Height="*" MinHeight="180" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" MinHeight="120" />
                 </Grid.RowDefinitions>
 
                 <!-- Warnings -->
                 <Border Grid.Row="0"
-                        Background="{StaticResource CardBackgroundBrush}"
-                        BorderBrush="{StaticResource CardBorderBrush}"
+                        IsVisible="{Binding !!Warnings.Count}"
+                        Background="{DynamicResource CardBackgroundBrush}"
+                        BorderBrush="{DynamicResource CardBorderBrush}"
                         BorderThickness="1"
                         CornerRadius="14"
                         Padding="0">
@@ -373,33 +449,41 @@
 
                         <Border Grid.Row="0"
                                 Padding="12,8"
-                                BorderBrush="{StaticResource CardBorderBrush}"
+                                BorderBrush="{DynamicResource CardBorderBrush}"
                                 BorderThickness="0,0,0,1">
 
-                            <TextBlock Text="Warnings (drag the divider below to resize)"
-                                       Foreground="{StaticResource PrimaryTextBrush}"
+                            <TextBlock Text="Warnings"
+                                       Foreground="{DynamicResource PrimaryTextBrush}"
                                        FontSize="14"
                                        FontWeight="SemiBold" />
                         </Border>
 
-                        <ScrollViewer Grid.Row="1">
+                        <TextBlock Grid.Row="1"
+                                   Text="Warnings appear here after a preview."
+                                   IsVisible="{Binding !Warnings.Count}"
+                                   Foreground="{DynamicResource MutedTextBrush}"
+                                   FontSize="12"
+                                   Margin="12,8" />
+
+                        <ScrollViewer Grid.Row="1"
+                                      IsVisible="{Binding !!Warnings.Count}">
                             <ItemsControl ItemsSource="{Binding Warnings}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="models:TransferWarningRowViewModel">
                                         <Border Padding="12,6"
-                                                BorderBrush="#252733"
+                                                BorderBrush="{DynamicResource SubtleBorderBrush}"
                                                 BorderThickness="0,0,0,1">
 
                                             <StackPanel Orientation="Horizontal"
                                                         Spacing="8">
                                                 <TextBlock Text="{Binding SeverityText}"
-                                                           Foreground="{StaticResource WarningBrush}"
+                                                           Foreground="{DynamicResource WarningBrush}"
                                                            FontSize="12"
                                                            FontWeight="SemiBold"
                                                            Width="60" />
 
                                                 <TextBlock Text="{Binding Message}"
-                                                           Foreground="{StaticResource SecondaryTextBrush}"
+                                                           Foreground="{DynamicResource SecondaryTextBrush}"
                                                            FontSize="12"
                                                            TextWrapping="Wrap" />
                                             </StackPanel>
@@ -412,18 +496,59 @@
                 </Border>
 
                 <GridSplitter Grid.Row="1"
+                              IsVisible="{Binding !!Warnings.Count}"
                               Height="8"
                               Margin="0,1"
-                              Background="{StaticResource SplitterBrush}"
+                              Background="Transparent"
                               ResizeDirection="Rows" />
 
                 <!-- Grouped preview items and execution results -->
                 <ScrollViewer Grid.Row="2">
+                    <Border Background="{DynamicResource CardBackgroundBrush}"
+                        BorderBrush="{DynamicResource CardBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="14"
+                        Padding="0">
+                  <Grid RowDefinitions="Auto,*">
+                    <Border Padding="12,8"
+                            BorderBrush="{DynamicResource CardBorderBrush}"
+                            BorderThickness="0,0,0,1">
+                        <StackPanel Spacing="2">
+                            <TextBlock Text="Preview results"
+                                       Foreground="{DynamicResource PrimaryTextBrush}"
+                                       FontSize="14"
+                                       FontWeight="SemiBold" />
+                            <TextBlock Text="Every file the copy would touch, grouped by source, with any warnings."
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                       FontSize="12" />
+                        </StackPanel>
+                    </Border>
+                  <Panel Grid.Row="1">
+                    <views:EmptyState Glyph="&#xE890;"
+                                      Title="No preview yet"
+                                      Message="Run Preview copy to see every file that would be copied, with any warnings, before anything happens.">
+                        <views:EmptyState.IsVisible>
+                            <MultiBinding Converter="{x:Static BoolConverters.And}">
+                                <Binding Path="!UserDataItems.Count" />
+                                <Binding Path="!MappingItems.Count" />
+                                <Binding Path="!Warnings.Count" />
+                                <Binding Path="!ExecutionResults.Count" />
+                            </MultiBinding>
+                        </views:EmptyState.IsVisible>
+                    </views:EmptyState>
                     <StackPanel Spacing="10">
+                        <StackPanel.IsVisible>
+                            <MultiBinding Converter="{x:Static BoolConverters.Or}">
+                                <Binding Path="!!UserDataItems.Count" />
+                                <Binding Path="!!MappingItems.Count" />
+                                <Binding Path="!!Warnings.Count" />
+                                <Binding Path="!!ExecutionResults.Count" />
+                            </MultiBinding>
+                        </StackPanel.IsVisible>
 
                         <!-- Group: Steam userdata game folder -->
-                        <Border Background="{StaticResource CardBackgroundBrush}"
-                                BorderBrush="{StaticResource CardBorderBrush}"
+                        <Border Background="{DynamicResource CardBackgroundBrush}"
+                                BorderBrush="{DynamicResource CardBorderBrush}"
                                 BorderThickness="1"
                                 CornerRadius="14"
                                 Padding="0">
@@ -432,39 +557,47 @@
 
                                 <Border Grid.Row="0"
                                         Padding="12,8"
-                                        BorderBrush="{StaticResource CardBorderBrush}"
+                                        BorderBrush="{DynamicResource CardBorderBrush}"
                                         BorderThickness="0,0,0,1">
 
                                     <StackPanel Spacing="2">
                                         <StackPanel Orientation="Horizontal"
                                                     Spacing="8">
                                             <TextBlock Text="Steam userdata game folder"
-                                                       Foreground="{StaticResource PrimaryTextBrush}"
+                                                       Foreground="{DynamicResource PrimaryTextBrush}"
                                                        FontSize="14"
                                                        FontWeight="SemiBold" />
 
                                             <TextBlock Text="Excluded from this preview"
                                                        IsVisible="{Binding !IncludeSteamUserDataGameFolder}"
-                                                       Foreground="{StaticResource WarningBrush}"
-                                                       FontSize="11"
+                                                       Foreground="{DynamicResource WarningBrush}"
+                                                       FontSize="12"
                                                        VerticalAlignment="Center" />
                                         </StackPanel>
 
                                         <TextBlock Text="The whole game-specific folder under the source profile's Steam userdata, copied into the target profile."
-                                                   Foreground="{StaticResource MutedTextBrush}"
-                                                   FontSize="11"
+                                                   Foreground="{DynamicResource MutedTextBrush}"
+                                                   FontSize="12"
                                                    TextWrapping="Wrap" />
                                     </StackPanel>
                                 </Border>
 
                                 <Border Grid.Row="1"
                                         Padding="10,6"
-                                        BorderBrush="{StaticResource CardBorderBrush}"
-                                        BorderThickness="0,0,0,1">
+                                        BorderBrush="{DynamicResource CardBorderBrush}"
+                                        BorderThickness="0,0,0,1"
+                                        IsVisible="{Binding !!UserDataItems.Count}">
 
                                     <ContentControl Content=""
                                                     ContentTemplate="{StaticResource PreviewColumnsHeaderTemplate}" />
                                 </Border>
+
+                                <TextBlock Grid.Row="1"
+                                           Text="Files from the source profile's Steam userdata appear here after a preview."
+                                           IsVisible="{Binding !UserDataItems.Count}"
+                                           Foreground="{DynamicResource MutedTextBrush}"
+                                           FontSize="12"
+                                           Margin="12,10" />
 
                                 <ItemsControl Grid.Row="2"
                                               ItemsSource="{Binding UserDataItems}"
@@ -473,8 +606,8 @@
                         </Border>
 
                         <!-- Group: Approved save mappings -->
-                        <Border Background="{StaticResource CardBackgroundBrush}"
-                                BorderBrush="{StaticResource CardBorderBrush}"
+                        <Border Background="{DynamicResource CardBackgroundBrush}"
+                                BorderBrush="{DynamicResource CardBorderBrush}"
                                 BorderThickness="1"
                                 CornerRadius="14"
                                 Padding="0">
@@ -483,39 +616,47 @@
 
                                 <Border Grid.Row="0"
                                         Padding="12,8"
-                                        BorderBrush="{StaticResource CardBorderBrush}"
+                                        BorderBrush="{DynamicResource CardBorderBrush}"
                                         BorderThickness="0,0,0,1">
 
                                     <StackPanel Spacing="2">
                                         <StackPanel Orientation="Horizontal"
                                                     Spacing="8">
                                             <TextBlock Text="Approved save mappings"
-                                                       Foreground="{StaticResource PrimaryTextBrush}"
+                                                       Foreground="{DynamicResource PrimaryTextBrush}"
                                                        FontSize="14"
                                                        FontWeight="SemiBold" />
 
                                             <TextBlock Text="Excluded from this preview"
                                                        IsVisible="{Binding !IncludeApprovedMappings}"
-                                                       Foreground="{StaticResource WarningBrush}"
-                                                       FontSize="11"
+                                                       Foreground="{DynamicResource WarningBrush}"
+                                                       FontSize="12"
                                                        VerticalAlignment="Center" />
                                         </StackPanel>
 
                                         <TextBlock Text="Save locations from the approved mapping database, expanded for the selected profiles."
-                                                   Foreground="{StaticResource MutedTextBrush}"
-                                                   FontSize="11"
+                                                   Foreground="{DynamicResource MutedTextBrush}"
+                                                   FontSize="12"
                                                    TextWrapping="Wrap" />
                                     </StackPanel>
                                 </Border>
 
                                 <Border Grid.Row="1"
                                         Padding="10,6"
-                                        BorderBrush="{StaticResource CardBorderBrush}"
-                                        BorderThickness="0,0,0,1">
+                                        BorderBrush="{DynamicResource CardBorderBrush}"
+                                        BorderThickness="0,0,0,1"
+                                        IsVisible="{Binding !!MappingItems.Count}">
 
                                     <ContentControl Content=""
                                                     ContentTemplate="{StaticResource PreviewColumnsHeaderTemplate}" />
                                 </Border>
+
+                                <TextBlock Grid.Row="1"
+                                           Text="Files from approved save mappings appear here after a preview."
+                                           IsVisible="{Binding !MappingItems.Count}"
+                                           Foreground="{DynamicResource MutedTextBrush}"
+                                           FontSize="12"
+                                           Margin="12,10" />
 
                                 <ItemsControl Grid.Row="2"
                                               ItemsSource="{Binding MappingItems}"
@@ -524,8 +665,8 @@
                         </Border>
 
                         <!-- Group: Execution results -->
-                        <Border Background="{StaticResource CardBackgroundBrush}"
-                                BorderBrush="{StaticResource CardBorderBrush}"
+                        <Border Background="{DynamicResource CardBackgroundBrush}"
+                                BorderBrush="{DynamicResource CardBorderBrush}"
                                 BorderThickness="1"
                                 CornerRadius="14"
                                 Padding="0">
@@ -534,68 +675,76 @@
 
                                 <Border Grid.Row="0"
                                         Padding="12,8"
-                                        BorderBrush="{StaticResource CardBorderBrush}"
+                                        BorderBrush="{DynamicResource CardBorderBrush}"
                                         BorderThickness="0,0,0,1">
 
                                     <StackPanel Spacing="2">
                                         <TextBlock Text="Execution results"
-                                                   Foreground="{StaticResource PrimaryTextBrush}"
+                                                   Foreground="{DynamicResource PrimaryTextBrush}"
                                                    FontSize="14"
                                                    FontWeight="SemiBold" />
 
                                         <TextBlock Text="Exactly what was copied, skipped, or failed during the last copy."
-                                                   Foreground="{StaticResource MutedTextBrush}"
-                                                   FontSize="11"
+                                                   Foreground="{DynamicResource MutedTextBrush}"
+                                                   FontSize="12"
                                                    TextWrapping="Wrap" />
                                     </StackPanel>
                                 </Border>
 
                                 <Border Grid.Row="1"
                                         Padding="10,6"
-                                        BorderBrush="{StaticResource CardBorderBrush}"
-                                        BorderThickness="0,0,0,1">
+                                        BorderBrush="{DynamicResource CardBorderBrush}"
+                                        BorderThickness="0,0,0,1"
+                                        IsVisible="{Binding !!ExecutionResults.Count}">
 
                                     <Grid ColumnDefinitions="2*,2*,80,130,*"
                                           ColumnSpacing="10">
 
                                         <TextBlock Grid.Column="0"
                                                    Text="Source file"
-                                                   Foreground="{StaticResource SecondaryTextBrush}"
+                                                   Foreground="{DynamicResource SecondaryTextBrush}"
                                                    FontSize="12"
                                                    FontWeight="Bold" />
 
                                         <TextBlock Grid.Column="1"
                                                    Text="Target file"
-                                                   Foreground="{StaticResource SecondaryTextBrush}"
+                                                   Foreground="{DynamicResource SecondaryTextBrush}"
                                                    FontSize="12"
                                                    FontWeight="Bold" />
 
                                         <TextBlock Grid.Column="2"
                                                    Text="Size"
-                                                   Foreground="{StaticResource SecondaryTextBrush}"
+                                                   Foreground="{DynamicResource SecondaryTextBrush}"
                                                    FontSize="12"
                                                    FontWeight="Bold" />
 
                                         <TextBlock Grid.Column="3"
                                                    Text="Status"
-                                                   Foreground="{StaticResource SecondaryTextBrush}"
+                                                   Foreground="{DynamicResource SecondaryTextBrush}"
                                                    FontSize="12"
                                                    FontWeight="Bold" />
 
                                         <TextBlock Grid.Column="4"
                                                    Text="Details"
-                                                   Foreground="{StaticResource SecondaryTextBrush}"
+                                                   Foreground="{DynamicResource SecondaryTextBrush}"
                                                    FontSize="12"
                                                    FontWeight="Bold" />
                                     </Grid>
                                 </Border>
+
+                                <TextBlock Grid.Row="1"
+                                           Text="File-by-file results appear here after a copy."
+                                           IsVisible="{Binding !ExecutionResults.Count}"
+                                           Foreground="{DynamicResource MutedTextBrush}"
+                                           FontSize="12"
+                                           Margin="12,10" />
 
                                 <ItemsControl Grid.Row="2"
                                               ItemsSource="{Binding ExecutionResults}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="models:SaveTransferItemResultRowViewModel">
                                             <Border Padding="10,6"
-                                                    BorderBrush="#252733"
+                                                    BorderBrush="{DynamicResource SubtleBorderBrush}"
                                                     BorderThickness="0,0,0,1">
 
                                                 <StackPanel Spacing="3">
@@ -604,14 +753,14 @@
 
                                                         <TextBlock Grid.Column="0"
                                                                    Text="{Binding SourceFile}"
-                                                                   Foreground="{StaticResource SecondaryTextBrush}"
+                                                                   Foreground="{DynamicResource SecondaryTextBrush}"
                                                                    ToolTip.Tip="{Binding SourceFile}"
                                                                    FontSize="12"
                                                                    TextTrimming="CharacterEllipsis" />
 
                                                         <TextBlock Grid.Column="1"
                                                                    Text="{Binding TargetFile}"
-                                                                   Foreground="{StaticResource SecondaryTextBrush}"
+                                                                   Foreground="{DynamicResource SecondaryTextBrush}"
                                                                    ToolTip.Tip="{Binding TargetFile}"
                                                                    FontSize="12"
                                                                    TextTrimming="CharacterEllipsis" />
@@ -619,24 +768,24 @@
                                                         <TextBlock Grid.Column="2"
                                                                    Text="{Binding SizeDisplay}"
                                                                    FontSize="12"
-                                                                   Foreground="{StaticResource MutedTextBrush}" />
+                                                                   Foreground="{DynamicResource MutedTextBrush}" />
 
                                                         <TextBlock Grid.Column="3"
                                                                    Text="{Binding Status}"
-                                                                   Foreground="{StaticResource PrimaryTextBrush}"
+                                                                   Foreground="{DynamicResource PrimaryTextBrush}"
                                                                    FontSize="12"
                                                                    FontWeight="SemiBold" />
 
                                                         <TextBlock Grid.Column="4"
                                                                    Text="{Binding Error}"
-                                                                   Foreground="{StaticResource WarningBrush}"
+                                                                   Foreground="{DynamicResource WarningBrush}"
                                                                    FontSize="12"
                                                                    TextWrapping="Wrap" />
                                                     </Grid>
 
                                                     <TextBlock Text="{Binding BackupDisplay}"
                                                                IsVisible="{Binding HasBackup}"
-                                                               Foreground="{StaticResource AccentBrush}"
+                                                               Foreground="{DynamicResource AccentBrush}"
                                                                FontSize="10"
                                                                ToolTip.Tip="{Binding BackupFile}"
                                                                TextTrimming="CharacterEllipsis" />
@@ -648,6 +797,10 @@
                             </Grid>
                         </Border>
                     </StackPanel>
+                  </Panel>
+                  </Grid>
+                </Border>
+                
                 </ScrollViewer>
             </Grid>
         </Grid>

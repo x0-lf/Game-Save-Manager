@@ -177,7 +177,7 @@ namespace GameSaves.App.ViewModels
         }
 
         [ObservableProperty]
-        private string restoreStatusMessage = "No restore executed.";
+        private string restoreStatusMessage = "No restore has run yet.";
 
         [ObservableProperty]
         private int filesRestored;
@@ -474,7 +474,7 @@ namespace GameSaves.App.ViewModels
             RunItems.Clear();
             RestoreResults.Clear();
             ConfirmRestore = false;
-            RestoreStatusMessage = "No restore executed.";
+            RestoreStatusMessage = "No restore has run yet.";
             FilesRestored = 0;
             FilesSkipped = 0;
             BytesRestoredDisplay = "0 B";
@@ -534,8 +534,10 @@ namespace GameSaves.App.ViewModels
                     Runs.Add(new BackupRunRowViewModel(run));
 
                 StatusMessage = Runs.Count == 0
-                    ? "No backup runs found. Backups are created automatically before files are overwritten."
-                    : $"Found {Runs.Count} backup run(s).";
+                    ? "No backup runs found."
+                    : Runs.Count == 1
+                        ? "1 backup run available."
+                        : $"{Runs.Count} backup runs available.";
             }
             catch (Exception ex)
             {

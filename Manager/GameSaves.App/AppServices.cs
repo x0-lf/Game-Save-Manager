@@ -2,6 +2,7 @@
 using GameSaves.App.ViewModels;
 using GameSaves.Infrastructure.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection;
+using System;
 
 namespace GameSaves.App
 {
@@ -9,11 +10,21 @@ namespace GameSaves.App
     {
         public static ServiceProvider Build()
         {
+            return Build(overrides: null);
+        }
+
+        // The overrides hook exists for development-only hosts (the UI capture
+        // harness) that must never touch the real database, registry-located
+        // Steam installation, or secret store. Last registration wins.
+        public static ServiceProvider Build(
+            Action<IServiceCollection>? overrides)
+        {
             var services = new ServiceCollection();
 
             services.AddGameSavesInfrastructure();
 
             services.AddSingleton<IFolderPickerService, FolderPickerService>();
+            services.AddSingleton<IUiSettingsStore, UiSettingsStore>();
             services.AddSingleton<ISyncSettingsStore, SyncSettingsStore>();
             services.AddSingleton<ISyncRemoteProfileMigrationService, SyncRemoteProfileMigrationService>();
 
@@ -41,6 +52,8 @@ namespace GameSaves.App
                     provider.GetRequiredService<BackupHistoryViewModel>(),
                     provider.GetRequiredService<TransferHistoryViewModel>(),
                 }));
+
+            overrides?.Invoke(services);
 
             return services.BuildServiceProvider();
         }

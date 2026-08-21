@@ -70,6 +70,7 @@ namespace GameSaves.App.ViewModels
         private string statusMessage = "Choose a sync folder (NAS share, USB drive, cloud-synced folder) and preview the sync.";
 
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(CanPreviewSync))]
         private string remoteRootPath = "";
 
         [ObservableProperty]
@@ -107,6 +108,7 @@ namespace GameSaves.App.ViewModels
         private SyncProviderKind selectedProviderKind = SyncProviderKind.LocalFolder;
 
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(CanPreviewSync))]
         private string sftpHost = "";
 
         [ObservableProperty]
@@ -203,6 +205,7 @@ namespace GameSaves.App.ViewModels
         [NotifyPropertyChangedFor(nameof(CanCheckGoogleDriveRootFolder))]
         [NotifyPropertyChangedFor(nameof(CanShowRecreateGoogleDriveRootFolder))]
         [NotifyPropertyChangedFor(nameof(CanRecreateGoogleDriveRootFolder))]
+        [NotifyPropertyChangedFor(nameof(CanPreviewSync))]
         private SyncRemoteProfile? selectedRemoteProfile;
 
         [ObservableProperty]
@@ -211,8 +214,11 @@ namespace GameSaves.App.ViewModels
         [ObservableProperty]
         private string remoteProfileDisplayName = "";
 
+        // The pristine state is "no profile selected", not "you changed
+        // something": a first run must not claim unsaved changes before the
+        // user has touched anything. See ui-critic-round-1 finding 13.
         [ObservableProperty]
-        private string remoteProfileState = "Unsaved changes";
+        private string remoteProfileState = "Unsaved settings (no profile)";
 
         [ObservableProperty]
         private bool confirmDeleteRemoteProfile;
@@ -430,7 +436,23 @@ namespace GameSaves.App.ViewModels
             SelectedProviderDescriptor.IsImplemented && SupportsRemoteQuota;
 
         public bool CanPreviewSync =>
-            SelectedProviderDescriptor.IsImplemented && !IsLoading;
+            SelectedProviderDescriptor.IsImplemented &&
+            !IsLoading &&
+            HasPlausibleSyncTarget;
+
+        // Preview is safe, but a preview against a target the user has not
+        // even named can only fail; sibling views gate their previews the
+        // same way. Plausibility only - full validation still happens in
+        // the preview itself.
+        private bool HasPlausibleSyncTarget => SelectedProviderKind switch
+        {
+            SyncProviderKind.LocalFolder =>
+                !string.IsNullOrWhiteSpace(RemoteRootPath),
+            SyncProviderKind.Sftp =>
+                !string.IsNullOrWhiteSpace(SftpHost),
+            SyncProviderKind.GoogleDrive => HasUsableGoogleDriveProfile,
+            _ => false,
+        };
 
         public string ProviderCapabilitySummary
         {
@@ -490,13 +512,13 @@ namespace GameSaves.App.ViewModels
 
         public string GoogleDriveAccountLabel =>
             GoogleDriveConnectionStatus == GoogleDriveConnectionStatus.Connected
-                ? "Account:"
+                ? "Account"
                 : (GoogleDriveConnectionStatus is
                        GoogleDriveConnectionStatus.ReauthenticationRequired or
                        GoogleDriveConnectionStatus.StoredAuthenticationAvailable) &&
                   (GoogleDriveAccountDisplayName is not null || GoogleDriveAccountEmail is not null)
-                    ? "Previously connected account:"
-                    : "Account:";
+                    ? "Previously connected account"
+                    : "Account";
 
         public string GoogleDriveStatusDisplayText => GoogleDriveConnectionStatus switch
         {
@@ -504,7 +526,13 @@ namespace GameSaves.App.ViewModels
                 "Authorization expired or revoked",
             GoogleDriveConnectionStatus.StoredAuthenticationAvailable =>
                 "Checking stored authentication",
-            _ => GoogleDriveConnectionStatus.ToString()
+            GoogleDriveConnectionStatus.NotConfigured => "Not configured",
+            GoogleDriveConnectionStatus.Disconnected => "Disconnected",
+            GoogleDriveConnectionStatus.Connecting => "Connecting",
+            GoogleDriveConnectionStatus.Connected => "Connected",
+            GoogleDriveConnectionStatus.Unavailable => "Unavailable",
+            GoogleDriveConnectionStatus.Failed => "Connection failed",
+            _ => "Unknown"
         };
 
         private bool HasUsableGoogleDriveProfile =>

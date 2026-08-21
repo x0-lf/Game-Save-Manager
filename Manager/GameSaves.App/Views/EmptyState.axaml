@@ -1,0 +1,54 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="GameSaves.App.Views.EmptyState">
+
+    <UserControl.Styles>
+        <Style Selector="ContentPresenter#ActionPresenter Button">
+            <Setter Property="MinHeight" Value="34" />
+            <Setter Property="Padding" Value="14,6" />
+        </Style>
+    </UserControl.Styles>
+
+    <!-- The shared empty-state pattern: icon, one-line title, short
+         explanation, optional call-to-action. Views overlay this on any
+         region whose backing collection is empty, so a first-run user sees
+         guidance instead of column headers floating over a void. -->
+    <StackPanel VerticalAlignment="Center"
+                HorizontalAlignment="Center"
+                Spacing="10"
+                Margin="24"
+                MaxWidth="460">
+
+        <Border Width="88"
+                Height="88"
+                CornerRadius="44"
+                HorizontalAlignment="Center"
+                Background="{DynamicResource EmptyStateCircleBrush}">
+            <TextBlock x:Name="GlyphText"
+                       FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                       FontSize="40"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center"
+                       Foreground="{DynamicResource SecondaryTextBrush}" />
+        </Border>
+
+        <TextBlock x:Name="TitleText"
+                   FontSize="15"
+                   FontWeight="SemiBold"
+                   HorizontalAlignment="Center"
+                   TextAlignment="Center"
+                   TextWrapping="Wrap"
+                   Foreground="{DynamicResource PrimaryTextBrush}" />
+
+        <TextBlock x:Name="MessageText"
+                   FontSize="12"
+                   HorizontalAlignment="Center"
+                   TextAlignment="Center"
+                   TextWrapping="Wrap"
+                   Foreground="{DynamicResource SecondaryTextBrush}" />
+
+        <ContentPresenter x:Name="ActionPresenter"
+                          HorizontalAlignment="Center"
+                          Margin="0,4,0,0" />
+    </StackPanel>
+</UserControl>

@@ -2,35 +2,26 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:GameSaves.App.ViewModels"
              xmlns:models="using:GameSaves.App.Models"
+             xmlns:views="using:GameSaves.App.Views"
              x:Class="GameSaves.App.Views.ProfilesView"
              x:DataType="vm:ProfilesViewModel"
-             Background="#111217">
+             Background="{DynamicResource PageBackgroundBrush}">
 
-    <UserControl.Resources>
-        <SolidColorBrush x:Key="CardBackgroundBrush" Color="#1A1B22" />
-        <SolidColorBrush x:Key="CardBorderBrush" Color="#2A2C36" />
-        <SolidColorBrush x:Key="PrimaryTextBrush" Color="#F4F4F5" />
-        <SolidColorBrush x:Key="SecondaryTextBrush" Color="#A7AAB4" />
-        <SolidColorBrush x:Key="MutedTextBrush" Color="#777B86" />
-        <SolidColorBrush x:Key="AccentBrush" Color="#7C9CFF" />
-        <SolidColorBrush x:Key="SuccessBrush" Color="#6EE7A8" />
-        <SolidColorBrush x:Key="WarningBrush" Color="#FACC6B" />
-        <SolidColorBrush x:Key="SplitterBrush" Color="#2A2C36" />
-    </UserControl.Resources>
 
     <Grid RowSpacing="0"
-          Margin="0,12,0,0">
+          Margin="0,12,0,14"
+          MaxWidth="1100">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="230" MinHeight="120" MaxHeight="420" />
+            <RowDefinition Height="180" MinHeight="120" MaxHeight="420" />
             <RowDefinition Height="8" />
             <RowDefinition Height="*" MinHeight="160" />
         </Grid.RowDefinitions>
 
         <!-- Header -->
         <Border Grid.Row="0"
-                Background="{StaticResource CardBackgroundBrush}"
-                BorderBrush="{StaticResource CardBorderBrush}"
+                Background="{DynamicResource CardBackgroundBrush}"
+                BorderBrush="{DynamicResource CardBorderBrush}"
                 BorderThickness="1"
                 CornerRadius="14"
                 Padding="14,10"
@@ -41,18 +32,16 @@
 
                 <StackPanel Grid.Column="0"
                             Spacing="2">
-                    <TextBlock Text="Steam Profiles"
-                               Foreground="{StaticResource PrimaryTextBrush}"
-                               FontSize="18"
-                               FontWeight="Bold" />
+                    <TextBlock Text="Profiles" Classes="h1" />
 
-                    <TextBlock Text="{Binding StatusMessage}"
-                               Foreground="{StaticResource SecondaryTextBrush}"
+                    <TextBlock Text="Source and target profiles for save transfers."
+                               Foreground="{DynamicResource SecondaryTextBrush}"
                                FontSize="12" />
                 </StackPanel>
 
                 <Button Grid.Column="1"
-                        Content="Refresh Profiles"
+                        Content="Scan Steam library"
+                        IsVisible="{Binding HasProfiles}"
                         Command="{Binding RefreshProfilesCommand}"
                         Height="34"
                         VerticalAlignment="Center" />
@@ -66,8 +55,8 @@
 
             <!-- Source -->
             <Border Grid.Column="0"
-                    Background="{StaticResource CardBackgroundBrush}"
-                    BorderBrush="{StaticResource CardBorderBrush}"
+                    Background="{DynamicResource CardBackgroundBrush}"
+                    BorderBrush="{DynamicResource CardBorderBrush}"
                     BorderThickness="1"
                     CornerRadius="14"
                     Padding="0">
@@ -75,11 +64,12 @@
                 <ScrollViewer>
                 <StackPanel Spacing="10"
                             Margin="16,12">
-                    <TextBlock Text="Source Profile"
-                               Foreground="{StaticResource PrimaryTextBrush}"
+                    <TextBlock Text="Source profile"
+                               Foreground="{DynamicResource PrimaryTextBrush}"
                                FontSize="15"
                                FontWeight="SemiBold" />
 
+                    <Panel>
                     <ComboBox ItemsSource="{Binding Profiles}"
                               SelectedItem="{Binding SourceProfile}"
                               HorizontalAlignment="Stretch"
@@ -89,20 +79,29 @@
                                 <StackPanel Spacing="2">
                                     <TextBlock Text="{Binding DisplayName}" />
                                     <TextBlock Text="{Binding UserDataPath}"
-                                               FontSize="11"
+                                               FontSize="12"
                                                Opacity="0.65" />
                                 </StackPanel>
                             </DataTemplate>
                         </ComboBox.ItemTemplate>
                     </ComboBox>
+                    <TextBlock Text="Select a profile"
+                               Foreground="{DynamicResource MutedTextBrush}"
+                               FontSize="13"
+                               Margin="12,0,32,0"
+                               VerticalAlignment="Center"
+                               IsHitTestVisible="False"
+                               IsVisible="{Binding SourceProfile, Converter={x:Static ObjectConverters.IsNull}}" />
+                    </Panel>
 
                     <TextBlock Text="{Binding SourcePath}"
-                               Foreground="{StaticResource MutedTextBrush}"
+                               Foreground="{DynamicResource MutedTextBrush}"
                                FontSize="12"
                                TextWrapping="Wrap" />
 
-                    <Button Content="Open Source Folder"
+                    <Button Content="Open source folder"
                             Command="{Binding OpenSourceFolderCommand}"
+                            IsEnabled="{Binding SourceProfile, Converter={x:Static ObjectConverters.IsNotNull}}"
                             Width="170" />
                 </StackPanel>
                 </ScrollViewer>
@@ -110,8 +109,8 @@
 
             <!-- Target -->
             <Border Grid.Column="1"
-                    Background="{StaticResource CardBackgroundBrush}"
-                    BorderBrush="{StaticResource CardBorderBrush}"
+                    Background="{DynamicResource CardBackgroundBrush}"
+                    BorderBrush="{DynamicResource CardBorderBrush}"
                     BorderThickness="1"
                     CornerRadius="14"
                     Padding="0">
@@ -119,11 +118,12 @@
                 <ScrollViewer>
                 <StackPanel Spacing="10"
                             Margin="16,12">
-                    <TextBlock Text="Target Profile"
-                               Foreground="{StaticResource PrimaryTextBrush}"
+                    <TextBlock Text="Target profile"
+                               Foreground="{DynamicResource PrimaryTextBrush}"
                                FontSize="15"
                                FontWeight="SemiBold" />
 
+                    <Panel>
                     <ComboBox ItemsSource="{Binding Profiles}"
                               SelectedItem="{Binding TargetProfile}"
                               HorizontalAlignment="Stretch"
@@ -133,20 +133,29 @@
                                 <StackPanel Spacing="2">
                                     <TextBlock Text="{Binding DisplayName}" />
                                     <TextBlock Text="{Binding UserDataPath}"
-                                               FontSize="11"
+                                               FontSize="12"
                                                Opacity="0.65" />
                                 </StackPanel>
                             </DataTemplate>
                         </ComboBox.ItemTemplate>
                     </ComboBox>
+                    <TextBlock Text="Select a profile"
+                               Foreground="{DynamicResource MutedTextBrush}"
+                               FontSize="13"
+                               Margin="12,0,32,0"
+                               VerticalAlignment="Center"
+                               IsHitTestVisible="False"
+                               IsVisible="{Binding TargetProfile, Converter={x:Static ObjectConverters.IsNull}}" />
+                    </Panel>
 
                     <TextBlock Text="{Binding TargetPath}"
-                               Foreground="{StaticResource MutedTextBrush}"
+                               Foreground="{DynamicResource MutedTextBrush}"
                                FontSize="12"
                                TextWrapping="Wrap" />
 
-                    <Button Content="Open Target Folder"
+                    <Button Content="Open target folder"
                             Command="{Binding OpenTargetFolderCommand}"
+                            IsEnabled="{Binding TargetProfile, Converter={x:Static ObjectConverters.IsNotNull}}"
                             Width="170" />
                 </StackPanel>
                 </ScrollViewer>
@@ -156,13 +165,13 @@
         <GridSplitter Grid.Row="2"
                       Height="8"
                       Margin="0,1"
-                      Background="{StaticResource SplitterBrush}"
+                      Background="Transparent"
                       ResizeDirection="Rows" />
 
         <!-- Profiles list -->
         <Border Grid.Row="3"
-                Background="{StaticResource CardBackgroundBrush}"
-                BorderBrush="{StaticResource CardBorderBrush}"
+                Background="{DynamicResource CardBackgroundBrush}"
+                BorderBrush="{DynamicResource CardBorderBrush}"
                 BorderThickness="1"
                 CornerRadius="14"
                 Padding="0">
@@ -171,56 +180,59 @@
 
                 <Border Grid.Row="0"
                         Padding="12,8"
-                        BorderBrush="{StaticResource CardBorderBrush}"
+                        BorderBrush="{DynamicResource CardBorderBrush}"
                         BorderThickness="0,0,0,1">
 
                     <StackPanel Spacing="2">
-                        <TextBlock Text="Detected Profiles (drag the divider above to resize)"
-                                   Foreground="{StaticResource PrimaryTextBrush}"
+                        <TextBlock Text="Detected profiles"
+                                   Foreground="{DynamicResource PrimaryTextBrush}"
                                    FontSize="14"
                                    FontWeight="SemiBold" />
 
                         <TextBlock Text="{Binding SelectionWarning}"
-                                   Foreground="{StaticResource WarningBrush}"
+                                   IsVisible="{Binding HasProfiles}"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
                                    FontSize="13" />
                     </StackPanel>
                 </Border>
 
                 <Border Grid.Row="1"
                         Padding="12"
-                        BorderBrush="{StaticResource CardBorderBrush}"
-                        BorderThickness="0,0,0,1">
+                        BorderBrush="{DynamicResource CardBorderBrush}"
+                        BorderThickness="0,0,0,1"
+                        IsVisible="{Binding HasProfiles}">
 
                     <Grid ColumnDefinitions="180,*,130,130"
                           ColumnSpacing="12">
                         <TextBlock Grid.Column="0"
                                    Text="Account ID"
-                                   Foreground="{StaticResource SecondaryTextBrush}"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
                                    FontWeight="Bold" />
 
                         <TextBlock Grid.Column="1"
                                    Text="Userdata path"
-                                   Foreground="{StaticResource SecondaryTextBrush}"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
                                    FontWeight="Bold" />
 
                         <TextBlock Grid.Column="2"
                                    Text="App folders"
-                                   Foreground="{StaticResource SecondaryTextBrush}"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
                                    FontWeight="Bold" />
 
                         <TextBlock Grid.Column="3"
                                    Text="Current"
-                                   Foreground="{StaticResource SecondaryTextBrush}"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
                                    FontWeight="Bold" />
                     </Grid>
                 </Border>
 
-                <ScrollViewer Grid.Row="2">
+                <ScrollViewer Grid.Row="2"
+                              IsVisible="{Binding HasProfiles}">
                     <ItemsControl ItemsSource="{Binding Profiles}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="models:SteamProfileRowViewModel">
                                 <Border Padding="12"
-                                        BorderBrush="#252733"
+                                        BorderBrush="{DynamicResource SubtleBorderBrush}"
                                         BorderThickness="0,0,0,1">
 
                                     <Grid ColumnDefinitions="180,*,130,130"
@@ -228,27 +240,47 @@
 
                                         <TextBlock Grid.Column="0"
                                                    Text="{Binding AccountId}"
-                                                   Foreground="{StaticResource PrimaryTextBrush}"
+                                                   Foreground="{DynamicResource PrimaryTextBrush}"
                                                    FontWeight="SemiBold" />
 
                                         <TextBlock Grid.Column="1"
                                                    Text="{Binding UserDataPath}"
-                                                   Foreground="{StaticResource SecondaryTextBrush}"
+                                                   Foreground="{DynamicResource SecondaryTextBrush}"
                                                    TextTrimming="CharacterEllipsis" />
 
                                         <TextBlock Grid.Column="2"
                                                    Text="{Binding AppFolderCount}"
-                                                   Foreground="{StaticResource AccentBrush}" />
+                                                   Foreground="{DynamicResource AccentBrush}" />
 
                                         <TextBlock Grid.Column="3"
                                                    Text="{Binding CurrentUserText}"
-                                                   Foreground="{StaticResource MutedTextBrush}" />
+                                                   Foreground="{DynamicResource MutedTextBrush}" />
                                     </Grid>
                                 </Border>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
                 </ScrollViewer>
+
+                <!-- Empty state: shown only when detection found no profiles
+                     and no refresh is in progress. -->
+                <views:EmptyState Grid.Row="2"
+                                 
+                                  Glyph="&#xE716;"
+                                  Title="No Steam profiles found"
+                                  Message="Make sure Steam is installed and signed in, then scan again.">
+                    <views:EmptyState.IsVisible>
+                        <MultiBinding Converter="{x:Static BoolConverters.And}">
+                            <Binding Path="!HasProfiles" />
+                            <Binding Path="!IsLoading" />
+                        </MultiBinding>
+                    </views:EmptyState.IsVisible>
+                    <views:EmptyState.ActionContent>
+                        <Button Content="Scan Steam library"
+                                Classes="primary"
+                                Command="{Binding RefreshProfilesCommand}" />
+                    </views:EmptyState.ActionContent>
+                </views:EmptyState>
             </Grid>
         </Border>
     </Grid>

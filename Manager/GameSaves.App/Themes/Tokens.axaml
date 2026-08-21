@@ -1,0 +1,133 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- The design system. Every colour in every view resolves here through
+         DynamicResource, so the theme variant can switch at runtime and no
+         view carries a literal. The dark values are the palette the
+         application shipped with; the light values are chosen against the
+         same semantic roles with WCAG AA contrast on their backgrounds.
+
+         The ToggleButton* and ExpanderHeader*/ExpanderContent* keys override
+         Fluent control resources application-wide so control chrome follows
+         the same surfaces as the cards instead of the theme's own bands. -->
+
+    <ResourceDictionary.ThemeDictionaries>
+
+        <ResourceDictionary x:Key="Dark">
+            <Color x:Key="SystemAccentColor">#4F6EDB</Color>
+            <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="#949AA8" />
+            <SolidColorBrush x:Key="TextControlPlaceholderForegroundFocused" Color="#949AA8" />
+            <SolidColorBrush x:Key="TextControlPlaceholderForegroundPointerOver" Color="#949AA8" />
+            <SolidColorBrush x:Key="TextControlPlaceholderForegroundDisabled" Color="#949AA8" />
+            <SolidColorBrush x:Key="ComboBoxPlaceHolderForeground" Color="#949AA8" />
+            <SolidColorBrush x:Key="ComboBoxPlaceHolderForegroundFocusedPressed" Color="#949AA8" />
+            <SolidColorBrush x:Key="ComboBoxForegroundDisabled" Color="#949AA8" />
+            <SolidColorBrush x:Key="PageBackgroundBrush" Color="#111217" />
+            <SolidColorBrush x:Key="CardBackgroundBrush" Color="#1D1F27" />
+            <SolidColorBrush x:Key="CardBorderBrush" Color="#343744" />
+            <SolidColorBrush x:Key="SubtleBorderBrush" Color="#252733" />
+            <SolidColorBrush x:Key="SplitterBrush" Color="#2A2C36" />
+            <SolidColorBrush x:Key="InsetBackgroundBrush" Color="#151720" />
+            <SolidColorBrush x:Key="EmptyStateCircleBrush" Color="#262933" />
+            <SolidColorBrush x:Key="PlaceholderInkBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="DeepInsetBackgroundBrush" Color="#10131A" />
+            <SolidColorBrush x:Key="PrimaryTextBrush" Color="#F4F4F5" />
+            <SolidColorBrush x:Key="SecondaryTextBrush" Color="#A7AAB4" />
+            <SolidColorBrush x:Key="MutedTextBrush" Color="#949AA8" />
+            <SolidColorBrush x:Key="AccentBrush" Color="#7C9CFF" />
+            <SolidColorBrush x:Key="BrandBrush" Color="#A9BCFF" />
+            <SolidColorBrush x:Key="AccentHoverBrush" Color="#93AEFF" />
+            <SolidColorBrush x:Key="AccentPressedBrush" Color="#6B8BF0" />
+            <SolidColorBrush x:Key="OnAccentBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="PrimaryButtonBrush" Color="#4F6EDB" />
+            <SolidColorBrush x:Key="PrimaryButtonHoverBrush" Color="#5B7BE8" />
+            <SolidColorBrush x:Key="PrimaryButtonPressedBrush" Color="#3F5CC4" />
+            <SolidColorBrush x:Key="SuccessBrush" Color="#6EE7A8" />
+            <SolidColorBrush x:Key="WarningBrush" Color="#FACC6B" />
+            <SolidColorBrush x:Key="WarningTintBrush" Color="#23252E" />
+            <SolidColorBrush x:Key="WarningEdgeBrush" Color="#6E5A28" />
+            <SolidColorBrush x:Key="DangerBrush" Color="#F87171" />
+
+            <SolidColorBrush x:Key="ToggleButtonBackground" Color="Transparent" />
+            <SolidColorBrush x:Key="ToggleButtonBackgroundChecked" Color="Transparent" />
+            <SolidColorBrush x:Key="ToggleButtonBackgroundPointerOver" Color="#20222B" />
+            <SolidColorBrush x:Key="ToggleButtonBackgroundPressed" Color="#20222B" />
+            <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPointerOver" Color="#20222B" />
+            <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPressed" Color="#20222B" />
+            <SolidColorBrush x:Key="ExpanderHeaderBackground" Color="#1D1F27" />
+            <SolidColorBrush x:Key="ExpanderHeaderBackgroundPointerOver" Color="#20222B" />
+            <SolidColorBrush x:Key="ExpanderHeaderBackgroundPressed" Color="#20222B" />
+            <SolidColorBrush x:Key="ExpanderHeaderBorderBrush" Color="Transparent" />
+            <SolidColorBrush x:Key="ExpanderContentBackground" Color="#1D1F27" />
+            <SolidColorBrush x:Key="ExpanderContentBorderBrush" Color="#2A2C36" />
+        </ResourceDictionary>
+
+        <ResourceDictionary x:Key="Light">
+            <Color x:Key="SystemAccentColor">#3557C7</Color>
+            <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="#5F6470" />
+            <SolidColorBrush x:Key="TextControlPlaceholderForegroundFocused" Color="#5F6470" />
+            <SolidColorBrush x:Key="TextControlPlaceholderForegroundPointerOver" Color="#5F6470" />
+            <SolidColorBrush x:Key="TextControlPlaceholderForegroundDisabled" Color="#5F6470" />
+            <SolidColorBrush x:Key="ComboBoxPlaceHolderForeground" Color="#5F6470" />
+            <SolidColorBrush x:Key="ComboBoxPlaceHolderForegroundFocusedPressed" Color="#5F6470" />
+            <SolidColorBrush x:Key="ComboBoxForegroundDisabled" Color="#5F6470" />
+            <SolidColorBrush x:Key="PageBackgroundBrush" Color="#F4F5F8" />
+            <SolidColorBrush x:Key="CardBackgroundBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="CardBorderBrush" Color="#DCDFE6" />
+            <SolidColorBrush x:Key="SubtleBorderBrush" Color="#E6E8EE" />
+            <SolidColorBrush x:Key="SplitterBrush" Color="#DCDFE6" />
+            <SolidColorBrush x:Key="InsetBackgroundBrush" Color="#F0F1F5" />
+            <SolidColorBrush x:Key="EmptyStateCircleBrush" Color="#EDEFF4" />
+            <SolidColorBrush x:Key="PlaceholderInkBrush" Color="#0D1117" />
+            <SolidColorBrush x:Key="DeepInsetBackgroundBrush" Color="#E9EBF1" />
+            <SolidColorBrush x:Key="PrimaryTextBrush" Color="#1B1D23" />
+            <SolidColorBrush x:Key="SecondaryTextBrush" Color="#555A64" />
+            <SolidColorBrush x:Key="MutedTextBrush" Color="#5F6470" />
+            <SolidColorBrush x:Key="AccentBrush" Color="#3557C7" />
+            <SolidColorBrush x:Key="BrandBrush" Color="#3557C7" />
+            <SolidColorBrush x:Key="AccentHoverBrush" Color="#2C4BB0" />
+            <SolidColorBrush x:Key="AccentPressedBrush" Color="#243F99" />
+            <SolidColorBrush x:Key="OnAccentBrush" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="PrimaryButtonBrush" Color="#3557C7" />
+            <SolidColorBrush x:Key="PrimaryButtonHoverBrush" Color="#2C4BB0" />
+            <SolidColorBrush x:Key="PrimaryButtonPressedBrush" Color="#243F99" />
+            <SolidColorBrush x:Key="SuccessBrush" Color="#177A4E" />
+            <SolidColorBrush x:Key="WarningBrush" Color="#96690F" />
+            <SolidColorBrush x:Key="WarningTintBrush" Color="#FBF3E0" />
+            <SolidColorBrush x:Key="WarningEdgeBrush" Color="#E0C070" />
+            <SolidColorBrush x:Key="DangerBrush" Color="#C13540" />
+
+            <SolidColorBrush x:Key="ToggleButtonBackground" Color="Transparent" />
+            <SolidColorBrush x:Key="ToggleButtonBackgroundChecked" Color="Transparent" />
+            <SolidColorBrush x:Key="ToggleButtonBackgroundPointerOver" Color="#E4E6EC" />
+            <SolidColorBrush x:Key="ToggleButtonBackgroundPressed" Color="#E4E6EC" />
+            <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPointerOver" Color="#E4E6EC" />
+            <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPressed" Color="#E4E6EC" />
+            <SolidColorBrush x:Key="ExpanderHeaderBackground" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="ExpanderHeaderBackgroundPointerOver" Color="#E4E6EC" />
+            <SolidColorBrush x:Key="ExpanderHeaderBackgroundPressed" Color="#E4E6EC" />
+            <SolidColorBrush x:Key="ExpanderHeaderBorderBrush" Color="Transparent" />
+            <SolidColorBrush x:Key="ExpanderContentBackground" Color="#FFFFFF" />
+            <SolidColorBrush x:Key="ExpanderContentBorderBrush" Color="#DCDFE6" />
+        </ResourceDictionary>
+
+    </ResourceDictionary.ThemeDictionaries>
+
+    <!-- Variant-independent scales. Adopt these instead of new literals. -->
+    <x:Double x:Key="FontSizeCaption">11</x:Double>
+    <x:Double x:Key="FontSizeBody">12</x:Double>
+    <x:Double x:Key="FontSizeBodyLarge">14</x:Double>
+    <x:Double x:Key="FontSizeTitle">16</x:Double>
+    <x:Double x:Key="FontSizeDisplay">22</x:Double>
+
+    <Thickness x:Key="SpaceXS">4</Thickness>
+    <Thickness x:Key="SpaceS">8</Thickness>
+    <Thickness x:Key="SpaceM">12</Thickness>
+    <Thickness x:Key="SpaceL">16</Thickness>
+    <Thickness x:Key="SpaceXL">24</Thickness>
+
+    <CornerRadius x:Key="RadiusS">8</CornerRadius>
+    <CornerRadius x:Key="RadiusM">10</CornerRadius>
+    <CornerRadius x:Key="RadiusL">14</CornerRadius>
+
+</ResourceDictionary>

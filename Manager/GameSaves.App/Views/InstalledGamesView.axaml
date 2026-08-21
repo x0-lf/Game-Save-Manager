@@ -2,30 +2,21 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:GameSaves.App.ViewModels"
              xmlns:models="using:GameSaves.App.Models"
+             xmlns:views="using:GameSaves.App.Views"
              x:Class="GameSaves.App.Views.InstalledGamesView"
              x:DataType="vm:InstalledGamesViewModel"
-             Background="#111217">
+             Background="{DynamicResource PageBackgroundBrush}">
 
-    <UserControl.Resources>
-        <SolidColorBrush x:Key="CardBackgroundBrush" Color="#1A1B22" />
-        <SolidColorBrush x:Key="CardBorderBrush" Color="#2A2C36" />
-        <SolidColorBrush x:Key="PrimaryTextBrush" Color="#F4F4F5" />
-        <SolidColorBrush x:Key="SecondaryTextBrush" Color="#A7AAB4" />
-        <SolidColorBrush x:Key="MutedTextBrush" Color="#777B86" />
-        <SolidColorBrush x:Key="AccentBrush" Color="#7C9CFF" />
-        <SolidColorBrush x:Key="SuccessBrush" Color="#6EE7A8" />
-        <SolidColorBrush x:Key="WarningBrush" Color="#FACC6B" />
-        <SolidColorBrush x:Key="DangerBrush" Color="#F87171" />
-    </UserControl.Resources>
 
     <Grid RowDefinitions="Auto,*"
           RowSpacing="10"
-          Margin="0,12,0,0">
+          Margin="0,12,0,14"
+          MaxWidth="1100">
 
         <!-- Header -->
         <Border Grid.Row="0"
-                Background="{StaticResource CardBackgroundBrush}"
-                BorderBrush="{StaticResource CardBorderBrush}"
+                Background="{DynamicResource CardBackgroundBrush}"
+                BorderBrush="{DynamicResource CardBorderBrush}"
                 BorderThickness="1"
                 CornerRadius="14"
                 Padding="14,10">
@@ -35,19 +26,17 @@
 
                 <StackPanel Grid.Column="0"
                             Spacing="2">
-                    <TextBlock Text="Installed Games"
-                               Foreground="{StaticResource PrimaryTextBrush}"
-                               FontSize="18"
-                               FontWeight="Bold" />
+                    <TextBlock Text="Installed games" Classes="h1" />
 
-                    <TextBlock Text="{Binding StatusMessage}"
-                               Foreground="{StaticResource SecondaryTextBrush}"
+                    <TextBlock Text="Discovered games and whether their saves are mapped."
+                               Foreground="{DynamicResource SecondaryTextBrush}"
                                FontSize="12"
                                TextWrapping="Wrap" />
                 </StackPanel>
 
                 <Button Grid.Column="1"
-                        Content="Refresh Installed Games"
+                        Content="Scan Steam library"
+                        IsVisible="{Binding !!Games.Count}"
                         Command="{Binding RefreshCommand}"
                         Height="34"
                         VerticalAlignment="Center" />
@@ -57,36 +46,41 @@
         <!-- Games table: scrolls horizontally as one unit so columns never
              get crushed; rows scroll vertically inside. -->
         <Border Grid.Row="1"
-                Background="{StaticResource CardBackgroundBrush}"
-                BorderBrush="{StaticResource CardBorderBrush}"
+                Background="{DynamicResource CardBackgroundBrush}"
+                BorderBrush="{DynamicResource CardBorderBrush}"
                 BorderThickness="1"
                 CornerRadius="14"
                 Padding="4">
 
+            <Grid>
+
+            <!-- Table (headers + rows + scroll chrome) hides as one unit when
+                 there are no games, so no orphaned headers or scrollbar. -->
             <ScrollViewer HorizontalScrollBarVisibility="Auto"
-                          VerticalScrollBarVisibility="Disabled">
+                          VerticalScrollBarVisibility="Disabled"
+                          IsVisible="{Binding !!Games.Count}">
 
                 <Grid RowDefinitions="Auto,*"
-                      MinWidth="1150">
+                      MinWidth="820">
 
                     <Border Grid.Row="0"
                             Padding="10,8"
-                            BorderBrush="{StaticResource CardBorderBrush}"
+                            BorderBrush="{DynamicResource CardBorderBrush}"
                             BorderThickness="0,0,0,1">
 
-                        <Grid ColumnDefinitions="2*,80,2*,90,80,80,80,70,90,120"
-                              ColumnSpacing="10">
+                        <Grid ColumnDefinitions="2*,60,2*,90,62,56,62,48,66,90"
+                              ColumnSpacing="8">
 
-                            <TextBlock Grid.Column="0" Text="Game" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
-                            <TextBlock Grid.Column="1" Text="AppID" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
-                            <TextBlock Grid.Column="2" Text="Install path" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
-                            <TextBlock Grid.Column="3" Text="Library" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
-                            <TextBlock Grid.Column="4" Text="Approved" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
-                            <TextBlock Grid.Column="5" Text="Pending" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
-                            <TextBlock Grid.Column="6" Text="NeedsFix" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
-                            <TextBlock Grid.Column="7" Text="Exists" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
-                            <TextBlock Grid.Column="8" Text="Files" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
-                            <TextBlock Grid.Column="9" Text="Status" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
+                            <TextBlock Grid.Column="0" Text="Game" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
+                            <TextBlock Grid.Column="1" Text="AppID" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
+                            <TextBlock Grid.Column="2" Text="Install path" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
+                            <TextBlock Grid.Column="3" Text="Library" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
+                            <TextBlock Grid.Column="4" Text="Approved" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
+                            <TextBlock Grid.Column="5" Text="Pending" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
+                            <TextBlock Grid.Column="6" Text="Needs fix" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
+                            <TextBlock Grid.Column="7" Text="Exists" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
+                            <TextBlock Grid.Column="8" Text="Files" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
+                            <TextBlock Grid.Column="9" Text="Status" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
                         </Grid>
                     </Border>
 
@@ -96,15 +90,15 @@
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="models:InstalledGameRowViewModel">
                                     <Border Padding="10,7"
-                                            BorderBrush="#252733"
+                                            BorderBrush="{DynamicResource SubtleBorderBrush}"
                                             BorderThickness="0,0,0,1">
 
-                                        <Grid ColumnDefinitions="2*,80,2*,90,80,80,80,70,90,120"
-                                              ColumnSpacing="10">
+                                        <Grid ColumnDefinitions="2*,60,2*,90,62,56,62,48,66,90"
+                                              ColumnSpacing="8">
 
                                             <TextBlock Grid.Column="0"
                                                        Text="{Binding GameName}"
-                                                       Foreground="{StaticResource PrimaryTextBrush}"
+                                                       Foreground="{DynamicResource PrimaryTextBrush}"
                                                        ToolTip.Tip="{Binding GameName}"
                                                        FontSize="12"
                                                        FontWeight="SemiBold"
@@ -113,13 +107,13 @@
 
                                             <TextBlock Grid.Column="1"
                                                        Text="{Binding AppId}"
-                                                       Foreground="{StaticResource MutedTextBrush}"
+                                                       Foreground="{DynamicResource MutedTextBrush}"
                                                        FontSize="12"
                                                        VerticalAlignment="Center" />
 
                                             <TextBlock Grid.Column="2"
                                                        Text="{Binding InstallPath}"
-                                                       Foreground="{StaticResource SecondaryTextBrush}"
+                                                       Foreground="{DynamicResource SecondaryTextBrush}"
                                                        ToolTip.Tip="{Binding InstallPath}"
                                                        FontSize="12"
                                                        VerticalAlignment="Center"
@@ -127,7 +121,7 @@
 
                                             <TextBlock Grid.Column="3"
                                                        Text="{Binding LibraryPath}"
-                                                       Foreground="{StaticResource MutedTextBrush}"
+                                                       Foreground="{DynamicResource MutedTextBrush}"
                                                        ToolTip.Tip="{Binding LibraryPath}"
                                                        FontSize="12"
                                                        VerticalAlignment="Center"
@@ -135,42 +129,42 @@
 
                                             <TextBlock Grid.Column="4"
                                                        Text="{Binding ApprovedMappings}"
-                                                       Foreground="{StaticResource SuccessBrush}"
+                                                       Foreground="{DynamicResource SuccessBrush}"
                                                        FontSize="12"
                                                        VerticalAlignment="Center" />
 
                                             <TextBlock Grid.Column="5"
                                                        Text="{Binding PendingMappings}"
-                                                       Foreground="{StaticResource WarningBrush}"
+                                                       Foreground="{DynamicResource WarningBrush}"
                                                        FontSize="12"
                                                        VerticalAlignment="Center" />
 
                                             <TextBlock Grid.Column="6"
                                                        Text="{Binding NeedsFixMappings}"
-                                                       Foreground="{StaticResource DangerBrush}"
+                                                       Foreground="{DynamicResource DangerBrush}"
                                                        FontSize="12"
                                                        VerticalAlignment="Center" />
 
                                             <TextBlock Grid.Column="7"
                                                        Text="{Binding SavePathExists}"
-                                                       Foreground="{StaticResource AccentBrush}"
+                                                       Foreground="{DynamicResource AccentBrush}"
                                                        FontSize="12"
                                                        VerticalAlignment="Center" />
 
                                             <StackPanel Grid.Column="8"
                                                         VerticalAlignment="Center">
                                                 <TextBlock Text="{Binding FileCount}"
-                                                           Foreground="{StaticResource PrimaryTextBrush}"
+                                                           Foreground="{DynamicResource PrimaryTextBrush}"
                                                            FontSize="12" />
 
                                                 <TextBlock Text="{Binding TotalSizeDisplay}"
-                                                           Foreground="{StaticResource MutedTextBrush}"
+                                                           Foreground="{DynamicResource MutedTextBrush}"
                                                            FontSize="10" />
                                             </StackPanel>
 
                                             <TextBlock Grid.Column="9"
                                                        Text="{Binding Status}"
-                                                       Foreground="{StaticResource PrimaryTextBrush}"
+                                                       Foreground="{DynamicResource PrimaryTextBrush}"
                                                        FontSize="12"
                                                        FontWeight="SemiBold"
                                                        VerticalAlignment="Center"
@@ -183,6 +177,25 @@
                     </ScrollViewer>
                 </Grid>
             </ScrollViewer>
+
+            <!-- Empty state: shown only when there are no games and no load is
+                 in progress (avoids flashing during the startup scan). -->
+            <views:EmptyState Glyph="&#xE8FD;"
+                              Title="No games found"
+                              Message="Scan your Steam libraries to see installed games and their save status.">
+                <views:EmptyState.IsVisible>
+                    <MultiBinding Converter="{x:Static BoolConverters.And}">
+                        <Binding Path="!Games.Count" />
+                        <Binding Path="!IsLoading" />
+                    </MultiBinding>
+                </views:EmptyState.IsVisible>
+                <views:EmptyState.ActionContent>
+                    <Button Content="Scan Steam library"
+                            Classes="primary"
+                            Command="{Binding RefreshCommand}" />
+                </views:EmptyState.ActionContent>
+            </views:EmptyState>
+            </Grid>
         </Border>
     </Grid>
 </UserControl>

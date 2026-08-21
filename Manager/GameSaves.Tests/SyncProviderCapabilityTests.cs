@@ -282,15 +282,17 @@ public sealed class SyncProviderCapabilityTests
     [Fact]
     public async Task ActivatedGoogleDrive_StillBuildsNothingWithoutASavedProfile()
     {
-        // Milestone V Task 3 activated the provider, so preview is now offered.
-        // The saved-profile guard, not the catalog, is what stops construction.
+        // Milestone V Task 3 activated the provider. Since the UI revamp,
+        // preview is not even offered without a usable saved profile - and
+        // the saved-profile guard beneath still stops construction if the
+        // command is somehow invoked anyway.
         var factory = new SyncProviderSelectionTests.RecordingSyncProviderFactory();
         SyncViewModel viewModel = CreateViewModel(factory);
         viewModel.SelectedProviderKind = SyncProviderKind.GoogleDrive;
 
         Assert.True(
             _catalog.GetDescriptor(SyncProviderKind.GoogleDrive).IsImplemented);
-        Assert.True(viewModel.CanPreviewSync);
+        Assert.False(viewModel.CanPreviewSync);
 
         await viewModel.PreviewSyncCommand.ExecuteAsync(null);
 

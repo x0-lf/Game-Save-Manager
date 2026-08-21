@@ -4,287 +4,478 @@
         xmlns:views="using:GameSaves.App.Views"
         x:Class="GameSaves.App.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
-        Title="Game Saves Manager"
+        Title="Game Save Manager"
         Width="1200"
         Height="760"
-        MinWidth="1000"
-        MinHeight="650"
-        Background="#111217">
+        MinWidth="800"
+        MinHeight="600"
+        Background="{DynamicResource PageBackgroundBrush}">
 
-	<Window.Resources>
-		<SolidColorBrush x:Key="PageBackgroundBrush" Color="#111217" />
-		<SolidColorBrush x:Key="CardBackgroundBrush" Color="#1A1B22" />
-		<SolidColorBrush x:Key="CardBorderBrush" Color="#2A2C36" />
-		<SolidColorBrush x:Key="PrimaryTextBrush" Color="#F4F4F5" />
-		<SolidColorBrush x:Key="SecondaryTextBrush" Color="#A7AAB4" />
-		<SolidColorBrush x:Key="MutedTextBrush" Color="#777B86" />
-		<SolidColorBrush x:Key="AccentBrush" Color="#7C9CFF" />
-		<SolidColorBrush x:Key="SuccessBrush" Color="#6EE7A8" />
-		<SolidColorBrush x:Key="WarningBrush" Color="#FACC6B" />
-		<SolidColorBrush x:Key="DangerBrush" Color="#F87171" />
-	</Window.Resources>
+	<Window.Styles>
+		<!-- Navigation rail: compact icon+label rows on the left edge. -->
+		<Style Selector="TabControl#MainNavigation">
+			<Setter Property="Padding" Value="16,10,16,16" />
+		</Style>
+		<Style Selector="TabControl#MainNavigation TabItem">
+			<Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}" />
+			<Setter Property="FontSize" Value="14" />
+			<Setter Property="FontWeight" Value="Medium" />
+			<Setter Property="Padding" Value="12,8" />
+			<Setter Property="Margin" Value="8,1" />
+			<Setter Property="MinHeight" Value="36" />
+			<Setter Property="CornerRadius" Value="8" />
+		</Style>
+		<Style Selector="TabControl#MainNavigation TabItem /template/ Border#PART_LayoutRoot">
+			<Setter Property="BorderBrush" Value="Transparent" />
+			<Setter Property="BorderThickness" Value="1" />
+		</Style>
+		<Style Selector="TabControl#MainNavigation TabItem:pointerover /template/ Border#PART_LayoutRoot">
+			<Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}" />
+		</Style>
+		<Style Selector="TabControl#MainNavigation TabItem:selected /template/ Border#PART_LayoutRoot">
+			<Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}" />
+			<Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}" />
+		</Style>
 
-	<Grid RowDefinitions="Auto,*"
-          Margin="16"
-          RowSpacing="12">
+		<!-- Below 900px the rail collapses to icons; the window toggles the
+		     compactNav class from code-behind. -->
+		<Style Selector="Window.compactNav TabControl#MainNavigation TabItem TextBlock.navLabel">
+			<Setter Property="IsVisible" Value="False" />
+		</Style>
+		<Style Selector="Window.compactNav TabControl#MainNavigation TabItem">
+			<Setter Property="Padding" Value="10,8" />
+		</Style>
+		<Style Selector="TabControl#MainNavigation TabItem TextBlock.navGlyph">
+			<Setter Property="FontFamily" Value="Segoe Fluent Icons, Segoe MDL2 Assets" />
+			<Setter Property="FontSize" Value="16" />
+			<Setter Property="VerticalAlignment" Value="Center" />
+		</Style>
+		<Style Selector="TabControl#MainNavigation TabItem TextBlock.navLabel">
+			<Setter Property="VerticalAlignment" Value="Center" />
+		</Style>
 
-		<!-- Top header -->
+		<!-- Dashboard stat values: neutral at zero, coloured only when the
+		     number carries real state. -->
+		<Style Selector="TextBlock.statValue">
+			<Setter Property="FontSize" Value="32" />
+			<Setter Property="FontWeight" Value="Bold" />
+			<Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
+		</Style>
+		<Style Selector="TextBlock.statValue.accent">
+			<Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+		</Style>
+		<Style Selector="TextBlock.statValue.good">
+			<Setter Property="Foreground" Value="{DynamicResource SuccessBrush}" />
+		</Style>
+		<Style Selector="TextBlock.statValue.warn">
+			<Setter Property="Foreground" Value="{DynamicResource WarningBrush}" />
+		</Style>
+		<Style Selector="TextBlock.statValue.bad">
+			<Setter Property="Foreground" Value="{DynamicResource DangerBrush}" />
+		</Style>
+	</Window.Styles>
+
+	<Grid RowDefinitions="Auto,*">
+
+		<!-- Slim application header: identity on the left, settings on the
+		     right. Section-scoped actions live inside each section, never
+		     here. -->
 		<Border Grid.Row="0"
-                Background="{StaticResource CardBackgroundBrush}"
-                BorderBrush="{StaticResource CardBorderBrush}"
-                BorderThickness="1"
-                CornerRadius="14"
-                Padding="16,10">
+                Background="{DynamicResource CardBackgroundBrush}"
+                BorderBrush="{DynamicResource SubtleBorderBrush}"
+                BorderThickness="0,0,0,1"
+                Padding="16,8">
 
-			<Grid ColumnDefinitions="*,Auto"
-                  ColumnSpacing="18">
+			<Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
 
 				<StackPanel Grid.Column="0"
-                            Spacing="2">
-					<TextBlock Text="Game Saves Manager"
-                               Foreground="{StaticResource PrimaryTextBrush}"
-                               FontSize="22"
-                               FontWeight="Bold" />
-
-					<TextBlock Text="{Binding StatusMessage}"
-                               Foreground="{StaticResource SecondaryTextBrush}"
-                               FontSize="12" />
+                            Orientation="Horizontal"
+                            Spacing="10"
+                            VerticalAlignment="Center">
+					<TextBlock Text="&#xE7FC;"
+                               FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                               FontSize="18"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource BrandBrush}" />
+					<TextBlock Text="Game Save Manager"
+                               Foreground="{DynamicResource PrimaryTextBrush}"
+                               FontSize="15"
+                               FontWeight="SemiBold"
+                               VerticalAlignment="Center" />
 				</StackPanel>
 
 				<Button Grid.Column="1"
-                        Content="Refresh Dashboard"
-                        Command="{Binding RefreshCommand}"
-                        Height="36"
-                        VerticalAlignment="Center" />
+                        x:Name="SettingsButton"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Padding="8"
+                        CornerRadius="8"
+                        AutomationProperties.Name="Settings"
+                        ToolTip.Tip="Settings">
+					<TextBlock Text="&#xE713;"
+                               FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                               FontSize="16"
+                               Foreground="{DynamicResource SecondaryTextBrush}" />
+					<Button.Flyout>
+						<Flyout Placement="BottomEdgeAlignedRight">
+							<StackPanel Spacing="10" Width="240" Margin="4">
+								<TextBlock Text="Appearance"
+                                           Foreground="{DynamicResource PrimaryTextBrush}"
+                                           FontSize="13"
+                                           FontWeight="SemiBold" />
+								<StackPanel Spacing="4">
+									<RadioButton x:Name="ThemeSystemRadio"
+                                                 GroupName="Theme"
+                                                 Content="Use system theme"
+                                                 IsChecked="True"
+                                                 IsCheckedChanged="OnThemeChoiceChanged" />
+									<RadioButton x:Name="ThemeLightRadio"
+                                                 GroupName="Theme"
+                                                 Content="Light"
+                                                 IsCheckedChanged="OnThemeChoiceChanged" />
+									<RadioButton x:Name="ThemeDarkRadio"
+                                                 GroupName="Theme"
+                                                 Content="Dark"
+                                                 IsCheckedChanged="OnThemeChoiceChanged" />
+								</StackPanel>
+								<Border Height="1" Background="{DynamicResource SubtleBorderBrush}" />
+								<StackPanel Spacing="2">
+									<TextBlock Text="About"
+                                           Foreground="{DynamicResource PrimaryTextBrush}"
+                                           FontSize="13"
+                                           FontWeight="SemiBold" />
+									<TextBlock Text="{Binding Platform, StringFormat='Platform: {0}'}"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                           FontSize="12" />
+									<TextBlock Text="{Binding DatabasePath}"
+                                           Foreground="{DynamicResource MutedTextBrush}"
+                                           FontSize="12"
+                                           TextWrapping="Wrap" />
+								</StackPanel>
+							</StackPanel>
+						</Flyout>
+					</Button.Flyout>
+				</Button>
 			</Grid>
 		</Border>
 
-		<!-- Main content -->
-		<TabControl Grid.Row="1">
+		<!-- Navigation rail plus content. The TabControl keeps every section
+		     alive so section state survives navigation, exactly as the old
+		     top tab strip did. -->
+		<TabControl Grid.Row="1"
+                    x:Name="MainNavigation"
+                    TabStripPlacement="Left"
+                    Padding="16,10,16,16">
 
-			<!-- Dashboard tab -->
-			<TabItem Header="Dashboard">
-				<ScrollViewer>
-					<StackPanel Spacing="18"
-                                Margin="0,18,0,0">
+			<TabItem>
+				<TabItem.Header>
+					<StackPanel Orientation="Horizontal" Spacing="10" ToolTip.Tip="Dashboard">
+						<TextBlock Classes="navGlyph" Text="&#xE80F;" />
+						<TextBlock Classes="navLabel" Text="Dashboard" />
+					</StackPanel>
+				</TabItem.Header>
+				<ScrollViewer VerticalContentAlignment="Stretch">
+					<StackPanel Spacing="14" MaxWidth="1100">
 
-						<Grid ColumnDefinitions="*,*,*,*"
-                              RowDefinitions="Auto,Auto"
-                              ColumnSpacing="14"
-                              RowSpacing="14">
+						<Border Background="{DynamicResource CardBackgroundBrush}"
+                                BorderBrush="{DynamicResource CardBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="14"
+                                Padding="16,10">
+							<Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+								<StackPanel Grid.Column="0" Spacing="2">
+									<TextBlock Text="Dashboard" Classes="h1" />
+									<TextBlock Text="Your Steam library and save mappings at a glance."
+                                               Foreground="{DynamicResource SecondaryTextBrush}"
+                                               FontSize="12"
+                                               IsVisible="{Binding !IsLoading}" />
+								<TextBlock Text="{Binding StatusMessage}"
+                                               Foreground="{DynamicResource SecondaryTextBrush}"
+                                               FontSize="12"
+                                               IsVisible="{Binding IsLoading}" />
+								</StackPanel>
+								<Button Grid.Column="1"
+                                        Content="Scan Steam library"
+                                        Command="{Binding RefreshCommand}"
+                                        IsVisible="{Binding !IsSteamMissing}"
+                                        Height="34"
+                                        VerticalAlignment="Center" />
+							</Grid>
+						</Border>
 
-							<!-- Steam root -->
-							<Border Grid.Row="0"
-                                    Grid.Column="0"
-                                    Background="{StaticResource CardBackgroundBrush}"
-                                    BorderBrush="{StaticResource CardBorderBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="16"
-                                    Padding="18">
-
-								<StackPanel Spacing="8">
-									<TextBlock Text="Steam Root"
-                                               Foreground="{StaticResource SecondaryTextBrush}"
-                                               FontSize="13" />
-
-									<TextBlock Text="{Binding SteamRoot}"
-                                               Foreground="{StaticResource PrimaryTextBrush}"
-                                               FontSize="15"
-                                               FontWeight="SemiBold"
+						<!-- The one condition that makes the whole app inert
+						     gets the most designed treatment on the page. -->
+						<Border IsVisible="{Binding IsSteamMissing}"
+                                Background="{DynamicResource WarningTintBrush}"
+                                BorderBrush="{DynamicResource WarningEdgeBrush}"
+                                BorderThickness="1"
+                                CornerRadius="12"
+                                Padding="14,12">
+							<Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+								<TextBlock Grid.Column="0"
+                                           Text="&#xE7BA;"
+                                           FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                                           FontSize="20"
+                                           VerticalAlignment="Center"
+                                           Foreground="{DynamicResource WarningBrush}" />
+								<StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+									<TextBlock Text="Steam was not found on this computer"
+                                               Foreground="{DynamicResource PrimaryTextBrush}"
+                                               FontSize="14"
+                                               FontWeight="SemiBold" />
+									<TextBlock Text="Game discovery, profiles and backups need a Steam installation. Install Steam, or scan again if it was just installed."
+                                               Foreground="{DynamicResource SecondaryTextBrush}"
+                                               FontSize="12"
+                                               MaxWidth="760"
+                                               HorizontalAlignment="Left"
                                                TextWrapping="Wrap" />
 								</StackPanel>
-							</Border>
+							</Grid>
+						</Border>
+
+						<!-- First run with no Steam: a guided path, not a
+						     wall of zeros. -->
+						<Border IsVisible="{Binding IsSteamMissing}"
+                                Background="{DynamicResource CardBackgroundBrush}"
+                                BorderBrush="{DynamicResource CardBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="16"
+                                Padding="24">
+							<StackPanel Spacing="14">
+								<TextBlock MaxWidth="640" HorizontalAlignment="Left" Text="Get set up"
+                                           Foreground="{DynamicResource PrimaryTextBrush}"
+                                           FontSize="16"
+                                           FontWeight="SemiBold" />
+								<StackPanel Spacing="10" MaxWidth="640" HorizontalAlignment="Left">
+									<Grid ColumnDefinitions="Auto,*" ColumnSpacing="10" MinHeight="32">
+										<TextBlock Text="1" Width="22" TextAlignment="Center" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center" />
+										<TextBlock Grid.Column="1" Text="Install Steam and sign in." Foreground="{DynamicResource PrimaryTextBrush}" FontSize="13" VerticalAlignment="Center" />
+									</Grid>
+									<Grid ColumnDefinitions="Auto,*" ColumnSpacing="10" MinHeight="32">
+										<TextBlock Text="2" Width="22" TextAlignment="Center" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center" />
+										<TextBlock Grid.Column="1" Text="Scan to discover your libraries, games and profiles." Foreground="{DynamicResource PrimaryTextBrush}" FontSize="13" VerticalAlignment="Center" />
+									</Grid>
+									<Button Content="Scan Steam library"
+                                            Classes="primary"
+                                            Command="{Binding RefreshCommand}"
+                                            Height="34"
+                                            Margin="32,0,0,0"
+                                            HorizontalAlignment="Left" />
+									<Grid ColumnDefinitions="Auto,*" ColumnSpacing="10" MinHeight="32">
+										<TextBlock Text="3" Width="22" TextAlignment="Center" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center" />
+										<TextBlock Grid.Column="1" Text="Create your first backup from the Manual backup section." Foreground="{DynamicResource PrimaryTextBrush}" FontSize="13" VerticalAlignment="Center" />
+									</Grid>
+								</StackPanel>
+								<TextBlock Text="Every backup is copy-only: nothing is ever overwritten or deleted."
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                           FontSize="12" />
+							</StackPanel>
+						</Border>
+
+						<Grid ColumnDefinitions="*,*,*"
+                              RowDefinitions="Auto,Auto"
+                              ColumnSpacing="14"
+                              RowSpacing="14"
+                              IsVisible="{Binding !IsSteamMissing}">
 
 							<!-- Libraries -->
 							<Border Grid.Row="0"
-                                    Grid.Column="1"
-                                    Background="{StaticResource CardBackgroundBrush}"
-                                    BorderBrush="{StaticResource CardBorderBrush}"
+                                    Grid.Column="0"
+                                    Background="{DynamicResource CardBackgroundBrush}"
+                                    BorderBrush="{DynamicResource CardBorderBrush}"
                                     BorderThickness="1"
                                     CornerRadius="16"
                                     Padding="18">
 
 								<StackPanel Spacing="8">
 									<TextBlock Text="Libraries"
-                                               Foreground="{StaticResource SecondaryTextBrush}"
-                                               FontSize="13" />
+                                               Foreground="{DynamicResource SecondaryTextBrush}"
+                                               FontSize="13"
+                                               TextWrapping="Wrap" />
 
 									<TextBlock Text="{Binding LibraryCount}"
-                                               Foreground="{StaticResource AccentBrush}"
-                                               FontSize="32"
-                                               FontWeight="Bold" />
+                                               Classes="statValue"
+                                               Classes.accent="{Binding HasLibraries}" />
 								</StackPanel>
 							</Border>
 
 							<!-- Installed games -->
 							<Border Grid.Row="0"
-                                    Grid.Column="2"
-                                    Background="{StaticResource CardBackgroundBrush}"
-                                    BorderBrush="{StaticResource CardBorderBrush}"
+                                    Grid.Column="1"
+                                    Background="{DynamicResource CardBackgroundBrush}"
+                                    BorderBrush="{DynamicResource CardBorderBrush}"
                                     BorderThickness="1"
                                     CornerRadius="16"
                                     Padding="18">
 
 								<StackPanel Spacing="8">
-									<TextBlock Text="Installed Games"
-                                               Foreground="{StaticResource SecondaryTextBrush}"
-                                               FontSize="13" />
+									<TextBlock Text="Installed games"
+                                               Foreground="{DynamicResource SecondaryTextBrush}"
+                                               FontSize="13"
+                                               TextWrapping="Wrap" />
 
 									<TextBlock Text="{Binding InstalledGameCount}"
-                                               Foreground="{StaticResource SuccessBrush}"
-                                               FontSize="32"
-                                               FontWeight="Bold" />
+                                               Classes="statValue"
+                                               Classes.good="{Binding HasInstalledGames}" />
 								</StackPanel>
 							</Border>
 
 							<!-- Profiles -->
 							<Border Grid.Row="0"
-                                    Grid.Column="3"
-                                    Background="{StaticResource CardBackgroundBrush}"
-                                    BorderBrush="{StaticResource CardBorderBrush}"
+                                    Grid.Column="2"
+                                    Background="{DynamicResource CardBackgroundBrush}"
+                                    BorderBrush="{DynamicResource CardBorderBrush}"
                                     BorderThickness="1"
                                     CornerRadius="16"
                                     Padding="18">
 
 								<StackPanel Spacing="8">
-									<TextBlock Text="Steam Profiles"
-                                               Foreground="{StaticResource SecondaryTextBrush}"
-                                               FontSize="13" />
+									<TextBlock Text="Steam profiles"
+                                               Foreground="{DynamicResource SecondaryTextBrush}"
+                                               FontSize="13"
+                                               TextWrapping="Wrap" />
 
 									<TextBlock Text="{Binding SteamProfileCount}"
-                                               Foreground="{StaticResource AccentBrush}"
-                                               FontSize="32"
-                                               FontWeight="Bold" />
+                                               Classes="statValue"
+                                               Classes.accent="{Binding HasSteamProfiles}" />
 								</StackPanel>
 							</Border>
 
 							<!-- Approved mappings -->
 							<Border Grid.Row="1"
                                     Grid.Column="0"
-                                    Background="{StaticResource CardBackgroundBrush}"
-                                    BorderBrush="{StaticResource CardBorderBrush}"
+                                    Background="{DynamicResource CardBackgroundBrush}"
+                                    BorderBrush="{DynamicResource CardBorderBrush}"
                                     BorderThickness="1"
                                     CornerRadius="16"
                                     Padding="18">
 
 								<StackPanel Spacing="8">
-									<TextBlock Text="Approved Mappings"
-                                               Foreground="{StaticResource SecondaryTextBrush}"
-                                               FontSize="13" />
+									<TextBlock Text="Approved mappings"
+                                               Foreground="{DynamicResource SecondaryTextBrush}"
+                                               FontSize="13"
+                                               TextWrapping="Wrap" />
 
 									<TextBlock Text="{Binding ApprovedMappingCount}"
-                                               Foreground="{StaticResource SuccessBrush}"
-                                               FontSize="32"
-                                               FontWeight="Bold" />
+                                               Classes="statValue"
+                                               Classes.good="{Binding HasApprovedMappings}" />
 								</StackPanel>
 							</Border>
 
 							<!-- Pending mappings -->
 							<Border Grid.Row="1"
                                     Grid.Column="1"
-                                    Background="{StaticResource CardBackgroundBrush}"
-                                    BorderBrush="{StaticResource CardBorderBrush}"
+                                    Background="{DynamicResource CardBackgroundBrush}"
+                                    BorderBrush="{DynamicResource CardBorderBrush}"
                                     BorderThickness="1"
                                     CornerRadius="16"
                                     Padding="18">
 
 								<StackPanel Spacing="8">
-									<TextBlock Text="Pending Mappings"
-                                               Foreground="{StaticResource SecondaryTextBrush}"
-                                               FontSize="13" />
+									<TextBlock Text="Pending mappings"
+                                               Foreground="{DynamicResource SecondaryTextBrush}"
+                                               FontSize="13"
+                                               TextWrapping="Wrap" />
 
 									<TextBlock Text="{Binding PendingMappingCount}"
-                                               Foreground="{StaticResource WarningBrush}"
-                                               FontSize="32"
-                                               FontWeight="Bold" />
+                                               Classes="statValue"
+                                               Classes.warn="{Binding HasPendingMappings}" />
 								</StackPanel>
 							</Border>
 
 							<!-- NeedsFix mappings -->
 							<Border Grid.Row="1"
                                     Grid.Column="2"
-                                    Background="{StaticResource CardBackgroundBrush}"
-                                    BorderBrush="{StaticResource CardBorderBrush}"
+                                    Background="{DynamicResource CardBackgroundBrush}"
+                                    BorderBrush="{DynamicResource CardBorderBrush}"
                                     BorderThickness="1"
                                     CornerRadius="16"
                                     Padding="18">
 
 								<StackPanel Spacing="8">
-									<TextBlock Text="NeedsFix Mappings"
-                                               Foreground="{StaticResource SecondaryTextBrush}"
-                                               FontSize="13" />
+									<TextBlock Text="Needs attention"
+                                               Foreground="{DynamicResource SecondaryTextBrush}"
+                                               FontSize="13"
+                                               TextWrapping="Wrap" />
 
 									<TextBlock Text="{Binding NeedsFixMappingCount}"
-                                               Foreground="{StaticResource DangerBrush}"
-                                               FontSize="32"
-                                               FontWeight="Bold" />
+                                               Classes="statValue"
+                                               Classes.bad="{Binding HasNeedsFixMappings}" />
 								</StackPanel>
 							</Border>
 
-							<!-- Platform/database -->
-							<Border Grid.Row="1"
-                                    Grid.Column="3"
-                                    Background="{StaticResource CardBackgroundBrush}"
-                                    BorderBrush="{StaticResource CardBorderBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="16"
-                                    Padding="18">
-
-								<StackPanel Spacing="8">
-									<TextBlock Text="Environment"
-                                               Foreground="{StaticResource SecondaryTextBrush}"
-                                               FontSize="13" />
-
-									<StackPanel Spacing="4">
-										<TextBlock Text="{Binding Platform}"
-                                                   Foreground="{StaticResource PrimaryTextBrush}"
-                                                   FontSize="18"
-                                                   FontWeight="SemiBold" />
-
-										<TextBlock Text="{Binding DatabasePath}"
-                                                   Foreground="{StaticResource MutedTextBrush}"
-                                                   FontSize="12"
-                                                   TextWrapping="Wrap" />
-									</StackPanel>
-								</StackPanel>
-							</Border>
 						</Grid>
 					</StackPanel>
 				</ScrollViewer>
 			</TabItem>
 
-			<!-- Installed games tab -->
-			<TabItem Header="Installed Games">
+			<TabItem>
+				<TabItem.Header>
+					<StackPanel Orientation="Horizontal" Spacing="10" ToolTip.Tip="Installed games">
+						<TextBlock Classes="navGlyph" Text="&#xE7FC;" />
+						<TextBlock Classes="navLabel" Text="Installed games" />
+					</StackPanel>
+				</TabItem.Header>
 				<views:InstalledGamesView DataContext="{Binding InstalledGames}" />
 			</TabItem>
 
-			<!-- Profiles tab placeholder -->
-			<TabItem Header="Profiles">
+			<TabItem>
+				<TabItem.Header>
+					<StackPanel Orientation="Horizontal" Spacing="10" ToolTip.Tip="Profiles">
+						<TextBlock Classes="navGlyph" Text="&#xE716;" />
+						<TextBlock Classes="navLabel" Text="Profiles" />
+					</StackPanel>
+				</TabItem.Header>
 				<views:ProfilesView DataContext="{Binding Profiles}" />
 			</TabItem>
 
-			<!-- Transfer preview placeholder -->
-			<TabItem Header="Transfer Preview">
+			<TabItem>
+				<TabItem.Header>
+					<StackPanel Orientation="Horizontal" Spacing="10" ToolTip.Tip="Transfer preview">
+						<TextBlock Classes="navGlyph" Text="&#xE8AB;" />
+						<TextBlock Classes="navLabel" Text="Transfer preview" />
+					</StackPanel>
+				</TabItem.Header>
 				<views:TransferPreviewView DataContext="{Binding TransferPreview}" />
 			</TabItem>
 
-			<!-- Manual on-demand backup -->
-			<TabItem Header="Manual Backup">
+			<TabItem>
+				<TabItem.Header>
+					<StackPanel Orientation="Horizontal" Spacing="10" ToolTip.Tip="Manual backup">
+						<TextBlock Classes="navGlyph" Text="&#xE74E;" />
+						<TextBlock Classes="navLabel" Text="Manual backup" />
+					</StackPanel>
+				</TabItem.Header>
 				<views:ManualBackupView DataContext="{Binding ManualBackup}" />
 			</TabItem>
 
-			<!-- Backup history and restore -->
-			<TabItem Header="Backups">
+			<TabItem>
+				<TabItem.Header>
+					<StackPanel Orientation="Horizontal" Spacing="10" ToolTip.Tip="Backups">
+						<TextBlock Classes="navGlyph" Text="&#xE8F1;" />
+						<TextBlock Classes="navLabel" Text="Backups" />
+					</StackPanel>
+				</TabItem.Header>
 				<views:BackupHistoryView DataContext="{Binding BackupHistory}" />
 			</TabItem>
 
-			<!-- Backup-run sync with a local/mounted folder -->
-			<TabItem Header="Sync">
+			<TabItem>
+				<TabItem.Header>
+					<StackPanel Orientation="Horizontal" Spacing="10" ToolTip.Tip="Sync">
+						<TextBlock Classes="navGlyph" Text="&#xE895;" />
+						<TextBlock Classes="navLabel" Text="Sync" />
+					</StackPanel>
+				</TabItem.Header>
 				<views:SyncView DataContext="{Binding Sync}" />
 			</TabItem>
 
-			<!-- Executed-run history from SQLite -->
-			<TabItem Header="History">
+			<TabItem>
+				<TabItem.Header>
+					<StackPanel Orientation="Horizontal" Spacing="10" ToolTip.Tip="History">
+						<TextBlock Classes="navGlyph" Text="&#xE81C;" />
+						<TextBlock Classes="navLabel" Text="History" />
+					</StackPanel>
+				</TabItem.Header>
 				<views:TransferHistoryView DataContext="{Binding TransferHistory}" />
 			</TabItem>
 		</TabControl>

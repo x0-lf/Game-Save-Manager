@@ -210,7 +210,9 @@ namespace GameSaves.App.ViewModels
                 SelectedTargetProfile = _profilesViewModel.TargetProfile ?? Profiles.Skip(1).FirstOrDefault();
                 SelectedGame = _installedGamesViewModel.SelectedGame ?? Games.FirstOrDefault();
 
-                StatusMessage = "Inputs refreshed.";
+                StatusMessage = Profiles.Count == 0
+                    ? "No profiles found. Scan for profiles first."
+                    : "Profiles and games are up to date.";
             }
             catch (Exception ex)
             {

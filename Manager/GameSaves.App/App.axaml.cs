@@ -31,6 +31,17 @@ namespace GameSaves.App
 
             if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             {
+                string storedTheme = _serviceProvider
+                    .GetRequiredService<IUiSettingsStore>()
+                    .Load().ThemeChoice;
+
+                RequestedThemeVariant = storedTheme switch
+                {
+                    AppUiSettings.ThemeLight => Avalonia.Styling.ThemeVariant.Light,
+                    AppUiSettings.ThemeDark => Avalonia.Styling.ThemeVariant.Dark,
+                    _ => Avalonia.Styling.ThemeVariant.Default,
+                };
+
                 desktop.MainWindow = new Views.MainWindow
                 {
                     DataContext = _serviceProvider.GetRequiredService<MainWindowViewModel>()

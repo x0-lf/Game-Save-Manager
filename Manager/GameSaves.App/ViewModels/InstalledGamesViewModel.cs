@@ -68,7 +68,12 @@ namespace GameSaves.App.ViewModels
                     Games.FirstOrDefault(game => game.StatusKind == GameSaveStatusKind.Ready)
                     ?? Games.FirstOrDefault();
 
-                StatusMessage = $"Loaded {Games.Count} installed games.";
+                StatusMessage = Games.Count switch
+                {
+                    0 => "No installed games found.",
+                    1 => "1 installed game found.",
+                    _ => $"{Games.Count} installed games found.",
+                };
             }
             catch (Exception ex)
             {

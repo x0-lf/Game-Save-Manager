@@ -98,7 +98,7 @@ namespace GameSaves.App.ViewModels
                     Runs.Add(new TransferRunRowViewModel(run));
 
                 StatusMessage = Runs.Count == 0
-                    ? "No executed runs recorded yet. Transfers, restores, and manual backups are recorded automatically."
+                    ? "No executed runs recorded yet."
                     : $"Showing the {Runs.Count} most recent run(s).";
             }
             catch (Exception ex)

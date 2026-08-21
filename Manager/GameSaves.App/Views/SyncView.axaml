@@ -2,42 +2,17 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:GameSaves.App.ViewModels"
              xmlns:models="using:GameSaves.App.Models"
+             xmlns:views="using:GameSaves.App.Views"
              x:Class="GameSaves.App.Views.SyncView"
              x:DataType="vm:SyncViewModel"
-             Background="#111217">
+             Background="{DynamicResource PageBackgroundBrush}">
 
-    <UserControl.Resources>
-        <SolidColorBrush x:Key="CardBackgroundBrush" Color="#1A1B22" />
-        <SolidColorBrush x:Key="CardBorderBrush" Color="#2A2C36" />
-        <SolidColorBrush x:Key="PrimaryTextBrush" Color="#F4F4F5" />
-        <SolidColorBrush x:Key="SecondaryTextBrush" Color="#A7AAB4" />
-        <SolidColorBrush x:Key="MutedTextBrush" Color="#777B86" />
-        <SolidColorBrush x:Key="AccentBrush" Color="#7C9CFF" />
-        <SolidColorBrush x:Key="SuccessBrush" Color="#6EE7A8" />
-        <SolidColorBrush x:Key="WarningBrush" Color="#FACC6B" />
-
-        <!-- Blend the Fluent Expander chrome into the card look: header and
-             content share the card background instead of the theme's darker
-             content band. -->
-        <SolidColorBrush x:Key="ExpanderHeaderBackground" Color="#1A1B22" />
-        <SolidColorBrush x:Key="ExpanderHeaderBackgroundPointerOver" Color="#20222B" />
-        <SolidColorBrush x:Key="ExpanderHeaderBackgroundPressed" Color="#20222B" />
-        <SolidColorBrush x:Key="ExpanderHeaderBorderBrush" Color="Transparent" />
-        <SolidColorBrush x:Key="ExpanderContentBackground" Color="#1A1B22" />
-        <SolidColorBrush x:Key="ExpanderContentBorderBrush" Color="#2A2C36" />
-        <SolidColorBrush x:Key="ToggleButtonBackground" Color="Transparent" />
-        <SolidColorBrush x:Key="ToggleButtonBackgroundPointerOver" Color="#20222B" />
-        <SolidColorBrush x:Key="ToggleButtonBackgroundPressed" Color="#20222B" />
-        <SolidColorBrush x:Key="ToggleButtonBackgroundChecked" Color="Transparent" />
-        <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPointerOver" Color="#20222B" />
-        <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPressed" Color="#20222B" />
-    </UserControl.Resources>
 
     <UserControl.Styles>
         <Style Selector="Expander">
             <Setter Property="HorizontalAlignment" Value="Stretch" />
-            <Setter Property="Background" Value="#1A1B22" />
-            <Setter Property="BorderBrush" Value="#2A2C36" />
+            <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="CornerRadius" Value="14" />
             <Setter Property="Padding" Value="12,8" />
@@ -46,76 +21,60 @@
         <Style Selector="Expander /template/ ToggleButton#ExpanderHeader">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Foreground" Value="#F4F4F5" />
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
             <Setter Property="FontSize" Value="14" />
             <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Padding" Value="8,6" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+
+        <Style Selector="Expander /template/ ToggleButton#ExpanderHeader:pointerover">
+            <Setter Property="Background" Value="{DynamicResource InsetBackgroundBrush}" />
         </Style>
 
         <Style Selector="Expander /template/ Border#ExpanderContent">
-            <Setter Property="Background" Value="#1A1B22" />
+            <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}" />
             <Setter Property="BorderThickness" Value="0" />
         </Style>
     </UserControl.Styles>
 
     <Grid RowDefinitions="Auto,*"
           RowSpacing="10"
-          Margin="0,12,0,0">
+          Margin="0,12,0,14"
+          MaxWidth="1100">
 
         <!-- Header: always-visible controls and live progress -->
         <Border Grid.Row="0"
-                Background="{StaticResource CardBackgroundBrush}"
-                BorderBrush="{StaticResource CardBorderBrush}"
+                Background="{DynamicResource CardBackgroundBrush}"
+                BorderBrush="{DynamicResource CardBorderBrush}"
                 BorderThickness="1"
                 CornerRadius="14"
                 Padding="14,10">
 
             <StackPanel Spacing="6">
-                <Grid ColumnDefinitions="*,Auto,Auto"
-                      ColumnSpacing="10">
-
-                    <StackPanel Grid.Column="0"
-                                Spacing="2"
-                                VerticalAlignment="Center">
-                        <TextBlock Text="Sync Backups"
-                                   Foreground="{StaticResource PrimaryTextBrush}"
-                                   FontSize="18"
-                                   FontWeight="Bold" />
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+                    <StackPanel Spacing="2" VerticalAlignment="Center">
+                        <TextBlock Text="Sync" Classes="h1" />
 
                         <TextBlock Text="{Binding StatusMessage}"
-                                   Foreground="{StaticResource SecondaryTextBrush}"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
                                    FontSize="12"
                                    TextWrapping="Wrap" />
                     </StackPanel>
 
-                    <Button Grid.Column="1"
-                            Content="Preview Sync (Dry Run)"
-                            Command="{Binding PreviewSyncCommand}"
-                            IsEnabled="{Binding CanPreviewSync}"
-                            Height="34"
-                            VerticalAlignment="Center" />
-
-                    <Button Grid.Column="2"
-                            Content="Sync Now"
-                            Command="{Binding ExecuteSyncCommand}"
-                            IsEnabled="{Binding CanExecuteSync}"
-                            Height="34"
-                            VerticalAlignment="Center" />
+                    <WrapPanel Grid.Column="1"
+                               ItemSpacing="10"
+                               LineSpacing="6"
+                               VerticalAlignment="Center">
+                        <Button Content="Preview sync"
+                                ToolTip.Tip="Dry run: nothing is copied until you confirm."
+                                Classes="primary"
+                                Command="{Binding PreviewSyncCommand}"
+                                IsEnabled="{Binding CanPreviewSync}"
+                                Height="34" />
+                    </WrapPanel>
                 </Grid>
-
-                <StackPanel Orientation="Horizontal"
-                            Spacing="16">
-                    <CheckBox Content="Upload local runs"
-                              IsChecked="{Binding UploadEnabled}"
-                              FontSize="12" />
-
-                    <CheckBox Content="Download remote runs"
-                              IsChecked="{Binding DownloadEnabled}"
-                              FontSize="12" />
-
-                    <CheckBox Content="I understand this will copy backup runs"
-                              IsChecked="{Binding ConfirmSync}"
-                              FontSize="12" />
-                </StackPanel>
 
                 <StackPanel Spacing="2"
                             IsVisible="{Binding IsSyncRunning}">
@@ -125,8 +84,8 @@
                                  Height="14" />
 
                     <TextBlock Text="{Binding ProgressText}"
-                               Foreground="{StaticResource AccentBrush}"
-                               FontSize="11"
+                               Foreground="{DynamicResource AccentBrush}"
+                               FontSize="12"
                                TextTrimming="CharacterEllipsis"
                                ToolTip.Tip="{Binding ProgressText}" />
 
@@ -137,7 +96,7 @@
                             IsEnabled="{Binding CanCancelSync}"
                             HorizontalAlignment="Left"
                             Height="28"
-                            FontSize="11"
+                            FontSize="12"
                             ToolTip.Tip="Stop the sync. Files already copied are kept and nothing is deleted." />
                 </StackPanel>
             </StackPanel>
@@ -148,21 +107,41 @@
             <StackPanel Spacing="10">
 
                 <!-- Sync target and connection -->
-                <Expander Header="Sync target &amp; connection"
-                          IsExpanded="{Binding TargetSectionExpanded}">
+                <Border Background="{DynamicResource CardBackgroundBrush}"
+                        BorderBrush="{DynamicResource CardBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="14"
+                        Padding="14,10">
+                  <StackPanel Spacing="8">
+                    <TextBlock Text="Sync target &amp; connection"
+                               Foreground="{DynamicResource PrimaryTextBrush}"
+                               FontSize="14"
+                               FontWeight="SemiBold" />
+
+                    <WrapPanel ItemSpacing="14" LineSpacing="6">
+                        <CheckBox Content="Upload local runs"
+                                  IsChecked="{Binding UploadEnabled}"
+                                  FontSize="12" />
+
+                        <CheckBox Content="Download remote runs"
+                                  IsChecked="{Binding DownloadEnabled}"
+                                  FontSize="12" />
+                    </WrapPanel>
+
+                    <Border Height="1" Background="{DynamicResource SubtleBorderBrush}" />
+                  <StackPanel>
 
                     <StackPanel Spacing="6"
                                 Margin="0,6,0,0">
 
-                        <Grid ColumnDefinitions="Auto,*"
-                              ColumnSpacing="10">
-                            <TextBlock Grid.Column="0"
-                                       Text="Remote profile"
-                                       VerticalAlignment="Center"
-                                       Foreground="{StaticResource MutedTextBrush}"
-                                       FontSize="12" />
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Remote profile"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                       FontSize="12"
+                                       FontWeight="Bold" />
 
-                            <ComboBox Grid.Column="1"
+                            <ComboBox MaxWidth="560"
+                                      HorizontalAlignment="Left"
                                       ItemsSource="{Binding RemoteProfileOptions}"
                                       SelectedItem="{Binding SelectedRemoteProfileOption}"
                                       MinHeight="32">
@@ -172,22 +151,26 @@
                                     </DataTemplate>
                                 </ComboBox.ItemTemplate>
                             </ComboBox>
-                        </Grid>
+                        </StackPanel>
 
-                        <Grid ColumnDefinitions="*,Auto"
-                              ColumnSpacing="10">
-                            <TextBox Grid.Column="0"
-                                     Text="{Binding RemoteProfileDisplayName}"
-                                     PlaceholderText="Profile name, for example Home SFTP Server"
-                                     MaxLength="100"
-                                     MinHeight="32" />
+                        <StackPanel Spacing="4">
+                            <Panel Width="520" HorizontalAlignment="Left">
+                                <TextBox Text="{Binding RemoteProfileDisplayName}"
+                                         MaxLength="100"
+                                         MinHeight="32" />
+                                <TextBlock Text="Profile name, for example Home SFTP Server"
+                                           Foreground="{DynamicResource MutedTextBrush}"
+                                           FontSize="13"
+                                           Margin="12,0"
+                                           VerticalAlignment="Center"
+                                           IsHitTestVisible="False"
+                                           IsVisible="{Binding !RemoteProfileDisplayName.Length}" />
+                            </Panel>
 
-                            <TextBlock Grid.Column="1"
-                                       Text="{Binding RemoteProfileState}"
-                                       VerticalAlignment="Center"
-                                       Foreground="{StaticResource AccentBrush}"
+                            <TextBlock Text="{Binding RemoteProfileState}"
+                                       Foreground="{DynamicResource MutedTextBrush}"
                                        FontSize="12" />
-                        </Grid>
+                        </StackPanel>
 
                         <StackPanel Orientation="Horizontal"
                                     Spacing="6">
@@ -197,42 +180,70 @@
                             <Button Content="Save"
                                     Command="{Binding SaveRemoteProfileCommand}"
                                     Height="30" />
-                            <Button Content="Save As"
-                                    Command="{Binding SaveRemoteProfileAsCommand}"
-                                    Height="30" />
-                            <Button Content="Rename"
-                                    Command="{Binding RenameRemoteProfileCommand}"
-                                    Height="30" />
+                            <Button Height="32"
+                                    Content="More…"
+                                    ToolTip.Tip="More profile actions">
+                                <Button.Flyout>
+                                    <MenuFlyout>
+                                        <MenuItem Header="Save as new profile"
+                                                  Command="{Binding SaveRemoteProfileAsCommand}" />
+                                        <MenuItem Header="Rename"
+                                                  Command="{Binding RenameRemoteProfileCommand}"
+                                                  IsEnabled="{Binding SelectedRemoteProfile, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                                    </MenuFlyout>
+                                </Button.Flyout>
+                            </Button>
                             <Button Content="Delete"
-                                    Command="{Binding DeleteRemoteProfileCommand}"
-                                    Height="30" />
+                                    Classes="danger"
+                                    IsEnabled="{Binding SelectedRemoteProfile, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                    Height="30">
+                                <Button.Flyout>
+                                    <Flyout Placement="Bottom">
+                                        <StackPanel Spacing="8" MaxWidth="560"
+                                      HorizontalAlignment="Stretch" Margin="4">
+                                            <TextBlock Text="Delete this profile?"
+                                                       Foreground="{DynamicResource PrimaryTextBrush}"
+                                                       FontSize="13"
+                                                       FontWeight="SemiBold" />
+                                            <TextBlock Text="Only the selected profile configuration is deleted. Backup runs, remote files, sync history, archives and save files are never removed."
+                                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                                       FontSize="12"
+                                                       TextWrapping="Wrap" />
+                                            <CheckBox Content="I understand"
+                                                      IsChecked="{Binding ConfirmDeleteRemoteProfile}"
+                                                      FontSize="12" />
+                                            <Button Content="Delete profile"
+                                                    Classes="danger"
+                                                    Command="{Binding DeleteRemoteProfileCommand}"
+                                                    HorizontalAlignment="Right"
+                                                    Height="30" />
+                                        </StackPanel>
+                                    </Flyout>
+                                </Button.Flyout>
+                            </Button>
                         </StackPanel>
 
-                        <CheckBox Content="Confirm deleting only the selected profile configuration"
-                                  IsChecked="{Binding ConfirmDeleteRemoteProfile}"
-                                  FontSize="11"
-                                  ToolTip.Tip="Profile deletion never removes backup runs, remote files, sync history, ZIP archives, save files, or SFTP known-host entries." />
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Provider"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                       FontSize="12"
+                                       FontWeight="Bold" />
 
-                        <Grid ColumnDefinitions="Auto,280"
-                              ColumnSpacing="10">
-                            <TextBlock Grid.Column="0"
-                                       Text="Provider"
-                                       VerticalAlignment="Center"
-                                       Foreground="{StaticResource MutedTextBrush}"
-                                       FontSize="12" />
-
-                            <ComboBox Grid.Column="1"
-                                      ItemsSource="{Binding ProviderOptions}"
+                            <ComboBox ItemsSource="{Binding ProviderOptions}"
                                       SelectedValue="{Binding SelectedProviderKind}"
                                       SelectedValueBinding="{Binding Kind}"
-                                      MinHeight="32">
+                                      MaxWidth="560"
+                                      HorizontalAlignment="Left"
+                                      Width="520"
+                                      MinHeight="32"
+                                      ToolTip.Tip="{Binding ProviderCapabilitySummary}">
                                 <ComboBox.ItemTemplate>
                                     <DataTemplate>
                                         <TextBlock Text="{Binding DisplayName}" />
                                     </DataTemplate>
                                 </ComboBox.ItemTemplate>
                             </ComboBox>
-                        </Grid>
+                        </StackPanel>
 
                         <!-- Local folder target -->
                         <StackPanel Spacing="4"
@@ -247,7 +258,7 @@
                                          MinHeight="32" />
 
                                 <Button Grid.Column="1"
-                                        Content="Choose Folder..."
+                                        Content="Choose folder..."
                                         Command="{Binding ChooseRemoteFolderCommand}"
                                         IsEnabled="{Binding CanSelectRemoteFolder}"
                                         Height="32"
@@ -347,39 +358,43 @@
                                         ToolTip.Tip="Removes the stored fingerprint for this host and port, e.g. after a planned server reinstall." />
 
                                 <TextBlock Text="Passwords and passphrases are never saved to disk."
-                                           Foreground="{StaticResource WarningBrush}"
-                                           FontSize="11"
+                                           Foreground="{DynamicResource WarningBrush}"
+                                           FontSize="12"
                                            VerticalAlignment="Center" />
                             </StackPanel>
                         </StackPanel>
 
                         <!-- Google Drive account configuration only. Sync stays disabled. -->
-                        <Border IsVisible="{Binding IsGoogleDriveSelected}"
-                                Background="#151720"
-                                BorderBrush="{StaticResource CardBorderBrush}"
-                                BorderThickness="1"
-                                CornerRadius="10"
-                                Padding="12">
-                            <StackPanel Spacing="6">
-                                <TextBlock Text="Google Drive"
-                                           Foreground="{StaticResource PrimaryTextBrush}"
-                                           FontWeight="SemiBold" />
+                        <StackPanel IsVisible="{Binding IsGoogleDriveSelected}"
+                                    Spacing="6">
+                            <Border Height="1"
+                                    Background="{DynamicResource SubtleBorderBrush}"
+                                    Margin="0,4" />
 
-                                <Grid ColumnDefinitions="Auto,*"
+                            <TextBlock Text="Google Drive"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                       FontSize="12"
+                                       FontWeight="Bold" />
+
+                            <StackPanel Spacing="6"
+                                        Margin="0,0,0,0">
+
+                                <Grid ColumnDefinitions="110,*"
                                       RowDefinitions="Auto,Auto,Auto"
                                       ColumnSpacing="10"
                                       RowSpacing="3">
-                                    <TextBlock Grid.Row="0" Text="{Binding GoogleDriveAccountLabel}" Foreground="{StaticResource MutedTextBrush}" />
-                                    <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding GoogleDriveAccountDisplayText}" Foreground="{StaticResource SecondaryTextBrush}" />
-                                    <TextBlock Grid.Row="1" Text="Email:" Foreground="{StaticResource MutedTextBrush}" />
-                                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding GoogleDriveEmailDisplayText}" Foreground="{StaticResource SecondaryTextBrush}" />
-                                    <TextBlock Grid.Row="2" Text="Status:" Foreground="{StaticResource MutedTextBrush}" />
-                                    <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding GoogleDriveStatusDisplayText}" Foreground="{StaticResource AccentBrush}" />
+                                    <TextBlock Grid.Row="0" Text="{Binding GoogleDriveAccountLabel}" Foreground="{DynamicResource MutedTextBrush}" />
+                                    <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding GoogleDriveAccountDisplayText}" Foreground="{DynamicResource PrimaryTextBrush}" />
+                                    <TextBlock Grid.Row="1" Text="Email" Foreground="{DynamicResource MutedTextBrush}" />
+                                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding GoogleDriveEmailDisplayText}" Foreground="{DynamicResource PrimaryTextBrush}" />
+                                    <TextBlock Grid.Row="2" Text="Status" Foreground="{DynamicResource MutedTextBrush}" />
+                                    <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding GoogleDriveStatusDisplayText}" Foreground="{DynamicResource PrimaryTextBrush}" />
                                 </Grid>
 
-                                <TextBlock Text="Scope: Files created or opened by Game Save Manager (drive.file)"
-                                           Foreground="{StaticResource SecondaryTextBrush}"
-                                           FontSize="11"
+                                <TextBlock Text="Scope: only files created or opened by Game Save Manager"
+                                           ToolTip.Tip="OAuth scope: drive.file"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                           FontSize="12"
                                            TextWrapping="Wrap" />
 
                                 <StackPanel Orientation="Horizontal" Spacing="8">
@@ -411,44 +426,44 @@
 
                                 <TextBlock Text="Disconnect removes protected authentication from this installation only. It does not delete the Google account, revoke access in Google Account settings, or remove Drive files."
                                            IsVisible="{Binding CanShowDisconnectGoogleDrive}"
-                                           Foreground="{StaticResource MutedTextBrush}"
-                                           FontSize="11"
+                                           Foreground="{DynamicResource MutedTextBrush}"
+                                           FontSize="12"
                                            TextWrapping="Wrap" />
 
-                                 <TextBlock Text="{Binding GoogleDriveConnectionMessage}"
-                                            Foreground="{StaticResource AccentBrush}"
-                                            FontSize="12"
-                                            TextWrapping="Wrap" />
+                                <TextBlock Text="{Binding GoogleDriveConnectionMessage}"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                           FontSize="12"
+                                           TextWrapping="Wrap" />
 
-                                <Border Background="#10131A"
-                                        BorderBrush="{StaticResource CardBorderBrush}"
-                                        BorderThickness="1"
-                                        CornerRadius="8"
-                                        Padding="10">
-                                    <StackPanel Spacing="6">
-                                        <TextBlock Text="Application backup folder"
-                                                   Foreground="{StaticResource PrimaryTextBrush}"
-                                                   FontWeight="SemiBold"
-                                                   FontSize="12" />
+                                <Border Height="1"
+                                        Background="{DynamicResource SubtleBorderBrush}"
+                                        Margin="0,4" />
 
+                                <TextBlock Text="Application backup folder"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                           FontSize="12"
+                                           FontWeight="Bold" />
+
+                                <StackPanel Spacing="6"
+                                            Margin="0,0,0,0">
                                         <Grid ColumnDefinitions="Auto,*"
                                               RowDefinitions="Auto,Auto"
                                               ColumnSpacing="10"
                                               RowSpacing="3">
                                             <TextBlock Grid.Row="0"
-                                                       Text="Backup folder:"
-                                                       Foreground="{StaticResource MutedTextBrush}" />
+                                                       Text="Backup folder"
+                                                       Foreground="{DynamicResource MutedTextBrush}" />
                                             <TextBlock Grid.Row="0"
                                                        Grid.Column="1"
                                                        Text="{Binding GoogleDriveRootFolderDisplayText}"
-                                                       Foreground="{StaticResource SecondaryTextBrush}" />
+                                                       Foreground="{DynamicResource SecondaryTextBrush}" />
                                             <TextBlock Grid.Row="1"
-                                                       Text="Folder status:"
-                                                       Foreground="{StaticResource MutedTextBrush}" />
+                                                       Text="Folder status"
+                                                       Foreground="{DynamicResource MutedTextBrush}" />
                                             <TextBlock Grid.Row="1"
                                                        Grid.Column="1"
                                                        Text="{Binding GoogleDriveRootFolderStatusDisplayText}"
-                                                       Foreground="{StaticResource AccentBrush}"
+                                                       Foreground="{DynamicResource SecondaryTextBrush}"
                                                        TextWrapping="Wrap" />
                                         </Grid>
 
@@ -481,31 +496,25 @@
                                                   ToolTip.Tip="The old Drive object, remote files, local backups, and saved profile remain. A new folder is created only when no unique existing candidate is available." />
 
                                         <TextBlock Text="{Binding GoogleDriveRootFolderMessage}"
-                                                   Foreground="{StaticResource AccentBrush}"
-                                                   FontSize="11"
+                                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                                   FontSize="12"
                                                    TextWrapping="Wrap" />
-                                    </StackPanel>
-                                </Border>
+                                </StackPanel>
 
-                                <TextBlock Text="The visible My Drive folder identity can now be configured and checked. Backup-run folders, uploads, downloads, preview, and synchronization are implemented in later milestones."
-                                           Foreground="{StaticResource WarningBrush}"
-                                           FontSize="11"
+                                <TextBlock Text="Backups sync into this folder in your My Drive. Uploads only create files, downloads never overwrite local files, and nothing is ever deleted remotely."
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                           FontSize="12"
                                            TextWrapping="Wrap" />
                             </StackPanel>
-                        </Border>
-
-                        <TextBlock Text="{Binding ProviderCapabilitySummary}"
-                                   Foreground="{StaticResource MutedTextBrush}"
-                                   FontSize="11"
-                                   TextWrapping="Wrap" />
+                        </StackPanel>
 
                         <StackPanel Orientation="Horizontal"
                                     Spacing="10"
                                     IsVisible="{Binding CanLogout}">
                             <TextBlock Text="Stored authentication available"
                                        IsVisible="{Binding HasStoredAuthentication}"
-                                       Foreground="{StaticResource SecondaryTextBrush}"
-                                       FontSize="11"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                       FontSize="12"
                                        VerticalAlignment="Center" />
                             <Button Content="Disconnect"
                                     Command="{Binding DisconnectAuthenticationCommand}"
@@ -515,25 +524,47 @@
                                     ToolTip.Tip="Removes encrypted authentication only. The saved profile and backup data are kept." />
                         </StackPanel>
 
-                        <Button Content="Check Connection &amp; Sync Status"
+                        <Button Content="Check connection"
                                 Command="{Binding CheckSyncStatusCommand}"
                                 IsVisible="{Binding CanCheckConnection}"
-                                Height="30"
+                                Height="28"
                                 FontSize="12"
                                 Margin="0,4,0,0"
                                 ToolTip.Tip="Connects to the sync target and reports whether the backup runs are in sync - without copying anything. Preview Sync (Dry Run) performs the same check automatically." />
 
                         <TextBlock Text="{Binding ConnectionCheckMessage}"
-                                   Foreground="{StaticResource AccentBrush}"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
                                    FontSize="12"
                                    TextWrapping="Wrap" />
 
-                        <TextBlock Text="Sync copies whole backup runs both ways. A run missing on one side is copied there - nothing is ever deleted or overwritten. Runs that differ on both sides are reported as conflicts and never copied automatically."
-                                   Foreground="{StaticResource MutedTextBrush}"
-                                   FontSize="11"
-                                   TextWrapping="Wrap" />
+                        <TextBlock Text="Sync copies whole backup runs both ways. A run missing on one side is copied there — nothing is ever deleted or overwritten. Runs that differ on both sides are reported as conflicts and never copied automatically."
+                                   Foreground="{DynamicResource MutedTextBrush}"
+                                   FontSize="12"
+                                   TextWrapping="Wrap"
+                   MaxWidth="560"
+                   HorizontalAlignment="Left" />
                     </StackPanel>
-                </Expander>
+                </StackPanel>
+
+                    <Border Height="1" Background="{DynamicResource SubtleBorderBrush}" />
+
+                    <WrapPanel ItemSpacing="10" LineSpacing="6">
+                        <Border Background="{DynamicResource InsetBackgroundBrush}"
+                                CornerRadius="8"
+                                Padding="10,6"
+                                VerticalAlignment="Center">
+                            <CheckBox Content="I understand this will copy backup runs"
+                                      IsChecked="{Binding ConfirmSync}"
+                                      FontSize="12" />
+                        </Border>
+                        <Button Content="Sync now"
+                                Command="{Binding ExecuteSyncCommand}"
+                                IsEnabled="{Binding CanExecuteSync}"
+                                Height="34"
+                                VerticalAlignment="Center" />
+                    </WrapPanel>
+                  </StackPanel>
+                </Border>
 
                 <!-- Sync plan -->
                 <Expander Header="Sync plan"
@@ -543,7 +574,7 @@
                                 Margin="0,6,0,0">
 
                         <TextBlock Text="{Binding SummaryDisplay}"
-                                   Foreground="{StaticResource AccentBrush}"
+                                   Foreground="{DynamicResource AccentBrush}"
                                    FontSize="12"
                                    TextWrapping="Wrap" />
 
@@ -552,7 +583,7 @@
 
                             <TextBlock Grid.Column="0"
                                        Text="{Binding SelectedSummaryDisplay}"
-                                       Foreground="{StaticResource SecondaryTextBrush}"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
                                        FontSize="12"
                                        VerticalAlignment="Center" />
 
@@ -570,19 +601,20 @@
                         </Grid>
 
                         <Border Padding="0,6,0,6"
-                                BorderBrush="{StaticResource CardBorderBrush}"
-                                BorderThickness="0,0,0,1">
+                                BorderBrush="{DynamicResource CardBorderBrush}"
+                                BorderThickness="0,0,0,1"
+                                IsVisible="{Binding !!Items.Count}">
 
                             <Grid ColumnDefinitions="34,2*,90,*,90,90,*"
                                   ColumnSpacing="10">
 
                                 <TextBlock Grid.Column="0" Text="" />
-                                <TextBlock Grid.Column="1" Text="Run" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
-                                <TextBlock Grid.Column="2" Text="Action" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
-                                <TextBlock Grid.Column="3" Text="Game" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
-                                <TextBlock Grid.Column="4" Text="Files" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
-                                <TextBlock Grid.Column="5" Text="Size" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
-                                <TextBlock Grid.Column="6" Text="Status" Foreground="{StaticResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
+                                <TextBlock Grid.Column="1" Text="Run" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
+                                <TextBlock Grid.Column="2" Text="Action" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
+                                <TextBlock Grid.Column="3" Text="Game" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
+                                <TextBlock Grid.Column="4" Text="Files" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
+                                <TextBlock Grid.Column="5" Text="Size" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
+                                <TextBlock Grid.Column="6" Text="Status" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
                             </Grid>
                         </Border>
 
@@ -590,7 +622,7 @@
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="models:SyncItemRowViewModel">
                                     <Border Padding="0,6"
-                                            BorderBrush="#252733"
+                                            BorderBrush="{DynamicResource SubtleBorderBrush}"
                                             BorderThickness="0,0,0,1">
 
                                         <Grid ColumnDefinitions="34,2*,90,*,90,90,*"
@@ -603,7 +635,7 @@
 
                                             <TextBlock Grid.Column="1"
                                                        Text="{Binding RunName}"
-                                                       Foreground="{StaticResource SecondaryTextBrush}"
+                                                       Foreground="{DynamicResource SecondaryTextBrush}"
                                                        ToolTip.Tip="{Binding RunName}"
                                                        FontSize="12"
                                                        VerticalAlignment="Center"
@@ -611,33 +643,33 @@
 
                                             <TextBlock Grid.Column="2"
                                                        Text="{Binding ActionText}"
-                                                       Foreground="{StaticResource AccentBrush}"
+                                                       Foreground="{DynamicResource AccentBrush}"
                                                        FontSize="12"
                                                        VerticalAlignment="Center"
                                                        FontWeight="SemiBold" />
 
                                             <TextBlock Grid.Column="3"
                                                        Text="{Binding GameName}"
-                                                       Foreground="{StaticResource SecondaryTextBrush}"
+                                                       Foreground="{DynamicResource SecondaryTextBrush}"
                                                        FontSize="12"
                                                        VerticalAlignment="Center"
                                                        TextTrimming="CharacterEllipsis" />
 
                                             <TextBlock Grid.Column="4"
                                                        Text="{Binding FilesDisplay}"
-                                                       Foreground="{StaticResource MutedTextBrush}"
+                                                       Foreground="{DynamicResource MutedTextBrush}"
                                                        FontSize="12"
                                                        VerticalAlignment="Center" />
 
                                             <TextBlock Grid.Column="5"
                                                        Text="{Binding SizeDisplay}"
-                                                       Foreground="{StaticResource MutedTextBrush}"
+                                                       Foreground="{DynamicResource MutedTextBrush}"
                                                        FontSize="12"
                                                        VerticalAlignment="Center" />
 
                                             <TextBlock Grid.Column="6"
                                                        Text="{Binding StatusText}"
-                                                       Foreground="{StaticResource PrimaryTextBrush}"
+                                                       Foreground="{DynamicResource PrimaryTextBrush}"
                                                        FontSize="12"
                                                        VerticalAlignment="Center"
                                                        TextWrapping="Wrap" />
@@ -646,6 +678,11 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
+
+                        <views:EmptyState Glyph="&#xE895;"
+                                          Title="No sync plan yet"
+                                          Message="Run Preview Sync (Dry Run) to see which backup runs would be copied."
+                                          IsVisible="{Binding !Items.Count}" />
                     </StackPanel>
                 </Expander>
 
@@ -653,24 +690,25 @@
                 <Expander Header="Warnings"
                           IsExpanded="{Binding WarningsSectionExpanded}">
 
-                    <ItemsControl ItemsSource="{Binding Warnings}"
-                                  Margin="0,6,0,0">
+                    <StackPanel Margin="0,6,0,0">
+
+                    <ItemsControl ItemsSource="{Binding Warnings}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="models:TransferWarningRowViewModel">
                                 <Border Padding="0,6"
-                                        BorderBrush="#252733"
+                                        BorderBrush="{DynamicResource SubtleBorderBrush}"
                                         BorderThickness="0,0,0,1">
 
                                     <StackPanel Orientation="Horizontal"
                                                 Spacing="8">
                                         <TextBlock Text="{Binding SeverityText}"
-                                                   Foreground="{StaticResource WarningBrush}"
+                                                   Foreground="{DynamicResource WarningBrush}"
                                                    FontSize="12"
                                                    FontWeight="SemiBold"
                                                    Width="60" />
 
                                         <TextBlock Text="{Binding Message}"
-                                                   Foreground="{StaticResource SecondaryTextBrush}"
+                                                   Foreground="{DynamicResource SecondaryTextBrush}"
                                                    FontSize="12"
                                                    TextWrapping="Wrap" />
                                     </StackPanel>
@@ -678,6 +716,12 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
+
+                    <views:EmptyState Glyph="&#xE930;"
+                                      Title="No warnings"
+                                      Message="Warnings from the sync preview and execution appear here."
+                                      IsVisible="{Binding !Warnings.Count}" />
+                    </StackPanel>
                 </Expander>
 
                 <!-- Execution results -->
@@ -688,7 +732,7 @@
                                 Margin="0,6,0,0">
 
                         <TextBlock Text="{Binding ExecutionStatusMessage}"
-                                   Foreground="{StaticResource SecondaryTextBrush}"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
                                    FontSize="12"
                                    TextWrapping="Wrap" />
 
@@ -696,7 +740,7 @@
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="models:SyncItemResultRowViewModel">
                                     <Border Padding="0,6"
-                                            BorderBrush="#252733"
+                                            BorderBrush="{DynamicResource SubtleBorderBrush}"
                                             BorderThickness="0,0,0,1">
 
                                         <Grid ColumnDefinitions="2*,130,90,*"
@@ -704,24 +748,24 @@
 
                                             <TextBlock Grid.Column="0"
                                                        Text="{Binding RunName}"
-                                                       Foreground="{StaticResource SecondaryTextBrush}"
+                                                       Foreground="{DynamicResource SecondaryTextBrush}"
                                                        FontSize="12"
                                                        TextTrimming="CharacterEllipsis" />
 
                                             <TextBlock Grid.Column="1"
                                                        Text="{Binding Status}"
-                                                       Foreground="{StaticResource PrimaryTextBrush}"
+                                                       Foreground="{DynamicResource PrimaryTextBrush}"
                                                        FontSize="12"
                                                        FontWeight="SemiBold" />
 
                                             <TextBlock Grid.Column="2"
                                                        Text="{Binding SizeDisplay}"
-                                                       Foreground="{StaticResource MutedTextBrush}"
+                                                       Foreground="{DynamicResource MutedTextBrush}"
                                                        FontSize="12" />
 
                                             <TextBlock Grid.Column="3"
                                                        Text="{Binding Error}"
-                                                       Foreground="{StaticResource WarningBrush}"
+                                                       Foreground="{DynamicResource WarningBrush}"
                                                        FontSize="12"
                                                        TextWrapping="Wrap" />
                                         </Grid>
@@ -739,36 +783,36 @@
                     <StackPanel Spacing="4"
                                 Margin="0,6,0,0">
 
-                        <TextBlock Text="Every executed sync, from the log stored alongside the sync folder - shared by all devices syncing with it."
-                                   Foreground="{StaticResource MutedTextBrush}"
-                                   FontSize="11"
+                        <TextBlock Text="Every executed sync, from the log stored alongside the sync folder — shared by all devices syncing with it."
+                                   Foreground="{DynamicResource MutedTextBrush}"
+                                   FontSize="12"
                                    TextWrapping="Wrap" />
 
                         <ItemsControl ItemsSource="{Binding SyncLog}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="models:SyncLogEntryRowViewModel">
                                     <Border Padding="0,6"
-                                            BorderBrush="#252733"
+                                            BorderBrush="{DynamicResource SubtleBorderBrush}"
                                             BorderThickness="0,0,0,1">
 
                                         <StackPanel Spacing="2">
                                             <StackPanel Orientation="Horizontal"
                                                         Spacing="10">
                                                 <TextBlock Text="{Binding TimestampDisplay}"
-                                                           Foreground="{StaticResource SecondaryTextBrush}"
+                                                           Foreground="{DynamicResource SecondaryTextBrush}"
                                                            FontSize="12" />
 
                                                 <TextBlock Text="{Binding DeviceName}"
-                                                           Foreground="{StaticResource AccentBrush}"
+                                                           Foreground="{DynamicResource AccentBrush}"
                                                            FontSize="12" />
 
                                                 <TextBlock Text="{Binding SummaryDisplay}"
-                                                           Foreground="{StaticResource MutedTextBrush}"
+                                                           Foreground="{DynamicResource MutedTextBrush}"
                                                            FontSize="12" />
                                             </StackPanel>
 
                                             <TextBlock Text="{Binding RunsDisplay}"
-                                                       Foreground="{StaticResource MutedTextBrush}"
+                                                       Foreground="{DynamicResource MutedTextBrush}"
                                                        FontSize="10"
                                                        TextWrapping="Wrap" />
                                         </StackPanel>
@@ -776,6 +820,11 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
+
+                        <views:EmptyState Glyph="&#xE81C;"
+                                          Title="No sync history yet"
+                                          Message="Executed syncs are recorded here, shared by every device using the same sync folder."
+                                          IsVisible="{Binding !SyncLog.Count}" />
                     </StackPanel>
                 </Expander>
             </StackPanel>

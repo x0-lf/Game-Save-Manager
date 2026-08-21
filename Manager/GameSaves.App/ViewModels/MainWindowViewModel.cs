@@ -14,6 +14,7 @@ namespace GameSaves.App.ViewModels
     public partial class MainWindowViewModel : ViewModelBase, IInitializableViewModel
     {
         private readonly ISteamDiscoveryService _steamDiscoveryService;
+        private readonly GameSaves.App.Services.IUiSettingsStore _uiSettingsStore;
         private readonly ISteamProfileDetector _steamProfileDetector;
         private readonly ISavePathMappingRepository _mappingRepository;
         private readonly ICurrentPlatformProvider _platformProvider;
@@ -32,26 +33,71 @@ namespace GameSaves.App.ViewModels
         [ObservableProperty]
         private string steamRoot = "Not scanned yet";
 
+        // True only after a completed scan that found no Steam installation;
+        // the Dashboard shows an actionable error banner instead of leaving
+        // the failure as passive text inside a stat card.
         [ObservableProperty]
+        private bool isSteamMissing;
+
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(HasLibraries))]
         private int libraryCount;
 
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(HasInstalledGames))]
         private int installedGameCount;
 
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(HasSteamProfiles))]
         private int steamProfileCount;
 
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(HasApprovedMappings))]
         private int approvedMappingCount;
 
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(HasPendingMappings))]
         private int pendingMappingCount;
 
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(HasNeedsFixMappings))]
         private int needsFixMappingCount;
+
+        // Semantic colour is applied to a stat only when it carries real
+        // state; a zero is neutral. See ui-critic-round-1 finding 15.
+        public bool HasLibraries => LibraryCount > 0;
+
+        public bool HasInstalledGames => InstalledGameCount > 0;
+
+        public bool HasSteamProfiles => SteamProfileCount > 0;
+
+        public bool HasApprovedMappings => ApprovedMappingCount > 0;
+
+        public bool HasPendingMappings => PendingMappingCount > 0;
+
+        public bool HasNeedsFixMappings => NeedsFixMappingCount > 0;
 
         [ObservableProperty]
         private string statusMessage = "Ready.";
+
+        // "system", "light" or "dark"; loaded at construction and persisted
+        // on every change so the choice survives restart.
+        [ObservableProperty]
+        private string themeChoice = GameSaves.App.Services.AppUiSettings.ThemeSystem;
+
+        public void SetThemeChoice(string choice)
+        {
+            if (choice is not (GameSaves.App.Services.AppUiSettings.ThemeSystem
+                or GameSaves.App.Services.AppUiSettings.ThemeLight
+                or GameSaves.App.Services.AppUiSettings.ThemeDark))
+            {
+                return;
+            }
+
+            ThemeChoice = choice;
+            _uiSettingsStore.Save(
+                _uiSettingsStore.Load() with { ThemeChoice = choice });
+        }
         public InstalledGamesViewModel InstalledGames { get; }
         public ProfilesViewModel Profiles { get; }
 
@@ -66,6 +112,7 @@ namespace GameSaves.App.ViewModels
         public SyncViewModel Sync { get; }
 
         public MainWindowViewModel(
+            GameSaves.App.Services.IUiSettingsStore uiSettingsStore,
             ISteamDiscoveryService steamDiscoveryService,
             ISteamProfileDetector steamProfileDetector,
             ISavePathMappingRepository mappingRepository,
@@ -79,7 +126,9 @@ namespace GameSaves.App.ViewModels
             TransferHistoryViewModel transferHistory,
             SyncViewModel sync)
         {
+            _uiSettingsStore = uiSettingsStore;
             _steamDiscoveryService = steamDiscoveryService;
+            ThemeChoice = uiSettingsStore.Load().ThemeChoice;
             _steamProfileDetector = steamProfileDetector;
             _mappingRepository = mappingRepository;
             _platformProvider = platformProvider;
@@ -147,6 +196,7 @@ namespace GameSaves.App.ViewModels
 
                         return new DashboardSnapshot(
                             discovery.SteamRoot ?? "Steam not found",
+                            discovery.SteamRoot is null,
                             discovery.Libraries.Count,
                             discovery.Games.Count,
                             profileCount,
@@ -159,6 +209,7 @@ namespace GameSaves.App.ViewModels
                 cancellationToken.ThrowIfCancellationRequested();
 
                 SteamRoot = snapshot.SteamRoot;
+                IsSteamMissing = snapshot.SteamMissing;
                 LibraryCount = snapshot.LibraryCount;
                 InstalledGameCount = snapshot.InstalledGameCount;
                 SteamProfileCount = snapshot.SteamProfileCount;
@@ -166,7 +217,9 @@ namespace GameSaves.App.ViewModels
                 PendingMappingCount = snapshot.PendingMappingCount;
                 NeedsFixMappingCount = snapshot.NeedsFixMappingCount;
 
-                StatusMessage = "Scan finished.";
+                StatusMessage = snapshot.SteamMissing
+                    ? "Steam not detected."
+                    : "Scan complete.";
             }
             catch (OperationCanceledException)
             {
@@ -186,6 +239,7 @@ namespace GameSaves.App.ViewModels
 
         private sealed record DashboardSnapshot(
             string SteamRoot,
+            bool SteamMissing,
             int LibraryCount,
             int InstalledGameCount,
             int SteamProfileCount,

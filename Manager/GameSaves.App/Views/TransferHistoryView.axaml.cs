@@ -7,6 +7,7 @@ namespace GameSaves.App.Views
         public TransferHistoryView()
         {
             InitializeComponent();
+            ResponsiveSplitGrid.Attach(SplitGrid, threshold: 760);
         }
     }
 }
