@@ -28,20 +28,28 @@ public sealed class InstalledGamesViewTests
 
         Assert.Equal(10, columns.Length);
         Assert.Equal(10, columns.Select(column => (string)column.Attribute("Tag")!).Distinct().Count());
+        // Wave 37 rebalanced default widths so all ten columns fit a
+        // 1400x900 viewport without horizontal scrolling; 95 was verified in
+        // captures to render the full "Needs fix" header. The intent this
+        // guard protects is the full header, so it pins the width that
+        // was pixel-verified to provide it.
         Assert.Contains(
             columns,
             column =>
                 (string?)column.Attribute("Header") == "Needs fix" &&
-                (string?)column.Attribute("Width") == "105");
+                (string?)column.Attribute("Width") == "95");
     }
 
     [Fact]
     public void SettingsExposeEveryInstalledGameColumn()
     {
-        XDocument window = XDocument.Load(FindView("MainWindow.axaml"));
+        // The column checkboxes moved from the header flyout to the Settings
+        // page's Layout section; they stay bound to the InstalledGames child
+        // view model so the table and Settings edit the same live options.
+        XDocument view = XDocument.Load(FindView("SettingsView.axaml"));
 
         XElement options = Assert.Single(
-            window.Descendants(),
+            view.Descendants(),
             element =>
                 (string?)element.Attribute("ItemsSource") ==
                 "{Binding InstalledGames.ColumnOptions}");
@@ -50,7 +58,9 @@ public sealed class InstalledGamesViewTests
             options.Ancestors(),
             element =>
                 element.Name.LocalName == "ScrollViewer" &&
-                (string?)element.Attribute("VerticalScrollBarVisibility") == "Auto");
+                ((string?)element.Attribute("Classes") ?? string.Empty)
+                    .Split(' ')
+                    .Contains("pageScroll"));
     }
 
     private static string FindView(string fileName)

@@ -13,10 +13,13 @@
          explanation, optional call-to-action. Views overlay this on any
          region whose backing collection is empty, so a first-run user sees
          guidance instead of column headers floating over a void. -->
+    <!-- 12px vertical margin, not 24: in the tightest 800x600 pane the full
+         stack barely fits, and a taller footprint pushes the call-to-action
+         out of the clipped pane entirely (critic round 28). -->
     <StackPanel VerticalAlignment="Center"
                 HorizontalAlignment="Center"
                 Spacing="10"
-                Margin="24"
+                Margin="24,12"
                 MaxWidth="460">
 
         <Border Width="88"
@@ -33,7 +36,7 @@
         </Border>
 
         <TextBlock x:Name="TitleText"
-                   FontSize="15"
+                   FontSize="{DynamicResource FontSizeSubheading}"
                    FontWeight="SemiBold"
                    HorizontalAlignment="Center"
                    TextAlignment="Center"
@@ -41,7 +44,7 @@
                    Foreground="{DynamicResource PrimaryTextBrush}" />
 
         <TextBlock x:Name="MessageText"
-                   FontSize="12"
+                   FontSize="{DynamicResource FontSizeBody}"
                    HorizontalAlignment="Center"
                    TextAlignment="Center"
                    TextWrapping="Wrap"

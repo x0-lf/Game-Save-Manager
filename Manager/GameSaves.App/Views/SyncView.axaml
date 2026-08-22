@@ -22,7 +22,7 @@
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
-            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontSize" Value="{DynamicResource FontSizeBodyLarge}" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Padding" Value="8,6" />
             <Setter Property="CornerRadius" Value="8" />
@@ -39,6 +39,9 @@
         </Style>
     </UserControl.Styles>
 
+    <ScrollViewer Classes="pageScroll"
+                  VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled">
     <Grid RowDefinitions="Auto,*"
           RowSpacing="10"
           Margin="0,12,0,14"
@@ -57,9 +60,14 @@
                     <StackPanel Spacing="2" VerticalAlignment="Center">
                         <TextBlock Text="Sync" Classes="h1" />
 
-                        <TextBlock Text="{Binding StatusMessage}"
+                        <TextBlock Text="Copy completed backup runs to a remote destination, preview first."
                                    Foreground="{DynamicResource SecondaryTextBrush}"
-                                   FontSize="12"
+                                   FontSize="{DynamicResource FontSizeBody}"
+                                   TextWrapping="Wrap" />
+
+                        <TextBlock Text="{Binding StatusMessage}"
+                                   Foreground="{DynamicResource MutedTextBrush}"
+                                   FontSize="{DynamicResource FontSizeBody}"
                                    TextWrapping="Wrap" />
                     </StackPanel>
 
@@ -85,7 +93,7 @@
 
                     <TextBlock Text="{Binding ProgressText}"
                                Foreground="{DynamicResource AccentBrush}"
-                               FontSize="12"
+                               FontSize="{DynamicResource FontSizeBody}"
                                TextTrimming="CharacterEllipsis"
                                ToolTip.Tip="{Binding ProgressText}" />
 
@@ -96,7 +104,7 @@
                             IsEnabled="{Binding CanCancelSync}"
                             HorizontalAlignment="Left"
                             Height="28"
-                            FontSize="12"
+                            FontSize="{DynamicResource FontSizeBody}"
                             ToolTip.Tip="Stop the sync. Files already copied are kept and nothing is deleted." />
                 </StackPanel>
             </StackPanel>
@@ -116,14 +124,14 @@
                     <StackPanel Spacing="10">
                         <TextBlock Text="Remote profile"
                                    Foreground="{DynamicResource PrimaryTextBrush}"
-                                   FontSize="14"
+                                   FontSize="{DynamicResource FontSizeBodyLarge}"
                                    FontWeight="SemiBold" />
 
                         <StackPanel Spacing="6">
                             <StackPanel Spacing="4">
                                 <TextBlock Text="Saved profile"
                                            Foreground="{DynamicResource SecondaryTextBrush}"
-                                           FontSize="12"
+                                           FontSize="{DynamicResource FontSizeBody}"
                                            FontWeight="SemiBold" />
 
                                 <ComboBox MaxWidth="560"
@@ -146,7 +154,7 @@
                                              MinHeight="32" />
                                     <TextBlock Text="Profile name, for example Home SFTP Server"
                                                Foreground="{DynamicResource MutedTextBrush}"
-                                               FontSize="13"
+                                               FontSize="{DynamicResource FontSizeSubtitle}"
                                                Margin="12,0"
                                                VerticalAlignment="Center"
                                                IsHitTestVisible="False"
@@ -155,7 +163,7 @@
 
                                 <TextBlock Text="{Binding RemoteProfileState}"
                                            Foreground="{DynamicResource MutedTextBrush}"
-                                           FontSize="12" />
+                                           FontSize="{DynamicResource FontSizeBody}" />
                             </StackPanel>
 
                             <StackPanel Orientation="Horizontal"
@@ -190,15 +198,15 @@
                                                         HorizontalAlignment="Stretch" Margin="4">
                                                 <TextBlock Text="Delete this profile?"
                                                            Foreground="{DynamicResource PrimaryTextBrush}"
-                                                           FontSize="13"
+                                                           FontSize="{DynamicResource FontSizeSubtitle}"
                                                            FontWeight="SemiBold" />
                                                 <TextBlock Text="Only the selected profile configuration is deleted. Backup runs, remote files, sync history, archives and save files are never removed."
                                                            Foreground="{DynamicResource SecondaryTextBrush}"
-                                                           FontSize="12"
+                                                           FontSize="{DynamicResource FontSizeBody}"
                                                            TextWrapping="Wrap" />
                                                 <CheckBox Content="I understand"
                                                           IsChecked="{Binding ConfirmDeleteRemoteProfile}"
-                                                          FontSize="12" />
+                                                          FontSize="{DynamicResource FontSizeBody}" />
                                                 <Button Content="Delete profile"
                                                         Classes="danger"
                                                         Command="{Binding DeleteRemoteProfileCommand}"
@@ -222,7 +230,7 @@
                     <StackPanel Spacing="10">
                         <TextBlock Text="Sync target &amp; connection"
                                    Foreground="{DynamicResource PrimaryTextBrush}"
-                                   FontSize="14"
+                                   FontSize="{DynamicResource FontSizeBodyLarge}"
                                    FontWeight="SemiBold" />
 
                         <StackPanel Spacing="8">
@@ -230,7 +238,7 @@
                             <StackPanel Spacing="4">
                                 <TextBlock Text="Provider"
                                            Foreground="{DynamicResource SecondaryTextBrush}"
-                                           FontSize="12"
+                                           FontSize="{DynamicResource FontSizeBody}"
                                            FontWeight="SemiBold" />
 
                                 <ComboBox ItemsSource="{Binding ProviderOptions}"
@@ -250,7 +258,7 @@
 
                                 <TextBlock Text="{Binding ProviderCapabilitySummary}"
                                            Foreground="{DynamicResource MutedTextBrush}"
-                                           FontSize="12"
+                                           FontSize="{DynamicResource FontSizeBody}"
                                            TextWrapping="Wrap"
                                            MaxWidth="560"
                                            HorizontalAlignment="Left" />
@@ -260,17 +268,17 @@
                             <StackPanel Spacing="4">
                                 <TextBlock Text="Sync behaviour"
                                            Foreground="{DynamicResource SecondaryTextBrush}"
-                                           FontSize="12"
+                                           FontSize="{DynamicResource FontSizeBody}"
                                            FontWeight="SemiBold" />
 
                                 <WrapPanel ItemSpacing="14" LineSpacing="6">
                                     <CheckBox Content="Upload local runs"
                                               IsChecked="{Binding UploadEnabled}"
-                                              FontSize="12" />
+                                              FontSize="{DynamicResource FontSizeBody}" />
 
                                     <CheckBox Content="Download remote runs"
                                               IsChecked="{Binding DownloadEnabled}"
-                                              FontSize="12" />
+                                              FontSize="{DynamicResource FontSizeBody}" />
                                 </WrapPanel>
                             </StackPanel>
 
@@ -281,7 +289,7 @@
                                         IsVisible="{Binding IsLocalFolderSelected}">
                                 <TextBlock Text="Folder location"
                                            Foreground="{DynamicResource SecondaryTextBrush}"
-                                           FontSize="12"
+                                           FontSize="{DynamicResource FontSizeBody}"
                                            FontWeight="SemiBold" />
 
                                 <Grid ColumnDefinitions="*,Auto,Auto"
@@ -314,7 +322,7 @@
                                         IsVisible="{Binding IsSftpSelected}">
                                 <TextBlock Text="SFTP connection"
                                            Foreground="{DynamicResource SecondaryTextBrush}"
-                                           FontSize="12"
+                                           FontSize="{DynamicResource FontSizeBody}"
                                            FontWeight="SemiBold" />
 
                                 <Grid ColumnDefinitions="2*,90,*"
@@ -342,12 +350,12 @@
                                     <RadioButton Content="Password"
                                                  GroupName="SftpAuth"
                                                  IsChecked="{Binding SftpUsePassword}"
-                                                 FontSize="12" />
+                                                 FontSize="{DynamicResource FontSizeBody}" />
 
                                     <RadioButton Content="Private key file"
                                                  GroupName="SftpAuth"
                                                  IsChecked="{Binding SftpUsePrivateKey}"
-                                                 FontSize="12" />
+                                                 FontSize="{DynamicResource FontSizeBody}" />
                                 </StackPanel>
 
                                 <TextBox Text="{Binding SftpPassword}"
@@ -386,19 +394,19 @@
 
                                 <CheckBox Content="Trust this server's host key on first connect"
                                           IsChecked="{Binding SftpTrustNewHostKey}"
-                                          FontSize="12"
+                                          FontSize="{DynamicResource FontSizeBody}"
                                           ToolTip.Tip="On the first connection the server's key fingerprint is stored (like SSH known_hosts). If it ever changes later, the sync fails loudly. Leave unchecked to see the fingerprint first without trusting it." />
 
                                 <WrapPanel ItemSpacing="10" LineSpacing="6">
                                     <Button Content="Forget Stored Host Key"
                                             Command="{Binding ForgetSftpHostKeyCommand}"
-                                            FontSize="12"
+                                            FontSize="{DynamicResource FontSizeBody}"
                                             Height="28"
                                             ToolTip.Tip="Removes the stored fingerprint for this host and port, e.g. after a planned server reinstall." />
 
                                     <TextBlock Text="Passwords and passphrases are never saved to disk."
                                                Foreground="{DynamicResource WarningBrush}"
-                                               FontSize="12"
+                                               FontSize="{DynamicResource FontSizeBody}"
                                                VerticalAlignment="Center" />
                                 </WrapPanel>
                             </StackPanel>
@@ -409,25 +417,25 @@
 
                                 <TextBlock Text="Google Drive account"
                                            Foreground="{DynamicResource SecondaryTextBrush}"
-                                           FontSize="12"
+                                           FontSize="{DynamicResource FontSizeBody}"
                                            FontWeight="SemiBold" />
 
                                 <Grid ColumnDefinitions="110,*"
                                       RowDefinitions="Auto,Auto,Auto"
                                       ColumnSpacing="10"
                                       RowSpacing="3">
-                                    <TextBlock Grid.Row="0" Text="{Binding GoogleDriveAccountLabel}" Foreground="{DynamicResource MutedTextBrush}" FontSize="12" />
-                                    <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding GoogleDriveAccountDisplayText}" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="12" />
-                                    <TextBlock Grid.Row="1" Text="Email" Foreground="{DynamicResource MutedTextBrush}" FontSize="12" />
-                                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding GoogleDriveEmailDisplayText}" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="12" />
-                                    <TextBlock Grid.Row="2" Text="Status" Foreground="{DynamicResource MutedTextBrush}" FontSize="12" />
-                                    <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding GoogleDriveStatusDisplayText}" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="12" />
+                                    <TextBlock Grid.Row="0" Text="{Binding GoogleDriveAccountLabel}" Foreground="{DynamicResource MutedTextBrush}" FontSize="{DynamicResource FontSizeBody}" />
+                                    <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding GoogleDriveAccountDisplayText}" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="{DynamicResource FontSizeBody}" />
+                                    <TextBlock Grid.Row="1" Text="Email" Foreground="{DynamicResource MutedTextBrush}" FontSize="{DynamicResource FontSizeBody}" />
+                                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding GoogleDriveEmailDisplayText}" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="{DynamicResource FontSizeBody}" />
+                                    <TextBlock Grid.Row="2" Text="Status" Foreground="{DynamicResource MutedTextBrush}" FontSize="{DynamicResource FontSizeBody}" />
+                                    <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding GoogleDriveStatusDisplayText}" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="{DynamicResource FontSizeBody}" />
                                 </Grid>
 
                                 <TextBlock Text="Scope: only files created or opened by Game Save Manager"
                                            ToolTip.Tip="OAuth scope: drive.file"
                                            Foreground="{DynamicResource SecondaryTextBrush}"
-                                           FontSize="12"
+                                           FontSize="{DynamicResource FontSizeBody}"
                                            TextWrapping="Wrap" />
 
                                 <WrapPanel ItemSpacing="8" LineSpacing="6">
@@ -460,12 +468,12 @@
                                 <TextBlock Text="Disconnect removes protected authentication from this installation only. It does not delete the Google account, revoke access in Google Account settings, or remove Drive files."
                                            IsVisible="{Binding CanShowDisconnectGoogleDrive}"
                                            Foreground="{DynamicResource MutedTextBrush}"
-                                           FontSize="12"
+                                           FontSize="{DynamicResource FontSizeBody}"
                                            TextWrapping="Wrap" />
 
                                 <TextBlock Text="{Binding GoogleDriveConnectionMessage}"
                                            Foreground="{DynamicResource SecondaryTextBrush}"
-                                           FontSize="12"
+                                           FontSize="{DynamicResource FontSizeBody}"
                                            TextWrapping="Wrap" />
 
                                 <Border Height="1"
@@ -474,7 +482,7 @@
 
                                 <TextBlock Text="Application backup folder"
                                            Foreground="{DynamicResource SecondaryTextBrush}"
-                                           FontSize="12"
+                                           FontSize="{DynamicResource FontSizeBody}"
                                            FontWeight="SemiBold" />
 
                                 <Grid ColumnDefinitions="110,*"
@@ -484,21 +492,21 @@
                                     <TextBlock Grid.Row="0"
                                                Text="Backup folder"
                                                Foreground="{DynamicResource MutedTextBrush}"
-                                               FontSize="12" />
+                                               FontSize="{DynamicResource FontSizeBody}" />
                                     <TextBlock Grid.Row="0"
                                                Grid.Column="1"
                                                Text="{Binding GoogleDriveRootFolderDisplayText}"
                                                Foreground="{DynamicResource PrimaryTextBrush}"
-                                               FontSize="12" />
+                                               FontSize="{DynamicResource FontSizeBody}" />
                                     <TextBlock Grid.Row="1"
                                                Text="Folder status"
                                                Foreground="{DynamicResource MutedTextBrush}"
-                                               FontSize="12" />
+                                               FontSize="{DynamicResource FontSizeBody}" />
                                     <TextBlock Grid.Row="1"
                                                Grid.Column="1"
                                                Text="{Binding GoogleDriveRootFolderStatusDisplayText}"
                                                Foreground="{DynamicResource PrimaryTextBrush}"
-                                               FontSize="12"
+                                               FontSize="{DynamicResource FontSizeBody}"
                                                TextWrapping="Wrap" />
                                 </Grid>
 
@@ -531,12 +539,12 @@
 
                                 <TextBlock Text="{Binding GoogleDriveRootFolderMessage}"
                                            Foreground="{DynamicResource SecondaryTextBrush}"
-                                           FontSize="12"
+                                           FontSize="{DynamicResource FontSizeBody}"
                                            TextWrapping="Wrap" />
 
                                 <TextBlock Text="Backups sync into this folder in your My Drive. Uploads only create files, downloads never overwrite local files, and nothing is ever deleted remotely."
                                            Foreground="{DynamicResource SecondaryTextBrush}"
-                                           FontSize="12"
+                                           FontSize="{DynamicResource FontSizeBody}"
                                            TextWrapping="Wrap" />
                             </StackPanel>
 
@@ -546,13 +554,13 @@
                                 <TextBlock Text="Stored authentication available"
                                            IsVisible="{Binding HasStoredAuthentication}"
                                            Foreground="{DynamicResource SecondaryTextBrush}"
-                                           FontSize="12"
+                                           FontSize="{DynamicResource FontSizeBody}"
                                            VerticalAlignment="Center" />
                                 <Button Content="Disconnect"
                                         Command="{Binding DisconnectAuthenticationCommand}"
                                         IsEnabled="{Binding HasStoredAuthentication}"
                                         Height="28"
-                                        FontSize="12"
+                                        FontSize="{DynamicResource FontSizeBody}"
                                         ToolTip.Tip="Removes encrypted authentication only. The saved profile and backup data are kept." />
                             </StackPanel>
 
@@ -561,19 +569,19 @@
                                         Command="{Binding CheckSyncStatusCommand}"
                                         IsVisible="{Binding CanCheckConnection}"
                                         Height="28"
-                                        FontSize="12"
+                                        FontSize="{DynamicResource FontSizeBody}"
                                         ToolTip.Tip="Connects to the sync target and reports whether the backup runs are in sync — without copying anything. Preview Sync (Dry Run) performs the same check automatically." />
 
                                 <TextBlock Text="{Binding ConnectionCheckMessage}"
                                            Foreground="{DynamicResource SecondaryTextBrush}"
-                                           FontSize="12"
+                                           FontSize="{DynamicResource FontSizeBody}"
                                            VerticalAlignment="Center"
                                            TextWrapping="Wrap" />
                             </WrapPanel>
 
                             <TextBlock Text="Sync copies whole backup runs both ways. A run missing on one side is copied there — nothing is ever deleted or overwritten. Runs that differ on both sides are reported as conflicts and never copied automatically."
                                        Foreground="{DynamicResource MutedTextBrush}"
-                                       FontSize="12"
+                                       FontSize="{DynamicResource FontSizeBody}"
                                        TextWrapping="Wrap"
                                        MaxWidth="560"
                                        HorizontalAlignment="Left" />
@@ -588,7 +596,7 @@
                                     VerticalAlignment="Center">
                                 <CheckBox Content="I understand this will copy backup runs"
                                           IsChecked="{Binding ConfirmSync}"
-                                          FontSize="12" />
+                                          FontSize="{DynamicResource FontSizeBody}" />
                             </Border>
                             <Button Content="Sync now"
                                     Command="{Binding ExecuteSyncCommand}"
@@ -608,7 +616,7 @@
 
                         <TextBlock Text="{Binding SummaryDisplay}"
                                    Foreground="{DynamicResource AccentBrush}"
-                                   FontSize="12"
+                                   FontSize="{DynamicResource FontSizeBody}"
                                    TextWrapping="Wrap" />
 
                         <Grid ColumnDefinitions="*,Auto,Auto"
@@ -617,19 +625,19 @@
                             <TextBlock Grid.Column="0"
                                        Text="{Binding SelectedSummaryDisplay}"
                                        Foreground="{DynamicResource SecondaryTextBrush}"
-                                       FontSize="12"
+                                       FontSize="{DynamicResource FontSizeBody}"
                                        VerticalAlignment="Center" />
 
                             <Button Grid.Column="1"
                                     Content="Select All"
                                     Command="{Binding SelectAllRunsCommand}"
-                                    FontSize="12"
+                                    FontSize="{DynamicResource FontSizeBody}"
                                     Height="26" />
 
                             <Button Grid.Column="2"
                                     Content="Select None"
                                     Command="{Binding DeselectAllRunsCommand}"
-                                    FontSize="12"
+                                    FontSize="{DynamicResource FontSizeBody}"
                                     Height="26" />
                         </Grid>
 
@@ -642,12 +650,12 @@
                                   ColumnSpacing="10">
 
                                 <TextBlock Grid.Column="0" Text="" />
-                                <TextBlock Grid.Column="1" Text="Run" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
-                                <TextBlock Grid.Column="2" Text="Action" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
-                                <TextBlock Grid.Column="3" Text="Game" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
-                                <TextBlock Grid.Column="4" Text="Files" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
-                                <TextBlock Grid.Column="5" Text="Size" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
-                                <TextBlock Grid.Column="6" Text="Status" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="12" FontWeight="Bold" />
+                                <TextBlock Grid.Column="1" Text="Run" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="{DynamicResource FontSizeBody}" FontWeight="Bold" />
+                                <TextBlock Grid.Column="2" Text="Action" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="{DynamicResource FontSizeBody}" FontWeight="Bold" />
+                                <TextBlock Grid.Column="3" Text="Game" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="{DynamicResource FontSizeBody}" FontWeight="Bold" />
+                                <TextBlock Grid.Column="4" Text="Files" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="{DynamicResource FontSizeBody}" FontWeight="Bold" />
+                                <TextBlock Grid.Column="5" Text="Size" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="{DynamicResource FontSizeBody}" FontWeight="Bold" />
+                                <TextBlock Grid.Column="6" Text="Status" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="{DynamicResource FontSizeBody}" FontWeight="Bold" />
                             </Grid>
                         </Border>
 
@@ -670,40 +678,40 @@
                                                        Text="{Binding RunName}"
                                                        Foreground="{DynamicResource SecondaryTextBrush}"
                                                        ToolTip.Tip="{Binding RunName}"
-                                                       FontSize="12"
+                                                       FontSize="{DynamicResource FontSizeBody}"
                                                        VerticalAlignment="Center"
                                                        TextTrimming="CharacterEllipsis" />
 
                                             <TextBlock Grid.Column="2"
                                                        Text="{Binding ActionText}"
                                                        Foreground="{DynamicResource AccentBrush}"
-                                                       FontSize="12"
+                                                       FontSize="{DynamicResource FontSizeBody}"
                                                        VerticalAlignment="Center"
                                                        FontWeight="SemiBold" />
 
                                             <TextBlock Grid.Column="3"
                                                        Text="{Binding GameName}"
                                                        Foreground="{DynamicResource SecondaryTextBrush}"
-                                                       FontSize="12"
+                                                       FontSize="{DynamicResource FontSizeBody}"
                                                        VerticalAlignment="Center"
                                                        TextTrimming="CharacterEllipsis" />
 
                                             <TextBlock Grid.Column="4"
                                                        Text="{Binding FilesDisplay}"
                                                        Foreground="{DynamicResource MutedTextBrush}"
-                                                       FontSize="12"
+                                                       FontSize="{DynamicResource FontSizeBody}"
                                                        VerticalAlignment="Center" />
 
                                             <TextBlock Grid.Column="5"
                                                        Text="{Binding SizeDisplay}"
                                                        Foreground="{DynamicResource MutedTextBrush}"
-                                                       FontSize="12"
+                                                       FontSize="{DynamicResource FontSizeBody}"
                                                        VerticalAlignment="Center" />
 
                                             <TextBlock Grid.Column="6"
                                                        Text="{Binding StatusText}"
                                                        Foreground="{DynamicResource PrimaryTextBrush}"
-                                                       FontSize="12"
+                                                       FontSize="{DynamicResource FontSizeBody}"
                                                        VerticalAlignment="Center"
                                                        TextWrapping="Wrap" />
                                         </Grid>
@@ -736,13 +744,13 @@
                                                 Spacing="8">
                                         <TextBlock Text="{Binding SeverityText}"
                                                    Foreground="{DynamicResource WarningBrush}"
-                                                   FontSize="12"
+                                                   FontSize="{DynamicResource FontSizeBody}"
                                                    FontWeight="SemiBold"
                                                    Width="60" />
 
                                         <TextBlock Text="{Binding Message}"
                                                    Foreground="{DynamicResource SecondaryTextBrush}"
-                                                   FontSize="12"
+                                                   FontSize="{DynamicResource FontSizeBody}"
                                                    TextWrapping="Wrap" />
                                     </StackPanel>
                                 </Border>
@@ -766,7 +774,7 @@
 
                         <TextBlock Text="{Binding ExecutionStatusMessage}"
                                    Foreground="{DynamicResource SecondaryTextBrush}"
-                                   FontSize="12"
+                                   FontSize="{DynamicResource FontSizeBody}"
                                    TextWrapping="Wrap" />
 
                         <ItemsControl ItemsSource="{Binding ExecutionResults}">
@@ -782,24 +790,24 @@
                                             <TextBlock Grid.Column="0"
                                                        Text="{Binding RunName}"
                                                        Foreground="{DynamicResource SecondaryTextBrush}"
-                                                       FontSize="12"
+                                                       FontSize="{DynamicResource FontSizeBody}"
                                                        TextTrimming="CharacterEllipsis" />
 
                                             <TextBlock Grid.Column="1"
                                                        Text="{Binding Status}"
                                                        Foreground="{DynamicResource PrimaryTextBrush}"
-                                                       FontSize="12"
+                                                       FontSize="{DynamicResource FontSizeBody}"
                                                        FontWeight="SemiBold" />
 
                                             <TextBlock Grid.Column="2"
                                                        Text="{Binding SizeDisplay}"
                                                        Foreground="{DynamicResource MutedTextBrush}"
-                                                       FontSize="12" />
+                                                       FontSize="{DynamicResource FontSizeBody}" />
 
                                             <TextBlock Grid.Column="3"
                                                        Text="{Binding Error}"
                                                        Foreground="{DynamicResource WarningBrush}"
-                                                       FontSize="12"
+                                                       FontSize="{DynamicResource FontSizeBody}"
                                                        TextWrapping="Wrap" />
                                         </Grid>
                                     </Border>
@@ -818,7 +826,7 @@
 
                         <TextBlock Text="Every executed sync, from the log stored alongside the sync folder — shared by all devices syncing with it."
                                    Foreground="{DynamicResource MutedTextBrush}"
-                                   FontSize="12"
+                                   FontSize="{DynamicResource FontSizeBody}"
                                    TextWrapping="Wrap" />
 
                         <ItemsControl ItemsSource="{Binding SyncLog}">
@@ -833,20 +841,20 @@
                                                         Spacing="10">
                                                 <TextBlock Text="{Binding TimestampDisplay}"
                                                            Foreground="{DynamicResource SecondaryTextBrush}"
-                                                           FontSize="12" />
+                                                           FontSize="{DynamicResource FontSizeBody}" />
 
                                                 <TextBlock Text="{Binding DeviceName}"
                                                            Foreground="{DynamicResource AccentBrush}"
-                                                           FontSize="12" />
+                                                           FontSize="{DynamicResource FontSizeBody}" />
 
                                                 <TextBlock Text="{Binding SummaryDisplay}"
                                                            Foreground="{DynamicResource MutedTextBrush}"
-                                                           FontSize="12" />
+                                                           FontSize="{DynamicResource FontSizeBody}" />
                                             </StackPanel>
 
                                             <TextBlock Text="{Binding RunsDisplay}"
                                                        Foreground="{DynamicResource MutedTextBrush}"
-                                                       FontSize="10"
+                                                       FontSize="{DynamicResource FontSizeMicro}"
                                                        TextWrapping="Wrap" />
                                         </StackPanel>
                                     </Border>
@@ -863,4 +871,5 @@
             </StackPanel>
         </ScrollViewer>
     </Grid>
+    </ScrollViewer>
 </UserControl>

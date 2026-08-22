@@ -50,6 +50,10 @@ namespace GameSaves.App.Views
                 {
                     grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
                     grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
+                    // Fixed middle row: the stacked cards keep the same
+                    // gutter the app uses between stacked cards, instead of
+                    // butting rounded corners (critic round 36).
+                    grid.RowDefinitions.Add(new RowDefinition(new GridLength(10)));
                     grid.RowDefinitions.Add(new RowDefinition(GridLength.Star));
 
                     Grid.SetColumn(left, 0);
@@ -57,9 +61,11 @@ namespace GameSaves.App.Views
                     left.MaxHeight = 260;
 
                     splitter.IsVisible = false;
+                    Grid.SetColumn(splitter, 0);
+                    Grid.SetRow(splitter, 1);
 
                     Grid.SetColumn(right, 0);
-                    Grid.SetRow(right, 1);
+                    Grid.SetRow(right, 2);
                 }
                 else
                 {
@@ -77,6 +83,9 @@ namespace GameSaves.App.Views
                     left.MaxHeight = originalLeftMaxHeight;
 
                     splitter.IsVisible = true;
+
+                    Grid.SetRow(splitter, 0);
+                    Grid.SetColumn(splitter, 1);
 
                     Grid.SetRow(right, 0);
                     Grid.SetColumn(right, 2);

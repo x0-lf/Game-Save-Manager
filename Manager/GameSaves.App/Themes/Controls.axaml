@@ -65,7 +65,7 @@
          hairline crossing rounded corners. -->
     <!-- One page-title treatment for every view. -->
     <Style Selector="TextBlock.h1">
-        <Setter Property="FontSize" Value="18" />
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeH1}" />
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
     </Style>
@@ -84,11 +84,9 @@
     </Style>
     <Style Selector="ScrollBar">
         <Setter Property="Opacity" Value="0" />
-        <Setter Property="Transitions">
-            <Transitions>
-                <DoubleTransition Property="Opacity" Duration="0:0:0.15" />
-            </Transitions>
-        </Setter>
+        <!-- Duration comes from a resource so the accessibility Reduce
+             Motion setting can swap the fade for instant changes. -->
+        <Setter Property="Transitions" Value="{DynamicResource ScrollBarOpacityTransitions}" />
     </Style>
     <Style Selector="ScrollViewer:pointerover /template/ ScrollBar">
         <Setter Property="Opacity" Value="1" />
@@ -124,11 +122,120 @@
         <Setter Property="Foreground" Value="{DynamicResource CardBackgroundBrush}" />
     </Style>
 
+    <!-- Detach button on each navigation tab header: floats the section in
+         its own window; closing the window reattaches the tab. The button is
+         keyboard focusable; its hit target meets the 24x24 minimum by growing
+         leftward over the label-to-button gap (negative margin) with
+         asymmetric padding, so the glyph keeps its exact pixel position and
+         the rail width does not change. -->
+    <Style Selector="Button.navDetach">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="8,6,4,6" />
+        <Setter Property="MinWidth" Value="24" />
+        <Setter Property="MinHeight" Value="24" />
+        <Setter Property="Margin" Value="-4,0,0,0" />
+        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.navDetach TextBlock">
+        <Setter Property="FontFamily" Value="Segoe Fluent Icons, Segoe MDL2 Assets" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
+    </Style>
+    <Style Selector="Button.navDetach:pointerover TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
+    </Style>
+
+    <!-- Other icon-only buttons (header gear). Base chrome lives in a class
+         style rather than inline on the button so the :focus-visible state
+         below can rebalance padding without losing to local values. -->
+    <Style Selector="Button.iconButton">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="8" />
+        <Setter Property="CornerRadius" Value="8" />
+    </Style>
+
+    <!-- Keyboard focus rings for the small icon-only controls. Only the
+         :focus-visible pseudo-class is styled, so mouse users never see these
+         visuals. The border is compensated by padding reduced by the same 2px
+         on every edge, which keeps the box size and the glyph position
+         pixel-identical while the accent ring is showing. -->
+    <Style Selector="Button.navDetach:focus-visible">
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+        <Setter Property="BorderThickness" Value="2" />
+        <Setter Property="Padding" Value="6,4,2,4" />
+    </Style>
+    <Style Selector="Button.iconButton:focus-visible">
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+        <Setter Property="BorderThickness" Value="2" />
+        <Setter Property="Padding" Value="6" />
+    </Style>
+
     <Style Selector="Button.primary:disabled /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderBrush" Value="{DynamicResource SubtleBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
+    </Style>
+
+    <!-- Page-level scroll surfaces: unlike transient inner scrollbars, the
+         page scrollbar rests visible so content below the 800x600 fold has
+         a discoverable cue. Rest visibility comes from real thumb ink at
+         full opacity — a fractional Opacity over the collapsed hairline
+         thumb measured as near-invisible (critic round 31). -->
+    <Style Selector="ScrollViewer.pageScroll /template/ ScrollBar">
+        <Setter Property="Opacity" Value="1" />
+    </Style>
+    <Style Selector="ScrollViewer.pageScroll /template/ ScrollBar:vertical">
+        <Setter Property="Margin" Value="0,6,0,6" />
+    </Style>
+    <Style Selector="ScrollViewer.pageScroll /template/ ScrollBar /template/ Thumb">
+        <Setter Property="Background" Value="{DynamicResource MutedTextBrush}" />
+    </Style>
+
+    <!-- DataGrid: the table belongs to the card it sits in. The header is a
+         quiet inset band, gridlines are subtle, hover uses the app's inset
+         hover idiom, and selection is an accent tint rather than a slab.
+         Ordering matters within the row-state block: selected must follow
+         pointerover, and selected:pointerover must come last, because style
+         collection order decides which matching setter wins. -->
+    <Style Selector="DataGrid">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="RowBackground" Value="Transparent" />
+        <Setter Property="HorizontalGridLinesBrush" Value="{DynamicResource CardBorderBrush}" />
+    </Style>
+    <Style Selector="DataGridRow">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="DataGridColumnHeader">
+        <Setter Property="Background" Value="{DynamicResource InsetBackgroundBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeCaption}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="MinHeight" Value="34" />
+        <Setter Property="SeparatorBrush" Value="{DynamicResource CardBorderBrush}" />
+        <Setter Property="AreSeparatorsVisible" Value="True" />
+    </Style>
+    <Style Selector="DataGridColumnHeader /template/ Path#SortIcon">
+        <Setter Property="Fill" Value="{DynamicResource MutedTextBrush}" />
+    </Style>
+    <Style Selector="DataGridRow /template/ Rectangle#BackgroundRectangle">
+        <Setter Property="Fill" Value="Transparent" />
+        <Setter Property="Opacity" Value="1" />
+    </Style>
+    <Style Selector="DataGridRow:pointerover /template/ Rectangle#BackgroundRectangle">
+        <Setter Property="Fill" Value="{DynamicResource InsetBackgroundBrush}" />
+        <Setter Property="Opacity" Value="1" />
+    </Style>
+    <Style Selector="DataGridRow:selected /template/ Rectangle#BackgroundRectangle">
+        <Setter Property="Fill" Value="{DynamicResource AccentBrush}" />
+        <Setter Property="Opacity" Value="0.12" />
+    </Style>
+    <Style Selector="DataGridRow:selected:pointerover /template/ Rectangle#BackgroundRectangle">
+        <Setter Property="Fill" Value="{DynamicResource AccentBrush}" />
+        <Setter Property="Opacity" Value="0.18" />
     </Style>
 
 </Styles>

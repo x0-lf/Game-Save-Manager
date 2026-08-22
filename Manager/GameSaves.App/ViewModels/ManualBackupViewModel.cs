@@ -346,7 +346,7 @@ namespace GameSaves.App.ViewModels
                 SelectedGame ??= Games.FirstOrDefault();
 
                 StatusMessage = Profiles.Count == 0
-                    ? "No profiles found. Scan for profiles first."
+                    ? "No profiles found."
                     : "Profiles and games are up to date.";
             }
             catch (Exception ex)

@@ -41,6 +41,10 @@ namespace GameSaves.App.Services
 
     public interface ISyncSettingsStore
     {
+        // The exact file this store reads and writes, so surfaces such as
+        // Settings > Data locations never re-derive the path.
+        string FilePath { get; }
+
         SyncUiSettings Load();
 
         void Save(SyncUiSettings settings);
@@ -67,6 +71,8 @@ namespace GameSaves.App.Services
 
             _filePath = filePath;
         }
+
+        public string FilePath => _filePath;
 
         public SyncUiSettings Load()
         {

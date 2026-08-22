@@ -8,6 +8,9 @@
              Background="{DynamicResource PageBackgroundBrush}">
 
 
+    <ScrollViewer Classes="pageScroll"
+                  VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled">
     <Grid RowDefinitions="Auto,*"
           RowSpacing="10"
           Margin="0,12,0,14"
@@ -30,12 +33,12 @@
 
                     <TextBlock Text="A record of every copy, restore and backup."
                                Foreground="{DynamicResource SecondaryTextBrush}"
-                               FontSize="12"
+                               FontSize="{DynamicResource FontSizeBody}"
                                TextWrapping="Wrap" />
 
                     <TextBlock Text="{Binding StatusMessage}"
                                Foreground="{DynamicResource MutedTextBrush}"
-                               FontSize="12"
+                               FontSize="{DynamicResource FontSizeBody}"
                                TextWrapping="Wrap" />
                 </StackPanel>
 
@@ -73,12 +76,12 @@
                         <StackPanel Spacing="2">
                             <TextBlock Text="Executed runs"
                                        Foreground="{DynamicResource PrimaryTextBrush}"
-                                       FontSize="14"
+                                       FontSize="{DynamicResource FontSizeBodyLarge}"
                                        FontWeight="SemiBold" />
 
                             <TextBlock Text="Recorded automatically."
                                        Foreground="{DynamicResource MutedTextBrush}"
-                                       FontSize="12"
+                                       FontSize="{DynamicResource FontSizeBody}"
                                        TextWrapping="Wrap" />
                         </StackPanel>
                     </Border>
@@ -97,36 +100,36 @@
                                         <TextBlock Text="{Binding KindText}"
                                                    Foreground="{DynamicResource AccentBrush}"
                                                    FontWeight="SemiBold"
-                                                   FontSize="12" />
+                                                   FontSize="{DynamicResource FontSizeBody}" />
 
                                         <TextBlock Text="{Binding GameName}"
                                                    Foreground="{DynamicResource PrimaryTextBrush}"
-                                                   FontSize="12"
+                                                   FontSize="{DynamicResource FontSizeBody}"
                                                    FontWeight="SemiBold" />
                                     </StackPanel>
 
                                     <TextBlock Text="{Binding StartedDisplay}"
                                                Foreground="{DynamicResource SecondaryTextBrush}"
-                                               FontSize="12" />
+                                               FontSize="{DynamicResource FontSizeBody}" />
 
                                     <StackPanel Orientation="Horizontal"
                                                 Spacing="8">
                                         <TextBlock Text="{Binding ProfilesDisplay}"
                                                    Foreground="{DynamicResource MutedTextBrush}"
-                                                   FontSize="12" />
+                                                   FontSize="{DynamicResource FontSizeBody}" />
 
                                         <TextBlock Text="{Binding CountsDisplay}"
                                                    Foreground="{DynamicResource MutedTextBrush}"
-                                                   FontSize="12" />
+                                                   FontSize="{DynamicResource FontSizeBody}" />
 
                                         <TextBlock Text="{Binding BytesDisplay}"
                                                    Foreground="{DynamicResource MutedTextBrush}"
-                                                   FontSize="12" />
+                                                   FontSize="{DynamicResource FontSizeBody}" />
                                     </StackPanel>
 
                                     <TextBlock Text="{Binding FlagsDisplay}"
                                                Foreground="{DynamicResource WarningBrush}"
-                                               FontSize="12" />
+                                               FontSize="{DynamicResource FontSizeBody}" />
                                 </StackPanel>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
@@ -164,16 +167,16 @@
                         <StackPanel Spacing="2">
                             <TextBlock Text="Files in this run"
                                        Foreground="{DynamicResource PrimaryTextBrush}"
-                                       FontSize="14"
+                                       FontSize="{DynamicResource FontSizeBodyLarge}"
                                        FontWeight="SemiBold" IsVisible="{Binding !!Runs.Count}" />
                             <TextBlock Text="Run files"
                                        Foreground="{DynamicResource PrimaryTextBrush}"
-                                       FontSize="14"
+                                       FontSize="{DynamicResource FontSizeBodyLarge}"
                                        FontWeight="SemiBold" IsVisible="{Binding !Runs.Count}" />
 
                             <TextBlock Text="Exactly what was copied, skipped, or failed, per file."
                                        Foreground="{DynamicResource MutedTextBrush}"
-                                       FontSize="12"
+                                       FontSize="{DynamicResource FontSizeBody}"
                                        TextWrapping="Wrap" />
                         </StackPanel>
                     </Border>
@@ -186,7 +189,7 @@
 
                         <TextBlock Text="{Binding SelectedRun.BlockedReason, StringFormat='Run was blocked: {0}'}"
                                    Foreground="{DynamicResource WarningBrush}"
-                                   FontSize="12"
+                                   FontSize="{DynamicResource FontSizeBody}"
                                    TextWrapping="Wrap" />
                     </Border>
 
@@ -202,31 +205,31 @@
                             <TextBlock Grid.Column="0"
                                        Text="Source file"
                                        Foreground="{DynamicResource SecondaryTextBrush}"
-                                       FontSize="12"
+                                       FontSize="{DynamicResource FontSizeBody}"
                                        FontWeight="Bold" />
 
                             <TextBlock Grid.Column="1"
                                        Text="Target file"
                                        Foreground="{DynamicResource SecondaryTextBrush}"
-                                       FontSize="12"
+                                       FontSize="{DynamicResource FontSizeBody}"
                                        FontWeight="Bold" />
 
                             <TextBlock Grid.Column="2"
                                        Text="Size"
                                        Foreground="{DynamicResource SecondaryTextBrush}"
-                                       FontSize="12"
+                                       FontSize="{DynamicResource FontSizeBody}"
                                        FontWeight="Bold" />
 
                             <TextBlock Grid.Column="3"
                                        Text="Status"
                                        Foreground="{DynamicResource SecondaryTextBrush}"
-                                       FontSize="12"
+                                       FontSize="{DynamicResource FontSizeBody}"
                                        FontWeight="Bold" />
 
                             <TextBlock Grid.Column="4"
                                        Text="Details"
                                        Foreground="{DynamicResource SecondaryTextBrush}"
-                                       FontSize="12"
+                                       FontSize="{DynamicResource FontSizeBody}"
                                        FontWeight="Bold" />
                         </Grid>
                     </Border>
@@ -266,38 +269,38 @@
                                                            Text="{Binding SourceFile}"
                                                            Foreground="{DynamicResource SecondaryTextBrush}"
                                                            ToolTip.Tip="{Binding SourceFile}"
-                                                           FontSize="12"
+                                                           FontSize="{DynamicResource FontSizeBody}"
                                                            TextTrimming="CharacterEllipsis" />
 
                                                 <TextBlock Grid.Column="1"
                                                            Text="{Binding TargetFile}"
                                                            Foreground="{DynamicResource SecondaryTextBrush}"
                                                            ToolTip.Tip="{Binding TargetFile}"
-                                                           FontSize="12"
+                                                           FontSize="{DynamicResource FontSizeBody}"
                                                            TextTrimming="CharacterEllipsis" />
 
                                                 <TextBlock Grid.Column="2"
                                                            Text="{Binding SizeDisplay}"
-                                                           FontSize="12"
+                                                           FontSize="{DynamicResource FontSizeBody}"
                                                            Foreground="{DynamicResource MutedTextBrush}" />
 
                                                 <TextBlock Grid.Column="3"
                                                            Text="{Binding Status}"
                                                            Foreground="{DynamicResource PrimaryTextBrush}"
-                                                           FontSize="12"
+                                                           FontSize="{DynamicResource FontSizeBody}"
                                                            FontWeight="SemiBold" />
 
                                                 <TextBlock Grid.Column="4"
                                                            Text="{Binding Error}"
                                                            Foreground="{DynamicResource WarningBrush}"
-                                                           FontSize="12"
+                                                           FontSize="{DynamicResource FontSizeBody}"
                                                            TextWrapping="Wrap" />
                                             </Grid>
 
                                             <TextBlock Text="{Binding BackupDisplay}"
                                                        IsVisible="{Binding HasBackup}"
                                                        Foreground="{DynamicResource AccentBrush}"
-                                                       FontSize="10"
+                                                       FontSize="{DynamicResource FontSizeMicro}"
                                                        TextTrimming="CharacterEllipsis" />
                                         </StackPanel>
                                     </Border>
@@ -309,4 +312,5 @@
             </Border>
         </Grid>
     </Grid>
+    </ScrollViewer>
 </UserControl>

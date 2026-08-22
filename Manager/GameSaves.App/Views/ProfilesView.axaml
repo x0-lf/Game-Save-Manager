@@ -8,10 +8,14 @@
              Background="{DynamicResource PageBackgroundBrush}">
 
 
+    <ScrollViewer Classes="pageScroll"
+                  VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled">
     <Grid RowSpacing="0"
           Margin="0,12,0,14"
           MaxWidth="1100">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="150" MinHeight="120" MaxHeight="420" />
             <RowDefinition Height="8" />
@@ -36,11 +40,11 @@
 
                     <TextBlock Text="Source and target profiles for save transfers."
                                Foreground="{DynamicResource SecondaryTextBrush}"
-                               FontSize="12" />
+                               FontSize="{DynamicResource FontSizeBody}" />
 
                     <TextBlock Text="{Binding StatusMessage}"
                                Foreground="{DynamicResource MutedTextBrush}"
-                               FontSize="12"
+                               FontSize="{DynamicResource FontSizeBody}"
                                TextWrapping="Wrap" />
                 </StackPanel>
 
@@ -53,8 +57,38 @@
             </Grid>
         </Border>
 
+        <Border Grid.Row="1" Margin="0,0,0,10">
+            <Border IsVisible="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).IsSteamMissing}"
+                    Background="{DynamicResource WarningTintBrush}"
+                    BorderBrush="{DynamicResource WarningEdgeBrush}"
+                    BorderThickness="1"
+                    CornerRadius="12"
+                    Padding="12,8">
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                    <TextBlock Grid.Column="0"
+                               Text="&#xE7BA;"
+                               FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                               FontSize="20"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource WarningBrush}" />
+                    <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                        <TextBlock Text="Steam was not found on this computer"
+                                   Foreground="{DynamicResource PrimaryTextBrush}"
+                                   FontSize="{DynamicResource FontSizeBodyLarge}"
+                                   FontWeight="SemiBold" />
+                        <TextBlock Text="Profile detection needs a Steam installation. Install Steam, or scan again if it was just installed."
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                   FontSize="{DynamicResource FontSizeBody}"
+                                   MaxWidth="760"
+                                   HorizontalAlignment="Left"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Border>
+
         <!-- Source / Target selection (resizable, scrolls when small) -->
-        <Grid Grid.Row="1"
+        <Grid Grid.Row="2"
               ColumnDefinitions="*,*"
               ColumnSpacing="16">
 
@@ -71,7 +105,7 @@
                             Margin="16,12">
                     <TextBlock Text="Source profile"
                                Foreground="{DynamicResource PrimaryTextBrush}"
-                               FontSize="14"
+                               FontSize="{DynamicResource FontSizeBodyLarge}"
                                FontWeight="SemiBold" />
 
                     <Panel>
@@ -84,7 +118,7 @@
                                 <StackPanel Spacing="2">
                                     <TextBlock Text="{Binding DisplayName}" />
                                     <TextBlock Text="{Binding UserDataPath}"
-                                               FontSize="12"
+                                               FontSize="{DynamicResource FontSizeBody}"
                                                Opacity="0.65" />
                                 </StackPanel>
                             </DataTemplate>
@@ -92,7 +126,7 @@
                     </ComboBox>
                     <TextBlock Text="Select a profile"
                                Foreground="{DynamicResource MutedTextBrush}"
-                               FontSize="13"
+                               FontSize="{DynamicResource FontSizeSubtitle}"
                                Margin="12,0,32,0"
                                VerticalAlignment="Center"
                                IsHitTestVisible="False"
@@ -101,7 +135,7 @@
 
                     <TextBlock Text="{Binding SourcePath}"
                                Foreground="{DynamicResource MutedTextBrush}"
-                               FontSize="12"
+                               FontSize="{DynamicResource FontSizeBody}"
                                TextWrapping="Wrap" />
 
                     <Button Content="Open source folder"
@@ -125,7 +159,7 @@
                             Margin="16,12">
                     <TextBlock Text="Target profile"
                                Foreground="{DynamicResource PrimaryTextBrush}"
-                               FontSize="14"
+                               FontSize="{DynamicResource FontSizeBodyLarge}"
                                FontWeight="SemiBold" />
 
                     <Panel>
@@ -138,7 +172,7 @@
                                 <StackPanel Spacing="2">
                                     <TextBlock Text="{Binding DisplayName}" />
                                     <TextBlock Text="{Binding UserDataPath}"
-                                               FontSize="12"
+                                               FontSize="{DynamicResource FontSizeBody}"
                                                Opacity="0.65" />
                                 </StackPanel>
                             </DataTemplate>
@@ -146,7 +180,7 @@
                     </ComboBox>
                     <TextBlock Text="Select a profile"
                                Foreground="{DynamicResource MutedTextBrush}"
-                               FontSize="13"
+                               FontSize="{DynamicResource FontSizeSubtitle}"
                                Margin="12,0,32,0"
                                VerticalAlignment="Center"
                                IsHitTestVisible="False"
@@ -155,7 +189,7 @@
 
                     <TextBlock Text="{Binding TargetPath}"
                                Foreground="{DynamicResource MutedTextBrush}"
-                               FontSize="12"
+                               FontSize="{DynamicResource FontSizeBody}"
                                TextWrapping="Wrap" />
 
                     <Button Content="Open target folder"
@@ -167,14 +201,14 @@
             </Border>
         </Grid>
 
-        <GridSplitter Grid.Row="2"
+        <GridSplitter Grid.Row="3"
                       Height="8"
                       Margin="0,1"
                       Background="Transparent"
                       ResizeDirection="Rows" />
 
         <!-- Profiles list -->
-        <Border Grid.Row="3"
+        <Border Grid.Row="4"
                 Background="{DynamicResource CardBackgroundBrush}"
                 BorderBrush="{DynamicResource CardBorderBrush}"
                 BorderThickness="1"
@@ -191,13 +225,13 @@
                     <StackPanel Spacing="2">
                         <TextBlock Text="Detected profiles"
                                    Foreground="{DynamicResource PrimaryTextBrush}"
-                                   FontSize="14"
+                                   FontSize="{DynamicResource FontSizeBodyLarge}"
                                    FontWeight="SemiBold" />
 
                         <TextBlock Text="{Binding SelectionWarning}"
                                    IsVisible="{Binding HasProfiles}"
                                    Foreground="{DynamicResource SecondaryTextBrush}"
-                                   FontSize="13" />
+                                   FontSize="{DynamicResource FontSizeSubtitle}" />
                     </StackPanel>
                 </Border>
 
@@ -270,7 +304,6 @@
                 <!-- Empty state: shown only when detection found no profiles
                      and no refresh is in progress. -->
                 <views:EmptyState Grid.Row="2"
-                                 
                                   Glyph="&#xE716;"
                                   Title="No Steam profiles found"
                                   Message="Make sure Steam is installed and signed in, then scan again.">
@@ -289,4 +322,5 @@
             </Grid>
         </Border>
     </Grid>
+    </ScrollViewer>
 </UserControl>

@@ -8,6 +8,9 @@
              Background="{DynamicResource PageBackgroundBrush}">
 
 
+    <ScrollViewer Classes="pageScroll"
+                  VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled">
     <Grid RowDefinitions="Auto,Auto,Auto,*"
           RowSpacing="10"
           Margin="0,12,0,14"
@@ -31,12 +34,12 @@
 
                     <TextBlock Text="Create a backup of any game&#8217;s saves on demand."
                                Foreground="{DynamicResource SecondaryTextBrush}"
-                               FontSize="12"
+                               FontSize="{DynamicResource FontSizeBody}"
                                TextWrapping="Wrap" />
 
                     <TextBlock Text="{Binding StatusMessage}"
                                Foreground="{DynamicResource MutedTextBrush}"
-                               FontSize="12"
+                               FontSize="{DynamicResource FontSizeBody}"
                                TextWrapping="Wrap" />
                 </StackPanel>
 
@@ -63,26 +66,36 @@
                 Background="{DynamicResource WarningTintBrush}"
                 BorderBrush="{DynamicResource WarningEdgeBrush}"
                 BorderThickness="1"
-                CornerRadius="10"
+                CornerRadius="12"
                 Padding="12,8"
                 Margin="0,0,0,0"
                 IsVisible="{Binding !Profiles.Count}">
-            <StackPanel Orientation="Horizontal" Spacing="10">
-                <TextBlock Text="&#xE7BA;"
+            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+                <TextBlock Grid.Column="0"
+                           Text="&#xE7BA;"
                            FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
-                           FontSize="14"
+                           FontSize="20"
                            VerticalAlignment="Center"
                            Foreground="{DynamicResource WarningBrush}" />
-                <TextBlock Text="No profiles found — scan for profiles first."
-                           Foreground="{DynamicResource PrimaryTextBrush}"
-                           FontSize="12"
-                           VerticalAlignment="Center" />
-                <Button Content="Go to Profiles"
+                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                    <TextBlock Text="No profiles found"
+                               Foreground="{DynamicResource PrimaryTextBrush}"
+                               FontSize="{DynamicResource FontSizeBodyLarge}"
+                               FontWeight="SemiBold" />
+                    <TextBlock Text="Scan for profiles first, then come back to create a backup."
+                               Foreground="{DynamicResource SecondaryTextBrush}"
+                               FontSize="{DynamicResource FontSizeBody}"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+                <Button Grid.Column="2"
+                        Content="Go to Profiles"
                         Click="OnGoToProfilesClick"
-                        FontSize="12"
-                        Height="26"
+                        BorderBrush="{DynamicResource WarningEdgeBrush}"
+                        Foreground="{DynamicResource PrimaryTextBrush}"
+                        FontSize="{DynamicResource FontSizeBody}"
+                        Height="28"
                         VerticalAlignment="Center" />
-            </StackPanel>
+            </Grid>
         </Border>
 
         <Border Grid.Row="2"
@@ -100,7 +113,7 @@
                   <StackPanel Spacing="3">
                     <TextBlock Text="Profile"
                                Foreground="{DynamicResource SecondaryTextBrush}"
-                               FontSize="12"
+                               FontSize="{DynamicResource FontSizeBody}"
                                FontWeight="SemiBold" />
 
                     <Panel>
@@ -110,7 +123,7 @@
                               MinHeight="30" />
                         <TextBlock Text="Select a profile"
                                    Foreground="{DynamicResource MutedTextBrush}"
-                                   FontSize="13"
+                                   FontSize="{DynamicResource FontSizeSubtitle}"
                                    Margin="12,0,32,0"
                                    VerticalAlignment="Center"
                                    IsHitTestVisible="False"
@@ -119,7 +132,7 @@
 
                     <TextBlock Text="Installed game"
                                Foreground="{DynamicResource SecondaryTextBrush}"
-                               FontSize="12"
+                               FontSize="{DynamicResource FontSizeBody}"
                                FontWeight="SemiBold"
                                Margin="0,2,0,0" />
 
@@ -130,7 +143,7 @@
                               MinHeight="30" />
                         <TextBlock Text="Select a game"
                                    Foreground="{DynamicResource MutedTextBrush}"
-                                   FontSize="13"
+                                   FontSize="{DynamicResource FontSizeSubtitle}"
                                    Margin="12,0,32,0"
                                    VerticalAlignment="Center"
                                    IsHitTestVisible="False"
@@ -141,23 +154,23 @@
                   <StackPanel Spacing="3">
                     <TextBlock Text="Backup source"
                                Foreground="{DynamicResource SecondaryTextBrush}"
-                               FontSize="12"
+                               FontSize="{DynamicResource FontSizeBody}"
                                FontWeight="SemiBold" />
 
                     <CheckBox Content="Include Steam userdata game folder"
                               IsChecked="{Binding IncludeSteamUserDataGameFolder}"
-                              FontSize="12"
+                              FontSize="{DynamicResource FontSizeBody}"
                               ToolTip.Tip="Backs up the full &lt;SteamRoot&gt;\userdata\&lt;profile&gt;\&lt;AppId&gt; folder for the selected profile." />
 
                     <CheckBox Content="Include approved save-path mappings"
                               IsChecked="{Binding IncludeApprovedMappings}"
-                              FontSize="12"
+                              FontSize="{DynamicResource FontSizeBody}"
                               ToolTip.Tip="Backs up save locations from the approved mapping database (gamesave.db), expanded for the selected profile." />
 
                     <TextBlock Text="Select at least one backup source."
                                IsVisible="{Binding !HasAnyBackupSource}"
                                Foreground="{DynamicResource WarningBrush}"
-                               FontSize="12"
+                               FontSize="{DynamicResource FontSizeBody}"
                                TextWrapping="Wrap" />
                   </StackPanel>
                 </StackPanel>
@@ -167,7 +180,7 @@
                   <StackPanel Spacing="3">
                     <TextBlock Text="Backup destination"
                                Foreground="{DynamicResource SecondaryTextBrush}"
-                               FontSize="12"
+                               FontSize="{DynamicResource FontSizeBody}"
                                FontWeight="SemiBold" />
 
                     <TextBox Text="{Binding DestinationPath}"
@@ -179,12 +192,12 @@
                         <Button Content="Choose folder…"
                                 Command="{Binding ChooseDestinationFolderCommand}"
                                 ToolTip.Tip="Select where this backup should be stored."
-                                FontSize="12"
+                                FontSize="{DynamicResource FontSizeBody}"
                                 Height="30" />
 
                         <Button Content="Reset to default"
                                 Command="{Binding UseDefaultDestinationCommand}"
-                                FontSize="12"
+                                FontSize="{DynamicResource FontSizeBody}"
                                 Height="30" />
                       </WrapPanel>
 
@@ -192,14 +205,14 @@
                                MaxWidth="560"
                                HorizontalAlignment="Left"
                                Foreground="{DynamicResource MutedTextBrush}"
-                               FontSize="12"
+                               FontSize="{DynamicResource FontSizeBody}"
                                TextWrapping="Wrap" />
                   </StackPanel>
 
                   <StackPanel Spacing="3">
                     <TextBlock Text="Backup preset"
                                Foreground="{DynamicResource SecondaryTextBrush}"
-                               FontSize="12"
+                               FontSize="{DynamicResource FontSizeBody}"
                                FontWeight="SemiBold" />
 
                     <Panel>
@@ -210,7 +223,7 @@
                               ToolTip.Tip="Applying a preset fills the destination and backup sources. Presets never start a backup by themselves." />
                         <TextBlock Text="Apply a saved preset…"
                                Foreground="{DynamicResource MutedTextBrush}"
-                               FontSize="13"
+                               FontSize="{DynamicResource FontSizeSubtitle}"
                                Margin="12,0,32,0"
                                VerticalAlignment="Center"
                                IsHitTestVisible="False"
@@ -222,7 +235,7 @@
                                  MinHeight="30" />
                         <TextBlock Text="Preset name"
                                    Foreground="{DynamicResource MutedTextBrush}"
-                                   FontSize="13"
+                                   FontSize="{DynamicResource FontSizeSubtitle}"
                                    Margin="12,0"
                                    VerticalAlignment="Center"
                                    IsHitTestVisible="False"
@@ -233,7 +246,7 @@
                         <Button Content="Save preset"
                                 IsEnabled="{Binding !!PresetName.Length}"
                                 Command="{Binding SavePresetCommand}"
-                                FontSize="12"
+                                FontSize="{DynamicResource FontSizeBody}"
                                 Height="30"
                                 ToolTip.Tip="Saves the current destination and backup sources under this name. Saving an existing name updates that preset." />
 
@@ -241,21 +254,21 @@
                                 Classes="danger"
                                 IsEnabled="{Binding SelectedPreset, Converter={x:Static ObjectConverters.IsNotNull}}"
                                 Command="{Binding DeletePresetCommand}"
-                                FontSize="12"
+                                FontSize="{DynamicResource FontSizeBody}"
                                 Height="30"
                                 ToolTip.Tip="Deletes the selected preset. Backups already created are not affected." />
 
                         <Button Content="Clear preset"
                                 IsEnabled="{Binding SelectedPreset, Converter={x:Static ObjectConverters.IsNotNull}}"
                                 Command="{Binding ClearPresetSelectionCommand}"
-                                FontSize="12"
+                                FontSize="{DynamicResource FontSizeBody}"
                                 Height="30"
                                 ToolTip.Tip="Clears the preset selection. The current settings are kept and the backup runs without a preset." />
                     </WrapPanel>
 
                     <TextBlock Text="{Binding PresetStatusDisplay}"
                                Foreground="{DynamicResource MutedTextBrush}"
-                               FontSize="12"
+                               FontSize="{DynamicResource FontSizeBody}"
                                TextWrapping="Wrap" />
                   </StackPanel>
                 </StackPanel>
@@ -284,18 +297,18 @@
                                 Margin="14">
                         <TextBlock Text="Summary"
                                    Foreground="{DynamicResource PrimaryTextBrush}"
-                                   FontSize="14"
+                                   FontSize="{DynamicResource FontSizeBodyLarge}"
                                    FontWeight="SemiBold" />
 
                         <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" RowSpacing="2" ColumnSpacing="16" MaxWidth="420" HorizontalAlignment="Left">
-                            <TextBlock Text="Files to back up" Foreground="{DynamicResource MutedTextBrush}" FontSize="12" />
-                            <TextBlock Grid.Column="1" Text="{Binding TotalFiles, StringFormat='{}{0}'}" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="12" FontWeight="SemiBold" />
-                            <TextBlock Grid.Row="1" Text="Total size" Foreground="{DynamicResource MutedTextBrush}" FontSize="12" />
-                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding TotalSizeDisplay, StringFormat='{}{0}'}" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="12" FontWeight="SemiBold" />
+                            <TextBlock Text="Files to back up" Foreground="{DynamicResource MutedTextBrush}" FontSize="{DynamicResource FontSizeBody}" />
+                            <TextBlock Grid.Column="1" Text="{Binding TotalFiles, StringFormat='{}{0}'}" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="{DynamicResource FontSizeBody}" FontWeight="SemiBold" />
+                            <TextBlock Grid.Row="1" Text="Total size" Foreground="{DynamicResource MutedTextBrush}" FontSize="{DynamicResource FontSizeBody}" />
+                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding TotalSizeDisplay, StringFormat='{}{0}'}" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="{DynamicResource FontSizeBody}" FontWeight="SemiBold" />
                         </Grid>
                         <TextBlock Text="Backup only. Source files are never deleted or modified. Every run is a new timestamped folder with a SHA-256 manifest — nothing existing is overwritten."
                                    Foreground="{DynamicResource SecondaryTextBrush}"
-                                   FontSize="12"
+                                   FontSize="{DynamicResource FontSizeBody}"
                                    TextWrapping="Wrap" />
 
                         <Border Background="{DynamicResource InsetBackgroundBrush}"
@@ -303,7 +316,7 @@
                                 Padding="10,6">
                             <CheckBox Content="I understand this will copy save files to the destination"
                                   IsChecked="{Binding ConfirmBackup}"
-                                  FontSize="12" />
+                                  FontSize="{DynamicResource FontSizeBody}" />
                         </Border>
 
                         <Button Content="Back up now"
@@ -314,22 +327,22 @@
 
                         <TextBlock Text="{Binding ExecutionStatusMessage}"
                                    Foreground="{DynamicResource SecondaryTextBrush}"
-                                   FontSize="12"
+                                   FontSize="{DynamicResource FontSizeBody}"
                                    TextWrapping="Wrap" />
 
                         <StackPanel Spacing="6"
                                     IsVisible="{Binding !!ExecutionResults.Count}">
                             <TextBlock Text="{Binding FilesBackedUp, StringFormat='Backed up: {0} file(s)'}"
-                                       FontSize="12"
+                                       FontSize="{DynamicResource FontSizeBody}"
                                        Foreground="{DynamicResource SuccessBrush}" />
 
                             <TextBlock Text="{Binding BytesBackedUpDisplay, StringFormat='Bytes backed up: {0}'}"
-                                       FontSize="12"
+                                       FontSize="{DynamicResource FontSizeBody}"
                                        Foreground="{DynamicResource MutedTextBrush}" />
 
                             <TextBlock Text="{Binding BackupLocationMessage}"
                                        Foreground="{DynamicResource AccentBrush}"
-                                       FontSize="12"
+                                       FontSize="{DynamicResource FontSizeBody}"
                                        TextWrapping="Wrap" />
                         </StackPanel>
                     </StackPanel>
@@ -364,12 +377,12 @@
                                 <StackPanel Spacing="2">
                                     <TextBlock Text="What will be backed up"
                                                Foreground="{DynamicResource PrimaryTextBrush}"
-                                               FontSize="14"
+                                               FontSize="{DynamicResource FontSizeBodyLarge}"
                                                FontWeight="SemiBold" />
 
                                     <TextBlock Text="Every save location found for the selected profile and game, grouped by source type."
                                                Foreground="{DynamicResource MutedTextBrush}"
-                                               FontSize="12"
+                                               FontSize="{DynamicResource FontSizeBody}"
                                                TextWrapping="Wrap" />
                                 </StackPanel>
                             </Border>
@@ -386,31 +399,31 @@
                                     <TextBlock Grid.Column="0"
                                                Text="Source type"
                                                Foreground="{DynamicResource SecondaryTextBrush}"
-                                               FontSize="12"
+                                               FontSize="{DynamicResource FontSizeBody}"
                                                FontWeight="SemiBold" />
 
                                     <TextBlock Grid.Column="1"
                                                Text="Source path"
                                                Foreground="{DynamicResource SecondaryTextBrush}"
-                                               FontSize="12"
+                                               FontSize="{DynamicResource FontSizeBody}"
                                                FontWeight="SemiBold" />
 
                                     <TextBlock Grid.Column="2"
                                                Text="Source"
                                                Foreground="{DynamicResource SecondaryTextBrush}"
-                                               FontSize="12"
+                                               FontSize="{DynamicResource FontSizeBody}"
                                                FontWeight="SemiBold" />
 
                                     <TextBlock Grid.Column="3"
                                                Text="Files"
                                                Foreground="{DynamicResource SecondaryTextBrush}"
-                                               FontSize="12"
+                                               FontSize="{DynamicResource FontSizeBody}"
                                                FontWeight="SemiBold" />
 
                                     <TextBlock Grid.Column="4"
                                                Text="Status"
                                                Foreground="{DynamicResource SecondaryTextBrush}"
-                                               FontSize="12"
+                                               FontSize="{DynamicResource FontSizeBody}"
                                                FontWeight="SemiBold" />
                                 </Grid>
                             </Border>
@@ -436,40 +449,40 @@
                                                     <TextBlock Grid.Column="0"
                                                                Text="{Binding SourceTypeText}"
                                                                Foreground="{DynamicResource AccentBrush}"
-                                                               FontSize="12" />
+                                                               FontSize="{DynamicResource FontSizeBody}" />
 
                                                     <TextBlock Grid.Column="1"
                                                                Text="{Binding SourcePath}"
                                                                Foreground="{DynamicResource SecondaryTextBrush}"
                                                                ToolTip.Tip="{Binding SourcePath}"
-                                                               FontSize="12"
+                                                               FontSize="{DynamicResource FontSizeBody}"
                                                                TextTrimming="CharacterEllipsis" />
 
                                                     <TextBlock Grid.Column="2"
                                                                Text="{Binding SourceExistsText}"
-                                                               FontSize="12"
+                                                               FontSize="{DynamicResource FontSizeBody}"
                                                                Foreground="{DynamicResource AccentBrush}" />
 
                                                     <StackPanel Grid.Column="3">
                                                         <TextBlock Text="{Binding FileCount}"
-                                                                   FontSize="12"
+                                                                   FontSize="{DynamicResource FontSizeBody}"
                                                                    Foreground="{DynamicResource PrimaryTextBrush}" />
 
                                                         <TextBlock Text="{Binding TotalSizeDisplay}"
                                                                    Foreground="{DynamicResource MutedTextBrush}"
-                                                                   FontSize="10" />
+                                                                   FontSize="{DynamicResource FontSizeMicro}" />
                                                     </StackPanel>
 
                                                     <TextBlock Grid.Column="4"
                                                                Text="{Binding StatusText}"
                                                                Foreground="{DynamicResource PrimaryTextBrush}"
-                                                               FontSize="12"
+                                                               FontSize="{DynamicResource FontSizeBody}"
                                                                FontWeight="SemiBold" />
                                                 </Grid>
 
                                                 <TextBlock Text="{Binding ActionText}"
                                                            Foreground="{DynamicResource MutedTextBrush}"
-                                                           FontSize="12"
+                                                           FontSize="{DynamicResource FontSizeBody}"
                                                            TextWrapping="Wrap" />
                                             </StackPanel>
                                         </Border>
@@ -496,7 +509,7 @@
 
                                 <TextBlock Text="Warnings"
                                            Foreground="{DynamicResource PrimaryTextBrush}"
-                                           FontSize="14"
+                                           FontSize="{DynamicResource FontSizeBodyLarge}"
                                            FontWeight="SemiBold" />
                             </Border>
 
@@ -512,13 +525,13 @@
                                                         Spacing="8">
                                                 <TextBlock Text="{Binding SeverityText}"
                                                            Foreground="{DynamicResource WarningBrush}"
-                                                           FontSize="12"
+                                                           FontSize="{DynamicResource FontSizeBody}"
                                                            FontWeight="SemiBold"
                                                            Width="60" />
 
                                                 <TextBlock Text="{Binding Message}"
                                                            Foreground="{DynamicResource SecondaryTextBrush}"
-                                                           FontSize="12"
+                                                           FontSize="{DynamicResource FontSizeBody}"
                                                            TextWrapping="Wrap" />
                                             </StackPanel>
                                         </Border>
@@ -545,12 +558,12 @@
                                 <StackPanel Spacing="2">
                                     <TextBlock Text="Execution results"
                                                Foreground="{DynamicResource PrimaryTextBrush}"
-                                               FontSize="14"
+                                               FontSize="{DynamicResource FontSizeBodyLarge}"
                                                FontWeight="SemiBold" />
 
                                     <TextBlock Text="Exactly what was backed up or failed during the last backup."
                                                Foreground="{DynamicResource MutedTextBrush}"
-                                               FontSize="12"
+                                               FontSize="{DynamicResource FontSizeBody}"
                                                TextWrapping="Wrap" />
                                 </StackPanel>
                             </Border>
@@ -567,31 +580,31 @@
                                     <TextBlock Grid.Column="0"
                                                Text="Source file"
                                                Foreground="{DynamicResource SecondaryTextBrush}"
-                                               FontSize="12"
+                                               FontSize="{DynamicResource FontSizeBody}"
                                                FontWeight="SemiBold" />
 
                                     <TextBlock Grid.Column="1"
                                                Text="Backup file"
                                                Foreground="{DynamicResource SecondaryTextBrush}"
-                                               FontSize="12"
+                                               FontSize="{DynamicResource FontSizeBody}"
                                                FontWeight="SemiBold" />
 
                                     <TextBlock Grid.Column="2"
                                                Text="Size"
                                                Foreground="{DynamicResource SecondaryTextBrush}"
-                                               FontSize="12"
+                                               FontSize="{DynamicResource FontSizeBody}"
                                                FontWeight="SemiBold" />
 
                                     <TextBlock Grid.Column="3"
                                                Text="Status"
                                                Foreground="{DynamicResource SecondaryTextBrush}"
-                                               FontSize="12"
+                                               FontSize="{DynamicResource FontSizeBody}"
                                                FontWeight="SemiBold" />
 
                                     <TextBlock Grid.Column="4"
                                                Text="Details"
                                                Foreground="{DynamicResource SecondaryTextBrush}"
-                                               FontSize="12"
+                                               FontSize="{DynamicResource FontSizeBody}"
                                                FontWeight="SemiBold" />
                                 </Grid>
                             </Border>
@@ -617,31 +630,31 @@
                                                            Text="{Binding SourceFile}"
                                                            Foreground="{DynamicResource SecondaryTextBrush}"
                                                            ToolTip.Tip="{Binding SourceFile}"
-                                                           FontSize="12"
+                                                           FontSize="{DynamicResource FontSizeBody}"
                                                            TextTrimming="CharacterEllipsis" />
 
                                                 <TextBlock Grid.Column="1"
                                                            Text="{Binding TargetFile}"
                                                            Foreground="{DynamicResource SecondaryTextBrush}"
                                                            ToolTip.Tip="{Binding TargetFile}"
-                                                           FontSize="12"
+                                                           FontSize="{DynamicResource FontSizeBody}"
                                                            TextTrimming="CharacterEllipsis" />
 
                                                 <TextBlock Grid.Column="2"
                                                            Text="{Binding SizeDisplay}"
-                                                           FontSize="12"
+                                                           FontSize="{DynamicResource FontSizeBody}"
                                                            Foreground="{DynamicResource MutedTextBrush}" />
 
                                                 <TextBlock Grid.Column="3"
                                                            Text="{Binding Status}"
                                                            Foreground="{DynamicResource PrimaryTextBrush}"
-                                                           FontSize="12"
+                                                           FontSize="{DynamicResource FontSizeBody}"
                                                            FontWeight="SemiBold" />
 
                                                 <TextBlock Grid.Column="4"
                                                            Text="{Binding Error}"
                                                            Foreground="{DynamicResource WarningBrush}"
-                                                           FontSize="12"
+                                                           FontSize="{DynamicResource FontSizeBody}"
                                                            TextWrapping="Wrap" />
                                             </Grid>
                                         </Border>
@@ -654,4 +667,5 @@
             </ScrollViewer>
         </Grid>
     </Grid>
+    </ScrollViewer>
 </UserControl>

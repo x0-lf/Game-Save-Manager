@@ -45,6 +45,7 @@ namespace GameSaves.UiCapture
             "backups",
             "sync",
             "history",
+            "settings",
         };
 
         private static readonly (string Slug, int Width, int Height)[] Sizes =
@@ -55,6 +56,12 @@ namespace GameSaves.UiCapture
 
         public static int Main(string[] args)
         {
+            // TEMPORARY W40 diagnostic probe; removed before freeze.
+            if (args.Length == 1 && args[0] == "--probe-accent")
+            {
+                return ProbeAccent();
+            }
+
             string outputDirectory = args.Length > 0
                 ? args[0]
                 : Path.Combine("artifacts", "ui-captures");
@@ -102,6 +109,225 @@ namespace GameSaves.UiCapture
                 {
                 }
             }
+        }
+
+        private static int ProbeAccent()
+        {
+            string tempRoot = Path.Combine(
+                Path.GetTempPath(),
+                "gamesave-ui-probe-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempRoot);
+            string originalDirectory = Environment.CurrentDirectory;
+            Environment.CurrentDirectory = tempRoot;
+
+            try
+            {
+                using HeadlessUnitTestSession session =
+                    HeadlessUnitTestSession.StartNew(typeof(Program));
+
+                return session.Dispatch(() =>
+                {
+                    var app = Avalonia.Application.Current!;
+                    Console.WriteLine(
+                        $"app.RequestedThemeVariant={app.RequestedThemeVariant} " +
+                        $"app.ActualThemeVariant={app.ActualThemeVariant}");
+                    Console.WriteLine(
+                        $"avalonia={typeof(Avalonia.AvaloniaObject).Assembly.GetName().Version}");
+
+                    // Dump every style-level resource provider (FluentTheme and
+                    // friends) and its theme dictionaries' accent values.
+                    for (int i = 0; i < app.Styles.Count; i++)
+                    {
+                        Console.WriteLine($"  style[{i}] {app.Styles[i].GetType().FullName}");
+                        DumpResources("    style", app.Styles[i].Resources);
+                    }
+
+                    Console.WriteLine(
+                        $"app merged dict count={app.Resources.MergedDictionaries.Count}");
+                    DumpResources("    app", app.Resources);
+                    for (int i = 0; i < app.Resources.MergedDictionaries.Count; i++)
+                    {
+                        string Describe(IResourceProvider p) => p switch
+                        {
+                            ResourceDictionary rd =>
+                                $"directKeys={rd.Count} themeDicts={rd.ThemeDictionaries.Count}",
+                            Avalonia.Markup.Xaml.Styling.ResourceInclude inc =>
+                                $"include loaded={(inc.Loaded is ResourceDictionary l ? $"directKeys={l.Count} themeDicts={l.ThemeDictionaries.Count}" : "unloaded")}",
+                            _ => p.GetType().Name,
+                        };
+
+                        Console.WriteLine(
+                            $"  merged[{i}] {Describe(app.Resources.MergedDictionaries[i])}");
+                        if (app.Resources.MergedDictionaries[i] is
+                            Avalonia.Markup.Xaml.Styling.ResourceInclude
+                            { Loaded: ResourceDictionary loaded })
+                        {
+                            DumpResources("      tokens", loaded);
+                        }
+                    }
+
+                    // Synthetic precedence test: a Tokens-like dictionary (only
+                    // theme dictionaries) merged into an app-like dictionary,
+                    // queried for both variants.
+                    var tokensLike = new ResourceDictionary();
+                    var darkDict = new ResourceDictionary
+                    {
+                        ["SystemAccentColor"] = Avalonia.Media.Color.Parse("#4F6EDB"),
+                    };
+                    var lightDict = new ResourceDictionary
+                    {
+                        ["SystemAccentColor"] = Avalonia.Media.Color.Parse("#3557C7"),
+                    };
+                    tokensLike.ThemeDictionaries.Add(ThemeVariant.Dark, darkDict);
+                    tokensLike.ThemeDictionaries.Add(ThemeVariant.Light, lightDict);
+                    var appLike = new ResourceDictionary();
+                    appLike.MergedDictionaries.Add(tokensLike);
+                    foreach (ThemeVariant tv in new[] { ThemeVariant.Light, ThemeVariant.Dark })
+                    {
+                        Console.WriteLine(
+                            $"  synthetic tokens-like app query {tv}: " +
+                            $"{(appLike.TryGetResource("SystemAccentColor", tv, out object? sv) ? DescribeValue(sv) : "(not found)")}");
+                    }
+
+                    using ServiceProvider provider = AppServices.Build(services =>
+                    {
+                        services.AddSingleton<IAppDatabasePathProvider>(
+                            new GameSaves.Infrastructure.Platform
+                                .SchemaInitializingAppDatabasePathProvider(
+                                    new FixedDatabasePathProvider("probe.db")));
+                        services.AddSingleton<ISteamRootLocator>(new NoSteamRootLocator());
+                        services.AddSingleton<ISteamFallbackScanner>(
+                            new NoSteamFallbackScanner());
+                        services.AddSingleton<IUiSettingsStore>(
+                            new UiSettingsStore("probe-ui.json"));
+                    });
+
+                    var window = new GameSaves.App.Views.MainWindow
+                    {
+                        DataContext = provider.GetRequiredService<MainWindowViewModel>(),
+                    };
+                    window.Show();
+                    Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+                    TabControl tabs = window
+                        .GetVisualDescendants()
+                        .OfType<TabControl>()
+                        .First();
+
+                    foreach (ThemeVariant theme in new[]
+                        { ThemeVariant.Light, ThemeVariant.Dark })
+                    {
+                        window.RequestedThemeVariant = theme;
+                        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+                        tabs.SelectedIndex = 8; // Settings: sliders + inner tabs
+                        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+                        Console.WriteLine(
+                            $"--- window variant {theme} " +
+                            $"(window actual {window.ActualThemeVariant}) ---");
+
+                        var slider = window.GetVisualDescendants()
+                            .OfType<Avalonia.Controls.Slider>().FirstOrDefault();
+                        var radio = window.GetVisualDescendants()
+                            .OfType<Avalonia.Controls.RadioButton>().FirstOrDefault();
+                        var innerTab = window.GetVisualDescendants()
+                            .OfType<TabControl>()
+                            .FirstOrDefault(t => !ReferenceEquals(t, tabs));
+
+                        if (slider is not null)
+                        {
+                            Console.WriteLine(SliderLine("slider", slider));
+                        }
+
+                        if (radio is not null)
+                        {
+                            Console.WriteLine(SliderLine("radio", radio));
+                        }
+
+                        if (innerTab is not null)
+                        {
+                            Console.WriteLine(SliderLine("innerTabItem", innerTab));
+                        }
+
+                        Console.WriteLine($"  app-level: {SliderLine("app", app)}");
+                    }
+
+                    window.Close();
+                    return 0;
+                }, CancellationToken.None).GetAwaiter().GetResult();
+            }
+            finally
+            {
+                Environment.CurrentDirectory = originalDirectory;
+                try
+                {
+                    Directory.Delete(tempRoot, recursive: true);
+                }
+                catch (IOException)
+                {
+                }
+                catch (UnauthorizedAccessException)
+                {
+                }
+            }
+        }
+
+        private static void DumpResources(string indent, Avalonia.Controls.IResourceDictionary? d)
+        {
+            if (d is null)
+            {
+                return;
+            }
+
+            string[] keys =
+            {
+                "SystemAccentColor",
+                "SystemAccentColorLight1",
+                "SystemAccentColorDark1",
+                "AccentFillColorDefaultBrush",
+                "AccentFillColorSecondaryBrush",
+            };
+
+            foreach (ThemeVariant tv in new[] { ThemeVariant.Light, ThemeVariant.Dark })
+            {
+                var parts = new List<string>();
+                foreach (string key in keys)
+                {
+                    if (d.TryGetResource(key, tv, out object? v))
+                    {
+                        parts.Add($"{key}={DescribeValue(v)}");
+                    }
+                }
+
+                Console.WriteLine($"{indent} theme[{tv.Key}]: {(parts.Count > 0 ? string.Join(" ", parts) : "(no accent keys)")}");
+            }
+
+            foreach (string key in keys)
+            {
+                if (d.TryGetResource(key, (ThemeVariant?)null, out object? v))
+                {
+                    Console.WriteLine($"{indent} direct {key}={DescribeValue(v)}");
+                }
+            }
+        }
+
+        private static string DescribeValue(object? v) => v switch
+        {
+            Avalonia.Media.ISolidColorBrush b => b.Color.ToString(),
+            Avalonia.Media.Color c => c.ToString(),
+            null => "null",
+            _ => v.ToString() ?? "?",
+        };
+
+        private static string SliderLine(string label, Avalonia.Controls.IResourceHost o)
+        {
+            string Get(string key) =>
+                o.TryFindResource(key, out object? v)
+                    ? DescribeValue(v)
+                    : "(not found)";
+
+            return $"  {label}: SystemAccentColor={Get("SystemAccentColor")} " +
+                   $"AccentFillColorDefaultBrush={Get("AccentFillColorDefaultBrush")}";
         }
 
         private static async Task<int> CaptureAllAsync(
@@ -186,6 +412,9 @@ namespace GameSaves.UiCapture
             }
 
             PopulateInstalledGames(viewModel.InstalledGames);
+            // Populated rows imply Steam was found; leaving the missing flag
+            // set would render a banner contradicting the table (round 33).
+            viewModel.IsSteamMissing = false;
             tabs.SelectedIndex = 1;
 
             foreach (ThemeVariant theme in new[]
@@ -262,7 +491,11 @@ namespace GameSaves.UiCapture
                     gamePath,
                     FolderExists: true,
                     SteamDiscoveryConfidence.High),
-                needsFix > 0 ? GameSaveStatusKind.NeedsFixOnly : GameSaveStatusKind.Ready,
+                needsFix > 0
+                    ? GameSaveStatusKind.NeedsFixOnly
+                    : pending > 0
+                        ? GameSaveStatusKind.MappingMissing
+                        : GameSaveStatusKind.Ready,
                 status,
                 approved,
                 pending,

@@ -44,6 +44,10 @@ namespace GameSaves.App.Models
 
         public bool SavePathExists { get; }
 
+        // Table display text: a raw bool.ToString() in the grid reads as an
+        // undesigned data dump (critic round 24).
+        public string SavePathExistsDisplay => SavePathExists ? "Yes" : "No";
+
         public int FileCount { get; }
 
         public long TotalBytes { get; }
@@ -53,6 +57,17 @@ namespace GameSaves.App.Models
         public string Status { get; }
 
         public GameSaveStatusKind StatusKind { get; }
+
+        // Table ink classes: the status cell carries the row's one summary
+        // signal, so it takes semantic color like the count columns do
+        // (critic round 35).
+        public bool IsStatusHealthy => StatusKind == GameSaveStatusKind.Ready;
+
+        public bool IsStatusBlocked =>
+            StatusKind is GameSaveStatusKind.NeedsFixOnly
+                or GameSaveStatusKind.PathMissing;
+
+        public bool IsStatusCaution => !IsStatusHealthy && !IsStatusBlocked;
 
         public string? Error { get; }
 

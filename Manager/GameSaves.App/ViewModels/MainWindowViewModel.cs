@@ -14,7 +14,6 @@ namespace GameSaves.App.ViewModels
     public partial class MainWindowViewModel : ViewModelBase, IInitializableViewModel
     {
         private readonly ISteamDiscoveryService _steamDiscoveryService;
-        private readonly GameSaves.App.Services.IUiSettingsStore _uiSettingsStore;
         private readonly ISteamProfileDetector _steamProfileDetector;
         private readonly ISavePathMappingRepository _mappingRepository;
         private readonly ICurrentPlatformProvider _platformProvider;
@@ -80,24 +79,6 @@ namespace GameSaves.App.ViewModels
         [ObservableProperty]
         private string statusMessage = "Ready.";
 
-        // "system", "light" or "dark"; loaded at construction and persisted
-        // on every change so the choice survives restart.
-        [ObservableProperty]
-        private string themeChoice = GameSaves.App.Services.AppUiSettings.ThemeSystem;
-
-        public void SetThemeChoice(string choice)
-        {
-            if (choice is not (GameSaves.App.Services.AppUiSettings.ThemeSystem
-                or GameSaves.App.Services.AppUiSettings.ThemeLight
-                or GameSaves.App.Services.AppUiSettings.ThemeDark))
-            {
-                return;
-            }
-
-            ThemeChoice = choice;
-            _uiSettingsStore.Save(
-                _uiSettingsStore.Load() with { ThemeChoice = choice });
-        }
         public InstalledGamesViewModel InstalledGames { get; }
         public ProfilesViewModel Profiles { get; }
 
@@ -111,8 +92,14 @@ namespace GameSaves.App.ViewModels
 
         public SyncViewModel Sync { get; }
 
+        public SettingsViewModel Settings { get; }
+
         public MainWindowViewModel(
             GameSaves.App.Services.IUiSettingsStore uiSettingsStore,
+            GameSaves.App.Services.ThemeService themeService,
+            GameSaves.App.Services.WindowMaterialService windowMaterialService,
+            GameSaves.App.Services.ISyncSettingsStore syncSettingsStore,
+            GameSaves.Core.Sync.ISyncProviderCatalog providerCatalog,
             ISteamDiscoveryService steamDiscoveryService,
             ISteamProfileDetector steamProfileDetector,
             ISavePathMappingRepository mappingRepository,
@@ -126,9 +113,7 @@ namespace GameSaves.App.ViewModels
             TransferHistoryViewModel transferHistory,
             SyncViewModel sync)
         {
-            _uiSettingsStore = uiSettingsStore;
             _steamDiscoveryService = steamDiscoveryService;
-            ThemeChoice = uiSettingsStore.Load().ThemeChoice;
             _steamProfileDetector = steamProfileDetector;
             _mappingRepository = mappingRepository;
             _platformProvider = platformProvider;
@@ -144,6 +129,16 @@ namespace GameSaves.App.ViewModels
             ManualBackup = manualBackup;
             TransferHistory = transferHistory;
             Sync = sync;
+
+            Settings = new SettingsViewModel(
+                uiSettingsStore,
+                themeService,
+                windowMaterialService,
+                installedGames,
+                syncSettingsStore,
+                providerCatalog,
+                Platform,
+                DatabasePath);
         }
 
         // Automatic startup load of the Dashboard. Reuses the same load path as

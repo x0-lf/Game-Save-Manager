@@ -344,6 +344,8 @@ public sealed class SyncRemoteProfileViewModelTests
 
         public SyncUiSettings? Saved { get; private set; }
 
+        public string FilePath => "in-memory://sync-settings";
+
         public SyncUiSettings Load() => _settings;
 
         public void Save(SyncUiSettings settings) => Saved = settings;

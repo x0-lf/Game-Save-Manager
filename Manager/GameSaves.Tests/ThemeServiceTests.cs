@@ -1,0 +1,329 @@
+using System;
+using System.IO;
+using System.Linq;
+using System.Xml.Linq;
+using Avalonia.Media;
+using GameSaves.App.Services;
+using Xunit;
+
+namespace GameSaves.Tests
+{
+    // ThemeService's runtime application needs a live Avalonia Application,
+    // so these tests pin the pure parts: palette completeness and fidelity
+    // (indigo must reproduce Tokens.axaml exactly), the opacity math, the
+    // text-scale token table, and the reduce-motion and high-contrast tables.
+    public sealed class ThemeServiceTests
+    {
+        public static TheoryData<string> Accents => new()
+        {
+            AppUiSettings.AccentIndigo,
+            AppUiSettings.AccentTeal,
+            AppUiSettings.AccentRose,
+            AppUiSettings.AccentAmber,
+            AppUiSettings.AccentViolet,
+        };
+
+        [Theory]
+        [MemberData(nameof(Accents))]
+        public void EveryAccent_DefinesAllKeysInBothVariants(string accent)
+        {
+            foreach (bool isDark in new[] { true, false })
+            {
+                ThemeService.AccentPalette palette =
+                    ThemeService.GetPalette(accent, isDark);
+
+                var colors = palette.AsResources().ToDictionary(
+                    pair => pair.Key, pair => pair.Value);
+
+                Assert.Superset(
+                    ThemeService.AccentResourceKeys.ToHashSet(),
+                    colors.Keys.ToHashSet());
+                Assert.DoesNotContain(default, colors.Values);
+            }
+        }
+
+        [Fact]
+        public void AnUnknownAccent_FallsBackToIndigo()
+        {
+            Assert.Equal(
+                ThemeService.GetPalette(AppUiSettings.AccentIndigo, isDark: true),
+                ThemeService.GetPalette("chartreuse", isDark: true));
+            Assert.Equal(
+                ThemeService.GetPalette(AppUiSettings.AccentIndigo, isDark: false),
+                ThemeService.GetPalette(string.Empty, isDark: false));
+        }
+
+        [Fact]
+        public void IndigoDarkPalette_MatchesTokensAxamlExactly()
+        {
+            ThemeService.AccentPalette indigo =
+                ThemeService.GetPalette(AppUiSettings.AccentIndigo, isDark: true);
+
+            Assert.Equal(Color.Parse("#4F6EDB"), indigo.SystemAccentColor);
+            Assert.Equal(Color.Parse("#7C9CFF"), indigo.Accent);
+            Assert.Equal(Color.Parse("#A9BCFF"), indigo.Brand);
+            Assert.Equal(Color.Parse("#93AEFF"), indigo.AccentHover);
+            Assert.Equal(Color.Parse("#6B8BF0"), indigo.AccentPressed);
+            Assert.Equal(Color.Parse("#4F6EDB"), indigo.PrimaryButton);
+            Assert.Equal(Color.Parse("#5B7BE8"), indigo.PrimaryButtonHover);
+            Assert.Equal(Color.Parse("#3F5CC4"), indigo.PrimaryButtonPressed);
+        }
+
+        [Fact]
+        public void IndigoLightPalette_MatchesTokensAxamlExactly()
+        {
+            ThemeService.AccentPalette indigo =
+                ThemeService.GetPalette(AppUiSettings.AccentIndigo, isDark: false);
+
+            Assert.Equal(Color.Parse("#3557C7"), indigo.SystemAccentColor);
+            Assert.Equal(Color.Parse("#3557C7"), indigo.Accent);
+            Assert.Equal(Color.Parse("#3557C7"), indigo.Brand);
+            Assert.Equal(Color.Parse("#2C4BB0"), indigo.AccentHover);
+            Assert.Equal(Color.Parse("#243F99"), indigo.AccentPressed);
+            Assert.Equal(Color.Parse("#3557C7"), indigo.PrimaryButton);
+            Assert.Equal(Color.Parse("#2C4BB0"), indigo.PrimaryButtonHover);
+            Assert.Equal(Color.Parse("#243F99"), indigo.PrimaryButtonPressed);
+        }
+
+        [Fact]
+        public void WithOpacity_ScalesAlphaAndKeepsHue()
+        {
+            Color baseColor = Color.Parse("#FF102030");
+
+            Color half = ThemeService.WithOpacity(baseColor, 0.5);
+            Assert.Equal(128, half.A);
+            Assert.Equal(baseColor.R, half.R);
+            Assert.Equal(baseColor.G, half.G);
+            Assert.Equal(baseColor.B, half.B);
+
+            Color alreadyTranslucent = Color.Parse("#80102030");
+            Color quarter = ThemeService.WithOpacity(alreadyTranslucent, 0.5);
+            Assert.Equal(64, quarter.A);
+
+            Color semi = Color.Parse("#C8102030");
+            Color full = ThemeService.WithOpacity(semi, 2.5);
+            Assert.Equal(0xC8, full.A);
+        }
+
+        [Theory]
+        [InlineData(1.5, 1.0)]
+        [InlineData(-0.2, 0.0)]
+        [InlineData(0.0, 0.0)]
+        [InlineData(1.0, 1.0)]
+        [InlineData(double.NaN, 1.0)]
+        [InlineData(double.PositiveInfinity, 1.0)]
+        public void OpacityNormalizesToTheUnitRange(double input, double expected)
+        {
+            Assert.Equal(
+                expected,
+                UiTransparencySettings.NormalizeOpacity(input));
+        }
+
+        [Theory]
+        [InlineData(0.5, 0.85)]
+        [InlineData(0.85, 0.85)]
+        [InlineData(1.0, 1.0)]
+        [InlineData(1.2, 1.2)]
+        [InlineData(1.5, 1.5)]
+        [InlineData(2.0, 1.5)]
+        [InlineData(double.NaN, 1.0)]
+        [InlineData(double.NegativeInfinity, 1.0)]
+        public void TextScale_ClampsToTheSupportedRange(double input, double expected)
+        {
+            Assert.Equal(expected, UiAccessibilitySettings.ClampTextScale(input));
+        }
+
+        [Fact]
+        public void ScaledFontSize_MultipliesTheBaseByTheClampedScale()
+        {
+            Assert.Equal(12, ThemeService.ScaledFontSize(12, 1.0));
+            Assert.Equal(15, ThemeService.ScaledFontSize(12, 1.25));
+            Assert.Equal(10.2, ThemeService.ScaledFontSize(12, 0.85));
+            Assert.Equal(48, ThemeService.ScaledFontSize(32, 1.5));
+            Assert.Equal(18, ThemeService.ScaledFontSize(12, 9.0));
+            Assert.Equal(12, ThemeService.ScaledFontSize(12, double.NaN));
+        }
+
+        [Fact]
+        public void TextScaleOverrides_AtDefaultReproduceTheBaseTable()
+        {
+            Assert.Equal(
+                ThemeService.FontSizeTokenBaseSizes,
+                ThemeService.BuildTextScaleOverrides(1.0));
+        }
+
+        [Fact]
+        public void TextScaleOverrides_ScaleEveryTokenAtAnIncreasedScale()
+        {
+            System.Collections.Generic.IReadOnlyDictionary<string, double> overrides =
+                ThemeService.BuildTextScaleOverrides(1.3);
+
+            Assert.Equal(ThemeService.FontSizeTokenBaseSizes.Keys, overrides.Keys);
+
+            foreach ((string key, double baseSize) in ThemeService.FontSizeTokenBaseSizes)
+                Assert.Equal(ThemeService.ScaledFontSize(baseSize, 1.3), overrides[key]);
+        }
+
+        [Fact]
+        public void FontSizeTokenBaseSizes_MatchTokensAxamlExactly()
+        {
+            XDocument tokens = XDocument.Load(FindAppFile(Path.Combine("Themes", "Tokens.axaml")));
+
+            // The x:Key attribute lives in the XAML namespace; resolve it by
+            // local name because the prefix is an implementation detail.
+            var expected = tokens
+                .Descendants()
+                .Where(element => element.Name.LocalName == "Double")
+                .ToDictionary(
+                    element => element.Attributes().Single(
+                        attribute => attribute.Name.LocalName == "Key").Value,
+                    element => double.Parse(element.Value));
+
+            Assert.Equal(
+                ThemeService.FontSizeTokenBaseSizes.OrderBy(pair => pair.Key),
+                expected.OrderBy(pair => pair.Key));
+        }
+
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public void HighContrast_WhenOff_WritesNothing(bool isDark)
+        {
+            Assert.Empty(ThemeService.GetHighContrastOverrides(isDark, highContrast: false));
+        }
+
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public void HighContrast_CoversEverySemanticKeyWithSolidColors(bool isDark)
+        {
+            System.Collections.Generic.IReadOnlyDictionary<string, Color> overrides =
+                ThemeService.GetHighContrastOverrides(isDark, highContrast: true);
+
+            Assert.Equal(
+                ThemeService.HighContrastResourceKeys.ToHashSet(),
+                overrides.Keys.ToHashSet());
+
+            foreach (Color color in overrides.Values)
+            {
+                Assert.NotEqual(default, color);
+                Assert.Equal(255, color.A);
+            }
+        }
+
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public void HighContrast_LeavesAccentKeysToTheAccentPalette(bool isDark)
+        {
+            System.Collections.Generic.IReadOnlyDictionary<string, Color> overrides =
+                ThemeService.GetHighContrastOverrides(isDark, highContrast: true);
+
+            Assert.Empty(overrides.Keys.Intersect(ThemeService.AccentResourceKeys));
+        }
+
+        [Fact]
+        public void HighContrast_UsesInvertedInksBetweenVariants()
+        {
+            System.Collections.Generic.IReadOnlyDictionary<string, Color> dark =
+                ThemeService.GetHighContrastOverrides(isDark: true, highContrast: true);
+            System.Collections.Generic.IReadOnlyDictionary<string, Color> light =
+                ThemeService.GetHighContrastOverrides(isDark: false, highContrast: true);
+
+            Assert.Equal(
+                Color.Parse("#000000"),
+                dark[ThemeService.PageBackgroundBrushKey]);
+            Assert.Equal(
+                Color.Parse("#FFFFFF"),
+                dark["PrimaryTextBrush"]);
+            Assert.Equal(
+                Color.Parse("#FFFFFF"),
+                light[ThemeService.PageBackgroundBrushKey]);
+            Assert.Equal(
+                Color.Parse("#000000"),
+                light["PrimaryTextBrush"]);
+        }
+
+        [Theory]
+        [InlineData(0.4, true, 1.0)]
+        [InlineData(0.4, false, 0.4)]
+        [InlineData(1.7, false, 1.0)]
+        [InlineData(1.7, true, 1.0)]
+        public void HighContrast_ForcesOpaqueSurfaces(
+            double stored, bool highContrast, double expected)
+        {
+            Assert.Equal(
+                expected,
+                ThemeService.EffectiveSurfaceOpacity(stored, highContrast));
+        }
+
+        [Theory]
+        [InlineData(0.4, false, false, 0.4)]
+        [InlineData(0.4, true, false, 1.0)]
+        [InlineData(1.0, false, true, 0.0)]
+        [InlineData(0.2, false, true, 0.0)]
+        // High contrast always wins: even a stale material confirmation
+        // must not thin a high-contrast surface.
+        [InlineData(0.2, true, true, 1.0)]
+        public void WindowSurfaceOpacity_IsTransparentOnlyWhileAMaterialComposites(
+            double stored, bool highContrast, bool materialActive, double expected)
+        {
+            Assert.Equal(
+                expected,
+                ThemeService.EffectiveWindowSurfaceOpacity(
+                    stored, highContrast, materialActive));
+        }
+
+        [Fact]
+        public void MotionDurationFast_IsInstantWhenReducedAndShippedOtherwise()
+        {
+            Assert.Equal(TimeSpan.Zero, ThemeService.MotionDurationFast(true));
+            Assert.Equal(
+                TimeSpan.FromMilliseconds(150),
+                ThemeService.MotionDurationFast(false));
+        }
+
+        // BuildScrollBarTransitions itself is not unit-constructed here: the
+        // Transitions collection validates items through the Avalonia
+        // dispatcher, which parallel xUnit threads do not own. The real app
+        // only builds it on the UI thread inside ThemeService.Apply; the
+        // duration table above and the wiring test below pin the behavior.
+
+        [Fact]
+        public void TheOnlyAppAnimation_IsTheResourceDrivenScrollbarFade()
+        {
+            XDocument controls = XDocument.Load(FindAppFile(Path.Combine("Themes", "Controls.axaml")));
+
+            // Controls.axaml must resolve its scrollbar transitions through
+            // the resource so ThemeService can swap them at runtime, and it
+            // must not author any other animation of its own.
+            XElement scrollBarStyle = controls
+                .Descendants()
+                .Single(element => element.Name.LocalName == "Style" &&
+                    (string?)element.Attribute("Selector") == "ScrollBar");
+
+            Assert.Contains(
+                scrollBarStyle.Descendants(),
+                element => (string?)element.Attribute("Value") ==
+                    "{DynamicResource ScrollBarOpacityTransitions}");
+
+            Assert.DoesNotContain(controls.Descendants(),
+                element => element.Name.LocalName == "Transitions");
+        }
+
+        private static string FindAppFile(string relativePath)
+        {
+            DirectoryInfo? directory = new(AppContext.BaseDirectory);
+
+            while (directory is not null)
+            {
+                if (File.Exists(Path.Combine(directory.FullName, "Manager.sln")))
+                    return Path.Combine(directory.FullName, "GameSaves.App", relativePath);
+
+                directory = directory.Parent;
+            }
+
+            throw new DirectoryNotFoundException("Manager.sln was not found.");
+        }
+    }
+}

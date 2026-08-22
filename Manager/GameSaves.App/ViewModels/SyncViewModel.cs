@@ -67,7 +67,7 @@ namespace GameSaves.App.ViewModels
         private bool isLoading;
 
         [ObservableProperty]
-        private string statusMessage = "Choose a sync folder (NAS share, USB drive, cloud-synced folder) and preview the sync.";
+        private string statusMessage = "No remote profile saved yet.";
 
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(CanPreviewSync))]
@@ -464,22 +464,43 @@ namespace GameSaves.App.ViewModels
                           "Provider configuration is available, but sync is unavailable."
                         : SelectedProviderDescriptor.UnavailableMessage ?? "Provider unavailable.";
 
-                var capabilities = new List<string>();
+                // Product prose, not a feature-flag dump: one sentence for
+                // what the provider needs, one for what it supports.
+                var needs = new List<string>();
 
                 if (RequiresServerCredentials)
-                    capabilities.Add("server credentials required");
+                    needs.Add("server credentials");
                 if (RequiresInteractiveLogin)
-                    capabilities.Add("interactive login required");
-                if (SupportsConnectionTesting)
-                    capabilities.Add("connection testing supported");
-                if (SupportsRemoteFolderSelection)
-                    capabilities.Add("remote folder selection supported");
-                if (SupportsPersistentAuthentication)
-                    capabilities.Add("persistent authentication supported");
+                    needs.Add("an interactive sign-in");
 
-                return string.Join("; ", capabilities) + ".";
+                var supports = new List<string>();
+
+                if (SupportsConnectionTesting)
+                    supports.Add("connection testing");
+                if (SupportsRemoteFolderSelection)
+                    supports.Add("remote folder selection");
+                if (SupportsPersistentAuthentication)
+                    supports.Add("staying signed in");
+
+                var sentences = new List<string>();
+
+                if (needs.Count > 0)
+                    sentences.Add($"Needs {JoinNaturally(needs)}.");
+                if (supports.Count > 0)
+                    sentences.Add($"Supports {JoinNaturally(supports)}.");
+
+                return string.Join(" ", sentences);
             }
         }
+
+        private static string JoinNaturally(IReadOnlyList<string> items) =>
+            items.Count switch
+            {
+                1 => items[0],
+                2 => $"{items[0]} and {items[1]}",
+                _ => string.Join(", ", items.Take(items.Count - 1)) +
+                     $", and {items[^1]}",
+            };
 
         public bool IsLocalFolderSelected =>
             SelectedProviderDescriptor.ConfigurationSurface ==

@@ -30,12 +30,12 @@
 
                     <TextBlock Text="Restore points for your save files."
                                Foreground="{DynamicResource SecondaryTextBrush}"
-                               FontSize="12"
+                               FontSize="{DynamicResource FontSizeBody}"
                                TextWrapping="Wrap" />
 
                     <TextBlock Text="{Binding StatusMessage}"
                                Foreground="{DynamicResource MutedTextBrush}"
-                               FontSize="12"
+                               FontSize="{DynamicResource FontSizeBody}"
                                TextWrapping="Wrap" />
                 </StackPanel>
 
@@ -90,7 +90,7 @@
 
                         <TextBlock Text="Backup runs"
                                    Foreground="{DynamicResource PrimaryTextBrush}"
-                                   FontSize="14"
+                                   FontSize="{DynamicResource FontSizeBodyLarge}"
                                    FontWeight="SemiBold" />
                     </Border>
 
@@ -110,26 +110,26 @@
 
                                     <TextBlock Text="{Binding StartedDisplay}"
                                                Foreground="{DynamicResource SecondaryTextBrush}"
-                                               FontSize="12" />
+                                               FontSize="{DynamicResource FontSizeBody}" />
 
                                     <StackPanel Orientation="Horizontal"
                                                 Spacing="8">
                                         <TextBlock Text="{Binding KindText}"
                                                    Foreground="{DynamicResource AccentBrush}"
-                                                   FontSize="12" />
+                                                   FontSize="{DynamicResource FontSizeBody}" />
 
                                         <TextBlock Text="{Binding FileCount, StringFormat='{}{0} file(s)'}"
                                                    Foreground="{DynamicResource MutedTextBrush}"
-                                                   FontSize="12" />
+                                                   FontSize="{DynamicResource FontSizeBody}" />
 
                                         <TextBlock Text="{Binding TotalSizeDisplay}"
                                                    Foreground="{DynamicResource MutedTextBrush}"
-                                                   FontSize="12" />
+                                                   FontSize="{DynamicResource FontSizeBody}" />
                                     </StackPanel>
 
                                     <TextBlock Text="{Binding ProfilesDisplay}"
                                                Foreground="{DynamicResource MutedTextBrush}"
-                                               FontSize="12" />
+                                               FontSize="{DynamicResource FontSizeBody}" />
                                 </StackPanel>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
@@ -166,43 +166,43 @@
                                     IsEnabled="{Binding SelectedRun, Converter={x:Static ObjectConverters.IsNotNull}}">
                             <TextBlock Text="Restore"
                                        Foreground="{DynamicResource PrimaryTextBrush}"
-                                       FontSize="15"
+                                       FontSize="{DynamicResource FontSizeSubheading}"
                                        FontWeight="SemiBold" />
 
                             <TextBlock Text="Select a backup run to enable restore."
                                        IsVisible="{Binding SelectedRun, Converter={x:Static ObjectConverters.IsNull}}"
                                        Foreground="{DynamicResource MutedTextBrush}"
-                                       FontSize="12"
+                                       FontSize="{DynamicResource FontSizeBody}"
                                        TextWrapping="Wrap" />
 
                             <TextBlock Text="Restore copies backup files to the target you choose below. Nothing is deleted. Files whose current version differs are only replaced when overwrite is enabled, and every replaced file is backed up first."
                                        Foreground="{DynamicResource SecondaryTextBrush}"
-                                       FontSize="12"
+                                       FontSize="{DynamicResource FontSizeBody}"
                                        TextWrapping="Wrap" />
 
                             <TextBlock Text="Restore target"
                                        Foreground="{DynamicResource SecondaryTextBrush}"
-                                       FontSize="12"
+                                       FontSize="{DynamicResource FontSizeBody}"
                                        FontWeight="Bold"
                                        Margin="0,4,0,0" />
 
                             <RadioButton Content="Restore to Original Location"
                                          GroupName="RestoreTarget"
                                          IsChecked="{Binding RestoreToOriginal}"
-                                         FontSize="12"
+                                         FontSize="{DynamicResource FontSizeBody}"
                                          ToolTip.Tip="Copies each backup file back to the exact path recorded in the backup manifest." />
 
                             <RadioButton Content="Restore to Selected Profile"
                                          GroupName="RestoreTarget"
                                          IsChecked="{Binding RestoreToSelectedProfile}"
-                                         FontSize="12"
+                                         FontSize="{DynamicResource FontSizeBody}"
                                          ToolTip.Tip="Redirects files from the backup's Steam userdata game folder into the selected profile's userdata folder for the same game. Files outside a userdata game folder are skipped." />
 
                             <StackPanel Spacing="4"
                                         IsVisible="{Binding RestoreToSelectedProfile}">
                                 <TextBlock Text="Target profile"
                                            Foreground="{DynamicResource SecondaryTextBrush}"
-                                           FontSize="12" />
+                                           FontSize="{DynamicResource FontSizeBody}" />
 
                                 <ComboBox ItemsSource="{Binding Profiles}"
                                           SelectedItem="{Binding SelectedTargetProfile}"
@@ -213,14 +213,14 @@
                             <RadioButton Content="Restore to Approved Mapping Location"
                                          GroupName="RestoreTarget"
                                          IsChecked="{Binding RestoreToMappingLocation}"
-                                         FontSize="12"
+                                         FontSize="{DynamicResource FontSizeBody}"
                                          ToolTip.Tip="Copies the backup into a save location resolved from the approved mapping database (gamesave.db) for this game. Only approved, enabled mappings that resolve to exactly one path can be used." />
 
                             <StackPanel Spacing="4"
                                         IsVisible="{Binding RestoreToMappingLocation}">
                                 <TextBlock Text="Mapping"
                                            Foreground="{DynamicResource SecondaryTextBrush}"
-                                           FontSize="12" />
+                                           FontSize="{DynamicResource FontSizeBody}" />
 
                                 <ComboBox ItemsSource="{Binding MappingOptions}"
                                           SelectedItem="{Binding SelectedMappingOption}"
@@ -230,7 +230,7 @@
 
                             <TextBlock Text="{Binding ResolvedTargetDisplay}"
                                        Foreground="{DynamicResource AccentBrush}"
-                                       FontSize="12"
+                                       FontSize="{DynamicResource FontSizeBody}"
                                        TextWrapping="Wrap" />
 
                             <CheckBox Content="Overwrite current files that differ from the backup"
@@ -272,7 +272,7 @@
 
                             <TextBlock Text="{Binding PreRestoreBackupMessage}"
                                        Foreground="{DynamicResource MutedTextBrush}"
-                                       FontSize="12"
+                                       FontSize="{DynamicResource FontSizeBody}"
                                        TextWrapping="Wrap" />
                         </StackPanel>
                       </Panel>
@@ -294,7 +294,7 @@
 
                                 <TextBlock Text="Files in this backup run"
                                            Foreground="{DynamicResource PrimaryTextBrush}"
-                                           FontSize="14"
+                                           FontSize="{DynamicResource FontSizeBodyLarge}"
                                            FontWeight="SemiBold" />
                             </Border>
 
@@ -381,12 +381,12 @@
                                 <StackPanel Spacing="2">
                                     <TextBlock Text="Restore results"
                                                Foreground="{DynamicResource PrimaryTextBrush}"
-                                               FontSize="14"
+                                               FontSize="{DynamicResource FontSizeBodyLarge}"
                                                FontWeight="SemiBold" />
 
                                     <TextBlock Text="Exactly what was restored, skipped, or failed during the last restore or preview."
                                                Foreground="{DynamicResource MutedTextBrush}"
-                                               FontSize="12"
+                                               FontSize="{DynamicResource FontSizeBody}"
                                                TextWrapping="Wrap" />
                                 </StackPanel>
                             </Border>
@@ -464,7 +464,7 @@
                                                 <TextBlock Text="{Binding PreRestoreBackupDisplay}"
                                                            IsVisible="{Binding HasPreRestoreBackup}"
                                                            Foreground="{DynamicResource AccentBrush}"
-                                                           FontSize="12"
+                                                           FontSize="{DynamicResource FontSizeBody}"
                                                            TextTrimming="CharacterEllipsis" />
                                             </StackPanel>
                                         </Border>
@@ -484,12 +484,12 @@
                         <StackPanel Spacing="6">
                             <TextBlock Text="Archive (ZIP)"
                                        Foreground="{DynamicResource PrimaryTextBrush}"
-                                       FontSize="15"
+                                       FontSize="{DynamicResource FontSizeSubheading}"
                                        FontWeight="SemiBold" />
 
                             <TextBlock Text="Export packs the selected run (files + manifest) into one ZIP for cold storage or another machine. Import brings such a ZIP back into the backup base, where it appears in this list and can be restored. Nothing is ever overwritten."
                                        Foreground="{DynamicResource MutedTextBrush}"
-                                       FontSize="12"
+                                       FontSize="{DynamicResource FontSizeBody}"
                                        TextWrapping="Wrap" />
 
                             <StackPanel Orientation="Horizontal"
@@ -507,7 +507,7 @@
 
                             <TextBlock Text="{Binding ArchiveStatusMessage}"
                                        Foreground="{DynamicResource SecondaryTextBrush}"
-                                       FontSize="12"
+                                       FontSize="{DynamicResource FontSizeBody}"
                                        TextWrapping="Wrap" />
                         </StackPanel>
                     </Border>
@@ -522,23 +522,23 @@
                         <StackPanel Spacing="6">
                             <TextBlock Text="Cleanup (deletes backup runs)"
                                        Foreground="{DynamicResource PrimaryTextBrush}"
-                                       FontSize="15"
+                                       FontSize="{DynamicResource FontSizeSubheading}"
                                        FontWeight="SemiBold" />
 
                             <TextBlock Text="This is the only place the app deletes anything. Only backup run folders inside the application backup base are deleted — save files and backups in custom destinations are never touched. Always preview first."
                                        Foreground="{DynamicResource WarningBrush}"
-                                       FontSize="12"
+                                       FontSize="{DynamicResource FontSizeBody}"
                                        TextWrapping="Wrap" />
 
                             <TextBlock Text="Delete the selected run"
                                        Foreground="{DynamicResource SecondaryTextBrush}"
-                                       FontSize="12"
+                                       FontSize="{DynamicResource FontSizeBody}"
                                        FontWeight="Bold"
                                        Margin="0,4,0,0" />
 
                             <CheckBox Content="I understand this permanently deletes the selected backup run"
                                       IsChecked="{Binding ConfirmDeleteRun}"
-                                      FontSize="12" />
+                                      FontSize="{DynamicResource FontSizeBody}" />
 
                             <Button Content="Delete Selected Run"
                                     Command="{Binding DeleteSelectedRunCommand}"
@@ -547,7 +547,7 @@
 
                             <TextBlock Text="Retention policy"
                                        Foreground="{DynamicResource SecondaryTextBrush}"
-                                       FontSize="12"
+                                       FontSize="{DynamicResource FontSizeBody}"
                                        FontWeight="Bold"
                                        Margin="0,6,0,0" />
 
@@ -555,7 +555,7 @@
                                         Spacing="6">
                                 <TextBlock Text="Keep newest"
                                            Foreground="{DynamicResource SecondaryTextBrush}"
-                                           FontSize="12"
+                                           FontSize="{DynamicResource FontSizeBody}"
                                            VerticalAlignment="Center" />
 
                                 <TextBox Text="{Binding KeepNewestRunsText}"
@@ -564,7 +564,7 @@
 
                                 <TextBlock Text="run(s), delete the rest. Only runs older than"
                                            Foreground="{DynamicResource SecondaryTextBrush}"
-                                           FontSize="12"
+                                           FontSize="{DynamicResource FontSizeBody}"
                                            VerticalAlignment="Center" />
 
                                 <TextBox Text="{Binding OlderThanDaysText}"
@@ -574,13 +574,13 @@
 
                                 <TextBlock Text="day(s)."
                                            Foreground="{DynamicResource SecondaryTextBrush}"
-                                           FontSize="12"
+                                           FontSize="{DynamicResource FontSizeBody}"
                                            VerticalAlignment="Center" />
                             </StackPanel>
 
                             <CheckBox Content="I understand this permanently deletes the previewed backup runs"
                                       IsChecked="{Binding ConfirmCleanup}"
-                                      FontSize="12" />
+                                      FontSize="{DynamicResource FontSizeBody}" />
 
                             <StackPanel Orientation="Horizontal"
                                         Spacing="10">
@@ -595,7 +595,7 @@
 
                             <TextBlock Text="{Binding CleanupStatusMessage}"
                                        Foreground="{DynamicResource SecondaryTextBrush}"
-                                       FontSize="12"
+                                       FontSize="{DynamicResource FontSizeBody}"
                                        TextWrapping="Wrap" />
 
                             <ItemsControl ItemsSource="{Binding CleanupResults}">
@@ -612,30 +612,30 @@
                                                     <TextBlock Grid.Column="0"
                                                                Text="{Binding RunDisplay}"
                                                                Foreground="{DynamicResource SecondaryTextBrush}"
-                                                               FontSize="12"
+                                                               FontSize="{DynamicResource FontSizeBody}"
                                                                TextTrimming="CharacterEllipsis" />
 
                                                     <TextBlock Grid.Column="1"
                                                                Text="{Binding SizeDisplay}"
                                                                Foreground="{DynamicResource MutedTextBrush}"
-                                                               FontSize="12" />
+                                                               FontSize="{DynamicResource FontSizeBody}" />
 
                                                     <TextBlock Grid.Column="2"
                                                                Text="{Binding Status}"
                                                                Foreground="{DynamicResource PrimaryTextBrush}"
-                                                               FontSize="12"
+                                                               FontSize="{DynamicResource FontSizeBody}"
                                                                FontWeight="SemiBold" />
 
                                                     <TextBlock Grid.Column="3"
                                                                Text="{Binding Error}"
                                                                Foreground="{DynamicResource WarningBrush}"
-                                                               FontSize="12"
+                                                               FontSize="{DynamicResource FontSizeBody}"
                                                                TextWrapping="Wrap" />
                                                 </Grid>
 
                                                 <TextBlock Text="{Binding BackupRootPath}"
                                                            Foreground="{DynamicResource MutedTextBrush}"
-                                                           FontSize="10"
+                                                           FontSize="{DynamicResource FontSizeMicro}"
                                                            ToolTip.Tip="{Binding BackupRootPath}"
                                                            TextTrimming="CharacterEllipsis" />
                                             </StackPanel>

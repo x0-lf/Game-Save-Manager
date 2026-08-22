@@ -1,0 +1,744 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:GameSaves.App.ViewModels"
+             xmlns:models="using:GameSaves.App.Models"
+             xmlns:conv="using:GameSaves.App.Converters"
+             xmlns:s="using:GameSaves.App.Services"
+             x:Class="GameSaves.App.Views.SettingsView"
+             x:DataType="vm:SettingsViewModel"
+             Background="{DynamicResource PageBackgroundBrush}">
+
+    <ScrollViewer Classes="pageScroll"
+                  VerticalContentAlignment="Stretch">
+        <StackPanel Spacing="10"
+                    MaxWidth="1100"
+                    Margin="0,12,0,14"
+                    HorizontalAlignment="Stretch">
+
+            <Border Background="{DynamicResource CardBackgroundBrush}"
+                    BorderBrush="{DynamicResource CardBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="14"
+                    Padding="16,10">
+                <StackPanel Spacing="2">
+                    <TextBlock Text="Settings" Classes="h1" />
+                    <TextBlock Text="Appearance, accessibility, behaviour, layout, providers, data locations and diagnostics."
+                               Foreground="{DynamicResource SecondaryTextBrush}"
+                               FontSize="{DynamicResource FontSizeBody}"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <TabControl>
+
+                <TabItem Header="Appearance">
+                    <StackPanel Spacing="10" Margin="0,12,0,0">
+
+                        <Border Background="{DynamicResource CardBackgroundBrush}"
+                                BorderBrush="{DynamicResource CardBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="12"
+                                Padding="14">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Theme"
+                                           Foreground="{DynamicResource PrimaryTextBrush}"
+                                           FontSize="{DynamicResource FontSizeSubtitle}"
+                                           FontWeight="SemiBold" />
+                                <StackPanel Spacing="4">
+                                    <RadioButton GroupName="SettingsTheme"
+                                                 Content="Use system theme"
+                                                 IsChecked="{Binding ThemeChoice, Mode=TwoWay, Converter={x:Static conv:StringEqualityConverter.Instance}, ConverterParameter={x:Static s:AppUiSettings.ThemeSystem}}"
+                                                 AutomationProperties.Name="Use system theme" />
+                                    <RadioButton GroupName="SettingsTheme"
+                                                 Content="Light"
+                                                 IsChecked="{Binding ThemeChoice, Mode=TwoWay, Converter={x:Static conv:StringEqualityConverter.Instance}, ConverterParameter={x:Static s:AppUiSettings.ThemeLight}}"
+                                                 AutomationProperties.Name="Light theme" />
+                                    <RadioButton GroupName="SettingsTheme"
+                                                 Content="Dark"
+                                                 IsChecked="{Binding ThemeChoice, Mode=TwoWay, Converter={x:Static conv:StringEqualityConverter.Instance}, ConverterParameter={x:Static s:AppUiSettings.ThemeDark}}"
+                                                 AutomationProperties.Name="Dark theme" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Background="{DynamicResource CardBackgroundBrush}"
+                                BorderBrush="{DynamicResource CardBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="12"
+                                Padding="14">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Accent colour"
+                                           Foreground="{DynamicResource PrimaryTextBrush}"
+                                           FontSize="{DynamicResource FontSizeSubtitle}"
+                                           FontWeight="SemiBold" />
+                                <StackPanel Spacing="4" Orientation="Horizontal">
+                                    <RadioButton GroupName="SettingsAccent"
+                                                 Content="Indigo"
+                                                 Margin="0,0,16,0"
+                                                 IsChecked="{Binding AccentTheme, Mode=TwoWay, Converter={x:Static conv:StringEqualityConverter.Instance}, ConverterParameter={x:Static s:AppUiSettings.AccentIndigo}}"
+                                                 AutomationProperties.Name="Indigo accent" />
+                                    <RadioButton GroupName="SettingsAccent"
+                                                 Content="Teal"
+                                                 Margin="0,0,16,0"
+                                                 IsChecked="{Binding AccentTheme, Mode=TwoWay, Converter={x:Static conv:StringEqualityConverter.Instance}, ConverterParameter={x:Static s:AppUiSettings.AccentTeal}}"
+                                                 AutomationProperties.Name="Teal accent" />
+                                    <RadioButton GroupName="SettingsAccent"
+                                                 Content="Rose"
+                                                 Margin="0,0,16,0"
+                                                 IsChecked="{Binding AccentTheme, Mode=TwoWay, Converter={x:Static conv:StringEqualityConverter.Instance}, ConverterParameter={x:Static s:AppUiSettings.AccentRose}}"
+                                                 AutomationProperties.Name="Rose accent" />
+                                    <RadioButton GroupName="SettingsAccent"
+                                                 Content="Amber"
+                                                 Margin="0,0,16,0"
+                                                 IsChecked="{Binding AccentTheme, Mode=TwoWay, Converter={x:Static conv:StringEqualityConverter.Instance}, ConverterParameter={x:Static s:AppUiSettings.AccentAmber}}"
+                                                 AutomationProperties.Name="Amber accent" />
+                                    <RadioButton GroupName="SettingsAccent"
+                                                 Content="Violet"
+                                                 IsChecked="{Binding AccentTheme, Mode=TwoWay, Converter={x:Static conv:StringEqualityConverter.Instance}, ConverterParameter={x:Static s:AppUiSettings.AccentViolet}}"
+                                                 AutomationProperties.Name="Violet accent" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Background="{DynamicResource CardBackgroundBrush}"
+                                BorderBrush="{DynamicResource CardBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="12"
+                                Padding="14">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Window material"
+                                           Foreground="{DynamicResource PrimaryTextBrush}"
+                                           FontSize="{DynamicResource FontSizeSubtitle}"
+                                           FontWeight="SemiBold" />
+                                <TextBlock Text="Let the operating system draw the window backdrop. Falls back to the normal opaque window when the system cannot composite the material."
+                                           Foreground="{DynamicResource MutedTextBrush}"
+                                           FontSize="{DynamicResource FontSizeBody}"
+                                           TextWrapping="Wrap" />
+                                <TextBlock Text="High contrast is on, so window materials stay off and the window remains fully opaque."
+                                           IsVisible="{Binding HighContrast}"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                           FontSize="{DynamicResource FontSizeBody}"
+                                           TextWrapping="Wrap" />
+                                <StackPanel Spacing="4" Orientation="Horizontal">
+                                    <RadioButton GroupName="SettingsWindowMaterial"
+                                                 Content="None"
+                                                 Margin="0,0,16,0"
+                                                 IsChecked="{Binding WindowMaterial, Mode=TwoWay, Converter={x:Static conv:StringEqualityConverter.Instance}, ConverterParameter={x:Static s:AppUiSettings.MaterialNone}}"
+                                                 IsEnabled="{Binding !HighContrast}"
+                                                 AutomationProperties.Name="No window material" />
+                                    <RadioButton GroupName="SettingsWindowMaterial"
+                                                 Content="Acrylic"
+                                                 Margin="0,0,16,0"
+                                                 IsChecked="{Binding WindowMaterial, Mode=TwoWay, Converter={x:Static conv:StringEqualityConverter.Instance}, ConverterParameter={x:Static s:AppUiSettings.MaterialAcrylic}}"
+                                                 IsEnabled="{Binding !HighContrast}"
+                                                 AutomationProperties.Name="Acrylic window material" />
+                                    <RadioButton GroupName="SettingsWindowMaterial"
+                                                 Content="Mica"
+                                                 IsChecked="{Binding WindowMaterial, Mode=TwoWay, Converter={x:Static conv:StringEqualityConverter.Instance}, ConverterParameter={x:Static s:AppUiSettings.MaterialMica}}"
+                                                 IsEnabled="{Binding !HighContrast}"
+                                                 AutomationProperties.Name="Mica window material" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Background="{DynamicResource CardBackgroundBrush}"
+                                BorderBrush="{DynamicResource CardBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="12"
+                                Padding="14">
+                            <StackPanel Spacing="10">
+                                <TextBlock Text="Transparency"
+                                           Foreground="{DynamicResource PrimaryTextBrush}"
+                                           FontSize="{DynamicResource FontSizeSubtitle}"
+                                           FontWeight="SemiBold" />
+                                <TextBlock Text="Lower a level to let the desktop show through. Applies immediately."
+                                           Foreground="{DynamicResource MutedTextBrush}"
+                                           FontSize="{DynamicResource FontSizeBody}"
+                                           TextWrapping="Wrap" />
+                                <TextBlock Text="High contrast is on, so surfaces stay fully opaque and these levels have no effect."
+                                           IsVisible="{Binding HighContrast}"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                           FontSize="{DynamicResource FontSizeBody}"
+                                           TextWrapping="Wrap" />
+                                <TextBlock Text="A window material is replacing the window background, so the Window level has no effect."
+                                           IsVisible="{Binding IsWindowMaterialSelected}"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                           FontSize="{DynamicResource FontSizeBody}"
+                                           TextWrapping="Wrap" />
+                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                                    <TextBlock Grid.Column="0"
+                                               Text="Window"
+                                               Foreground="{DynamicResource SecondaryTextBrush}"
+                                               FontSize="{DynamicResource FontSizeBody}"
+                                               VerticalAlignment="Center" />
+                                    <Slider Grid.Column="1"
+                                            Minimum="0.2"
+                                            Maximum="1"
+                                            Value="{Binding WindowOpacity, Mode=TwoWay}"
+                                            IsEnabled="{Binding !IsWindowOpacityInert}"
+                                            AutomationProperties.Name="Window transparency" />
+                                    <TextBlock Grid.Column="2"
+                                               Text="{Binding WindowOpacity, StringFormat='{}{0:P0}'}"
+                                               Foreground="{DynamicResource MutedTextBrush}"
+                                               FontSize="{DynamicResource FontSizeBody}"
+                                               Width="44"
+                                               TextAlignment="Right"
+                                               VerticalAlignment="Center" />
+                                </Grid>
+                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                                    <TextBlock Grid.Column="0"
+                                               Text="Cards"
+                                               Foreground="{DynamicResource SecondaryTextBrush}"
+                                               FontSize="{DynamicResource FontSizeBody}"
+                                               VerticalAlignment="Center" />
+                                    <Slider Grid.Column="1"
+                                            Minimum="0.2"
+                                            Maximum="1"
+                                            Value="{Binding CardOpacity, Mode=TwoWay}"
+                                            IsEnabled="{Binding !HighContrast}"
+                                            AutomationProperties.Name="Card transparency" />
+                                    <TextBlock Grid.Column="2"
+                                               Text="{Binding CardOpacity, StringFormat='{}{0:P0}'}"
+                                               Foreground="{DynamicResource MutedTextBrush}"
+                                               FontSize="{DynamicResource FontSizeBody}"
+                                               Width="44"
+                                               TextAlignment="Right"
+                                               VerticalAlignment="Center" />
+                                </Grid>
+                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                                    <TextBlock Grid.Column="0"
+                                               Text="Insets"
+                                               Foreground="{DynamicResource SecondaryTextBrush}"
+                                               FontSize="{DynamicResource FontSizeBody}"
+                                               VerticalAlignment="Center" />
+                                    <Slider Grid.Column="1"
+                                            Minimum="0.2"
+                                            Maximum="1"
+                                            Value="{Binding InsetOpacity, Mode=TwoWay}"
+                                            IsEnabled="{Binding !HighContrast}"
+                                            AutomationProperties.Name="Inset transparency" />
+                                    <TextBlock Grid.Column="2"
+                                               Text="{Binding InsetOpacity, StringFormat='{}{0:P0}'}"
+                                               Foreground="{DynamicResource MutedTextBrush}"
+                                               FontSize="{DynamicResource FontSizeBody}"
+                                               Width="44"
+                                               TextAlignment="Right"
+                                               VerticalAlignment="Center" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </TabItem>
+
+                <TabItem Header="Accessibility">
+                    <StackPanel Spacing="10" Margin="0,12,0,0">
+
+                        <Border Background="{DynamicResource CardBackgroundBrush}"
+                                BorderBrush="{DynamicResource CardBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="12"
+                                Padding="14">
+                            <StackPanel Spacing="10">
+                                <TextBlock Text="Text size"
+                                           Foreground="{DynamicResource PrimaryTextBrush}"
+                                           FontSize="{DynamicResource FontSizeSubtitle}"
+                                           FontWeight="SemiBold" />
+                                <TextBlock Text="Scale all reading text from 85% to 150%. Icon glyphs keep their size. Applies immediately."
+                                           Foreground="{DynamicResource MutedTextBrush}"
+                                           FontSize="{DynamicResource FontSizeBody}"
+                                           TextWrapping="Wrap" />
+                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
+                                    <TextBlock Grid.Column="0"
+                                               Text="Scale"
+                                               Foreground="{DynamicResource SecondaryTextBrush}"
+                                               FontSize="{DynamicResource FontSizeBody}"
+                                               VerticalAlignment="Center" />
+                                    <Slider Grid.Column="1"
+                                            Minimum="0.85"
+                                            Maximum="1.5"
+                                            SmallChange="0.05"
+                                            LargeChange="0.05"
+                                            Value="{Binding TextScale, Mode=TwoWay}"
+                                            AutomationProperties.Name="Text scale" />
+                                    <TextBlock Grid.Column="2"
+                                               Text="{Binding TextScale, StringFormat='{}{0:P0}'}"
+                                               Foreground="{DynamicResource MutedTextBrush}"
+                                               FontSize="{DynamicResource FontSizeBody}"
+                                               Width="44"
+                                               TextAlignment="Right"
+                                               VerticalAlignment="Center" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Background="{DynamicResource CardBackgroundBrush}"
+                                BorderBrush="{DynamicResource CardBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="12"
+                                Padding="14">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Motion"
+                                           Foreground="{DynamicResource PrimaryTextBrush}"
+                                           FontSize="{DynamicResource FontSizeSubtitle}"
+                                           FontWeight="SemiBold" />
+                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                                    <ToggleSwitch Grid.Column="0"
+                                                  IsChecked="{Binding ReduceMotion, Mode=TwoWay}"
+                                                  Content="Reduce motion"
+                                                  AutomationProperties.Name="Reduce motion" />
+                                    <TextBlock Grid.Column="1"
+                                               Text="Replace animations such as the scrollbar fade with instant changes."
+                                               Foreground="{DynamicResource MutedTextBrush}"
+                                               FontSize="{DynamicResource FontSizeBody}"
+                                               TextWrapping="Wrap"
+                                               VerticalAlignment="Center" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Background="{DynamicResource CardBackgroundBrush}"
+                                BorderBrush="{DynamicResource CardBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="12"
+                                Padding="14">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Contrast"
+                                           Foreground="{DynamicResource PrimaryTextBrush}"
+                                           FontSize="{DynamicResource FontSizeSubtitle}"
+                                           FontWeight="SemiBold" />
+                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                                    <ToggleSwitch Grid.Column="0"
+                                                  IsChecked="{Binding HighContrast, Mode=TwoWay}"
+                                                  Content="High contrast"
+                                                  AutomationProperties.Name="High contrast" />
+                                    <TextBlock Grid.Column="1"
+                                               Text="Use solid high-contrast surfaces, borders and text. Surfaces ignore transparency while this is on."
+                                               Foreground="{DynamicResource MutedTextBrush}"
+                                               FontSize="{DynamicResource FontSizeBody}"
+                                               TextWrapping="Wrap"
+                                               VerticalAlignment="Center" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </TabItem>
+
+                <TabItem Header="Behaviour">
+                    <StackPanel Spacing="10" Margin="0,12,0,0">
+                        <Border Background="{DynamicResource CardBackgroundBrush}"
+                                BorderBrush="{DynamicResource CardBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="12"
+                                Padding="14"
+                                HorizontalAlignment="Left"
+                                MinWidth="360">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Startup tab"
+                                           Foreground="{DynamicResource PrimaryTextBrush}"
+                                           FontSize="{DynamicResource FontSizeSubtitle}"
+                                           FontWeight="SemiBold" />
+                                <TextBlock Text="Choose which section the app opens on. Applies the next time the app starts; a tab hidden from the navigation rail falls back to Dashboard."
+                                           Foreground="{DynamicResource MutedTextBrush}"
+                                           FontSize="{DynamicResource FontSizeBody}"
+                                           TextWrapping="Wrap" />
+                                <StackPanel Spacing="4">
+                                    <RadioButton GroupName="SettingsStartupTab"
+                                                 Content="Dashboard"
+                                                 IsChecked="{Binding StartupTabKey, Mode=TwoWay, Converter={x:Static conv:StringEqualityConverter.Instance}, ConverterParameter={x:Static s:UiRailLayoutSettings.TabDashboard}}"
+                                                 AutomationProperties.Name="Start on Dashboard" />
+                                    <RadioButton GroupName="SettingsStartupTab"
+                                                 Content="Installed games"
+                                                 IsChecked="{Binding StartupTabKey, Mode=TwoWay, Converter={x:Static conv:StringEqualityConverter.Instance}, ConverterParameter={x:Static s:UiRailLayoutSettings.TabInstalledGames}}"
+                                                 AutomationProperties.Name="Start on Installed games" />
+                                    <RadioButton GroupName="SettingsStartupTab"
+                                                 Content="Profiles"
+                                                 IsChecked="{Binding StartupTabKey, Mode=TwoWay, Converter={x:Static conv:StringEqualityConverter.Instance}, ConverterParameter={x:Static s:UiRailLayoutSettings.TabProfiles}}"
+                                                 AutomationProperties.Name="Start on Profiles" />
+                                    <RadioButton GroupName="SettingsStartupTab"
+                                                 Content="Transfer preview"
+                                                 IsChecked="{Binding StartupTabKey, Mode=TwoWay, Converter={x:Static conv:StringEqualityConverter.Instance}, ConverterParameter={x:Static s:UiRailLayoutSettings.TabTransferPreview}}"
+                                                 AutomationProperties.Name="Start on Transfer preview" />
+                                    <RadioButton GroupName="SettingsStartupTab"
+                                                 Content="Manual backup"
+                                                 IsChecked="{Binding StartupTabKey, Mode=TwoWay, Converter={x:Static conv:StringEqualityConverter.Instance}, ConverterParameter={x:Static s:UiRailLayoutSettings.TabManualBackup}}"
+                                                 AutomationProperties.Name="Start on Manual backup" />
+                                    <RadioButton GroupName="SettingsStartupTab"
+                                                 Content="Backups"
+                                                 IsChecked="{Binding StartupTabKey, Mode=TwoWay, Converter={x:Static conv:StringEqualityConverter.Instance}, ConverterParameter={x:Static s:UiRailLayoutSettings.TabBackups}}"
+                                                 AutomationProperties.Name="Start on Backups" />
+                                    <RadioButton GroupName="SettingsStartupTab"
+                                                 Content="Sync"
+                                                 IsChecked="{Binding StartupTabKey, Mode=TwoWay, Converter={x:Static conv:StringEqualityConverter.Instance}, ConverterParameter={x:Static s:UiRailLayoutSettings.TabSync}}"
+                                                 AutomationProperties.Name="Start on Sync" />
+                                    <RadioButton GroupName="SettingsStartupTab"
+                                                 Content="History"
+                                                 IsChecked="{Binding StartupTabKey, Mode=TwoWay, Converter={x:Static conv:StringEqualityConverter.Instance}, ConverterParameter={x:Static s:UiRailLayoutSettings.TabHistory}}"
+                                                 AutomationProperties.Name="Start on History" />
+                                    <RadioButton GroupName="SettingsStartupTab"
+                                                 Content="Settings"
+                                                 IsChecked="{Binding StartupTabKey, Mode=TwoWay, Converter={x:Static conv:StringEqualityConverter.Instance}, ConverterParameter={x:Static s:UiRailLayoutSettings.TabSettings}}"
+                                                 AutomationProperties.Name="Start on Settings" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </TabItem>
+
+                <TabItem Header="Layout">
+                    <StackPanel Spacing="10" Margin="0,12,0,0">
+                        <Border Background="{DynamicResource CardBackgroundBrush}"
+                                BorderBrush="{DynamicResource CardBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="12"
+                                Padding="14"
+                                HorizontalAlignment="Left"
+                                MinWidth="320">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Installed games columns"
+                                           Foreground="{DynamicResource PrimaryTextBrush}"
+                                           FontSize="{DynamicResource FontSizeSubtitle}"
+                                           FontWeight="SemiBold" />
+                                <TextBlock Text="Choose the columns shown in Installed games. Drag table headers there to reorder them."
+                                           Foreground="{DynamicResource MutedTextBrush}"
+                                           FontSize="{DynamicResource FontSizeBody}"
+                                           TextWrapping="Wrap" />
+                                <ItemsControl ItemsSource="{Binding InstalledGames.ColumnOptions}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="models:InstalledGameColumnOption">
+                                            <CheckBox Content="{Binding Header}"
+                                                      IsChecked="{Binding IsVisible, Mode=TwoWay}"
+                                                      AutomationProperties.Name="{Binding Header, StringFormat='Show {0} column'}" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Background="{DynamicResource CardBackgroundBrush}"
+                                BorderBrush="{DynamicResource CardBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="12"
+                                Padding="14"
+                                HorizontalAlignment="Left"
+                                MinWidth="360">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Navigation rail"
+                                           Foreground="{DynamicResource PrimaryTextBrush}"
+                                           FontSize="{DynamicResource FontSizeSubtitle}"
+                                           FontWeight="SemiBold" />
+                                <TextBlock Text="Choose where the navigation rail sits and which tabs it shows. Ctrl+1..9 always follow the original tab order, and a hidden tab's shortcut does nothing."
+                                           Foreground="{DynamicResource MutedTextBrush}"
+                                           FontSize="{DynamicResource FontSizeBody}"
+                                           TextWrapping="Wrap" />
+
+                                <TextBlock Text="Position"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                           FontSize="{DynamicResource FontSizeBody}" />
+                                <StackPanel Spacing="4" Orientation="Horizontal">
+                                    <RadioButton GroupName="SettingsRailPosition"
+                                                 Content="Left"
+                                                 Margin="0,0,16,0"
+                                                 IsChecked="{Binding RailPosition, Mode=TwoWay, Converter={x:Static conv:StringEqualityConverter.Instance}, ConverterParameter={x:Static s:UiRailLayoutSettings.PositionLeft}}"
+                                                 AutomationProperties.Name="Left rail position" />
+                                    <RadioButton GroupName="SettingsRailPosition"
+                                                 Content="Right"
+                                                 Margin="0,0,16,0"
+                                                 IsChecked="{Binding RailPosition, Mode=TwoWay, Converter={x:Static conv:StringEqualityConverter.Instance}, ConverterParameter={x:Static s:UiRailLayoutSettings.PositionRight}}"
+                                                 AutomationProperties.Name="Right rail position" />
+                                    <RadioButton GroupName="SettingsRailPosition"
+                                                 Content="Top"
+                                                 IsChecked="{Binding RailPosition, Mode=TwoWay, Converter={x:Static conv:StringEqualityConverter.Instance}, ConverterParameter={x:Static s:UiRailLayoutSettings.PositionTop}}"
+                                                 AutomationProperties.Name="Top rail position" />
+                                </StackPanel>
+
+                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                                    <ToggleSwitch Grid.Column="0"
+                                                  IsChecked="{Binding RailCollapsed, Mode=TwoWay}"
+                                                  Content="Collapse to icons"
+                                                  AutomationProperties.Name="Collapse navigation rail" />
+                                    <TextBlock Grid.Column="1"
+                                               Text="Show only the tab icons in a narrow strip. Use the menu button at the top of the rail to expand it again."
+                                               Foreground="{DynamicResource MutedTextBrush}"
+                                               FontSize="{DynamicResource FontSizeBody}"
+                                               TextWrapping="Wrap"
+                                               VerticalAlignment="Center" />
+                                </Grid>
+
+                                <TextBlock Text="Tabs"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                           FontSize="{DynamicResource FontSizeBody}"
+                                           Margin="0,4,0,0" />
+                                <ItemsControl ItemsSource="{Binding RailTabs}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="models:RailTabOption">
+                                            <Grid ColumnDefinitions="180,Auto,Auto" ColumnSpacing="4">
+                                                <CheckBox Grid.Column="0"
+                                                          Content="{Binding Header}"
+                                                          IsChecked="{Binding IsVisible, Mode=TwoWay}"
+                                                          IsEnabled="{Binding CanHide}"
+                                                          AutomationProperties.Name="{Binding Header, StringFormat='Show {0} tab'}" />
+                                                <Button Grid.Column="1"
+                                                        Classes="iconButton"
+                                                        MinWidth="24"
+                                                        MinHeight="24"
+                                                        Command="{Binding $parent[UserControl].((vm:SettingsViewModel)DataContext).MoveRailTabUpCommand}"
+                                                        CommandParameter="{Binding Key}"
+                                                        IsEnabled="{Binding CanMoveUp}"
+                                                        AutomationProperties.Name="{Binding Header, StringFormat='Move {0} tab up'}"
+                                                        ToolTip.Tip="Move up">
+                                                    <TextBlock Text="&#xE70E;"
+                                                               FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                                                               FontSize="12"
+                                                               Foreground="{DynamicResource MutedTextBrush}" />
+                                                </Button>
+                                                <Button Grid.Column="2"
+                                                        Classes="iconButton"
+                                                        MinWidth="24"
+                                                        MinHeight="24"
+                                                        Command="{Binding $parent[UserControl].((vm:SettingsViewModel)DataContext).MoveRailTabDownCommand}"
+                                                        CommandParameter="{Binding Key}"
+                                                        IsEnabled="{Binding CanMoveDown}"
+                                                        AutomationProperties.Name="{Binding Header, StringFormat='Move {0} tab down'}"
+                                                        ToolTip.Tip="Move down">
+                                                    <TextBlock Text="&#xE70D;"
+                                                               FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                                                               FontSize="12"
+                                                               Foreground="{DynamicResource MutedTextBrush}" />
+                                                </Button>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <TextBlock Text="Dashboard and Settings always stay in the navigation rail, so the rail is never empty and the settings page itself stays reachable."
+                                           Foreground="{DynamicResource MutedTextBrush}"
+                                           FontSize="{DynamicResource FontSizeBody}"
+                                           TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Background="{DynamicResource CardBackgroundBrush}"
+                                BorderBrush="{DynamicResource CardBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="12"
+                                Padding="14"
+                                HorizontalAlignment="Left"
+                                MinWidth="360">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Workspace layouts"
+                                           Foreground="{DynamicResource PrimaryTextBrush}"
+                                           FontSize="{DynamicResource FontSizeSubtitle}"
+                                           FontWeight="SemiBold" />
+                                <TextBlock Text="Save where your detached windows sit, then apply a layout to return to it. Layouts are never applied automatically when the app starts, and applying one changes only detached windows — never the rail, columns, or theme."
+                                           Foreground="{DynamicResource MutedTextBrush}"
+                                           FontSize="{DynamicResource FontSizeBody}"
+                                           TextWrapping="Wrap" />
+                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                    <TextBox Grid.Column="0"
+                                             Text="{Binding NewLayoutName, Mode=TwoWay}"
+                                             PlaceholderText="Name this layout"
+                                             MaxLength="40"
+                                             AutomationProperties.Name="Workspace layout name"
+                                             ToolTip.Tip="A name for where your detached windows currently sit" />
+                                    <Button Grid.Column="1"
+                                            Classes="primary"
+                                            Content="Save current layout"
+                                            Command="{Binding SaveWorkspaceLayoutCommand}"
+                                            AutomationProperties.Name="Save current layout" />
+                                </Grid>
+                                <ItemsControl ItemsSource="{Binding WorkspaceLayouts}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="s:UiWorkspaceLayoutSettings">
+                                            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                                                <TextBlock Grid.Column="0"
+                                                           Text="{Binding Name}"
+                                                           Foreground="{DynamicResource PrimaryTextBrush}"
+                                                           FontSize="{DynamicResource FontSizeBody}"
+                                                           VerticalAlignment="Center" />
+                                                <Button Grid.Column="1"
+                                                        Content="Apply"
+                                                        Command="{Binding $parent[UserControl].((vm:SettingsViewModel)DataContext).ApplyWorkspaceLayoutCommand}"
+                                                        CommandParameter="{Binding Name}"
+                                                        AutomationProperties.Name="{Binding Name, StringFormat='Apply {0} layout'}" />
+                                                <Button Grid.Column="2"
+                                                        Content="Delete"
+                                                        Command="{Binding $parent[UserControl].((vm:SettingsViewModel)DataContext).DeleteWorkspaceLayoutCommand}"
+                                                        CommandParameter="{Binding Name}"
+                                                        AutomationProperties.Name="{Binding Name, StringFormat='Delete {0} layout'}" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <TextBlock Text="No layouts saved yet. Detach a tab with the button in its rail entry, arrange the windows, then save where they sit."
+                                           IsVisible="{Binding !HasWorkspaceLayouts}"
+                                           Foreground="{DynamicResource MutedTextBrush}"
+                                           FontSize="{DynamicResource FontSizeBody}"
+                                           TextWrapping="Wrap" />
+                                <StackPanel Spacing="8" Orientation="Horizontal">
+                                    <Button Content="Export"
+                                            Command="{Binding ExportWorkspaceLayoutsCommand}"
+                                            AutomationProperties.Name="Export layouts"
+                                            ToolTip.Tip="Save all layouts to a JSON file" />
+                                    <Button Content="Import"
+                                            Command="{Binding ImportWorkspaceLayoutsCommand}"
+                                            AutomationProperties.Name="Import layouts"
+                                            ToolTip.Tip="Load layouts from a JSON file" />
+                                    <Button Content="{Binding ResetWorkspaceText}"
+                                            Command="{Binding ResetWorkspaceCommand}"
+                                            AutomationProperties.Name="Reset workspace"
+                                            ToolTip.Tip="Reattach every window and clear the saved layouts" />
+                                </StackPanel>
+                                <TextBlock Text="{Binding WorkspaceStatus}"
+                                           IsVisible="{Binding HasWorkspaceStatus}"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                           FontSize="{DynamicResource FontSizeBody}"
+                                           TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </TabItem>
+
+                <TabItem Header="Providers">
+                    <StackPanel Spacing="10" Margin="0,12,0,0">
+                        <Border Background="{DynamicResource CardBackgroundBrush}"
+                                BorderBrush="{DynamicResource CardBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="12"
+                                Padding="14"
+                                HorizontalAlignment="Left"
+                                MinWidth="360">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Sync providers"
+                                           Foreground="{DynamicResource PrimaryTextBrush}"
+                                           FontSize="{DynamicResource FontSizeSubtitle}"
+                                           FontWeight="SemiBold" />
+                                <TextBlock Text="The providers this version of the app can synchronize through. Configure sync providers in the Sync tab."
+                                           Foreground="{DynamicResource MutedTextBrush}"
+                                           FontSize="{DynamicResource FontSizeBody}"
+                                           TextWrapping="Wrap" />
+                                <ItemsControl ItemsSource="{Binding ProviderStatuses}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="models:ProviderStatusOption">
+                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                                                <TextBlock Grid.Column="0"
+                                                           Text="{Binding Name}"
+                                                           Foreground="{DynamicResource PrimaryTextBrush}"
+                                                           FontSize="{DynamicResource FontSizeBody}"
+                                                           VerticalAlignment="Center"
+                                                           AutomationProperties.Name="{Binding Name, StringFormat='Provider {0}'}" />
+                                                <TextBlock Grid.Column="1"
+                                                           Text="{Binding Status}"
+                                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                                           FontSize="{DynamicResource FontSizeBody}"
+                                                           VerticalAlignment="Center" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </TabItem>
+
+                <TabItem Header="Data">
+                    <StackPanel Spacing="10" Margin="0,12,0,0">
+                        <Border Background="{DynamicResource CardBackgroundBrush}"
+                                BorderBrush="{DynamicResource CardBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="12"
+                                Padding="14">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Data locations"
+                                           Foreground="{DynamicResource PrimaryTextBrush}"
+                                           FontSize="{DynamicResource FontSizeSubtitle}"
+                                           FontWeight="SemiBold" />
+                                <TextBlock Text="Where this app keeps its database and settings files on this computer. Read-only information."
+                                           Foreground="{DynamicResource MutedTextBrush}"
+                                           FontSize="{DynamicResource FontSizeBody}"
+                                           TextWrapping="Wrap" />
+                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                                    <TextBlock Grid.Column="0"
+                                               Text="Database"
+                                               Foreground="{DynamicResource SecondaryTextBrush}"
+                                               FontSize="{DynamicResource FontSizeBody}"
+                                               VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="1"
+                                               Text="{Binding DatabasePath}"
+                                               Foreground="{DynamicResource MutedTextBrush}"
+                                               FontSize="{DynamicResource FontSizeBody}"
+                                               TextTrimming="PrefixCharacterEllipsis"
+                                               VerticalAlignment="Center"
+                                               AutomationProperties.Name="Database location" />
+                                </Grid>
+                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                                    <TextBlock Grid.Column="0"
+                                               Text="Interface settings"
+                                               Foreground="{DynamicResource SecondaryTextBrush}"
+                                               FontSize="{DynamicResource FontSizeBody}"
+                                               VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="1"
+                                               Text="{Binding UiSettingsPath}"
+                                               Foreground="{DynamicResource MutedTextBrush}"
+                                               FontSize="{DynamicResource FontSizeBody}"
+                                               TextTrimming="PrefixCharacterEllipsis"
+                                               VerticalAlignment="Center"
+                                               AutomationProperties.Name="Interface settings location" />
+                                </Grid>
+                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                                    <TextBlock Grid.Column="0"
+                                               Text="Sync settings"
+                                               Foreground="{DynamicResource SecondaryTextBrush}"
+                                               FontSize="{DynamicResource FontSizeBody}"
+                                               VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="1"
+                                               Text="{Binding SyncSettingsPath}"
+                                               Foreground="{DynamicResource MutedTextBrush}"
+                                               FontSize="{DynamicResource FontSizeBody}"
+                                               TextTrimming="PrefixCharacterEllipsis"
+                                               VerticalAlignment="Center"
+                                               AutomationProperties.Name="Sync settings location" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </TabItem>
+
+                <TabItem Header="Diagnostics">
+                    <StackPanel Spacing="10" Margin="0,12,0,0">
+                        <Border Background="{DynamicResource CardBackgroundBrush}"
+                                BorderBrush="{DynamicResource CardBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="12"
+                                Padding="14"
+                                HorizontalAlignment="Left"
+                                MinWidth="360">
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="Diagnostics"
+                                           Foreground="{DynamicResource PrimaryTextBrush}"
+                                           FontSize="{DynamicResource FontSizeSubtitle}"
+                                           FontWeight="SemiBold" />
+                                <TextBlock Text="{Binding ApplicationVersion, StringFormat='App version: {0}'}"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                           FontSize="{DynamicResource FontSizeBody}"
+                                           AutomationProperties.Name="App version" />
+                                <TextBlock Text="{Binding Platform, StringFormat='Platform: {0}'}"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                           FontSize="{DynamicResource FontSizeBody}"
+                                           AutomationProperties.Name="Platform" />
+                                <TextBlock Text="{Binding OperatingSystemVersion, StringFormat='Operating system: {0}'}"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                           FontSize="{DynamicResource FontSizeBody}"
+                                           TextTrimming="CharacterEllipsis"
+                                           AutomationProperties.Name="Operating system" />
+                                <TextBlock Text="{Binding RuntimeDescription, StringFormat='Runtime: {0}'}"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                           FontSize="{DynamicResource FontSizeBody}"
+                                           TextTrimming="CharacterEllipsis"
+                                           AutomationProperties.Name="Runtime" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </TabItem>
+            </TabControl>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

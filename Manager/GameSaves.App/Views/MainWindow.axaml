@@ -1,7 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:GameSaves.App.ViewModels"
-        xmlns:models="using:GameSaves.App.Models"
         xmlns:views="using:GameSaves.App.Views"
         x:Class="GameSaves.App.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
@@ -12,6 +11,25 @@
         MinHeight="600"
         Background="{DynamicResource PageBackgroundBrush}">
 
+	<!-- Keyboard shortcuts. Ctrl+1..9 jump to the rail's original tab order
+	     (a detached tab surfaces its floating window; a hidden tab's slot
+	     does nothing, so slot numbers never shift meaning); Ctrl+Comma opens
+	     Settings. Gestures live here so they stay reviewable; the commands
+	     are attached in code-behind, where the navigation control and the
+	     detach coordinator live. Ctrl+D1 is the top-row digit. -->
+	<Window.KeyBindings>
+		<KeyBinding Gesture="Ctrl+D1" CommandParameter="1" />
+		<KeyBinding Gesture="Ctrl+D2" CommandParameter="2" />
+		<KeyBinding Gesture="Ctrl+D3" CommandParameter="3" />
+		<KeyBinding Gesture="Ctrl+D4" CommandParameter="4" />
+		<KeyBinding Gesture="Ctrl+D5" CommandParameter="5" />
+		<KeyBinding Gesture="Ctrl+D6" CommandParameter="6" />
+		<KeyBinding Gesture="Ctrl+D7" CommandParameter="7" />
+		<KeyBinding Gesture="Ctrl+D8" CommandParameter="8" />
+		<KeyBinding Gesture="Ctrl+D9" CommandParameter="9" />
+		<KeyBinding Gesture="Ctrl+OemComma" />
+	</Window.KeyBindings>
+
 	<Window.Styles>
 		<!-- Navigation rail: compact icon+label rows on the left edge. -->
 		<Style Selector="TabControl#MainNavigation">
@@ -19,11 +37,14 @@
 		</Style>
 		<Style Selector="TabControl#MainNavigation TabItem">
 			<Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}" />
-			<Setter Property="FontSize" Value="14" />
+			<Setter Property="FontSize" Value="{DynamicResource FontSizeBodyLarge}" />
 			<Setter Property="FontWeight" Value="Medium" />
 			<Setter Property="Padding" Value="12,8" />
 			<Setter Property="Margin" Value="8,1" />
-			<Setter Property="MinHeight" Value="36" />
+			<!-- Fixed height, not MinHeight: the Fluent selected state renders
+			     the pill taller, which reflowed the whole rail by 2-4px on
+			     every view change (critic round 27). -->
+			<Setter Property="Height" Value="38" />
 			<Setter Property="CornerRadius" Value="8" />
 		</Style>
 		<Style Selector="TabControl#MainNavigation TabItem /template/ Border#PART_LayoutRoot">
@@ -46,6 +67,26 @@
 		<Style Selector="Window.compactNav TabControl#MainNavigation TabItem">
 			<Setter Property="Padding" Value="10,8" />
 		</Style>
+
+		<!-- Collapsed rail (the Settings collapse toggle): a glyph-only strip
+		     roughly 48px wide. The detach button hides with the label —
+		     detach stays reachable through the tab context menu — and the
+		     header ToolTips keep carrying the tab names. Declared after the
+		     compactNav styles so a window that is both narrow and collapsed
+		     takes the narrower collapsed geometry. -->
+		<Style Selector="Window.railCollapsed TabControl#MainNavigation">
+			<Setter Property="Padding" Value="2,10,2,10" />
+		</Style>
+		<Style Selector="Window.railCollapsed TabControl#MainNavigation TabItem">
+			<Setter Property="Padding" Value="12,8" />
+			<Setter Property="Margin" Value="4,1" />
+		</Style>
+		<Style Selector="Window.railCollapsed TabControl#MainNavigation TabItem TextBlock.navLabel">
+			<Setter Property="IsVisible" Value="False" />
+		</Style>
+		<Style Selector="Window.railCollapsed TabControl#MainNavigation TabItem Button.navDetach">
+			<Setter Property="IsVisible" Value="False" />
+		</Style>
 		<Style Selector="TabControl#MainNavigation TabItem TextBlock.navGlyph">
 			<Setter Property="FontFamily" Value="Segoe Fluent Icons, Segoe MDL2 Assets" />
 			<Setter Property="FontSize" Value="16" />
@@ -55,10 +96,14 @@
 			<Setter Property="VerticalAlignment" Value="Center" />
 		</Style>
 
+		<!-- Detach button styles moved to Themes/Controls.axaml so the base
+		     chrome and the :focus-visible ring (which rebalances padding to
+		     keep the box pixel-stable) live in one place. -->
+
 		<!-- Dashboard stat values: neutral at zero, coloured only when the
 		     number carries real state. -->
 		<Style Selector="TextBlock.statValue">
-			<Setter Property="FontSize" Value="32" />
+			<Setter Property="FontSize" Value="{DynamicResource FontSizeStat}" />
 			<Setter Property="FontWeight" Value="Bold" />
 			<Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
 		</Style>
@@ -100,106 +145,74 @@
                                Foreground="{DynamicResource BrandBrush}" />
 					<TextBlock Text="Game Save Manager"
                                Foreground="{DynamicResource PrimaryTextBrush}"
-                               FontSize="15"
+                               FontSize="{DynamicResource FontSizeSubheading}"
                                FontWeight="SemiBold"
                                VerticalAlignment="Center" />
 				</StackPanel>
 
-				<Button Grid.Column="1"
+					<Button Grid.Column="1"
                         x:Name="SettingsButton"
-                        Background="Transparent"
-                        BorderThickness="0"
-                        Padding="8"
-                        CornerRadius="8"
+                        Classes="iconButton"
+                        Click="OnSettingsClicked"
                         AutomationProperties.Name="Settings"
-                        ToolTip.Tip="Settings">
-					<TextBlock Text="&#xE713;"
+                        ToolTip.Tip="Settings (Ctrl+Comma)">
+						<TextBlock Text="&#xE713;"
                                FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
                                FontSize="16"
                                Foreground="{DynamicResource SecondaryTextBrush}" />
-					<Button.Flyout>
-						<Flyout Placement="BottomEdgeAlignedRight">
-							<ScrollViewer MaxHeight="500"
-                                              VerticalScrollBarVisibility="Auto">
-								<StackPanel Spacing="10" Width="240" Margin="4">
-								<TextBlock Text="Appearance"
-                                           Foreground="{DynamicResource PrimaryTextBrush}"
-                                           FontSize="13"
-                                           FontWeight="SemiBold" />
-								<StackPanel Spacing="4">
-									<RadioButton x:Name="ThemeSystemRadio"
-                                                 GroupName="Theme"
-                                                 Content="Use system theme"
-                                                 IsChecked="True"
-                                                 IsCheckedChanged="OnThemeChoiceChanged" />
-									<RadioButton x:Name="ThemeLightRadio"
-                                                 GroupName="Theme"
-                                                 Content="Light"
-                                                 IsCheckedChanged="OnThemeChoiceChanged" />
-									<RadioButton x:Name="ThemeDarkRadio"
-                                                 GroupName="Theme"
-                                                 Content="Dark"
-                                                 IsCheckedChanged="OnThemeChoiceChanged" />
-								</StackPanel>
-								<Border Height="1" Background="{DynamicResource SubtleBorderBrush}" />
-								<StackPanel Spacing="4">
-									<TextBlock Text="Installed games columns"
-                                           Foreground="{DynamicResource PrimaryTextBrush}"
-                                           FontSize="13"
-                                           FontWeight="SemiBold" />
-									<TextBlock Text="Drag table headers to reorder them."
-                                           Foreground="{DynamicResource MutedTextBrush}"
-                                           FontSize="12"
-                                           TextWrapping="Wrap" />
-									<ItemsControl ItemsSource="{Binding InstalledGames.ColumnOptions}">
-										<ItemsControl.ItemTemplate>
-											<DataTemplate x:DataType="models:InstalledGameColumnOption">
-												<CheckBox Content="{Binding Header}"
-                                                          IsChecked="{Binding IsVisible, Mode=TwoWay}"
-                                                          AutomationProperties.Name="{Binding Header, StringFormat='Show {0} column'}" />
-											</DataTemplate>
-										</ItemsControl.ItemTemplate>
-									</ItemsControl>
-								</StackPanel>
-								<Border Height="1" Background="{DynamicResource SubtleBorderBrush}" />
-								<StackPanel Spacing="2">
-									<TextBlock Text="About"
-                                           Foreground="{DynamicResource PrimaryTextBrush}"
-                                           FontSize="13"
-                                           FontWeight="SemiBold" />
-									<TextBlock Text="{Binding Platform, StringFormat='Platform: {0}'}"
-                                           Foreground="{DynamicResource SecondaryTextBrush}"
-                                           FontSize="12" />
-									<TextBlock Text="{Binding DatabasePath}"
-                                           Foreground="{DynamicResource MutedTextBrush}"
-                                           FontSize="12"
-                                           TextWrapping="Wrap" />
-								</StackPanel>
-								</StackPanel>
-							</ScrollViewer>
-						</Flyout>
-					</Button.Flyout>
-				</Button>
+					</Button>
 			</Grid>
 		</Border>
 
 		<!-- Navigation rail plus content. The TabControl keeps every section
 		     alive so section state survives navigation, exactly as the old
-		     top tab strip did. -->
-		<TabControl Grid.Row="1"
-                    x:Name="MainNavigation"
-                    TabStripPlacement="Left"
-                    Padding="16,10,16,16">
+		     top tab strip did. The expand button shares the rail's column
+		     and is visible only while the rail is collapsed (it is bound to
+		     the collapse state), so the default layout renders unchanged. -->
+		<Grid Grid.Row="1" RowDefinitions="Auto,*">
 
-			<TabItem>
+			<Button x:Name="ExpandNavigationButton"
+			        Grid.Row="0"
+			        Classes="iconButton"
+			        Click="OnExpandNavigationClicked"
+			        IsVisible="{Binding Settings.RailCollapsed}"
+			        HorizontalAlignment="Left"
+			        Margin="10,8,0,0"
+			        AutomationProperties.Name="Expand navigation"
+			        ToolTip.Tip="Show the navigation labels again">
+				<TextBlock Text="&#xE700;"
+				           FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+				           FontSize="16"
+				           Foreground="{DynamicResource SecondaryTextBrush}" />
+			</Button>
+
+			<TabControl Grid.Row="1"
+	                    x:Name="MainNavigation"
+	                    TabStripPlacement="Left">
+
+			<TabItem AutomationProperties.Name="Dashboard">
+				<TabItem.ContextMenu>
+					<ContextMenu>
+						<MenuItem Header="Detach tab"
+						          Click="OnTabDetachMenuClicked"
+						          AutomationProperties.Name="Detach tab" />
+					</ContextMenu>
+				</TabItem.ContextMenu>
 				<TabItem.Header>
-					<StackPanel Orientation="Horizontal" Spacing="10" ToolTip.Tip="Dashboard">
+					<StackPanel Orientation="Horizontal" Spacing="10" ToolTip.Tip="Dashboard (Ctrl+1)">
 						<TextBlock Classes="navGlyph" Text="&#xE80F;" />
 						<TextBlock Classes="navLabel" Text="Dashboard" />
+						<Button Classes="navDetach"
+						        Click="OnTabDetachClicked"
+        AutomationProperties.Name="Detach Dashboard"
+							        AutomationProperties.HelpText="Detaches this tab into a separate window; close the window to reattach"
+							        ToolTip.Tip="Move this tab to its own window">
+							<TextBlock Text="&#xE8A7;" />
+						</Button>
 					</StackPanel>
 				</TabItem.Header>
-				<ScrollViewer VerticalContentAlignment="Stretch">
-					<StackPanel Spacing="14" MaxWidth="1100">
+				<ScrollViewer Classes="pageScroll" VerticalContentAlignment="Stretch">
+					<StackPanel Spacing="10" MaxWidth="1100" Margin="0,12,0,14">
 
 						<Border Background="{DynamicResource CardBackgroundBrush}"
                                 BorderBrush="{DynamicResource CardBorderBrush}"
@@ -209,12 +222,14 @@
 							<Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
 								<StackPanel Grid.Column="0" Spacing="2">
 									<TextBlock Text="Dashboard" Classes="h1" />
-									<TextBlock Foreground="{DynamicResource SecondaryTextBrush}"
-                                               FontSize="12"
-                                               TextWrapping="Wrap">
-                                        <Run Text="Your Steam library and save mappings at a glance. " />
-                                        <Run Text="{Binding StatusMessage}" />
-                                    </TextBlock>
+									<TextBlock Text="Your Steam library and save mappings at a glance."
+                                               Foreground="{DynamicResource SecondaryTextBrush}"
+                                               FontSize="{DynamicResource FontSizeBody}"
+                                               TextWrapping="Wrap" />
+									<TextBlock Text="{Binding StatusMessage}"
+                                               Foreground="{DynamicResource MutedTextBrush}"
+                                               FontSize="{DynamicResource FontSizeBody}"
+                                               TextWrapping="Wrap" />
 								</StackPanel>
 								<Button Grid.Column="1"
                                         Content="Scan Steam library"
@@ -231,7 +246,7 @@
                                 Background="{DynamicResource WarningTintBrush}"
                                 BorderBrush="{DynamicResource WarningEdgeBrush}"
                                 BorderThickness="1"
-                                CornerRadius="10"
+                                CornerRadius="12"
                                 Padding="12,8">
 							<Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
 								<TextBlock Grid.Column="0"
@@ -243,11 +258,11 @@
 								<StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
 									<TextBlock Text="Steam was not found on this computer"
                                                Foreground="{DynamicResource PrimaryTextBrush}"
-                                               FontSize="14"
+                                               FontSize="{DynamicResource FontSizeBodyLarge}"
                                                FontWeight="SemiBold" />
 									<TextBlock Text="Game discovery, profiles and backups need a Steam installation. Install Steam, or scan again if it was just installed."
                                                Foreground="{DynamicResource SecondaryTextBrush}"
-                                               FontSize="12"
+                                               FontSize="{DynamicResource FontSizeBody}"
                                                MaxWidth="760"
                                                HorizontalAlignment="Left"
                                                TextWrapping="Wrap" />
@@ -262,7 +277,7 @@
                                 BorderBrush="{DynamicResource CardBorderBrush}"
                                 BorderThickness="1"
                                 CornerRadius="16"
-                                Padding="24">
+                                Padding="18">
 							<StackPanel Spacing="14">
 								<TextBlock MaxWidth="640" HorizontalAlignment="Left" Text="Get set up"
                                            Foreground="{DynamicResource PrimaryTextBrush}"
@@ -271,11 +286,11 @@
 								<StackPanel Spacing="10" MaxWidth="640" HorizontalAlignment="Left">
 									<Grid ColumnDefinitions="Auto,*" ColumnSpacing="10" MinHeight="32">
 										<TextBlock Text="1" Width="22" TextAlignment="Center" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center" />
-										<TextBlock Grid.Column="1" Text="Install Steam and sign in." Foreground="{DynamicResource PrimaryTextBrush}" FontSize="13" VerticalAlignment="Center" />
+										<TextBlock Grid.Column="1" Text="Install Steam and sign in." Foreground="{DynamicResource PrimaryTextBrush}" FontSize="{DynamicResource FontSizeSubtitle}" VerticalAlignment="Center" />
 									</Grid>
 									<Grid ColumnDefinitions="Auto,*" ColumnSpacing="10" MinHeight="32">
 										<TextBlock Text="2" Width="22" TextAlignment="Center" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center" />
-										<TextBlock Grid.Column="1" Text="Scan to discover your libraries, games and profiles." Foreground="{DynamicResource PrimaryTextBrush}" FontSize="13" VerticalAlignment="Center" />
+										<TextBlock Grid.Column="1" Text="Scan to discover your libraries, games and profiles." Foreground="{DynamicResource PrimaryTextBrush}" FontSize="{DynamicResource FontSizeSubtitle}" VerticalAlignment="Center" />
 									</Grid>
 									<Button Content="Scan Steam library"
                                             Classes="primary"
@@ -285,12 +300,12 @@
                                             HorizontalAlignment="Left" />
 									<Grid ColumnDefinitions="Auto,*" ColumnSpacing="10" MinHeight="32">
 										<TextBlock Text="3" Width="22" TextAlignment="Center" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center" />
-										<TextBlock Grid.Column="1" Text="Create your first backup from the Manual backup section." Foreground="{DynamicResource PrimaryTextBrush}" FontSize="13" VerticalAlignment="Center" />
+										<TextBlock Grid.Column="1" Text="Create your first backup from the Manual backup section." Foreground="{DynamicResource PrimaryTextBrush}" FontSize="{DynamicResource FontSizeSubtitle}" VerticalAlignment="Center" />
 									</Grid>
 								</StackPanel>
 								<TextBlock Text="Every backup is copy-only: nothing is ever overwritten or deleted."
                                            Foreground="{DynamicResource SecondaryTextBrush}"
-                                           FontSize="12" />
+                                           FontSize="{DynamicResource FontSizeBody}" />
 							</StackPanel>
 						</Border>
 
@@ -312,7 +327,7 @@
 								<StackPanel Spacing="8">
 									<TextBlock Text="Libraries"
                                                Foreground="{DynamicResource SecondaryTextBrush}"
-                                               FontSize="13"
+                                               FontSize="{DynamicResource FontSizeSubtitle}"
                                                TextWrapping="Wrap" />
 
 									<TextBlock Text="{Binding LibraryCount}"
@@ -333,7 +348,7 @@
 								<StackPanel Spacing="8">
 									<TextBlock Text="Installed games"
                                                Foreground="{DynamicResource SecondaryTextBrush}"
-                                               FontSize="13"
+                                               FontSize="{DynamicResource FontSizeSubtitle}"
                                                TextWrapping="Wrap" />
 
 									<TextBlock Text="{Binding InstalledGameCount}"
@@ -354,7 +369,7 @@
 								<StackPanel Spacing="8">
 									<TextBlock Text="Steam profiles"
                                                Foreground="{DynamicResource SecondaryTextBrush}"
-                                               FontSize="13"
+                                               FontSize="{DynamicResource FontSizeSubtitle}"
                                                TextWrapping="Wrap" />
 
 									<TextBlock Text="{Binding SteamProfileCount}"
@@ -375,7 +390,7 @@
 								<StackPanel Spacing="8">
 									<TextBlock Text="Approved mappings"
                                                Foreground="{DynamicResource SecondaryTextBrush}"
-                                               FontSize="13"
+                                               FontSize="{DynamicResource FontSizeSubtitle}"
                                                TextWrapping="Wrap" />
 
 									<TextBlock Text="{Binding ApprovedMappingCount}"
@@ -396,7 +411,7 @@
 								<StackPanel Spacing="8">
 									<TextBlock Text="Pending mappings"
                                                Foreground="{DynamicResource SecondaryTextBrush}"
-                                               FontSize="13"
+                                               FontSize="{DynamicResource FontSizeSubtitle}"
                                                TextWrapping="Wrap" />
 
 									<TextBlock Text="{Binding PendingMappingCount}"
@@ -417,7 +432,7 @@
 								<StackPanel Spacing="8">
 									<TextBlock Text="Needs attention"
                                                Foreground="{DynamicResource SecondaryTextBrush}"
-                                               FontSize="13"
+                                               FontSize="{DynamicResource FontSizeSubtitle}"
                                                TextWrapping="Wrap" />
 
 									<TextBlock Text="{Binding NeedsFixMappingCount}"
@@ -431,75 +446,198 @@
 				</ScrollViewer>
 			</TabItem>
 
-			<TabItem>
+			<TabItem AutomationProperties.Name="Installed games">
+				<TabItem.ContextMenu>
+					<ContextMenu>
+						<MenuItem Header="Detach tab"
+						          Click="OnTabDetachMenuClicked"
+						          AutomationProperties.Name="Detach tab" />
+					</ContextMenu>
+				</TabItem.ContextMenu>
 				<TabItem.Header>
-					<StackPanel Orientation="Horizontal" Spacing="10" ToolTip.Tip="Installed games">
+					<StackPanel Orientation="Horizontal" Spacing="10" ToolTip.Tip="Installed games (Ctrl+2)">
 						<TextBlock Classes="navGlyph" Text="&#xE7FC;" />
 						<TextBlock Classes="navLabel" Text="Installed games" />
+						<Button Classes="navDetach"
+						        Click="OnTabDetachClicked"
+        AutomationProperties.Name="Detach Installed games"
+							        AutomationProperties.HelpText="Detaches this tab into a separate window; close the window to reattach"
+							        ToolTip.Tip="Move this tab to its own window">
+							<TextBlock Text="&#xE8A7;" />
+						</Button>
 					</StackPanel>
 				</TabItem.Header>
 				<views:InstalledGamesView DataContext="{Binding InstalledGames}" />
 			</TabItem>
 
-			<TabItem>
+			<TabItem AutomationProperties.Name="Profiles">
+				<TabItem.ContextMenu>
+					<ContextMenu>
+						<MenuItem Header="Detach tab"
+						          Click="OnTabDetachMenuClicked"
+						          AutomationProperties.Name="Detach tab" />
+					</ContextMenu>
+				</TabItem.ContextMenu>
 				<TabItem.Header>
-					<StackPanel Orientation="Horizontal" Spacing="10" ToolTip.Tip="Profiles">
+					<StackPanel Orientation="Horizontal" Spacing="10" ToolTip.Tip="Profiles (Ctrl+3)">
 						<TextBlock Classes="navGlyph" Text="&#xE716;" />
 						<TextBlock Classes="navLabel" Text="Profiles" />
+						<Button Classes="navDetach"
+						        Click="OnTabDetachClicked"
+        AutomationProperties.Name="Detach Profiles"
+							        AutomationProperties.HelpText="Detaches this tab into a separate window; close the window to reattach"
+							        ToolTip.Tip="Move this tab to its own window">
+							<TextBlock Text="&#xE8A7;" />
+						</Button>
 					</StackPanel>
 				</TabItem.Header>
 				<views:ProfilesView DataContext="{Binding Profiles}" />
 			</TabItem>
 
-			<TabItem>
+			<TabItem AutomationProperties.Name="Transfer preview">
+				<TabItem.ContextMenu>
+					<ContextMenu>
+						<MenuItem Header="Detach tab"
+						          Click="OnTabDetachMenuClicked"
+						          AutomationProperties.Name="Detach tab" />
+					</ContextMenu>
+				</TabItem.ContextMenu>
 				<TabItem.Header>
-					<StackPanel Orientation="Horizontal" Spacing="10" ToolTip.Tip="Transfer preview">
+					<StackPanel Orientation="Horizontal" Spacing="10" ToolTip.Tip="Transfer preview (Ctrl+4)">
 						<TextBlock Classes="navGlyph" Text="&#xE8AB;" />
 						<TextBlock Classes="navLabel" Text="Transfer preview" />
+						<Button Classes="navDetach"
+						        Click="OnTabDetachClicked"
+        AutomationProperties.Name="Detach Transfer preview"
+							        AutomationProperties.HelpText="Detaches this tab into a separate window; close the window to reattach"
+							        ToolTip.Tip="Move this tab to its own window">
+							<TextBlock Text="&#xE8A7;" />
+						</Button>
 					</StackPanel>
 				</TabItem.Header>
 				<views:TransferPreviewView DataContext="{Binding TransferPreview}" />
 			</TabItem>
 
-			<TabItem>
+			<TabItem AutomationProperties.Name="Manual backup">
+				<TabItem.ContextMenu>
+					<ContextMenu>
+						<MenuItem Header="Detach tab"
+						          Click="OnTabDetachMenuClicked"
+						          AutomationProperties.Name="Detach tab" />
+					</ContextMenu>
+				</TabItem.ContextMenu>
 				<TabItem.Header>
-					<StackPanel Orientation="Horizontal" Spacing="10" ToolTip.Tip="Manual backup">
+					<StackPanel Orientation="Horizontal" Spacing="10" ToolTip.Tip="Manual backup (Ctrl+5)">
 						<TextBlock Classes="navGlyph" Text="&#xE74E;" />
 						<TextBlock Classes="navLabel" Text="Manual backup" />
+						<Button Classes="navDetach"
+						        Click="OnTabDetachClicked"
+        AutomationProperties.Name="Detach Manual backup"
+							        AutomationProperties.HelpText="Detaches this tab into a separate window; close the window to reattach"
+							        ToolTip.Tip="Move this tab to its own window">
+							<TextBlock Text="&#xE8A7;" />
+						</Button>
 					</StackPanel>
 				</TabItem.Header>
 				<views:ManualBackupView DataContext="{Binding ManualBackup}" />
 			</TabItem>
 
-			<TabItem>
+			<TabItem AutomationProperties.Name="Backups">
+				<TabItem.ContextMenu>
+					<ContextMenu>
+						<MenuItem Header="Detach tab"
+						          Click="OnTabDetachMenuClicked"
+						          AutomationProperties.Name="Detach tab" />
+					</ContextMenu>
+				</TabItem.ContextMenu>
 				<TabItem.Header>
-					<StackPanel Orientation="Horizontal" Spacing="10" ToolTip.Tip="Backups">
+					<StackPanel Orientation="Horizontal" Spacing="10" ToolTip.Tip="Backups (Ctrl+6)">
 						<TextBlock Classes="navGlyph" Text="&#xE8F1;" />
 						<TextBlock Classes="navLabel" Text="Backups" />
+						<Button Classes="navDetach"
+						        Click="OnTabDetachClicked"
+        AutomationProperties.Name="Detach Backups"
+							        AutomationProperties.HelpText="Detaches this tab into a separate window; close the window to reattach"
+							        ToolTip.Tip="Move this tab to its own window">
+							<TextBlock Text="&#xE8A7;" />
+						</Button>
 					</StackPanel>
 				</TabItem.Header>
 				<views:BackupHistoryView DataContext="{Binding BackupHistory}" />
 			</TabItem>
 
-			<TabItem>
+			<TabItem AutomationProperties.Name="Sync">
+				<TabItem.ContextMenu>
+					<ContextMenu>
+						<MenuItem Header="Detach tab"
+						          Click="OnTabDetachMenuClicked"
+						          AutomationProperties.Name="Detach tab" />
+					</ContextMenu>
+				</TabItem.ContextMenu>
 				<TabItem.Header>
-					<StackPanel Orientation="Horizontal" Spacing="10" ToolTip.Tip="Sync">
+					<StackPanel Orientation="Horizontal" Spacing="10" ToolTip.Tip="Sync (Ctrl+7)">
 						<TextBlock Classes="navGlyph" Text="&#xE895;" />
 						<TextBlock Classes="navLabel" Text="Sync" />
+						<Button Classes="navDetach"
+						        Click="OnTabDetachClicked"
+        AutomationProperties.Name="Detach Sync"
+							        AutomationProperties.HelpText="Detaches this tab into a separate window; close the window to reattach"
+							        ToolTip.Tip="Move this tab to its own window">
+							<TextBlock Text="&#xE8A7;" />
+						</Button>
 					</StackPanel>
 				</TabItem.Header>
 				<views:SyncView DataContext="{Binding Sync}" />
 			</TabItem>
 
-			<TabItem>
+			<TabItem AutomationProperties.Name="History">
+				<TabItem.ContextMenu>
+					<ContextMenu>
+						<MenuItem Header="Detach tab"
+						          Click="OnTabDetachMenuClicked"
+						          AutomationProperties.Name="Detach tab" />
+					</ContextMenu>
+				</TabItem.ContextMenu>
 				<TabItem.Header>
-					<StackPanel Orientation="Horizontal" Spacing="10" ToolTip.Tip="History">
+					<StackPanel Orientation="Horizontal" Spacing="10" ToolTip.Tip="History (Ctrl+8)">
 						<TextBlock Classes="navGlyph" Text="&#xE81C;" />
 						<TextBlock Classes="navLabel" Text="History" />
+						<Button Classes="navDetach"
+						        Click="OnTabDetachClicked"
+        AutomationProperties.Name="Detach History"
+							        AutomationProperties.HelpText="Detaches this tab into a separate window; close the window to reattach"
+							        ToolTip.Tip="Move this tab to its own window">
+							<TextBlock Text="&#xE8A7;" />
+						</Button>
 					</StackPanel>
 				</TabItem.Header>
 				<views:TransferHistoryView DataContext="{Binding TransferHistory}" />
 			</TabItem>
-		</TabControl>
+
+			<TabItem x:Name="SettingsTab" AutomationProperties.Name="Settings">
+				<TabItem.ContextMenu>
+					<ContextMenu>
+						<MenuItem Header="Detach tab"
+						          Click="OnTabDetachMenuClicked"
+						          AutomationProperties.Name="Detach tab" />
+					</ContextMenu>
+				</TabItem.ContextMenu>
+				<TabItem.Header>
+					<StackPanel Orientation="Horizontal" Spacing="10" ToolTip.Tip="Settings (Ctrl+9)">
+						<TextBlock Classes="navGlyph" Text="&#xE713;" />
+						<TextBlock Classes="navLabel" Text="Settings" />
+						<Button Classes="navDetach"
+						        Click="OnTabDetachClicked"
+        AutomationProperties.Name="Detach Settings"
+							        AutomationProperties.HelpText="Detaches this tab into a separate window; close the window to reattach"
+							        ToolTip.Tip="Move this tab to its own window">
+							<TextBlock Text="&#xE8A7;" />
+						</Button>
+					</StackPanel>
+				</TabItem.Header>
+				<views:SettingsView DataContext="{Binding Settings}" />
+				</TabItem>
+			</TabControl>
+		</Grid>
 	</Grid>
 </Window>

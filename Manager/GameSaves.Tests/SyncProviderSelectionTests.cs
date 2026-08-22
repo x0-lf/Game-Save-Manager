@@ -263,6 +263,8 @@ public sealed class SyncProviderSelectionTests
 
         public SyncUiSettings? Saved { get; private set; }
 
+        public string FilePath => "in-memory://sync-settings";
+
         public SyncUiSettings Load() => _loaded;
 
         public void Save(SyncUiSettings settings)

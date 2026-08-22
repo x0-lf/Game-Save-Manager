@@ -1,0 +1,18 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="GameSaves.App.Views.DetachedWindow"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="True"
+        Width="980"
+        Height="680"
+        MinWidth="480"
+        MinHeight="360"
+        Background="{DynamicResource PageBackgroundBrush}">
+
+    <!-- Escape closes through the normal close path: OnClosing raises
+         CloseRequested and the coordinator reattaches the tab. The command
+         is attached in code-behind. -->
+    <Window.KeyBindings>
+        <KeyBinding Gesture="Escape" />
+    </Window.KeyBindings>
+</Window>

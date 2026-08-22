@@ -30,4 +30,8 @@
 	<ProjectReference Include="..\GameSaves.Core\GameSaves.Core.csproj" />
 	<ProjectReference Include="..\GameSaves.Infrastructure\GameSaves.Infrastructure.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+	<InternalsVisibleTo Include="GameSaves.Tests" />
+  </ItemGroup>
 </Project>

@@ -1,16 +1,91 @@
-using Avalonia;
 using System;
+using System.Collections.Generic;
+using System.Collections.Specialized;
+using System.ComponentModel;
+using System.Linq;
+using System.Windows.Input;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
-using Avalonia.Styling;
+using Avalonia.VisualTree;
+using CommunityToolkit.Mvvm.Input;
+using Avalonia.Input;
+using GameSaves.App.Models;
+using GameSaves.App.Services;
+using GameSaves.App.ViewModels;
 
 namespace GameSaves.App.Views
 {
     public partial class MainWindow : Window
     {
+        private readonly TabDetachCoordinator _tabDetach = new(() => new DetachedWindow());
+
+        // The rail's original tab order. Captured once because detaching
+        // removes tabs from the TabControl; the Ctrl+1..9 shortcuts keep
+        // addressing these slots so a shortcut means the same section
+        // whether that tab is docked or floating.
+        private readonly IReadOnlyList<TabItem> _navigationTabs;
+
+        // Stable rail tab keys to TabItems, following the canonical creation
+        // order that the persisted RailLayout keys address.
+        private readonly Dictionary<string, TabItem> _tabsByKey;
+
+        // The settings view model whose rail state is applied live. Null
+        // until a MainWindowViewModel data context is attached.
+        private SettingsViewModel? _railSettings;
+
+        // The persisted startup tab is applied exactly once, after the rail
+        // layout, and never on later rail edits.
+        private bool _startupSelectionApplied;
+
+        // The workspace-layout bridge handed to the settings view model once
+        // this window (its owner, coordinator, and tab keys) exists.
+        public IWorkspaceLayoutHost WorkspaceHost { get; }
+
+        // Canonical creation-order tabs, for the workspace snapshot glue.
+        internal IReadOnlyList<TabItem> NavigationTabs => _navigationTabs;
+
         public MainWindow()
         {
             InitializeComponent();
+
+            _navigationTabs = MainNavigation.Items.OfType<TabItem>().ToArray();
+
+            _tabsByKey = new Dictionary<string, TabItem>(StringComparer.Ordinal)
+            {
+                [UiRailLayoutSettings.TabDashboard] = _navigationTabs[0],
+                [UiRailLayoutSettings.TabInstalledGames] = _navigationTabs[1],
+                [UiRailLayoutSettings.TabProfiles] = _navigationTabs[2],
+                [UiRailLayoutSettings.TabTransferPreview] = _navigationTabs[3],
+                [UiRailLayoutSettings.TabManualBackup] = _navigationTabs[4],
+                [UiRailLayoutSettings.TabBackups] = _navigationTabs[5],
+                [UiRailLayoutSettings.TabSync] = _navigationTabs[6],
+                [UiRailLayoutSettings.TabHistory] = _navigationTabs[7],
+                [UiRailLayoutSettings.TabSettings] = _navigationTabs[8],
+            };
+
+            WorkspaceHost = new MainWindowWorkspaceLayoutHost(
+                this,
+                _tabDetach,
+                _tabsByKey);
+
+            // The keyboard shortcut gestures are declared in MainWindow.axaml;
+            // their commands are attached here because they need the
+            // navigation control and the detach coordinator, which are view
+            // concerns. Digit bindings carry their slot as CommandParameter;
+            // the Ctrl+Comma binding has none and opens Settings.
+            ICommand selectTab = new RelayCommand<string>(SelectNavigationSlot);
+            ICommand openSettings = new RelayCommand(
+                () => _tabDetach.SelectOrActivate(MainNavigation, SettingsTab));
+            foreach (KeyBinding binding in KeyBindings)
+                binding.Command = binding.CommandParameter is null ? openSettings : selectTab;
+
+            // Shift+F10 / Menu key on a focused tab opens its context menu,
+            // so the detach action is reachable without a mouse.
+            MainNavigation.AddHandler(
+                InputElement.KeyDownEvent,
+                OnNavigationKeyDown,
+                RoutingStrategies.Tunnel);
 
             // Below 900px the navigation rail collapses to icons; styles in
             // MainWindow.axaml key off the compactNav class.
@@ -26,59 +101,307 @@ namespace GameSaves.App.Views
                         Classes.Remove("compactNav");
                 }
             };
+
+            // The persisted rail layout (position, collapse state, tab order,
+            // tab visibility) is owned by the settings view model; apply it
+            // whenever that state arrives or changes.
+            DataContextChanged += OnDataContextChanged;
         }
 
-        // Theme choice is applied at the application level so every window,
-        // including future torn-out panels, follows it. "Use system theme"
-        // maps to the Default variant, which tracks the OS setting.
-        private bool _applyingStoredTheme;
-
-        protected override void OnDataContextChanged(EventArgs e)
+        // Owned detached windows close together with this window; the
+        // coordinator must not fight application shutdown by reattaching
+        // tabs into a closing window.
+        protected override void OnClosing(WindowClosingEventArgs e)
         {
-            base.OnDataContextChanged(e);
+            _tabDetach.NotifyOwnerClosing();
+            base.OnClosing(e);
+        }
 
-            if (DataContext is not ViewModels.MainWindowViewModel viewModel)
-                return;
+        // The header gear button opens the Settings tab, which owns every
+        // settings surface; there is no separate flyout anymore. If the tab
+        // is currently floating, surface that window instead.
+        private void OnSettingsClicked(object? sender, RoutedEventArgs e)
+        {
+            _tabDetach.SelectOrActivate(MainNavigation, SettingsTab);
+        }
 
-            _applyingStoredTheme = true;
-            try
+        private void OnTabDetachClicked(object? sender, RoutedEventArgs e)
+        {
+            if (sender is Control control &&
+                control.GetVisualAncestors().OfType<TabItem>().FirstOrDefault() is { } tab)
             {
-                RadioButton radio = viewModel.ThemeChoice switch
-                {
-                    Services.AppUiSettings.ThemeLight => ThemeLightRadio,
-                    Services.AppUiSettings.ThemeDark => ThemeDarkRadio,
-                    _ => ThemeSystemRadio,
-                };
-                radio.IsChecked = true;
-            }
-            finally
-            {
-                _applyingStoredTheme = false;
+                _tabDetach.Detach(MainNavigation, tab, this);
             }
         }
 
-        private void OnThemeChoiceChanged(object? sender, RoutedEventArgs e)
+        // Context-menu path for detach (right-click or Shift+F10 on a tab).
+        // The menu item lives in a popup, so the tab is resolved through the
+        // context menu's placement target rather than visual ancestors.
+        private void OnTabDetachMenuClicked(object? sender, RoutedEventArgs e)
         {
-            if (sender is not RadioButton { IsChecked: true } choice ||
-                Application.Current is not { } application)
-            {
+            if (sender is MenuItem { Parent: ContextMenu { PlacementTarget: TabItem tab } })
+                _tabDetach.Detach(MainNavigation, tab, this);
+        }
+
+        // Ctrl+1..9 handler: select the tab when attached, surface its
+        // floating window when detached, ignore out-of-range slots.
+        private void SelectNavigationSlot(string? slot)
+        {
+            if (int.TryParse(slot, out int number))
+                _tabDetach.SelectOrActivateSlot(MainNavigation, _navigationTabs, number);
+        }
+
+        private void OnNavigationKeyDown(object? sender, KeyEventArgs e)
+        {
+            if (e.Handled)
                 return;
+
+            bool menuKey = e.Key == Key.Apps ||
+                (e.Key == Key.F10 && e.KeyModifiers.HasFlag(KeyModifiers.Shift));
+            if (!menuKey || e.Source is not Visual source)
+                return;
+
+            TabItem? tab = source as TabItem ??
+                source.GetVisualAncestors().OfType<TabItem>().FirstOrDefault();
+            if (tab?.ContextMenu is { } menu)
+            {
+                e.Handled = true;
+                menu.Open(tab);
+            }
+        }
+
+        // Rail layout plumbing: subscribe to the settings view model's rail
+        // state when it arrives, unsubscribe when it is replaced, and apply
+        // the full layout on every change (the apply is idempotent).
+        private void OnDataContextChanged(object? sender, EventArgs e)
+        {
+            if (_railSettings is not null)
+            {
+                _railSettings.PropertyChanged -= OnRailSettingsPropertyChanged;
+                _railSettings.RailTabs.CollectionChanged -= OnRailTabsChanged;
+
+                foreach (RailTabOption option in _railSettings.RailTabs)
+                    option.PropertyChanged -= OnRailTabOptionChanged;
+
+                _railSettings.WorkspaceHost = null;
+                _railSettings = null;
             }
 
-            (ThemeVariant variant, string name) = choice.Name switch
+            if (DataContext is MainWindowViewModel { Settings: { } settings })
             {
-                "ThemeLightRadio" => (ThemeVariant.Light, Services.AppUiSettings.ThemeLight),
-                "ThemeDarkRadio" => (ThemeVariant.Dark, Services.AppUiSettings.ThemeDark),
-                _ => (ThemeVariant.Default, Services.AppUiSettings.ThemeSystem),
+                _railSettings = settings;
+                settings.PropertyChanged += OnRailSettingsPropertyChanged;
+                settings.RailTabs.CollectionChanged += OnRailTabsChanged;
+
+                foreach (RailTabOption option in settings.RailTabs)
+                    option.PropertyChanged += OnRailTabOptionChanged;
+
+                // The workspace host is this window's own bridge; it is
+                // assigned whenever the settings view model is attached so
+                // snapshot/apply commands act on the live window.
+                settings.WorkspaceHost = WorkspaceHost;
+            }
+
+            ApplyNavigationLayout();
+            ApplyStartupSelection();
+        }
+
+        private void OnRailSettingsPropertyChanged(
+            object? sender,
+            PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName is nameof(SettingsViewModel.RailPosition)
+                or nameof(SettingsViewModel.RailCollapsed))
+            {
+                ApplyNavigationLayout();
+            }
+        }
+
+        private void OnRailTabsChanged(
+            object? sender,
+            NotifyCollectionChangedEventArgs e) => ApplyNavigationLayout();
+
+        private void OnRailTabOptionChanged(
+            object? sender,
+            PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(RailTabOption.IsVisible))
+                ApplyNavigationLayout();
+        }
+
+        // Reads the live rail state and applies it: placement, collapse
+        // class, tab order, and tab visibility. Attached tabs are reordered
+        // in place; detached tabs stay floating and reattach into this order
+        // later. The detach coordinator owns the ItemCollection policy.
+        private void ApplyNavigationLayout()
+        {
+            if (_railSettings is null)
+                return;
+
+            MainNavigation.TabStripPlacement = _railSettings.RailPosition switch
+            {
+                UiRailLayoutSettings.PositionRight => Dock.Right,
+                UiRailLayoutSettings.PositionTop => Dock.Top,
+                _ => Dock.Left,
             };
 
-            application.RequestedThemeVariant = variant;
+            bool collapsed = _railSettings.RailCollapsed;
 
-            if (!_applyingStoredTheme &&
-                DataContext is ViewModels.MainWindowViewModel viewModel)
+            if (Classes.Contains("railCollapsed") != collapsed)
             {
-                viewModel.SetThemeChoice(name);
+                if (collapsed)
+                    Classes.Add("railCollapsed");
+                else
+                    Classes.Remove("railCollapsed");
             }
+
+            var orderedTabs = new List<TabItem>(_railSettings.RailTabs.Count);
+
+            foreach (RailTabOption option in _railSettings.RailTabs)
+            {
+                if (_tabsByKey.TryGetValue(option.Key, out TabItem? tab))
+                    orderedTabs.Add(tab);
+            }
+
+            var hiddenTabs = new List<TabItem>();
+
+            foreach (RailTabOption option in _railSettings.RailTabs)
+            {
+                if (!option.IsVisible && _tabsByKey.TryGetValue(option.Key, out TabItem? tab))
+                    hiddenTabs.Add(tab);
+            }
+
+            _tabDetach.ApplyTabLayout(MainNavigation, orderedTabs, hiddenTabs);
+        }
+
+        // The persisted startup tab, applied once after the first rail layout
+        // and never again (later rail edits must not jump the selection).
+        private void ApplyStartupSelection()
+        {
+            if (_startupSelectionApplied || _railSettings is null)
+                return;
+
+            _startupSelectionApplied = true;
+
+            TabItem? startupTab = ResolveStartupTab(
+                MainNavigation,
+                _tabsByKey,
+                _railSettings.StartupTabKey);
+
+            if (startupTab is not null)
+                MainNavigation.SelectedItem = startupTab;
+        }
+
+        // Picks the tab to open on: the saved startup tab when it is still
+        // attached and visible, otherwise Dashboard (pinned visible by
+        // construction), otherwise nothing. Static so the selection policy
+        // is unit-testable without a windowing platform.
+        internal static TabItem? ResolveStartupTab(
+            TabControl navigation,
+            IReadOnlyDictionary<string, TabItem> tabsByKey,
+            string? startupTabKey)
+        {
+            if (IsSelectable(navigation, tabsByKey, startupTabKey, out TabItem? saved))
+                return saved;
+
+            if (IsSelectable(navigation, tabsByKey, UiRailLayoutSettings.TabDashboard, out TabItem? dashboard))
+                return dashboard;
+
+            return null;
+        }
+
+        private static bool IsSelectable(
+            TabControl navigation,
+            IReadOnlyDictionary<string, TabItem> tabsByKey,
+            string? key,
+            out TabItem? tab)
+        {
+            tab = key is not null &&
+                tabsByKey.TryGetValue(key, out TabItem? candidate) &&
+                navigation.Items.IndexOf(candidate) >= 0 &&
+                candidate.IsVisible
+                    ? candidate
+                    : null;
+
+            return tab is not null;
+        }
+
+        // The collapsed rail's menu button expands it again; the state itself
+        // is owned by the settings view model, which persists it and whose
+        // change notification re-applies the layout.
+        private void OnExpandNavigationClicked(object? sender, RoutedEventArgs e)
+        {
+            if (DataContext is MainWindowViewModel { Settings: { } settings })
+                settings.RailCollapsed = false;
+        }
+
+        // Keeps a saved window placement on a visible screen when a layout is
+        // applied: a saved top-left that still lies in some current working
+        // area is clamped inside that area (and shrunk if it is wider); a
+        // placement no screen contains cascades near the owner instead, so an
+        // applied layout can never strand a window off-screen. Pure so the
+        // policy is unit-testable without a windowing platform.
+        internal static Rect ClampToScreens(
+            Rect saved,
+            IReadOnlyList<Rect> workingAreas,
+            Rect ownerBounds,
+            int cascadeIndex,
+            out bool cascaded)
+        {
+            cascaded = false;
+
+            Rect? target = null;
+
+            foreach (Rect area in workingAreas)
+            {
+                if (area.Contains(saved.TopLeft))
+                {
+                    target = area;
+                    break;
+                }
+            }
+
+            if (target is null)
+            {
+                Point ownerCenter = new(
+                    ownerBounds.X + ownerBounds.Width / 2,
+                    ownerBounds.Y + ownerBounds.Height / 2);
+
+                foreach (Rect area in workingAreas)
+                {
+                    if (area.Contains(ownerCenter))
+                    {
+                        target = area;
+                        break;
+                    }
+                }
+            }
+
+            if (target is null)
+            {
+                cascaded = true;
+                double offset = 24 * (cascadeIndex + 1);
+
+                return new Rect(
+                    ownerBounds.X + offset,
+                    ownerBounds.Y + offset,
+                    saved.Width,
+                    saved.Height);
+            }
+
+            Rect screen = target.Value;
+            double width = Math.Min(saved.Width, screen.Width);
+            double height = Math.Min(saved.Height, screen.Height);
+            double left = Math.Clamp(
+                saved.X,
+                screen.X,
+                Math.Max(screen.X, screen.Right - width));
+            double top = Math.Clamp(
+                saved.Y,
+                screen.Y,
+                Math.Max(screen.Y, screen.Bottom - height));
+
+            return new Rect(left, top, width, height);
         }
     }
 }

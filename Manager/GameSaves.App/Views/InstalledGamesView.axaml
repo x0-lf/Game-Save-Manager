@@ -9,10 +9,37 @@
 
     <UserControl.Styles>
         <Style Selector="DataGrid.installedGamesTable /template/ ScrollBar:horizontal">
-            <Setter Property="Opacity" Value="0.2" />
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+        <Style Selector="DataGrid.installedGamesTable /template/ ScrollBar:horizontal /template/ Thumb">
+            <Setter Property="Background" Value="{DynamicResource MutedTextBrush}" />
         </Style>
         <Style Selector="DataGrid.installedGamesTable:pointerover /template/ ScrollBar:horizontal">
             <Setter Property="Opacity" Value="1" />
+        </Style>
+        <Style Selector="TextBlock.countApproved">
+            <Setter Property="Foreground" Value="{DynamicResource SuccessBrush}" />
+        </Style>
+        <Style Selector="TextBlock.countPending">
+            <Setter Property="Foreground" Value="{DynamicResource WarningBrush}" />
+        </Style>
+        <Style Selector="TextBlock.countNeedsFix">
+            <Setter Property="Foreground" Value="{DynamicResource DangerBrush}" />
+        </Style>
+        <Style Selector="TextBlock.zero">
+            <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
+        </Style>
+        <Style Selector="TextBlock.statusCell">
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
+        </Style>
+        <Style Selector="TextBlock.statusCell.healthy">
+            <Setter Property="Foreground" Value="{DynamicResource SuccessBrush}" />
+        </Style>
+        <Style Selector="TextBlock.statusCell.caution">
+            <Setter Property="Foreground" Value="{DynamicResource WarningBrush}" />
+        </Style>
+        <Style Selector="TextBlock.statusCell.blocked">
+            <Setter Property="Foreground" Value="{DynamicResource DangerBrush}" />
         </Style>
     </UserControl.Styles>
 
@@ -21,9 +48,10 @@
           Margin="0,12,0,14"
           MaxWidth="1100">
 
-        <!-- Header -->
-        <Border Grid.Row="0"
-                Background="{DynamicResource CardBackgroundBrush}"
+        <!-- Header, plus the blocking Steam-missing banner: the same
+             condition gets the same escalation on every affected view. -->
+        <StackPanel Grid.Row="0" Spacing="10">
+        <Border Background="{DynamicResource CardBackgroundBrush}"
                 BorderBrush="{DynamicResource CardBorderBrush}"
                 BorderThickness="1"
                 CornerRadius="14"
@@ -38,12 +66,12 @@
 
                     <TextBlock Text="Discovered games and whether their saves are mapped."
                                Foreground="{DynamicResource SecondaryTextBrush}"
-                               FontSize="12"
+                               FontSize="{DynamicResource FontSizeBody}"
                                TextWrapping="Wrap" />
 
                     <TextBlock Text="{Binding StatusMessage}"
                                Foreground="{DynamicResource MutedTextBrush}"
-                               FontSize="12"
+                               FontSize="{DynamicResource FontSizeBody}"
                                TextWrapping="Wrap" />
                 </StackPanel>
 
@@ -56,6 +84,35 @@
             </Grid>
         </Border>
 
+            <Border IsVisible="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).IsSteamMissing}"
+                    Background="{DynamicResource WarningTintBrush}"
+                    BorderBrush="{DynamicResource WarningEdgeBrush}"
+                    BorderThickness="1"
+                    CornerRadius="12"
+                    Padding="12,8">
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
+                    <TextBlock Grid.Column="0"
+                               Text="&#xE7BA;"
+                               FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                               FontSize="20"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource WarningBrush}" />
+                    <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                        <TextBlock Text="Steam was not found on this computer"
+                                   Foreground="{DynamicResource PrimaryTextBrush}"
+                                   FontSize="{DynamicResource FontSizeBodyLarge}"
+                                   FontWeight="SemiBold" />
+                        <TextBlock Text="Game discovery needs a Steam installation. Install Steam, or scan again if it was just installed."
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                   FontSize="{DynamicResource FontSizeBody}"
+                                   MaxWidth="760"
+                                   HorizontalAlignment="Left"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </StackPanel>
+
         <!-- DataGrid owns one shared column measure for headers and every row.
              Headers can be reordered/resized; visibility and order persist. -->
         <Border Grid.Row="1"
@@ -63,7 +120,7 @@
                 BorderBrush="{DynamicResource CardBorderBrush}"
                 BorderThickness="1"
                 CornerRadius="14"
-                Padding="4">
+                Padding="10">
 
             <Grid>
 
@@ -88,16 +145,17 @@
                 <DataGrid.Columns>
                     <DataGridTemplateColumn Header="Game"
                                             Tag="game"
-                                            Width="200"
+                                            Width="140"
                                             SortMemberPath="GameName">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate x:DataType="models:InstalledGameRowViewModel">
                                 <TextBlock Text="{Binding GameName}"
                                            ToolTip.Tip="{Binding GameName}"
                                            Foreground="{DynamicResource PrimaryTextBrush}"
-                                           FontSize="12"
+                                           FontSize="{DynamicResource FontSizeBody}"
                                            FontWeight="SemiBold"
                                            VerticalAlignment="Center"
+                                           Margin="12,0,12,0"
                                            TextTrimming="CharacterEllipsis" />
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
@@ -108,93 +166,145 @@
                                         Binding="{Binding AppId}"
                                         Width="80"
                                         Foreground="{DynamicResource MutedTextBrush}"
-                                        FontSize="12" />
+                                        FontSize="{DynamicResource FontSizeBody}" />
 
                     <DataGridTemplateColumn Header="Install path"
                                             Tag="installPath"
-                                            Width="240"
+                                            Width="160"
                                             SortMemberPath="InstallPath">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate x:DataType="models:InstalledGameRowViewModel">
+                                <!-- Prefix ellipsis keeps the distinguishing
+                                     tail of a path visible; end-truncation
+                                     collapsed every row to the same
+                                     ".../steamapps/common/..." prefix. -->
                                 <TextBlock Text="{Binding InstallPath}"
                                            ToolTip.Tip="{Binding InstallPath}"
                                            Foreground="{DynamicResource SecondaryTextBrush}"
-                                           FontSize="12"
+                                           FontSize="{DynamicResource FontSizeBody}"
                                            VerticalAlignment="Center"
-                                           TextTrimming="CharacterEllipsis" />
+                                           Margin="12,0,12,0"
+                                           TextTrimming="PrefixCharacterEllipsis" />
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
 
                     <DataGridTemplateColumn Header="Library"
                                             Tag="library"
-                                            Width="200"
+                                            Width="115"
                                             SortMemberPath="LibraryPath">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate x:DataType="models:InstalledGameRowViewModel">
                                 <TextBlock Text="{Binding LibraryPath}"
                                            ToolTip.Tip="{Binding LibraryPath}"
                                            Foreground="{DynamicResource MutedTextBrush}"
-                                           FontSize="12"
+                                           FontSize="{DynamicResource FontSizeBody}"
                                            VerticalAlignment="Center"
+                                           Margin="12,0,12,0"
                                            TextTrimming="CharacterEllipsis" />
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
 
-                    <DataGridTextColumn Header="Approved"
-                                        Tag="approved"
-                                        Binding="{Binding ApprovedMappings}"
-                                        Width="105"
-                                        Foreground="{DynamicResource SuccessBrush}"
-                                        FontSize="12" />
+                    <DataGridTemplateColumn Header="Approved"
+                                            Tag="approved"
+                                            Width="100"
+                                            SortMemberPath="ApprovedMappings">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate x:DataType="models:InstalledGameRowViewModel">
+                                <TextBlock Text="{Binding ApprovedMappings, StringFormat='{}{0}'}"
+                                           Classes="countApproved"
+                                           Classes.zero="{Binding !ApprovedMappings}"
+                                           FontSize="{DynamicResource FontSizeBody}"
+                                           Margin="12,0,0,0"
+                                           VerticalAlignment="Center" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
 
-                    <DataGridTextColumn Header="Pending"
-                                        Tag="pending"
-                                        Binding="{Binding PendingMappings}"
-                                        Width="95"
-                                        Foreground="{DynamicResource WarningBrush}"
-                                        FontSize="12" />
+                    <DataGridTemplateColumn Header="Pending"
+                                            Tag="pending"
+                                            Width="95"
+                                            SortMemberPath="PendingMappings">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate x:DataType="models:InstalledGameRowViewModel">
+                                <TextBlock Text="{Binding PendingMappings, StringFormat='{}{0}'}"
+                                           Classes="countPending"
+                                           Classes.zero="{Binding !PendingMappings}"
+                                           FontSize="{DynamicResource FontSizeBody}"
+                                           Margin="12,0,0,0"
+                                           VerticalAlignment="Center" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
 
-                    <DataGridTextColumn Header="Needs fix"
-                                        Tag="needsFix"
-                                        Binding="{Binding NeedsFixMappings}"
-                                        Width="105"
-                                        Foreground="{DynamicResource DangerBrush}"
-                                        FontSize="12" />
+                    <DataGridTemplateColumn Header="Needs fix"
+                                            Tag="needsFix"
+                                            Width="95"
+                                            SortMemberPath="NeedsFixMappings">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate x:DataType="models:InstalledGameRowViewModel">
+                                <TextBlock Text="{Binding NeedsFixMappings, StringFormat='{}{0}'}"
+                                           Classes="countNeedsFix"
+                                           Classes.zero="{Binding !NeedsFixMappings}"
+                                           FontSize="{DynamicResource FontSizeBody}"
+                                           Margin="12,0,0,0"
+                                           VerticalAlignment="Center" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
 
-                    <DataGridTextColumn Header="Exists"
-                                        Tag="exists"
-                                        Binding="{Binding SavePathExists}"
-                                        Width="85"
-                                        Foreground="{DynamicResource AccentBrush}"
-                                        FontSize="12" />
+                    <DataGridTemplateColumn Header="Exists"
+                                            Tag="exists"
+                                            Width="85"
+                                            SortMemberPath="SavePathExists">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate x:DataType="models:InstalledGameRowViewModel">
+                                <TextBlock Text="{Binding SavePathExistsDisplay}"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                           FontSize="{DynamicResource FontSizeBody}"
+                                           Margin="12,0,0,0"
+                                           VerticalAlignment="Center" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
 
                     <DataGridTemplateColumn Header="Files"
                                             Tag="files"
-                                            Width="100"
+                                            Width="85"
                                             SortMemberPath="FileCount">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate x:DataType="models:InstalledGameRowViewModel">
-                                <StackPanel VerticalAlignment="Center">
+                                <StackPanel VerticalAlignment="Center" Margin="12,0,0,0">
                                     <TextBlock Text="{Binding FileCount}"
                                                Foreground="{DynamicResource PrimaryTextBrush}"
-                                               FontSize="12" />
+                                               FontSize="{DynamicResource FontSizeBody}" />
                                     <TextBlock Text="{Binding TotalSizeDisplay}"
-                                               Foreground="{DynamicResource MutedTextBrush}"
-                                               FontSize="10" />
+                                               Foreground="{DynamicResource SecondaryTextBrush}"
+                                               FontSize="{DynamicResource FontSizeMicro}" />
                                 </StackPanel>
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
 
-                    <DataGridTextColumn Header="Status"
-                                        Tag="status"
-                                        Binding="{Binding Status}"
-                                        Width="160"
-                                        Foreground="{DynamicResource PrimaryTextBrush}"
-                                        FontSize="12"
-                                        FontWeight="SemiBold" />
+                    <DataGridTemplateColumn Header="Status"
+                                            Tag="status"
+                                            Width="120"
+                                            SortMemberPath="Status">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate x:DataType="models:InstalledGameRowViewModel">
+                                <TextBlock Text="{Binding Status}"
+                                           Classes="statusCell"
+                                           Classes.healthy="{Binding IsStatusHealthy}"
+                                           Classes.caution="{Binding IsStatusCaution}"
+                                           Classes.blocked="{Binding IsStatusBlocked}"
+                                           FontSize="{DynamicResource FontSizeBody}"
+                                           FontWeight="SemiBold"
+                                           Margin="12,0,0,0"
+                                           VerticalAlignment="Center" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
                 </DataGrid.Columns>
             </DataGrid>
 
