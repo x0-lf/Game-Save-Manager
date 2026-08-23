@@ -10,9 +10,14 @@
     <!-- Secondary (default) buttons: bordered ghost on the card surface,
          so enabled state has a visible edge and disabled state is
          unmistakably faded rather than another identical grey slab. -->
+    <!-- One control height for the whole product. Every button, text input
+         and select is 32 px; the only exceptions are the 24 px square icon
+         buttons (their own hit-target rule) and the navigation rail's own
+         item height. Views must not set Height on these controls. -->
     <Style Selector="Button">
+        <Setter Property="Height" Value="32" />
         <Setter Property="Background" Value="Transparent" />
-        <Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="CornerRadius" Value="8" />
         <Setter Property="HorizontalContentAlignment" Value="Center" />
@@ -25,7 +30,10 @@
          fill entirely so it can never read as enabled in either theme. -->
     <Style Selector="Button:disabled /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="Transparent" />
-        <Setter Property="BorderBrush" Value="{DynamicResource SubtleBorderBrush}" />
+        <!-- The control-border role, muted by the 0.6 disabled opacity below
+             rather than by a weaker colour: a disabled button must still read
+             as a button next to its enabled sibling. -->
+        <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
     </Style>
@@ -49,13 +57,15 @@
     <!-- Inputs are inset-filled so they can never be mistaken for the
          ghost-outline buttons, including when a button is disabled. -->
     <Style Selector="TextBox">
+        <Setter Property="MinHeight" Value="32" />
         <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}" />
         <Setter Property="CornerRadius" Value="6" />
     </Style>
     <Style Selector="ComboBox">
+        <Setter Property="MinHeight" Value="32" />
         <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}" />
         <Setter Property="CornerRadius" Value="6" />
         <Setter Property="PlaceholderForeground" Value="{DynamicResource PlaceholderInkBrush}" />
     </Style>
@@ -82,17 +92,26 @@
         <Setter Property="Background" Value="{DynamicResource SubtleBorderBrush}" />
         <Setter Property="CornerRadius" Value="4" />
     </Style>
+    <!-- An expanded bar is 16 px of track; the thumb inside it is 8 px so the
+         track still reads as a track. Fluent's resting form is a 2 px
+         hairline, which is not a drag target, so every bar that must be
+         usable at rest sets AllowAutoHide="False". -->
+    <Style Selector="ScrollBar:vertical /template/ Thumb">
+        <Setter Property="Width" Value="8" />
+    </Style>
+    <Style Selector="ScrollBar:horizontal /template/ Thumb">
+        <Setter Property="Height" Value="8" />
+    </Style>
+    <!-- Every scrollbar rests expanded and visible. Fluent's resting form
+         is a 2 px hairline that is neither a drag target nor a legible cue
+         that content continues; AllowAutoHide="False" is the supported way
+         to keep the expanded form. Duration still comes from a resource so
+         the accessibility Reduce Motion setting can swap any opacity
+         transition for an instant change. -->
     <Style Selector="ScrollBar">
-        <Setter Property="Opacity" Value="0" />
-        <!-- Duration comes from a resource so the accessibility Reduce
-             Motion setting can swap the fade for instant changes. -->
+        <Setter Property="AllowAutoHide" Value="False" />
+        <Setter Property="Opacity" Value="1" />
         <Setter Property="Transitions" Value="{DynamicResource ScrollBarOpacityTransitions}" />
-    </Style>
-    <Style Selector="ScrollViewer:pointerover /template/ ScrollBar">
-        <Setter Property="Opacity" Value="1" />
-    </Style>
-    <Style Selector="ScrollBar:pointerover">
-        <Setter Property="Opacity" Value="1" />
     </Style>
 
     <Style Selector="Button.primary">
@@ -175,7 +194,7 @@
 
     <Style Selector="Button.primary:disabled /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="Transparent" />
-        <Setter Property="BorderBrush" Value="{DynamicResource SubtleBorderBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
     </Style>
@@ -185,9 +204,6 @@
          a discoverable cue. Rest visibility comes from real thumb ink at
          full opacity — a fractional Opacity over the collapsed hairline
          thumb measured as near-invisible (critic round 31). -->
-    <Style Selector="ScrollViewer.pageScroll /template/ ScrollBar">
-        <Setter Property="Opacity" Value="1" />
-    </Style>
     <Style Selector="ScrollViewer.pageScroll /template/ ScrollBar:vertical">
         <Setter Property="Margin" Value="0,6,0,6" />
     </Style>
@@ -201,7 +217,15 @@
          Ordering matters within the row-state block: selected must follow
          pointerover, and selected:pointerover must come last, because style
          collection order decides which matching setter wins. -->
+    <Style Selector="DataGrid /template/ ScrollBar /template/ Thumb">
+        <Setter Property="Background" Value="{DynamicResource MutedTextBrush}" />
+    </Style>
+
     <Style Selector="DataGrid">
+        <!-- The table owns its own scrollbars; the attached property is the
+             only handle on them, because the DataGrid template sets
+             AllowAutoHide locally and a local value beats a style. -->
+        <Setter Property="ScrollViewer.AllowAutoHide" Value="False" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="RowBackground" Value="Transparent" />
         <Setter Property="HorizontalGridLinesBrush" Value="{DynamicResource CardBorderBrush}" />

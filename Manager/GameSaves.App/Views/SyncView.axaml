@@ -44,7 +44,7 @@
                   HorizontalScrollBarVisibility="Disabled">
     <Grid RowDefinitions="Auto,*"
           RowSpacing="10"
-          Margin="0,12,0,14"
+          Margin="0,12,24,14"
           MaxWidth="1100">
 
         <!-- Header: always-visible controls and live progress -->
@@ -79,8 +79,7 @@
                                 ToolTip.Tip="Dry run: nothing is copied until you confirm."
                                 Classes="primary"
                                 Command="{Binding PreviewSyncCommand}"
-                                IsEnabled="{Binding CanPreviewSync}"
-                                Height="34" />
+                                IsEnabled="{Binding CanPreviewSync}" />
                     </WrapPanel>
                 </Grid>
 
@@ -103,7 +102,6 @@
                             Command="{Binding CancelSyncCommand}"
                             IsEnabled="{Binding CanCancelSync}"
                             HorizontalAlignment="Left"
-                            Height="28"
                             FontSize="{DynamicResource FontSizeBody}"
                             ToolTip.Tip="Stop the sync. Files already copied are kept and nothing is deleted." />
                 </StackPanel>
@@ -128,17 +126,19 @@
                                    FontWeight="SemiBold" />
 
                         <StackPanel Spacing="6">
-                            <StackPanel Spacing="4">
+                            <!-- Two equal columns, the same form grid Manual
+                                 backup uses: every field ends on its column
+                                 edge instead of a per-control measure. -->
+                            <Grid ColumnDefinitions="*,*" ColumnSpacing="14">
+                            <StackPanel Grid.Column="0" Spacing="4">
                                 <TextBlock Text="Saved profile"
                                            Foreground="{DynamicResource SecondaryTextBrush}"
                                            FontSize="{DynamicResource FontSizeBody}"
                                            FontWeight="SemiBold" />
 
-                                <ComboBox MaxWidth="560"
-                                          HorizontalAlignment="Left"
-                                          ItemsSource="{Binding RemoteProfileOptions}"
+                                <ComboBox ItemsSource="{Binding RemoteProfileOptions}"
                                           SelectedItem="{Binding SelectedRemoteProfileOption}"
-                                          MinHeight="32">
+                                          HorizontalAlignment="Stretch">
                                     <ComboBox.ItemTemplate>
                                         <DataTemplate>
                                             <TextBlock Text="{Binding DisplayName}" />
@@ -147,11 +147,15 @@
                                 </ComboBox>
                             </StackPanel>
 
-                            <StackPanel Spacing="4">
-                                <Panel Width="520" HorizontalAlignment="Left">
+                            <StackPanel Grid.Column="1" Spacing="4">
+                                <TextBlock Text="Profile name"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                           FontSize="{DynamicResource FontSizeBody}"
+                                           FontWeight="SemiBold" />
+
+                                <Panel>
                                     <TextBox Text="{Binding RemoteProfileDisplayName}"
-                                             MaxLength="100"
-                                             MinHeight="32" />
+                                             MaxLength="100" />
                                     <TextBlock Text="Profile name, for example Home SFTP Server"
                                                Foreground="{DynamicResource MutedTextBrush}"
                                                FontSize="{DynamicResource FontSizeSubtitle}"
@@ -160,22 +164,21 @@
                                                IsHitTestVisible="False"
                                                IsVisible="{Binding !RemoteProfileDisplayName.Length}" />
                                 </Panel>
-
-                                <TextBlock Text="{Binding RemoteProfileState}"
-                                           Foreground="{DynamicResource MutedTextBrush}"
-                                           FontSize="{DynamicResource FontSizeBody}" />
                             </StackPanel>
+                            </Grid>
+
+                            <TextBlock Text="{Binding RemoteProfileState}"
+                                       Foreground="{DynamicResource MutedTextBrush}"
+                                       FontSize="{DynamicResource FontSizeBody}" />
 
                             <StackPanel Orientation="Horizontal"
                                         Spacing="6">
                                 <Button Content="New"
-                                        Command="{Binding NewRemoteProfileCommand}"
-                                        Height="30" />
+                                        Command="{Binding NewRemoteProfileCommand}" />
                                 <Button Content="Save"
                                         Classes="primary"
-                                        Command="{Binding SaveRemoteProfileCommand}"
-                                        Height="30" />
-                                <Button Height="30"
+                                        Command="{Binding SaveRemoteProfileCommand}" />
+                                <Button
                                         Content="More…"
                                         ToolTip.Tip="More profile actions">
                                     <Button.Flyout>
@@ -190,8 +193,7 @@
                                 </Button>
                                 <Button Content="Delete"
                                         Classes="danger"
-                                        IsEnabled="{Binding SelectedRemoteProfile, Converter={x:Static ObjectConverters.IsNotNull}}"
-                                        Height="30">
+                                        IsEnabled="{Binding SelectedRemoteProfile, Converter={x:Static ObjectConverters.IsNotNull}}">
                                     <Button.Flyout>
                                         <Flyout Placement="Bottom">
                                             <StackPanel Spacing="8" MaxWidth="560"
@@ -210,8 +212,7 @@
                                                 <Button Content="Delete profile"
                                                         Classes="danger"
                                                         Command="{Binding DeleteRemoteProfileCommand}"
-                                                        HorizontalAlignment="Right"
-                                                        Height="30" />
+                                                        HorizontalAlignment="Right" />
                                             </StackPanel>
                                         </Flyout>
                                     </Button.Flyout>
@@ -234,8 +235,9 @@
                                    FontWeight="SemiBold" />
 
                         <StackPanel Spacing="8">
+                            <Grid ColumnDefinitions="*,*" ColumnSpacing="14">
                             <!-- Provider selector -->
-                            <StackPanel Spacing="4">
+                            <StackPanel Grid.Column="0" Spacing="4">
                                 <TextBlock Text="Provider"
                                            Foreground="{DynamicResource SecondaryTextBrush}"
                                            FontSize="{DynamicResource FontSizeBody}"
@@ -244,10 +246,7 @@
                                 <ComboBox ItemsSource="{Binding ProviderOptions}"
                                           SelectedValue="{Binding SelectedProviderKind}"
                                           SelectedValueBinding="{Binding Kind}"
-                                          MaxWidth="560"
-                                          HorizontalAlignment="Left"
-                                          Width="520"
-                                          MinHeight="32"
+                                          HorizontalAlignment="Stretch"
                                           ToolTip.Tip="{Binding ProviderCapabilitySummary}">
                                     <ComboBox.ItemTemplate>
                                         <DataTemplate>
@@ -259,13 +258,11 @@
                                 <TextBlock Text="{Binding ProviderCapabilitySummary}"
                                            Foreground="{DynamicResource MutedTextBrush}"
                                            FontSize="{DynamicResource FontSizeBody}"
-                                           TextWrapping="Wrap"
-                                           MaxWidth="560"
-                                           HorizontalAlignment="Left" />
+                                           TextWrapping="Wrap" />
                             </StackPanel>
 
-                            <!-- Sync behaviour / Direction group below provider -->
-                            <StackPanel Spacing="4">
+                            <!-- Sync behaviour shares the provider row's grid -->
+                            <StackPanel Grid.Column="1" Spacing="4">
                                 <TextBlock Text="Sync behaviour"
                                            Foreground="{DynamicResource SecondaryTextBrush}"
                                            FontSize="{DynamicResource FontSizeBody}"
@@ -281,6 +278,7 @@
                                               FontSize="{DynamicResource FontSizeBody}" />
                                 </WrapPanel>
                             </StackPanel>
+                            </Grid>
 
                             <Border Height="1" Background="{DynamicResource SubtleBorderBrush}" Margin="0,2" />
 
@@ -298,21 +296,18 @@
                                     <TextBox Grid.Column="0"
                                              Text="{Binding RemoteRootPath}"
                                              PlaceholderText="Folder to sync backup runs with (NAS share, USB drive, cloud-synced folder)"
-                                             ToolTip.Tip="{Binding RemoteRootPath}"
-                                             MinHeight="32" />
+                                             ToolTip.Tip="{Binding RemoteRootPath}" />
 
                                     <Button Grid.Column="1"
                                             Content="Choose folder…"
                                             Command="{Binding ChooseRemoteFolderCommand}"
                                             IsEnabled="{Binding CanSelectRemoteFolder}"
-                                            Height="32"
                                             VerticalAlignment="Top" />
 
                                     <Button Grid.Column="2"
                                             Content="Open Folder"
                                             Command="{Binding OpenRemoteLocationCommand}"
                                             IsVisible="{Binding CanOpenRemoteLocation}"
-                                            Height="32"
                                             VerticalAlignment="Top" />
                                 </Grid>
                             </StackPanel>
@@ -330,19 +325,16 @@
 
                                     <TextBox Grid.Column="0"
                                              Text="{Binding SftpHost}"
-                                             PlaceholderText="Host name or IP address"
-                                             MinHeight="30" />
+                                             PlaceholderText="Host name or IP address" />
 
                                     <TextBox Grid.Column="1"
                                              Text="{Binding SftpPort}"
                                              PlaceholderText="22"
-                                             ToolTip.Tip="SSH port (default 22)"
-                                             MinHeight="30" />
+                                             ToolTip.Tip="SSH port (default 22)" />
 
                                     <TextBox Grid.Column="2"
                                              Text="{Binding SftpUsername}"
-                                             PlaceholderText="Username"
-                                             MinHeight="30" />
+                                             PlaceholderText="Username" />
                                 </Grid>
 
                                 <StackPanel Orientation="Horizontal"
@@ -361,8 +353,7 @@
                                 <TextBox Text="{Binding SftpPassword}"
                                          PasswordChar="●"
                                          PlaceholderText="Password (kept in memory only, never stored)"
-                                         IsVisible="{Binding SftpUsePassword}"
-                                         MinHeight="30" />
+                                         IsVisible="{Binding SftpUsePassword}" />
 
                                 <StackPanel Spacing="4"
                                             IsVisible="{Binding SftpUsePrivateKey}">
@@ -372,25 +363,21 @@
                                         <TextBox Grid.Column="0"
                                                  Text="{Binding SftpKeyFilePath}"
                                                  PlaceholderText="Path to the private key file (e.g. C:\Users\you\.ssh\id_ed25519)"
-                                                 ToolTip.Tip="{Binding SftpKeyFilePath}"
-                                                 MinHeight="30" />
+                                                 ToolTip.Tip="{Binding SftpKeyFilePath}" />
 
                                         <Button Grid.Column="1"
                                                 Content="Browse…"
                                                 Command="{Binding ChooseKeyFileCommand}"
-                                                Height="30"
                                                 VerticalAlignment="Top" />
                                     </Grid>
 
                                     <TextBox Text="{Binding SftpKeyPassphrase}"
                                              PasswordChar="●"
-                                             PlaceholderText="Key passphrase, if any (kept in memory only, never stored)"
-                                             MinHeight="30" />
+                                             PlaceholderText="Key passphrase, if any (kept in memory only, never stored)" />
                                 </StackPanel>
 
                                 <TextBox Text="{Binding SftpRemotePath}"
-                                         PlaceholderText="Remote folder path, e.g. /srv/gamesave-sync"
-                                         MinHeight="30" />
+                                         PlaceholderText="Remote folder path, e.g. /srv/gamesave-sync" />
 
                                 <CheckBox Content="Trust this server's host key on first connect"
                                           IsChecked="{Binding SftpTrustNewHostKey}"
@@ -401,7 +388,6 @@
                                     <Button Content="Forget Stored Host Key"
                                             Command="{Binding ForgetSftpHostKeyCommand}"
                                             FontSize="{DynamicResource FontSizeBody}"
-                                            Height="28"
                                             ToolTip.Tip="Removes the stored fingerprint for this host and port, e.g. after a planned server reinstall." />
 
                                     <TextBlock Text="Passwords and passphrases are never saved to disk."
@@ -442,22 +428,18 @@
                                     <Button Content="Connect Google Drive"
                                             Command="{Binding ConnectGoogleDriveCommand}"
                                             IsEnabled="{Binding CanConnectGoogleDrive}"
-                                            IsVisible="{Binding CanShowConnectGoogleDrive}"
-                                            Height="30" />
+                                            IsVisible="{Binding CanShowConnectGoogleDrive}" />
                                     <Button Content="Reconnect"
                                             Command="{Binding ReconnectGoogleDriveCommand}"
                                             IsEnabled="{Binding CanReconnectGoogleDrive}"
-                                            IsVisible="{Binding CanShowReconnectGoogleDrive}"
-                                            Height="30" />
+                                            IsVisible="{Binding CanShowReconnectGoogleDrive}" />
                                     <Button Content="Disconnect"
                                             Command="{Binding DisconnectGoogleDriveCommand}"
                                             IsEnabled="{Binding CanDisconnectGoogleDrive}"
-                                            IsVisible="{Binding CanShowDisconnectGoogleDrive}"
-                                            Height="30" />
+                                            IsVisible="{Binding CanShowDisconnectGoogleDrive}" />
                                     <Button Content="Cancel"
                                             Command="{Binding CancelGoogleDriveConnectionCommand}"
-                                            IsVisible="{Binding CanCancelGoogleDriveConnection}"
-                                            Height="30" />
+                                            IsVisible="{Binding CanCancelGoogleDriveConnection}" />
                                 </WrapPanel>
 
                                 <CheckBox Content="Confirm removing locally stored Google Drive authentication"
@@ -514,22 +496,18 @@
                                     <Button Content="Set Up Drive Folder"
                                             Command="{Binding SetUpGoogleDriveRootFolderCommand}"
                                             IsEnabled="{Binding CanSetUpGoogleDriveRootFolder}"
-                                            IsVisible="{Binding CanSetUpGoogleDriveRootFolder}"
-                                            Height="30" />
+                                            IsVisible="{Binding CanSetUpGoogleDriveRootFolder}" />
                                     <Button Content="Check Drive Folder"
                                             Command="{Binding CheckGoogleDriveRootFolderCommand}"
                                             IsEnabled="{Binding CanCheckGoogleDriveRootFolder}"
-                                            IsVisible="{Binding CanCheckGoogleDriveRootFolder}"
-                                            Height="30" />
+                                            IsVisible="{Binding CanCheckGoogleDriveRootFolder}" />
                                     <Button Content="Recreate Drive Folder"
                                             Command="{Binding RecreateGoogleDriveRootFolderCommand}"
                                             IsEnabled="{Binding CanRecreateGoogleDriveRootFolder}"
-                                            IsVisible="{Binding CanShowRecreateGoogleDriveRootFolder}"
-                                            Height="30" />
+                                            IsVisible="{Binding CanShowRecreateGoogleDriveRootFolder}" />
                                     <Button Content="Cancel Folder Operation"
                                             Command="{Binding CancelGoogleDriveRootFolderCommand}"
-                                            IsVisible="{Binding CanCancelGoogleDriveRootFolderOperation}"
-                                            Height="30" />
+                                            IsVisible="{Binding CanCancelGoogleDriveRootFolderOperation}" />
                                 </WrapPanel>
 
                                 <CheckBox Content="Confirm creating or selecting a replacement Google Drive root folder"
@@ -559,7 +537,6 @@
                                 <Button Content="Disconnect"
                                         Command="{Binding DisconnectAuthenticationCommand}"
                                         IsEnabled="{Binding HasStoredAuthentication}"
-                                        Height="28"
                                         FontSize="{DynamicResource FontSizeBody}"
                                         ToolTip.Tip="Removes encrypted authentication only. The saved profile and backup data are kept." />
                             </StackPanel>
@@ -568,7 +545,6 @@
                                 <Button Content="Check connection"
                                         Command="{Binding CheckSyncStatusCommand}"
                                         IsVisible="{Binding CanCheckConnection}"
-                                        Height="28"
                                         FontSize="{DynamicResource FontSizeBody}"
                                         ToolTip.Tip="Connects to the sync target and reports whether the backup runs are in sync — without copying anything. Preview Sync (Dry Run) performs the same check automatically." />
 
@@ -601,7 +577,6 @@
                             <Button Content="Sync now"
                                     Command="{Binding ExecuteSyncCommand}"
                                     IsEnabled="{Binding CanExecuteSync}"
-                                    Height="34"
                                     VerticalAlignment="Center" />
                         </WrapPanel>
                     </StackPanel>
@@ -631,14 +606,12 @@
                             <Button Grid.Column="1"
                                     Content="Select All"
                                     Command="{Binding SelectAllRunsCommand}"
-                                    FontSize="{DynamicResource FontSizeBody}"
-                                    Height="26" />
+                                    FontSize="{DynamicResource FontSizeBody}" />
 
                             <Button Grid.Column="2"
                                     Content="Select None"
                                     Command="{Binding DeselectAllRunsCommand}"
-                                    FontSize="{DynamicResource FontSizeBody}"
-                                    Height="26" />
+                                    FontSize="{DynamicResource FontSizeBody}" />
                         </Grid>
 
                         <Border Padding="0,6,0,6"

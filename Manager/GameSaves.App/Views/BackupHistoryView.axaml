@@ -10,7 +10,7 @@
 
     <Grid RowDefinitions="Auto,*"
           RowSpacing="10"
-          Margin="0,12,0,14"
+          Margin="0,12,24,14"
           MaxWidth="1100">
 
         <!-- Header -->
@@ -42,7 +42,6 @@
                 <Button Grid.Column="1"
                         Content="Refresh"
                         Command="{Binding RefreshRunsCommand}"
-                        Height="34"
                         VerticalAlignment="Center" />
             </Grid>
         </Border>
@@ -206,8 +205,7 @@
 
                                 <ComboBox ItemsSource="{Binding Profiles}"
                                           SelectedItem="{Binding SelectedTargetProfile}"
-                                          HorizontalAlignment="Stretch"
-                                          MinHeight="32" />
+                                          HorizontalAlignment="Stretch" />
                             </StackPanel>
 
                             <RadioButton Content="Restore to Approved Mapping Location"
@@ -224,8 +222,7 @@
 
                                 <ComboBox ItemsSource="{Binding MappingOptions}"
                                           SelectedItem="{Binding SelectedMappingOption}"
-                                          HorizontalAlignment="Stretch"
-                                          MinHeight="32" />
+                                          HorizontalAlignment="Stretch" />
                             </StackPanel>
 
                             <TextBlock Text="{Binding ResolvedTargetDisplay}"
@@ -242,12 +239,10 @@
                             <StackPanel Orientation="Horizontal"
                                         Spacing="10">
                                 <Button Content="Preview restore"
-                                        Command="{Binding PreviewRestoreCommand}"
-                                        Height="36" />
+                                        Command="{Binding PreviewRestoreCommand}" />
 
                                 <Button Content="Restore to target"
-                                        Command="{Binding ExecuteRestoreCommand}"
-                                        Height="36" />
+                                        Command="{Binding ExecuteRestoreCommand}" />
                             </StackPanel>
 
                             <TextBlock Text="{Binding RestoreStatusMessage}"
@@ -496,12 +491,10 @@
                                         Spacing="10">
                                 <Button Content="Export Selected Run to ZIP..."
                                         Command="{Binding ExportSelectedRunCommand}"
-                                        Height="32"
                                         ToolTip.Tip="Creates &lt;run name&gt;.zip in a folder you choose. The run itself is not modified." />
 
                                 <Button Content="Import Backup ZIP..."
                                         Command="{Binding ImportArchiveCommand}"
-                                        Height="32"
                                         ToolTip.Tip="Extracts a previously exported backup ZIP into the backup base and makes it restorable again." />
                             </StackPanel>
 
@@ -542,7 +535,6 @@
 
                             <Button Content="Delete Selected Run"
                                     Command="{Binding DeleteSelectedRunCommand}"
-                                    Height="32"
                                     ToolTip.Tip="Permanently deletes the backup run selected in the list on the left. Save files are never touched." />
 
                             <TextBlock Text="Retention policy"
@@ -559,8 +551,7 @@
                                            VerticalAlignment="Center" />
 
                                 <TextBox Text="{Binding KeepNewestRunsText}"
-                                         Width="60"
-                                         MinHeight="28" />
+                                         Width="60" />
 
                                 <TextBlock Text="run(s), delete the rest. Only runs older than"
                                            Foreground="{DynamicResource SecondaryTextBrush}"
@@ -569,8 +560,7 @@
 
                                 <TextBox Text="{Binding OlderThanDaysText}"
                                          PlaceholderText="any age"
-                                         Width="70"
-                                         MinHeight="28" />
+                                         Width="70" />
 
                                 <TextBlock Text="day(s)."
                                            Foreground="{DynamicResource SecondaryTextBrush}"
@@ -585,12 +575,10 @@
                             <StackPanel Orientation="Horizontal"
                                         Spacing="10">
                                 <Button Content="Preview Cleanup (Dry Run)"
-                                        Command="{Binding PreviewCleanupCommand}"
-                                        Height="32" />
+                                        Command="{Binding PreviewCleanupCommand}" />
 
                                 <Button Content="Delete Old Runs"
-                                        Command="{Binding ExecuteCleanupCommand}"
-                                        Height="32" />
+                                        Command="{Binding ExecuteCleanupCommand}" />
                             </StackPanel>
 
                             <TextBlock Text="{Binding CleanupStatusMessage}"

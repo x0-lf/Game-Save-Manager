@@ -118,7 +118,7 @@
                   HorizontalScrollBarVisibility="Disabled">
     <Grid RowDefinitions="Auto,Auto,Auto,*"
           RowSpacing="10"
-          Margin="0,12,0,14"
+          Margin="0,12,24,14"
           MaxWidth="1100">
 
         <!-- Header -->
@@ -151,7 +151,6 @@
                 <Button Grid.Column="1"
                         Content="Refresh"
                         Command="{Binding RefreshInputsCommand}"
-                        Height="34"
                         VerticalAlignment="Center" />
 
                 <Button Grid.Column="2"
@@ -160,7 +159,6 @@
                         IsEnabled="{Binding !!Profiles.Count}"
                             Classes="primary"
                         Command="{Binding PreviewTransferCommand}"
-                        Height="34"
                         VerticalAlignment="Center" />
             </Grid>
         </Border>
@@ -195,10 +193,8 @@
                 <Button Grid.Column="2"
                         Content="Go to Profiles"
                         Click="OnGoToProfilesClick"
-                        BorderBrush="{DynamicResource WarningEdgeBrush}"
                         Foreground="{DynamicResource PrimaryTextBrush}"
                         FontSize="{DynamicResource FontSizeBody}"
-                        Height="28"
                         VerticalAlignment="Center" />
             </Grid>
         </Border>
@@ -225,8 +221,7 @@
                     <Panel>
                         <ComboBox ItemsSource="{Binding Profiles}"
                               SelectedItem="{Binding SelectedSourceProfile}"
-                              HorizontalAlignment="Stretch"
-                              MinHeight="32" />
+                              HorizontalAlignment="Stretch" />
                         <TextBlock Text="Select a source profile"
                                    Foreground="{DynamicResource MutedTextBrush}"
                                    FontSize="{DynamicResource FontSizeSubtitle}"
@@ -247,8 +242,7 @@
                     <Panel>
                         <ComboBox ItemsSource="{Binding Profiles}"
                               SelectedItem="{Binding SelectedTargetProfile}"
-                              HorizontalAlignment="Stretch"
-                              MinHeight="32" />
+                              HorizontalAlignment="Stretch" />
                         <TextBlock Text="Select a target profile"
                                    Foreground="{DynamicResource MutedTextBrush}"
                                    FontSize="{DynamicResource FontSizeSubtitle}"
@@ -269,8 +263,7 @@
                     <Panel>
                         <ComboBox ItemsSource="{Binding Games}"
                               SelectedItem="{Binding SelectedGame}"
-                              HorizontalAlignment="Stretch"
-                              MinHeight="32" />
+                              HorizontalAlignment="Stretch" />
                         <TextBlock Text="Select a game"
                                    Foreground="{DynamicResource MutedTextBrush}"
                                    FontSize="{DynamicResource FontSizeSubtitle}"
@@ -325,119 +318,116 @@
                     CornerRadius="14"
                     Padding="0">
 
-                <ScrollViewer>
+                <StackPanel Spacing="6"
+                            Margin="14">
+                    <TextBlock Text="Summary"
+                               Foreground="{DynamicResource PrimaryTextBrush}"
+                               FontSize="{DynamicResource FontSizeBodyLarge}"
+                               FontWeight="SemiBold" />
+
+                    <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" RowSpacing="2" ColumnSpacing="16" MaxWidth="420" HorizontalAlignment="Left">
+                        <TextBlock Text="Files to consider" Foreground="{DynamicResource MutedTextBrush}" FontSize="{DynamicResource FontSizeBody}" />
+                        <TextBlock Grid.Column="1" Text="{Binding TotalFiles, StringFormat='{}{0}'}" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="{DynamicResource FontSizeBody}" FontWeight="SemiBold" />
+                        <TextBlock Grid.Row="1" Text="Total size" Foreground="{DynamicResource MutedTextBrush}" FontSize="{DynamicResource FontSizeBody}" />
+                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding TotalSizeDisplay, StringFormat='{}{0}'}" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="{DynamicResource FontSizeBody}" FontWeight="SemiBold" />
+                    </Grid>
+                    <TextBlock IsVisible="False" Text="{Binding TotalFiles, StringFormat='Files to consider: {0}'}"
+                               FontSize="{DynamicResource FontSizeBody}"
+                               Foreground="{DynamicResource SecondaryTextBrush}" />
+
+                    <TextBlock IsVisible="False" Text="{Binding TotalSizeDisplay, StringFormat='Total size: {0}'}"
+                               FontSize="{DynamicResource FontSizeBody}"
+                               Foreground="{DynamicResource SecondaryTextBrush}" />
+
+                    <TextBlock Text="Ready to copy"
+                               IsVisible="{Binding CanExecuteCopy}"
+                               FontSize="{DynamicResource FontSizeBody}"
+                               Foreground="{DynamicResource SuccessBrush}" />
+
+                    <TextBlock Text="Not ready to copy — run a preview first"
+                               IsVisible="{Binding !CanExecuteCopy}"
+                               FontSize="{DynamicResource FontSizeBody}"
+                               Foreground="{DynamicResource MutedTextBrush}" />
+
+                    <TextBlock Text="{Binding SteamUserDataSourceText, StringFormat='Steam userdata: {0}'}"
+                               FontSize="{DynamicResource FontSizeBody}"
+                               Foreground="{DynamicResource SecondaryTextBrush}" />
+
+                    <TextBlock Text="{Binding ApprovedMappingsSourceText, StringFormat='Approved mappings: {0}'}"
+                               FontSize="{DynamicResource FontSizeBody}"
+                               Foreground="{DynamicResource SecondaryTextBrush}" />
+
+                    <TextBlock Text="{Binding BlockedItemCount, StringFormat='Blocked items: {0}'}"
+                               IsVisible="{Binding HasBlockedItemsInPreview}"
+                               FontSize="{DynamicResource FontSizeBody}"
+                               Foreground="{DynamicResource WarningBrush}" />
+
+                    <CheckBox Content="Skip blocked items and copy the rest"
+                              IsChecked="{Binding SkipBlockedItems}"
+                              IsVisible="{Binding HasBlockedItemsInPreview}"
+                              FontSize="{DynamicResource FontSizeBody}"
+                              ToolTip.Tip="Items with errors (for example a save location that resolves to the same path for both profiles) are never copied. Enable this to copy the remaining safe items anyway; each blocked item is reported as skipped in the execution results." />
+
+                    <TextBlock Text="Copy only. Source files are never deleted or modified. Existing target files are skipped unless overwrite is enabled."
+                               Foreground="{DynamicResource SecondaryTextBrush}"
+                               FontSize="{DynamicResource FontSizeBody}"
+                               TextWrapping="Wrap" />
+
+                    <Border Background="{DynamicResource InsetBackgroundBrush}"
+                            CornerRadius="8"
+                            Padding="10,6">
+                        <CheckBox Content="I understand this will copy files into the target profile"
+                              IsChecked="{Binding ConfirmRealTransfer}"
+                              FontSize="{DynamicResource FontSizeBody}" />
+                    </Border>
+
+                    <CheckBox Content="Overwrite existing target files"
+                              IsChecked="{Binding OverwriteExisting}"
+                              FontSize="{DynamicResource FontSizeBody}" />
+
+                    <CheckBox Margin="24,0,0,0"
+                              Content="Back up files before overwriting (recommended)"
+                              IsChecked="{Binding BackupBeforeOverwrite}"
+                              IsEnabled="{Binding OverwriteExisting}"
+                              FontSize="{DynamicResource FontSizeBody}"
+                              ToolTip.Tip="Safe Mode: before a target file is overwritten, a copy of it is stored in the app's TransferBackups folder with a SHA-256 manifest. If a backup fails, that file is not overwritten." />
+
+                    <Button Content="Copy to target profile"
+                            Command="{Binding ExecuteTransferCommand}"
+                            IsEnabled="{Binding CanExecuteCopy}"
+                            HorizontalAlignment="Stretch" />
+
+                    <TextBlock Text="{Binding ExecutionStatusMessage}"
+                               Foreground="{DynamicResource SecondaryTextBrush}"
+                               FontSize="{DynamicResource FontSizeBody}"
+                               TextWrapping="Wrap" />
+
                     <StackPanel Spacing="6"
-                                Margin="14">
-                        <TextBlock Text="Summary"
-                                   Foreground="{DynamicResource PrimaryTextBrush}"
-                                   FontSize="{DynamicResource FontSizeBodyLarge}"
-                                   FontWeight="SemiBold" />
+                                IsVisible="{Binding !!ExecutionResults.Count}">
 
-                        <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" RowSpacing="2" ColumnSpacing="16" MaxWidth="420" HorizontalAlignment="Left">
-                            <TextBlock Text="Files to consider" Foreground="{DynamicResource MutedTextBrush}" FontSize="{DynamicResource FontSizeBody}" />
-                            <TextBlock Grid.Column="1" Text="{Binding TotalFiles, StringFormat='{}{0}'}" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="{DynamicResource FontSizeBody}" FontWeight="SemiBold" />
-                            <TextBlock Grid.Row="1" Text="Total size" Foreground="{DynamicResource MutedTextBrush}" FontSize="{DynamicResource FontSizeBody}" />
-                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding TotalSizeDisplay, StringFormat='{}{0}'}" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="{DynamicResource FontSizeBody}" FontWeight="SemiBold" />
-                        </Grid>
-                        <TextBlock IsVisible="False" Text="{Binding TotalFiles, StringFormat='Files to consider: {0}'}"
-                                   FontSize="{DynamicResource FontSizeBody}"
-                                   Foreground="{DynamicResource SecondaryTextBrush}" />
-
-                        <TextBlock IsVisible="False" Text="{Binding TotalSizeDisplay, StringFormat='Total size: {0}'}"
-                                   FontSize="{DynamicResource FontSizeBody}"
-                                   Foreground="{DynamicResource SecondaryTextBrush}" />
-
-                        <TextBlock Text="Ready to copy"
-                                   IsVisible="{Binding CanExecuteCopy}"
+                        <TextBlock Text="{Binding FilesCopied, StringFormat='Files copied: {0}'}"
                                    FontSize="{DynamicResource FontSizeBody}"
                                    Foreground="{DynamicResource SuccessBrush}" />
 
-                        <TextBlock Text="Not ready to copy — run a preview first"
-                                   IsVisible="{Binding !CanExecuteCopy}"
+                        <TextBlock Text="{Binding FilesSkipped, StringFormat='Files skipped: {0}'}"
                                    FontSize="{DynamicResource FontSizeBody}"
                                    Foreground="{DynamicResource MutedTextBrush}" />
 
-                        <TextBlock Text="{Binding SteamUserDataSourceText, StringFormat='Steam userdata: {0}'}"
+                        <TextBlock Text="{Binding BytesCopiedDisplay, StringFormat='Data copied: {0}'}"
                                    FontSize="{DynamicResource FontSizeBody}"
-                                   Foreground="{DynamicResource SecondaryTextBrush}" />
+                                   Foreground="{DynamicResource MutedTextBrush}" />
 
-                        <TextBlock Text="{Binding ApprovedMappingsSourceText, StringFormat='Approved mappings: {0}'}"
+                        <TextBlock Text="{Binding FilesBackedUp, StringFormat='Files backed up before overwrite: {0}'}"
                                    FontSize="{DynamicResource FontSizeBody}"
-                                   Foreground="{DynamicResource SecondaryTextBrush}" />
+                                   Foreground="{DynamicResource AccentBrush}" />
 
-                        <TextBlock Text="{Binding BlockedItemCount, StringFormat='Blocked items: {0}'}"
-                                   IsVisible="{Binding HasBlockedItemsInPreview}"
-                                   FontSize="{DynamicResource FontSizeBody}"
-                                   Foreground="{DynamicResource WarningBrush}" />
-
-                        <CheckBox Content="Skip blocked items and copy the rest"
-                                  IsChecked="{Binding SkipBlockedItems}"
-                                  IsVisible="{Binding HasBlockedItemsInPreview}"
-                                  FontSize="{DynamicResource FontSizeBody}"
-                                  ToolTip.Tip="Items with errors (for example a save location that resolves to the same path for both profiles) are never copied. Enable this to copy the remaining safe items anyway; each blocked item is reported as skipped in the execution results." />
-
-                        <TextBlock Text="Copy only. Source files are never deleted or modified. Existing target files are skipped unless overwrite is enabled."
-                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                        <TextBlock Text="{Binding BackupLocationMessage}"
+                                   Foreground="{DynamicResource MutedTextBrush}"
                                    FontSize="{DynamicResource FontSizeBody}"
                                    TextWrapping="Wrap" />
-
-                        <Border Background="{DynamicResource InsetBackgroundBrush}"
-                                CornerRadius="8"
-                                Padding="10,6">
-                            <CheckBox Content="I understand this will copy files into the target profile"
-                                  IsChecked="{Binding ConfirmRealTransfer}"
-                                  FontSize="{DynamicResource FontSizeBody}" />
-                        </Border>
-
-                        <CheckBox Content="Overwrite existing target files"
-                                  IsChecked="{Binding OverwriteExisting}"
-                                  FontSize="{DynamicResource FontSizeBody}" />
-
-                        <CheckBox Margin="24,0,0,0"
-                                  Content="Back up files before overwriting (recommended)"
-                                  IsChecked="{Binding BackupBeforeOverwrite}"
-                                  IsEnabled="{Binding OverwriteExisting}"
-                                  FontSize="{DynamicResource FontSizeBody}"
-                                  ToolTip.Tip="Safe Mode: before a target file is overwritten, a copy of it is stored in the app's TransferBackups folder with a SHA-256 manifest. If a backup fails, that file is not overwritten." />
-
-                        <Button Content="Copy to target profile"
-                                Command="{Binding ExecuteTransferCommand}"
-                                IsEnabled="{Binding CanExecuteCopy}"
-                                HorizontalAlignment="Stretch"
-                                Height="34" />
-
-                        <TextBlock Text="{Binding ExecutionStatusMessage}"
-                                   Foreground="{DynamicResource SecondaryTextBrush}"
-                                   FontSize="{DynamicResource FontSizeBody}"
-                                   TextWrapping="Wrap" />
-
-                        <StackPanel Spacing="6"
-                                    IsVisible="{Binding !!ExecutionResults.Count}">
-
-                            <TextBlock Text="{Binding FilesCopied, StringFormat='Files copied: {0}'}"
-                                       FontSize="{DynamicResource FontSizeBody}"
-                                       Foreground="{DynamicResource SuccessBrush}" />
-
-                            <TextBlock Text="{Binding FilesSkipped, StringFormat='Files skipped: {0}'}"
-                                       FontSize="{DynamicResource FontSizeBody}"
-                                       Foreground="{DynamicResource MutedTextBrush}" />
-
-                            <TextBlock Text="{Binding BytesCopiedDisplay, StringFormat='Data copied: {0}'}"
-                                       FontSize="{DynamicResource FontSizeBody}"
-                                       Foreground="{DynamicResource MutedTextBrush}" />
-
-                            <TextBlock Text="{Binding FilesBackedUp, StringFormat='Files backed up before overwrite: {0}'}"
-                                       FontSize="{DynamicResource FontSizeBody}"
-                                       Foreground="{DynamicResource AccentBrush}" />
-
-                            <TextBlock Text="{Binding BackupLocationMessage}"
-                                       Foreground="{DynamicResource MutedTextBrush}"
-                                       FontSize="{DynamicResource FontSizeBody}"
-                                       TextWrapping="Wrap" />
-                        </StackPanel>
                     </StackPanel>
-                </ScrollViewer>
-            </Border>
+                </StackPanel>
+        </Border>
 
             <GridSplitter Grid.Column="1"
                           Width="8"

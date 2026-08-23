@@ -12,12 +12,12 @@
                   VerticalScrollBarVisibility="Auto"
                   HorizontalScrollBarVisibility="Disabled">
     <Grid RowSpacing="0"
-          Margin="0,12,0,14"
+          Margin="0,12,24,14"
           MaxWidth="1100">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="150" MinHeight="120" MaxHeight="420" />
+            <RowDefinition Height="Auto" MinHeight="120" MaxHeight="420" />
             <RowDefinition Height="8" />
             <RowDefinition Height="*" MinHeight="160" />
         </Grid.RowDefinitions>
@@ -52,7 +52,6 @@
                         Content="Scan Steam library"
                         IsVisible="{Binding HasProfiles}"
                         Command="{Binding RefreshProfilesCommand}"
-                        Height="34"
                         VerticalAlignment="Center" />
             </Grid>
         </Border>
@@ -111,8 +110,7 @@
                     <Panel>
                     <ComboBox ItemsSource="{Binding Profiles}"
                               SelectedItem="{Binding SourceProfile}"
-                              HorizontalAlignment="Stretch"
-                              MinHeight="38">
+                              HorizontalAlignment="Stretch">
                         <ComboBox.ItemTemplate>
                             <DataTemplate x:DataType="models:SteamProfileRowViewModel">
                                 <StackPanel Spacing="2">
@@ -165,8 +163,7 @@
                     <Panel>
                     <ComboBox ItemsSource="{Binding Profiles}"
                               SelectedItem="{Binding TargetProfile}"
-                              HorizontalAlignment="Stretch"
-                              MinHeight="38">
+                              HorizontalAlignment="Stretch">
                         <ComboBox.ItemTemplate>
                             <DataTemplate x:DataType="models:SteamProfileRowViewModel">
                                 <StackPanel Spacing="2">

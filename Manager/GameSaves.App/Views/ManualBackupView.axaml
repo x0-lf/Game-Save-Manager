@@ -13,7 +13,7 @@
                   HorizontalScrollBarVisibility="Disabled">
     <Grid RowDefinitions="Auto,Auto,Auto,*"
           RowSpacing="10"
-          Margin="0,12,0,14"
+          Margin="0,12,24,14"
           MaxWidth="1100">
 
         <!-- Header -->
@@ -46,7 +46,6 @@
                 <Button Grid.Column="1"
                         Content="Refresh"
                         Command="{Binding RefreshInputsCommand}"
-                        Height="34"
                         VerticalAlignment="Center" />
 
                 <Button Grid.Column="2"
@@ -55,7 +54,6 @@
                         IsEnabled="{Binding !!Profiles.Count}"
                             Classes="primary"
                         Command="{Binding PreviewBackupCommand}"
-                        Height="34"
                         VerticalAlignment="Center" />
             </Grid>
         </Border>
@@ -90,10 +88,8 @@
                 <Button Grid.Column="2"
                         Content="Go to Profiles"
                         Click="OnGoToProfilesClick"
-                        BorderBrush="{DynamicResource WarningEdgeBrush}"
                         Foreground="{DynamicResource PrimaryTextBrush}"
                         FontSize="{DynamicResource FontSizeBody}"
-                        Height="28"
                         VerticalAlignment="Center" />
             </Grid>
         </Border>
@@ -109,8 +105,8 @@
                   ColumnSpacing="14">
 
                 <StackPanel Grid.Column="0"
-                            Spacing="10">
-                  <StackPanel Spacing="3">
+                            Spacing="16">
+                  <StackPanel Spacing="4">
                     <TextBlock Text="Profile"
                                Foreground="{DynamicResource SecondaryTextBrush}"
                                FontSize="{DynamicResource FontSizeBody}"
@@ -119,8 +115,7 @@
                     <Panel>
                         <ComboBox ItemsSource="{Binding Profiles}"
                               SelectedItem="{Binding SelectedProfile}"
-                              HorizontalAlignment="Stretch"
-                              MinHeight="30" />
+                              HorizontalAlignment="Stretch" />
                         <TextBlock Text="Select a profile"
                                    Foreground="{DynamicResource MutedTextBrush}"
                                    FontSize="{DynamicResource FontSizeSubtitle}"
@@ -139,8 +134,7 @@
                     <Panel>
                         <ComboBox ItemsSource="{Binding Games}"
                               SelectedItem="{Binding SelectedGame}"
-                              HorizontalAlignment="Stretch"
-                              MinHeight="30" />
+                              HorizontalAlignment="Stretch" />
                         <TextBlock Text="Select a game"
                                    Foreground="{DynamicResource MutedTextBrush}"
                                    FontSize="{DynamicResource FontSizeSubtitle}"
@@ -151,7 +145,7 @@
                     </Panel>
                   </StackPanel>
 
-                  <StackPanel Spacing="3">
+                  <StackPanel Spacing="4">
                     <TextBlock Text="Backup source"
                                Foreground="{DynamicResource SecondaryTextBrush}"
                                FontSize="{DynamicResource FontSizeBody}"
@@ -176,8 +170,8 @@
                 </StackPanel>
 
                 <StackPanel Grid.Column="1"
-                            Spacing="8">
-                  <StackPanel Spacing="3">
+                            Spacing="16">
+                  <StackPanel Spacing="4">
                     <TextBlock Text="Backup destination"
                                Foreground="{DynamicResource SecondaryTextBrush}"
                                FontSize="{DynamicResource FontSizeBody}"
@@ -185,20 +179,17 @@
 
                     <TextBox Text="{Binding DestinationPath}"
                              PlaceholderText="Select where this backup should be stored."
-                             ToolTip.Tip="{Binding DestinationPath}"
-                             MinHeight="30" />
+                             ToolTip.Tip="{Binding DestinationPath}" />
 
-                      <WrapPanel ItemSpacing="6" LineSpacing="4">
+                      <WrapPanel ItemSpacing="6" LineSpacing="4" Margin="0,4,0,0">
                         <Button Content="Choose folder…"
                                 Command="{Binding ChooseDestinationFolderCommand}"
                                 ToolTip.Tip="Select where this backup should be stored."
-                                FontSize="{DynamicResource FontSizeBody}"
-                                Height="30" />
+                                FontSize="{DynamicResource FontSizeBody}" />
 
                         <Button Content="Reset to default"
                                 Command="{Binding UseDefaultDestinationCommand}"
-                                FontSize="{DynamicResource FontSizeBody}"
-                                Height="30" />
+                                FontSize="{DynamicResource FontSizeBody}" />
                       </WrapPanel>
 
                     <TextBlock Text="Each run creates a timestamped folder here. Backups in the default location also appear in Backups."
@@ -209,7 +200,7 @@
                                TextWrapping="Wrap" />
                   </StackPanel>
 
-                  <StackPanel Spacing="3">
+                  <StackPanel Spacing="4">
                     <TextBlock Text="Backup preset"
                                Foreground="{DynamicResource SecondaryTextBrush}"
                                FontSize="{DynamicResource FontSizeBody}"
@@ -219,7 +210,6 @@
                         <ComboBox ItemsSource="{Binding Presets}"
                               SelectedItem="{Binding SelectedPreset}"
                               HorizontalAlignment="Stretch"
-                              MinHeight="30"
                               ToolTip.Tip="Applying a preset fills the destination and backup sources. Presets never start a backup by themselves." />
                         <TextBlock Text="Apply a saved preset…"
                                Foreground="{DynamicResource MutedTextBrush}"
@@ -230,9 +220,8 @@
                                IsVisible="{Binding SelectedPreset, Converter={x:Static ObjectConverters.IsNull}}" />
                     </Panel>
 
-                    <Panel>
-                        <TextBox Text="{Binding PresetName}"
-                                 MinHeight="30" />
+                    <Panel Margin="0,4,0,0">
+                        <TextBox Text="{Binding PresetName}" />
                         <TextBlock Text="Preset name"
                                    Foreground="{DynamicResource MutedTextBrush}"
                                    FontSize="{DynamicResource FontSizeSubtitle}"
@@ -242,12 +231,11 @@
                                    IsVisible="{Binding !PresetName.Length}" />
                     </Panel>
 
-                    <WrapPanel ItemSpacing="6" LineSpacing="4">
+                    <WrapPanel ItemSpacing="6" LineSpacing="4" Margin="0,4,0,0">
                         <Button Content="Save preset"
                                 IsEnabled="{Binding !!PresetName.Length}"
                                 Command="{Binding SavePresetCommand}"
                                 FontSize="{DynamicResource FontSizeBody}"
-                                Height="30"
                                 ToolTip.Tip="Saves the current destination and backup sources under this name. Saving an existing name updates that preset." />
 
                         <Button Content="Delete preset"
@@ -255,14 +243,12 @@
                                 IsEnabled="{Binding SelectedPreset, Converter={x:Static ObjectConverters.IsNotNull}}"
                                 Command="{Binding DeletePresetCommand}"
                                 FontSize="{DynamicResource FontSizeBody}"
-                                Height="30"
                                 ToolTip.Tip="Deletes the selected preset. Backups already created are not affected." />
 
                         <Button Content="Clear preset"
                                 IsEnabled="{Binding SelectedPreset, Converter={x:Static ObjectConverters.IsNotNull}}"
                                 Command="{Binding ClearPresetSelectionCommand}"
                                 FontSize="{DynamicResource FontSizeBody}"
-                                Height="30"
                                 ToolTip.Tip="Clears the preset selection. The current settings are kept and the backup runs without a preset." />
                     </WrapPanel>
 
@@ -322,8 +308,7 @@
                         <Button Content="Back up now"
                                 Command="{Binding ExecuteBackupCommand}"
                                 IsEnabled="{Binding CanExecuteBackup}"
-                                HorizontalAlignment="Stretch"
-                                Height="34" />
+                                HorizontalAlignment="Stretch" />
 
                         <TextBlock Text="{Binding ExecutionStatusMessage}"
                                    Foreground="{DynamicResource SecondaryTextBrush}"
@@ -442,7 +427,7 @@
                                                 BorderBrush="{DynamicResource SubtleBorderBrush}"
                                                 BorderThickness="0,0,0,1">
 
-                                            <StackPanel Spacing="3">
+                                            <StackPanel Spacing="4">
                                                 <Grid ColumnDefinitions="130,2*,60,80,100"
                                                       ColumnSpacing="10">
 

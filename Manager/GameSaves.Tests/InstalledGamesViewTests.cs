@@ -18,7 +18,12 @@ public sealed class InstalledGamesViewTests
 
         Assert.Equal("True", (string?)grid.Attribute("CanUserReorderColumns"));
         Assert.Equal("True", (string?)grid.Attribute("CanUserResizeColumns"));
-        Assert.Equal("Visible", (string?)grid.Attribute("HorizontalScrollBarVisibility"));
+        // Wave 42: "Visible" drew a full-width track with no thumb in it at
+        // 1400x900, where all ten columns already fit. The intent this guard
+        // protects is that the table stays horizontally scrollable at the
+        // narrow breakpoint, which "Auto" provides and which the capture
+        // matrix verifies; it pins the value that provides it.
+        Assert.Equal("Auto", (string?)grid.Attribute("HorizontalScrollBarVisibility"));
         Assert.Equal("OnColumnReordered", (string?)grid.Attribute("ColumnReordered"));
 
         XElement[] columns = grid

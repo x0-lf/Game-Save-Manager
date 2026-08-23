@@ -1440,10 +1440,14 @@ namespace GameSaves.App.ViewModels
             if (!IsGoogleDriveConnecting)
                 return;
 
-            _googleAuthenticationCancellation?.Cancel();
+            // Publish the interim message before cancelling: cancelling the
+            // token can resume the connect continuation inline, and that
+            // continuation writes the final outcome message. Writing after the
+            // cancel would overwrite it and strand the surface on "Cancelling".
             ConfirmDisconnectGoogleDrive = false;
             GoogleDriveConnectionMessage =
                 "Cancelling Google Drive sign-in…";
+            _googleAuthenticationCancellation?.Cancel();
         }
 
         [RelayCommand]
