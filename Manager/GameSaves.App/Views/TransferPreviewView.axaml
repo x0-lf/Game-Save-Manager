@@ -318,12 +318,35 @@
                     CornerRadius="14"
                     Padding="0">
 
-                <StackPanel Spacing="6"
+
+                <!-- Same header-band idiom as the sibling card on this row:
+                     a 12,8 band with a subtitle and a bottom rule. The two
+                     cards share a top edge, so two different header idioms
+                     put their titles 6 px out of register. History's card
+                     pair is the reference. See Round 41 P1-3. -->
+                <Grid RowDefinitions="Auto,*">
+
+                    <Border Grid.Row="0"
+                            Padding="12,8"
+                            BorderBrush="{DynamicResource CardBorderBrush}"
+                            BorderThickness="0,0,0,1">
+
+                        <StackPanel Spacing="2">
+                            <TextBlock Text="Summary"
+                                       Foreground="{DynamicResource PrimaryTextBrush}"
+                                       FontSize="{DynamicResource FontSizeBodyLarge}"
+                                       FontWeight="SemiBold" />
+
+                            <TextBlock Text="Totals and copy controls."
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                       FontSize="{DynamicResource FontSizeBody}"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+
+                <StackPanel Grid.Row="1"
+                            Spacing="6"
                             Margin="14">
-                    <TextBlock Text="Summary"
-                               Foreground="{DynamicResource PrimaryTextBrush}"
-                               FontSize="{DynamicResource FontSizeBodyLarge}"
-                               FontWeight="SemiBold" />
 
                     <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" RowSpacing="2" ColumnSpacing="16" MaxWidth="420" HorizontalAlignment="Left">
                         <TextBlock Text="Files to consider" Foreground="{DynamicResource MutedTextBrush}" FontSize="{DynamicResource FontSizeBody}" />
@@ -427,6 +450,7 @@
                                    TextWrapping="Wrap" />
                     </StackPanel>
                 </StackPanel>
+                </Grid>
         </Border>
 
             <GridSplitter Grid.Column="1"

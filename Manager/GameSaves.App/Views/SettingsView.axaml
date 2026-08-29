@@ -165,59 +165,66 @@
                                            Foreground="{DynamicResource SecondaryTextBrush}"
                                            FontSize="{DynamicResource FontSizeBody}"
                                            TextWrapping="Wrap" />
-                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
-                                    <TextBlock Grid.Column="0"
+                                <!-- One grid, not three: a per-row grid sized
+                                     its label column to its own longest word,
+                                     so "Window" started its track 12 px right
+                                     of "Cards" and "Insets". A shared column
+                                     makes the three tracks share a left edge
+                                     by construction. See Round 41 P1-1. -->
+                                <Grid ColumnDefinitions="Auto,*,Auto"
+                                      RowDefinitions="Auto,Auto,Auto"
+                                      ColumnSpacing="10"
+                                      RowSpacing="10">
+                                    <TextBlock Grid.Row="0" Grid.Column="0"
                                                Text="Window"
                                                Foreground="{DynamicResource SecondaryTextBrush}"
                                                FontSize="{DynamicResource FontSizeBody}"
                                                VerticalAlignment="Center" />
-                                    <Slider Grid.Column="1"
+                                    <Slider Grid.Row="0" Grid.Column="1"
                                             Minimum="0.2"
                                             Maximum="1"
                                             Value="{Binding WindowOpacity, Mode=TwoWay}"
                                             IsEnabled="{Binding !IsWindowOpacityInert}"
                                             AutomationProperties.Name="Window transparency" />
-                                    <TextBlock Grid.Column="2"
+                                    <TextBlock Grid.Row="0" Grid.Column="2"
                                                Text="{Binding WindowOpacity, StringFormat='{}{0:P0}'}"
                                                Foreground="{DynamicResource MutedTextBrush}"
                                                FontSize="{DynamicResource FontSizeBody}"
                                                Width="44"
                                                TextAlignment="Right"
                                                VerticalAlignment="Center" />
-                                </Grid>
-                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
-                                    <TextBlock Grid.Column="0"
+
+                                    <TextBlock Grid.Row="1" Grid.Column="0"
                                                Text="Cards"
                                                Foreground="{DynamicResource SecondaryTextBrush}"
                                                FontSize="{DynamicResource FontSizeBody}"
                                                VerticalAlignment="Center" />
-                                    <Slider Grid.Column="1"
+                                    <Slider Grid.Row="1" Grid.Column="1"
                                             Minimum="0.2"
                                             Maximum="1"
                                             Value="{Binding CardOpacity, Mode=TwoWay}"
                                             IsEnabled="{Binding !HighContrast}"
                                             AutomationProperties.Name="Card transparency" />
-                                    <TextBlock Grid.Column="2"
+                                    <TextBlock Grid.Row="1" Grid.Column="2"
                                                Text="{Binding CardOpacity, StringFormat='{}{0:P0}'}"
                                                Foreground="{DynamicResource MutedTextBrush}"
                                                FontSize="{DynamicResource FontSizeBody}"
                                                Width="44"
                                                TextAlignment="Right"
                                                VerticalAlignment="Center" />
-                                </Grid>
-                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
-                                    <TextBlock Grid.Column="0"
+
+                                    <TextBlock Grid.Row="2" Grid.Column="0"
                                                Text="Insets"
                                                Foreground="{DynamicResource SecondaryTextBrush}"
                                                FontSize="{DynamicResource FontSizeBody}"
                                                VerticalAlignment="Center" />
-                                    <Slider Grid.Column="1"
+                                    <Slider Grid.Row="2" Grid.Column="1"
                                             Minimum="0.2"
                                             Maximum="1"
                                             Value="{Binding InsetOpacity, Mode=TwoWay}"
                                             IsEnabled="{Binding !HighContrast}"
                                             AutomationProperties.Name="Inset transparency" />
-                                    <TextBlock Grid.Column="2"
+                                    <TextBlock Grid.Row="2" Grid.Column="2"
                                                Text="{Binding InsetOpacity, StringFormat='{}{0:P0}'}"
                                                Foreground="{DynamicResource MutedTextBrush}"
                                                FontSize="{DynamicResource FontSizeBody}"

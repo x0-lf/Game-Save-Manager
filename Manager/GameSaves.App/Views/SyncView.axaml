@@ -398,7 +398,17 @@
                             </StackPanel>
 
                             <!-- Google Drive account configuration -->
+                            <!-- One measure for the whole block. Its
+                                 paragraphs previously wrapped at three
+                                 different widths inside one card (one ran the
+                                 full 1070 px card while its siblings were
+                                 capped at 560), and its internal rule spanned
+                                 the card while the content it divides sits in
+                                 the left column. Constraining the container
+                                 once fixes both. See Round 41 P1-2. -->
                             <StackPanel IsVisible="{Binding IsGoogleDriveSelected}"
+                                        MaxWidth="560"
+                                        HorizontalAlignment="Left"
                                         Spacing="8">
 
                                 <TextBlock Text="Google Drive account"

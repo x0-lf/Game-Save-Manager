@@ -3,7 +3,8 @@ namespace GameSaves.Core.Sync
     /// <summary>
     /// Stable identity of a sync provider. Values are persisted in
     /// sync-settings.json, so existing numeric assignments must never change.
-    /// Only LocalFolder and Sftp are implemented today.
+    /// LocalFolder, Sftp, and GoogleDrive are implemented; WebDav and OneDrive
+    /// are declared but unavailable. SyncProviderCatalog is the authority.
     /// </summary>
     public enum SyncProviderKind
     {
