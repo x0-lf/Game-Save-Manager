@@ -14,11 +14,12 @@ dependencies are added, removed, or upgraded.
 
 | Package | Version used | License | Notes |
 |---|---:|---|---|
-| Avalonia | 12.0.5 (app), 12.1.0 (Reviewer) | MIT | Cross-platform UI framework. The desktop app and the Reviewer tool are on different versions. |
-| Avalonia.Desktop | 12.0.5 (app), 12.1.0 (Reviewer) | MIT | Desktop application support for Avalonia. |
-| Avalonia.Themes.Fluent | 12.0.5 (app), 12.1.0 (Reviewer) | MIT | Fluent theme package for Avalonia. |
-| Avalonia.Fonts.Inter | 12.0.5 (app), 12.1.0 (Reviewer) | MIT | Inter font package used by Avalonia. |
-| Avalonia.Controls.DataGrid | 12.1.0 | MIT | Data grid control; referenced only by the Reviewer tool. |
+| Avalonia | 12.1.0 | MIT | Cross-platform UI framework. |
+| Avalonia.Desktop | 12.1.0 | MIT | Desktop application support for Avalonia. |
+| Avalonia.Themes.Fluent | 12.1.0 | MIT | Fluent theme package for Avalonia. |
+| Avalonia.Fonts.Inter | 12.1.0 | MIT | Inter font package used by Avalonia. |
+| Avalonia.Controls.DataGrid | 12.1.0 | MIT | Data grid control used by the desktop app and Reviewer tool. |
+| Avalonia.Headless | 12.1.0 | MIT | Headless rendering platform; referenced only by the development-only GameSaves.UiCapture screenshot harness, never shipped. |
 | AvaloniaUI.DiagnosticsSupport | 2.2.3 | MIT | Avalonia diagnostics support package used for development/debug builds. |
 | CommunityToolkit.Mvvm | 8.4.2 | MIT | MVVM helpers, observable objects, and relay commands. |
 | Google.Apis.Auth | 1.75.0 | Apache-2.0 | Official OAuth 2.0 authorization and credential primitives; referenced only by Infrastructure. |
