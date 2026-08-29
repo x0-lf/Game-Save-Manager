@@ -29,7 +29,20 @@
                 </StackPanel>
             </Border>
 
-            <TabControl>
+            <!-- Padding zeroed so the tab strip and its panels sit on the same
+                 page column as every other view's cards. Fluent's default
+                 TabControl padding inset the strip to x=249 and the panels to
+                 x=253 against the 241 every other view holds.
+                 See Round 42 P1-2. -->
+            <TabControl Padding="0">
+                <TabControl.Styles>
+                    <!-- Fluent gives each TabItem a left margin, which pushed
+                         the strip 8px right of the page column the panels and
+                         every other view sit on. See Round 42 P1-2. -->
+                    <Style Selector="TabItem">
+                        <Setter Property="Margin" Value="0,0,16,0" />
+                    </Style>
+                </TabControl.Styles>
 
                 <TabItem Header="Appearance">
                     <StackPanel Spacing="10" Margin="0,12,0,0">

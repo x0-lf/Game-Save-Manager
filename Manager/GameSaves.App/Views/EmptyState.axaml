@@ -43,8 +43,17 @@
                    TextWrapping="Wrap"
                    Foreground="{DynamicResource PrimaryTextBrush}" />
 
+        <!-- Two lines are reserved for the caption. The stack is centred, so a
+             one-line caption made the block shorter and pushed its 88px disc
+             up; two empty states side by side in one row then showed their
+             discs 7px apart. Reserving the taller case keeps every block the
+             same height, so the discs align by construction.
+             ponytail: a fixed 28px reserve, not a measured two-line box;
+             revisit if text scaling changes the body line height.
+             See Round 42 P1-1. -->
         <TextBlock x:Name="MessageText"
                    FontSize="{DynamicResource FontSizeBody}"
+                   MinHeight="28"
                    HorizontalAlignment="Center"
                    TextAlignment="Center"
                    TextWrapping="Wrap"
