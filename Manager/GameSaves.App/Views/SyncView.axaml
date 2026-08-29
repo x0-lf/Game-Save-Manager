@@ -72,7 +72,7 @@
                     </StackPanel>
 
                     <WrapPanel Grid.Column="1"
-                               ItemSpacing="10"
+                               ItemSpacing="8"
                                LineSpacing="6"
                                VerticalAlignment="Center">
                         <Button Content="Preview sync"
@@ -268,7 +268,7 @@
                                            FontSize="{DynamicResource FontSizeBody}"
                                            FontWeight="SemiBold" />
 
-                                <WrapPanel ItemSpacing="14" LineSpacing="6">
+                                <WrapPanel ItemSpacing="8" LineSpacing="6">
                                     <CheckBox Content="Upload local runs"
                                               IsChecked="{Binding UploadEnabled}"
                                               FontSize="{DynamicResource FontSizeBody}" />
@@ -291,7 +291,7 @@
                                            FontWeight="SemiBold" />
 
                                 <Grid ColumnDefinitions="*,Auto,Auto"
-                                      ColumnSpacing="6">
+                                      ColumnSpacing="8">
 
                                     <TextBox Grid.Column="0"
                                              Text="{Binding RemoteRootPath}"
@@ -384,7 +384,7 @@
                                           FontSize="{DynamicResource FontSizeBody}"
                                           ToolTip.Tip="On the first connection the server's key fingerprint is stored (like SSH known_hosts). If it ever changes later, the sync fails loudly. Leave unchecked to see the fingerprint first without trusting it." />
 
-                                <WrapPanel ItemSpacing="10" LineSpacing="6">
+                                <WrapPanel ItemSpacing="8" LineSpacing="6">
                                     <Button Content="Forget Stored Host Key"
                                             Command="{Binding ForgetSftpHostKeyCommand}"
                                             FontSize="{DynamicResource FontSizeBody}"
@@ -407,7 +407,7 @@
                                  the left column. Constraining the container
                                  once fixes both. See Round 41 P1-2. -->
                             <StackPanel IsVisible="{Binding IsGoogleDriveSelected}"
-                                        MaxWidth="560"
+                                        Width="560"
                                         HorizontalAlignment="Left"
                                         Spacing="8">
 
@@ -416,9 +416,9 @@
                                            FontSize="{DynamicResource FontSizeBody}"
                                            FontWeight="SemiBold" />
 
-                                <Grid ColumnDefinitions="110,*"
+                                <Grid ColumnDefinitions="Auto,*"
                                       RowDefinitions="Auto,Auto,Auto"
-                                      ColumnSpacing="10"
+                                      ColumnSpacing="16"
                                       RowSpacing="3">
                                     <TextBlock Grid.Row="0" Text="{Binding GoogleDriveAccountLabel}" Foreground="{DynamicResource MutedTextBrush}" FontSize="{DynamicResource FontSizeBody}" />
                                     <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding GoogleDriveAccountDisplayText}" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="{DynamicResource FontSizeBody}" />
@@ -477,9 +477,9 @@
                                            FontSize="{DynamicResource FontSizeBody}"
                                            FontWeight="SemiBold" />
 
-                                <Grid ColumnDefinitions="110,*"
+                                <Grid ColumnDefinitions="Auto,*"
                                       RowDefinitions="Auto,Auto"
-                                      ColumnSpacing="10"
+                                      ColumnSpacing="16"
                                       RowSpacing="3">
                                     <TextBlock Grid.Row="0"
                                                Text="Backup folder"
@@ -551,7 +551,7 @@
                                         ToolTip.Tip="Removes encrypted authentication only. The saved profile and backup data are kept." />
                             </StackPanel>
 
-                            <WrapPanel ItemSpacing="10" LineSpacing="6" Margin="0,4,0,0">
+                            <WrapPanel ItemSpacing="8" LineSpacing="6" Margin="0,4,0,0">
                                 <Button Content="Check connection"
                                         Command="{Binding CheckSyncStatusCommand}"
                                         IsVisible="{Binding CanCheckConnection}"
@@ -569,13 +569,13 @@
                                        Foreground="{DynamicResource MutedTextBrush}"
                                        FontSize="{DynamicResource FontSizeBody}"
                                        TextWrapping="Wrap"
-                                       MaxWidth="560"
+                                       Width="560"
                                        HorizontalAlignment="Left" />
                         </StackPanel>
 
                         <Border Height="1" Background="{DynamicResource SubtleBorderBrush}" />
 
-                        <WrapPanel ItemSpacing="10" LineSpacing="6">
+                        <WrapPanel ItemSpacing="8" LineSpacing="6">
                             <Border Background="{DynamicResource InsetBackgroundBrush}"
                                     CornerRadius="8"
                                     Padding="10,6"

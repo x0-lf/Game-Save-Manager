@@ -68,9 +68,6 @@
 		<Style Selector="Window.compactNav TabControl#MainNavigation TabItem TextBlock.navLabel">
 			<Setter Property="IsVisible" Value="False" />
 		</Style>
-		<Style Selector="Window.compactNav TabControl#MainNavigation TabItem">
-			<Setter Property="Padding" Value="10,8" />
-		</Style>
 
 		<!-- Collapsed rail (the Settings collapse toggle): a glyph-only strip
 		     roughly 48px wide. The detach button hides with the label —

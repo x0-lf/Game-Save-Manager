@@ -2,13 +2,6 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="GameSaves.App.Views.EmptyState">
 
-    <UserControl.Styles>
-        <Style Selector="ContentPresenter#ActionPresenter Button">
-            <Setter Property="MinHeight" Value="34" />
-            <Setter Property="Padding" Value="14,6" />
-        </Style>
-    </UserControl.Styles>
-
     <!-- The shared empty-state pattern: icon, one-line title, short
          explanation, optional call-to-action. Views overlay this on any
          region whose backing collection is empty, so a first-run user sees

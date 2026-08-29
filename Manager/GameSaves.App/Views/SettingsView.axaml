@@ -45,17 +45,17 @@
                 </TabControl.Styles>
 
                 <TabItem Header="Appearance">
-                    <StackPanel Spacing="10" Margin="0,12,0,0">
+                    <StackPanel Spacing="10" Margin="0,8,0,0">
 
                         <Border Background="{DynamicResource CardBackgroundBrush}"
                                 BorderBrush="{DynamicResource CardBorderBrush}"
                                 BorderThickness="1"
-                                CornerRadius="12"
+                                CornerRadius="14"
                                 Padding="14">
                             <StackPanel Spacing="8">
                                 <TextBlock Text="Theme"
                                            Foreground="{DynamicResource PrimaryTextBrush}"
-                                           FontSize="{DynamicResource FontSizeSubtitle}"
+                                           FontSize="{DynamicResource FontSizeBodyLarge}"
                                            FontWeight="SemiBold" />
                                 <StackPanel Spacing="4">
                                     <RadioButton GroupName="SettingsTheme"
@@ -77,12 +77,12 @@
                         <Border Background="{DynamicResource CardBackgroundBrush}"
                                 BorderBrush="{DynamicResource CardBorderBrush}"
                                 BorderThickness="1"
-                                CornerRadius="12"
+                                CornerRadius="14"
                                 Padding="14">
                             <StackPanel Spacing="8">
                                 <TextBlock Text="Accent colour"
                                            Foreground="{DynamicResource PrimaryTextBrush}"
-                                           FontSize="{DynamicResource FontSizeSubtitle}"
+                                           FontSize="{DynamicResource FontSizeBodyLarge}"
                                            FontWeight="SemiBold" />
                                 <StackPanel Spacing="4" Orientation="Horizontal">
                                     <RadioButton GroupName="SettingsAccent"
@@ -116,12 +116,12 @@
                         <Border Background="{DynamicResource CardBackgroundBrush}"
                                 BorderBrush="{DynamicResource CardBorderBrush}"
                                 BorderThickness="1"
-                                CornerRadius="12"
+                                CornerRadius="14"
                                 Padding="14">
                             <StackPanel Spacing="8">
                                 <TextBlock Text="Window material"
                                            Foreground="{DynamicResource PrimaryTextBrush}"
-                                           FontSize="{DynamicResource FontSizeSubtitle}"
+                                           FontSize="{DynamicResource FontSizeBodyLarge}"
                                            FontWeight="SemiBold" />
                                 <TextBlock Text="Let the operating system draw the window backdrop. Falls back to the normal opaque window when the system cannot composite the material."
                                            Foreground="{DynamicResource MutedTextBrush}"
@@ -157,12 +157,12 @@
                         <Border Background="{DynamicResource CardBackgroundBrush}"
                                 BorderBrush="{DynamicResource CardBorderBrush}"
                                 BorderThickness="1"
-                                CornerRadius="12"
+                                CornerRadius="14"
                                 Padding="14">
                             <StackPanel Spacing="10">
                                 <TextBlock Text="Transparency"
                                            Foreground="{DynamicResource PrimaryTextBrush}"
-                                           FontSize="{DynamicResource FontSizeSubtitle}"
+                                           FontSize="{DynamicResource FontSizeBodyLarge}"
                                            FontWeight="SemiBold" />
                                 <TextBlock Text="Lower a level to let the desktop show through. Applies immediately."
                                            Foreground="{DynamicResource MutedTextBrush}"
@@ -251,17 +251,17 @@
                 </TabItem>
 
                 <TabItem Header="Accessibility">
-                    <StackPanel Spacing="10" Margin="0,12,0,0">
+                    <StackPanel Spacing="10" Margin="0,8,0,0">
 
                         <Border Background="{DynamicResource CardBackgroundBrush}"
                                 BorderBrush="{DynamicResource CardBorderBrush}"
                                 BorderThickness="1"
-                                CornerRadius="12"
+                                CornerRadius="14"
                                 Padding="14">
                             <StackPanel Spacing="10">
                                 <TextBlock Text="Text size"
                                            Foreground="{DynamicResource PrimaryTextBrush}"
-                                           FontSize="{DynamicResource FontSizeSubtitle}"
+                                           FontSize="{DynamicResource FontSizeBodyLarge}"
                                            FontWeight="SemiBold" />
                                 <TextBlock Text="Scale all reading text from 85% to 150%. Icon glyphs keep their size. Applies immediately."
                                            Foreground="{DynamicResource MutedTextBrush}"
@@ -294,12 +294,12 @@
                         <Border Background="{DynamicResource CardBackgroundBrush}"
                                 BorderBrush="{DynamicResource CardBorderBrush}"
                                 BorderThickness="1"
-                                CornerRadius="12"
+                                CornerRadius="14"
                                 Padding="14">
                             <StackPanel Spacing="8">
                                 <TextBlock Text="Motion"
                                            Foreground="{DynamicResource PrimaryTextBrush}"
-                                           FontSize="{DynamicResource FontSizeSubtitle}"
+                                           FontSize="{DynamicResource FontSizeBodyLarge}"
                                            FontWeight="SemiBold" />
                                 <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
                                     <ToggleSwitch Grid.Column="0"
@@ -319,12 +319,12 @@
                         <Border Background="{DynamicResource CardBackgroundBrush}"
                                 BorderBrush="{DynamicResource CardBorderBrush}"
                                 BorderThickness="1"
-                                CornerRadius="12"
+                                CornerRadius="14"
                                 Padding="14">
                             <StackPanel Spacing="8">
                                 <TextBlock Text="Contrast"
                                            Foreground="{DynamicResource PrimaryTextBrush}"
-                                           FontSize="{DynamicResource FontSizeSubtitle}"
+                                           FontSize="{DynamicResource FontSizeBodyLarge}"
                                            FontWeight="SemiBold" />
                                 <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
                                     <ToggleSwitch Grid.Column="0"
@@ -344,18 +344,18 @@
                 </TabItem>
 
                 <TabItem Header="Behaviour">
-                    <StackPanel Spacing="10" Margin="0,12,0,0">
+                    <StackPanel Spacing="10" Margin="0,8,0,0">
                         <Border Background="{DynamicResource CardBackgroundBrush}"
                                 BorderBrush="{DynamicResource CardBorderBrush}"
                                 BorderThickness="1"
-                                CornerRadius="12"
+                                CornerRadius="14"
                                 Padding="14"
                                 HorizontalAlignment="Left"
                                 MinWidth="360">
                             <StackPanel Spacing="8">
                                 <TextBlock Text="Startup tab"
                                            Foreground="{DynamicResource PrimaryTextBrush}"
-                                           FontSize="{DynamicResource FontSizeSubtitle}"
+                                           FontSize="{DynamicResource FontSizeBodyLarge}"
                                            FontWeight="SemiBold" />
                                 <TextBlock Text="Choose which section the app opens on. Applies the next time the app starts; a tab hidden from the navigation rail falls back to Dashboard."
                                            Foreground="{DynamicResource MutedTextBrush}"
@@ -405,18 +405,18 @@
                 </TabItem>
 
                 <TabItem Header="Layout">
-                    <StackPanel Spacing="10" Margin="0,12,0,0">
+                    <StackPanel Spacing="10" Margin="0,8,0,0">
                         <Border Background="{DynamicResource CardBackgroundBrush}"
                                 BorderBrush="{DynamicResource CardBorderBrush}"
                                 BorderThickness="1"
-                                CornerRadius="12"
+                                CornerRadius="14"
                                 Padding="14"
                                 HorizontalAlignment="Left"
                                 MinWidth="320">
                             <StackPanel Spacing="8">
                                 <TextBlock Text="Installed games columns"
                                            Foreground="{DynamicResource PrimaryTextBrush}"
-                                           FontSize="{DynamicResource FontSizeSubtitle}"
+                                           FontSize="{DynamicResource FontSizeBodyLarge}"
                                            FontWeight="SemiBold" />
                                 <TextBlock Text="Choose the columns shown in Installed games. Drag table headers there to reorder them."
                                            Foreground="{DynamicResource MutedTextBrush}"
@@ -437,14 +437,14 @@
                         <Border Background="{DynamicResource CardBackgroundBrush}"
                                 BorderBrush="{DynamicResource CardBorderBrush}"
                                 BorderThickness="1"
-                                CornerRadius="12"
+                                CornerRadius="14"
                                 Padding="14"
                                 HorizontalAlignment="Left"
                                 MinWidth="360">
                             <StackPanel Spacing="8">
                                 <TextBlock Text="Navigation rail"
                                            Foreground="{DynamicResource PrimaryTextBrush}"
-                                           FontSize="{DynamicResource FontSizeSubtitle}"
+                                           FontSize="{DynamicResource FontSizeBodyLarge}"
                                            FontWeight="SemiBold" />
                                 <TextBlock Text="Choose where the navigation rail sits and which tabs it shows. Ctrl+1..9 always follow the original tab order, and a hidden tab's shortcut does nothing."
                                            Foreground="{DynamicResource MutedTextBrush}"
@@ -539,14 +539,14 @@
                         <Border Background="{DynamicResource CardBackgroundBrush}"
                                 BorderBrush="{DynamicResource CardBorderBrush}"
                                 BorderThickness="1"
-                                CornerRadius="12"
+                                CornerRadius="14"
                                 Padding="14"
                                 HorizontalAlignment="Left"
                                 MinWidth="360">
                             <StackPanel Spacing="8">
                                 <TextBlock Text="Workspace layouts"
                                            Foreground="{DynamicResource PrimaryTextBrush}"
-                                           FontSize="{DynamicResource FontSizeSubtitle}"
+                                           FontSize="{DynamicResource FontSizeBodyLarge}"
                                            FontWeight="SemiBold" />
                                 <TextBlock Text="Save where your detached windows sit, then apply a layout to return to it. Layouts are never applied automatically when the app starts, and applying one changes only detached windows — never the rail, columns, or theme."
                                            Foreground="{DynamicResource MutedTextBrush}"
@@ -618,18 +618,18 @@
                 </TabItem>
 
                 <TabItem Header="Providers">
-                    <StackPanel Spacing="10" Margin="0,12,0,0">
+                    <StackPanel Spacing="10" Margin="0,8,0,0">
                         <Border Background="{DynamicResource CardBackgroundBrush}"
                                 BorderBrush="{DynamicResource CardBorderBrush}"
                                 BorderThickness="1"
-                                CornerRadius="12"
+                                CornerRadius="14"
                                 Padding="14"
                                 HorizontalAlignment="Left"
                                 MinWidth="360">
                             <StackPanel Spacing="8">
                                 <TextBlock Text="Sync providers"
                                            Foreground="{DynamicResource PrimaryTextBrush}"
-                                           FontSize="{DynamicResource FontSizeSubtitle}"
+                                           FontSize="{DynamicResource FontSizeBodyLarge}"
                                            FontWeight="SemiBold" />
                                 <TextBlock Text="The providers this version of the app can synchronize through. Configure sync providers in the Sync tab."
                                            Foreground="{DynamicResource MutedTextBrush}"
@@ -660,16 +660,16 @@
                 </TabItem>
 
                 <TabItem Header="Data">
-                    <StackPanel Spacing="10" Margin="0,12,0,0">
+                    <StackPanel Spacing="10" Margin="0,8,0,0">
                         <Border Background="{DynamicResource CardBackgroundBrush}"
                                 BorderBrush="{DynamicResource CardBorderBrush}"
                                 BorderThickness="1"
-                                CornerRadius="12"
+                                CornerRadius="14"
                                 Padding="14">
                             <StackPanel Spacing="8">
                                 <TextBlock Text="Data locations"
                                            Foreground="{DynamicResource PrimaryTextBrush}"
-                                           FontSize="{DynamicResource FontSizeSubtitle}"
+                                           FontSize="{DynamicResource FontSizeBodyLarge}"
                                            FontWeight="SemiBold" />
                                 <TextBlock Text="Where this app keeps its database and settings files on this computer. Read-only information."
                                            Foreground="{DynamicResource MutedTextBrush}"
@@ -723,18 +723,18 @@
                 </TabItem>
 
                 <TabItem Header="Diagnostics">
-                    <StackPanel Spacing="10" Margin="0,12,0,0">
+                    <StackPanel Spacing="10" Margin="0,8,0,0">
                         <Border Background="{DynamicResource CardBackgroundBrush}"
                                 BorderBrush="{DynamicResource CardBorderBrush}"
                                 BorderThickness="1"
-                                CornerRadius="12"
+                                CornerRadius="14"
                                 Padding="14"
                                 HorizontalAlignment="Left"
                                 MinWidth="360">
                             <StackPanel Spacing="2">
                                 <TextBlock Text="Diagnostics"
                                            Foreground="{DynamicResource PrimaryTextBrush}"
-                                           FontSize="{DynamicResource FontSizeSubtitle}"
+                                           FontSize="{DynamicResource FontSizeBodyLarge}"
                                            FontWeight="SemiBold" />
                                 <TextBlock Text="{Binding ApplicationVersion, StringFormat='App version: {0}'}"
                                            Foreground="{DynamicResource SecondaryTextBrush}"

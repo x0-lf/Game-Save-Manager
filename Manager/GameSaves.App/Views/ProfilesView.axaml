@@ -225,6 +225,17 @@
                                    FontSize="{DynamicResource FontSizeBodyLarge}"
                                    FontWeight="SemiBold" />
 
+                        <!-- One of these two is always visible, so the band always
+                             carries a subtitle. The house rule is: a header with a
+                             subtitle gets a ruled band, a title-only header does not.
+                             This card had the band but a conditional subtitle, so it
+                             collapsed to a title-only band whenever no profile was
+                             found. See Round 42 P2 on card-header idioms. -->
+                        <TextBlock Text="Steam accounts found in this installation."
+                                   IsVisible="{Binding !HasProfiles}"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                   FontSize="{DynamicResource FontSizeSubtitle}" />
+
                         <TextBlock Text="{Binding SelectionWarning}"
                                    IsVisible="{Binding HasProfiles}"
                                    Foreground="{DynamicResource SecondaryTextBrush}"

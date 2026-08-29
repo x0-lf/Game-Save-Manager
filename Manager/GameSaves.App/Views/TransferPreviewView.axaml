@@ -130,7 +130,7 @@
                 Padding="14,10">
 
             <Grid ColumnDefinitions="*,Auto,Auto"
-                  ColumnSpacing="10">
+                  ColumnSpacing="8">
 
                 <StackPanel Grid.Column="0"
                             Spacing="2"
