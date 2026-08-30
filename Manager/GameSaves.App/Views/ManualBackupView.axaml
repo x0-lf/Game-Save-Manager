@@ -264,9 +264,9 @@
         <!-- Main area -->
         <Grid Grid.Row="3" x:Name="SplitGrid">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="290" MinWidth="220" MaxWidth="520" />
+                <ColumnDefinition Width="2*" MinWidth="220" MaxWidth="520" />
                 <ColumnDefinition Width="8" />
-                <ColumnDefinition Width="*" MinWidth="420" />
+                <ColumnDefinition Width="3*" MinWidth="420" />
             </Grid.ColumnDefinitions>
 
             <!-- Summary -->

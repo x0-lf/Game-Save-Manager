@@ -89,7 +89,7 @@
         <!-- Source / Target selection (resizable, scrolls when small) -->
         <Grid Grid.Row="2"
               ColumnDefinitions="*,*"
-              ColumnSpacing="16">
+              ColumnSpacing="8">
 
             <!-- Source -->
             <Border Grid.Column="0"

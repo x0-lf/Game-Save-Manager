@@ -67,9 +67,9 @@
         <Grid Grid.Row="1" x:Name="SplitGrid"
               IsVisible="{Binding !!Runs.Count}">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="340" MinWidth="240" MaxWidth="620" />
+                <ColumnDefinition Width="2*" MinWidth="240" MaxWidth="620" />
                 <ColumnDefinition Width="8" />
-                <ColumnDefinition Width="*" MinWidth="400" />
+                <ColumnDefinition Width="3*" MinWidth="400" />
             </Grid.ColumnDefinitions>
 
             <!-- Runs list -->

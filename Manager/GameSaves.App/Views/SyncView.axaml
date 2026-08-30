@@ -172,7 +172,7 @@
                                        FontSize="{DynamicResource FontSizeBody}" />
 
                             <StackPanel Orientation="Horizontal"
-                                        Spacing="6">
+                                        Spacing="8">
                                 <Button Content="New"
                                         Command="{Binding NewRemoteProfileCommand}" />
                                 <Button Content="Save"

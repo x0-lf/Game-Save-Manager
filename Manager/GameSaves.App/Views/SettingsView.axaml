@@ -57,13 +57,15 @@
                                            Foreground="{DynamicResource PrimaryTextBrush}"
                                            FontSize="{DynamicResource FontSizeBodyLarge}"
                                            FontWeight="SemiBold" />
-                                <StackPanel Spacing="4">
+                                <StackPanel Spacing="4" Orientation="Horizontal">
                                     <RadioButton GroupName="SettingsTheme"
                                                  Content="Use system theme"
+                                                 Margin="0,0,16,0"
                                                  IsChecked="{Binding ThemeChoice, Mode=TwoWay, Converter={x:Static conv:StringEqualityConverter.Instance}, ConverterParameter={x:Static s:AppUiSettings.ThemeSystem}}"
                                                  AutomationProperties.Name="Use system theme" />
                                     <RadioButton GroupName="SettingsTheme"
                                                  Content="Light"
+                                                 Margin="0,0,16,0"
                                                  IsChecked="{Binding ThemeChoice, Mode=TwoWay, Converter={x:Static conv:StringEqualityConverter.Instance}, ConverterParameter={x:Static s:AppUiSettings.ThemeLight}}"
                                                  AutomationProperties.Name="Light theme" />
                                     <RadioButton GroupName="SettingsTheme"
