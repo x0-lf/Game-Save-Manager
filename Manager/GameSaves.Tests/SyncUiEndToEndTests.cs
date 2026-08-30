@@ -811,6 +811,7 @@ public sealed class SyncUiEndToEndTests
                 new StubSyncRemoteProfileMigrationService(settings),
                 new FixedUtcClock(Clock),
                 oauth,
+                SyncProviderSelectionTests.NewWorkspaceLayout(),
                 roots);
         }
 
@@ -848,7 +849,8 @@ public sealed class SyncUiEndToEndTests
                 new SyncRemoteProfileService(repository, new InMemorySecretStore()),
                 new StubSyncRemoteProfileMigrationService(settings),
                 new FixedUtcClock(Clock),
-                new StubGoogleDriveOAuthService())
+                new StubGoogleDriveOAuthService(),
+                SyncProviderSelectionTests.NewWorkspaceLayout())
             {
                 RemoteRootPath = RemoteRoot
             };

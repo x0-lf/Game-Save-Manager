@@ -200,13 +200,17 @@ namespace GameSaves.App.ViewModels
 
         public ObservableCollection<BackupRestoreItemResultRowViewModel> RestoreResults { get; } = new();
 
+        /// <summary>This page's panel arrangement.</summary>
+        public GameSaves.App.Services.IWorkspaceLayoutPage Workspace { get; }
+
         public BackupHistoryViewModel(
             IBackupHistoryService backupHistoryService,
             IBackupRestoreService backupRestoreService,
             IBackupCleanupService backupCleanupService,
             IBackupArchiveService backupArchiveService,
             Services.IFolderPickerService folderPickerService,
-            ProfilesViewModel profilesViewModel)
+            ProfilesViewModel profilesViewModel,
+            GameSaves.App.Services.WorkspaceLayoutService workspaceLayout)
         {
             _backupHistoryService = backupHistoryService;
             _backupRestoreService = backupRestoreService;
@@ -214,6 +218,9 @@ namespace GameSaves.App.ViewModels
             _backupArchiveService = backupArchiveService;
             _folderPickerService = folderPickerService;
             _profilesViewModel = profilesViewModel;
+
+            Workspace = workspaceLayout.Page(
+                GameSaves.App.Services.UiRailLayoutSettings.TabBackups);
         }
 
         [ObservableProperty]

@@ -150,7 +150,8 @@ public sealed class CancelSyncTests
             new SyncRemoteProfileService(repository, new InMemorySecretStore()),
             new StubSyncRemoteProfileMigrationService(settings),
             new FixedUtcClock(DateTimeOffset.Parse("2026-08-20T12:00:00Z")),
-            new StubGoogleDriveOAuthService());
+            new StubGoogleDriveOAuthService(),
+            SyncProviderSelectionTests.NewWorkspaceLayout());
     }
 
     private static string ReadSyncView()

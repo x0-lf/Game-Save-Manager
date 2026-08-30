@@ -216,7 +216,8 @@ public sealed class SyncProviderSelectionTests
             new SyncRemoteProfileService(repository, new InMemorySecretStore()),
             new StubSyncRemoteProfileMigrationService(SyncUiSettings.Default),
             new FixedUtcClock(DateTimeOffset.Parse("2026-07-20T12:00:00Z")),
-            new StubGoogleDriveOAuthService())
+            new StubGoogleDriveOAuthService(),
+            NewWorkspaceLayout())
         {
             SelectedProviderKind = SyncProviderKind.Sftp,
             SftpHost = "backup.example.test",
@@ -249,7 +250,8 @@ public sealed class SyncProviderSelectionTests
             new SyncRemoteProfileService(repository, new InMemorySecretStore()),
             new StubSyncRemoteProfileMigrationService(settings),
             new FixedUtcClock(DateTimeOffset.Parse("2026-07-20T12:00:00Z")),
-            new StubGoogleDriveOAuthService());
+            new StubGoogleDriveOAuthService(),
+            NewWorkspaceLayout());
     }
 
     internal sealed class InMemorySyncSettingsStore : ISyncSettingsStore
@@ -271,6 +273,22 @@ public sealed class SyncProviderSelectionTests
         {
             Saved = settings;
         }
+    }
+
+    // The Sync ViewModel owns a workspace page; layout is irrelevant to these
+    // tests, so they hand it a service over a throwaway in-memory store.
+    internal static WorkspaceLayoutService NewWorkspaceLayout() =>
+        new(new InMemoryUiSettingsStore());
+
+    private sealed class InMemoryUiSettingsStore : IUiSettingsStore
+    {
+        private AppUiSettings _settings = AppUiSettings.Default;
+
+        public string FilePath => "memory://ui-settings.json";
+
+        public AppUiSettings Load() => _settings;
+
+        public void Save(AppUiSettings settings) => _settings = settings;
     }
 
     internal sealed class NullFolderPickerService : IFolderPickerService

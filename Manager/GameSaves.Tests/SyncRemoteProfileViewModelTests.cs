@@ -92,7 +92,8 @@ public sealed class SyncRemoteProfileViewModelTests
             new SyncRemoteProfileService(repository, new InMemorySecretStore()),
             new StubSyncRemoteProfileMigrationService(settings),
             clock,
-            new StubGoogleDriveOAuthService());
+            new StubGoogleDriveOAuthService(),
+            SyncProviderSelectionTests.NewWorkspaceLayout());
         viewModel.SftpPassword = "first-session-password";
         await viewModel.PreviewSyncCommand.ExecuteAsync(null);
         ProfileTestProvider firstProvider =
@@ -310,7 +311,8 @@ public sealed class SyncRemoteProfileViewModelTests
             new SyncRemoteProfileService(repository, secretStore),
             new StubSyncRemoteProfileMigrationService(settings),
             clock,
-            new StubGoogleDriveOAuthService());
+            new StubGoogleDriveOAuthService(),
+            SyncProviderSelectionTests.NewWorkspaceLayout());
     }
 
     private static SyncRemoteProfile LocalProfile(

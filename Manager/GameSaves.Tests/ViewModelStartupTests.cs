@@ -25,7 +25,7 @@ public sealed class ViewModelStartupTests
     public async Task InstalledGames_InitializeAsync_LoadsGamesOnce()
     {
         var service = new FakeInstalledGameStatusService();
-        var viewModel = new InstalledGamesViewModel(service);
+        var viewModel = new InstalledGamesViewModel(service, NewWorkspaceLayout());
 
         await viewModel.InitializeAsync();
 
@@ -37,7 +37,7 @@ public sealed class ViewModelStartupTests
     public async Task InstalledGames_InitializeAsync_RunsLoadOnlyOnce()
     {
         var service = new FakeInstalledGameStatusService();
-        var viewModel = new InstalledGamesViewModel(service);
+        var viewModel = new InstalledGamesViewModel(service, NewWorkspaceLayout());
 
         await viewModel.InitializeAsync();
         await viewModel.InitializeAsync();
@@ -49,7 +49,7 @@ public sealed class ViewModelStartupTests
     public async Task InstalledGames_ManualRefresh_ReloadsAndPreservesOrder()
     {
         var service = new FakeInstalledGameStatusService();
-        var viewModel = new InstalledGamesViewModel(service);
+        var viewModel = new InstalledGamesViewModel(service, NewWorkspaceLayout());
 
         await viewModel.InitializeAsync();
         await viewModel.RefreshCommand.ExecuteAsync(null);   // scenario 19
@@ -66,7 +66,8 @@ public sealed class ViewModelStartupTests
     {
         var viewModel = new ProfilesViewModel(
             new EmptySteamDiscoveryService(),
-            new FakeSteamProfileDetector());
+            new FakeSteamProfileDetector(),
+            NewWorkspaceLayout());
 
         await viewModel.InitializeAsync();               // scenario 23
 
@@ -84,7 +85,7 @@ public sealed class ViewModelStartupTests
     public async Task Profiles_ManualRefresh_StillWorks()
     {
         var detector = new FakeSteamProfileDetector();
-        var viewModel = new ProfilesViewModel(new EmptySteamDiscoveryService(), detector);
+        var viewModel = new ProfilesViewModel(new EmptySteamDiscoveryService(), detector, NewWorkspaceLayout());
 
         await viewModel.InitializeAsync();
         await viewModel.RefreshProfilesCommand.ExecuteAsync(null);   // scenario 24
@@ -98,12 +99,12 @@ public sealed class ViewModelStartupTests
     [Fact]
     public async Task TransferPreview_InitializeAsync_LoadsInputsWithoutExecuting()
     {
-        var profiles = new ProfilesViewModel(new EmptySteamDiscoveryService(), new FakeSteamProfileDetector());
-        var games = new InstalledGamesViewModel(new FakeInstalledGameStatusService());
+        var profiles = new ProfilesViewModel(new EmptySteamDiscoveryService(), new FakeSteamProfileDetector(), NewWorkspaceLayout());
+        var games = new InstalledGamesViewModel(new FakeInstalledGameStatusService(), NewWorkspaceLayout());
         var previewService = new RecordingTransferPreviewService();
         var transferService = new RecordingSaveTransferService();
 
-        var viewModel = new TransferPreviewViewModel(previewService, transferService, profiles, games);
+        var viewModel = new TransferPreviewViewModel(previewService, transferService, profiles, games, NewWorkspaceLayout());
 
         await profiles.InitializeAsync();
         await games.InitializeAsync();
@@ -122,14 +123,15 @@ public sealed class ViewModelStartupTests
         // Transfer Preview tab reuses them instead of repeating discovery.
         var detector = new FakeSteamProfileDetector();
         var statusService = new FakeInstalledGameStatusService();
-        var profiles = new ProfilesViewModel(new EmptySteamDiscoveryService(), detector);
-        var games = new InstalledGamesViewModel(statusService);
+        var profiles = new ProfilesViewModel(new EmptySteamDiscoveryService(), detector, NewWorkspaceLayout());
+        var games = new InstalledGamesViewModel(statusService, NewWorkspaceLayout());
 
         var viewModel = new TransferPreviewViewModel(
             new RecordingTransferPreviewService(),
             new RecordingSaveTransferService(),
             profiles,
-            games);
+            games,
+            NewWorkspaceLayout());
 
         await profiles.InitializeAsync();
         await games.InitializeAsync();
@@ -144,8 +146,8 @@ public sealed class ViewModelStartupTests
     [Fact]
     public async Task ManualBackup_InitializeAsync_LoadsInputsWithoutBackingUp()
     {
-        var profiles = new ProfilesViewModel(new EmptySteamDiscoveryService(), new FakeSteamProfileDetector());
-        var games = new InstalledGamesViewModel(new FakeInstalledGameStatusService());
+        var profiles = new ProfilesViewModel(new EmptySteamDiscoveryService(), new FakeSteamProfileDetector(), NewWorkspaceLayout());
+        var games = new InstalledGamesViewModel(new FakeInstalledGameStatusService(), NewWorkspaceLayout());
         var manualBackup = new RecordingManualBackupService();
 
         var viewModel = new ManualBackupViewModel(
@@ -154,7 +156,8 @@ public sealed class ViewModelStartupTests
             new NullFolderPicker(),
             new FakePresetRepository(),
             profiles,
-            games);
+            games,
+            NewWorkspaceLayout());
 
         await profiles.InitializeAsync();
         await games.InitializeAsync();
@@ -181,7 +184,8 @@ public sealed class ViewModelStartupTests
             cleanup,
             archive,
             new NullFolderPicker(),
-            new ProfilesViewModel(new EmptySteamDiscoveryService(), new FakeSteamProfileDetector()));
+            new ProfilesViewModel(new EmptySteamDiscoveryService(), new FakeSteamProfileDetector(), NewWorkspaceLayout()),
+            NewWorkspaceLayout());
 
         await viewModel.InitializeAsync();
 
@@ -199,7 +203,7 @@ public sealed class ViewModelStartupTests
         // Scenario 40: initialization runs the same load path as manual Refresh.
         // The default status ("Refresh to list executed runs.") is replaced by
         // the loaded status, proving the load executed during initialization.
-        var viewModel = new TransferHistoryViewModel(new RecordingHistoryRepository());
+        var viewModel = new TransferHistoryViewModel(new RecordingHistoryRepository(), NewWorkspaceLayout());
 
         await viewModel.InitializeAsync();
 
@@ -211,7 +215,7 @@ public sealed class ViewModelStartupTests
     {
         // Scenario 42: a history-load failure is surfaced as status text, never
         // thrown out of initialization.
-        var viewModel = new TransferHistoryViewModel(new ThrowingHistoryRepository());
+        var viewModel = new TransferHistoryViewModel(new ThrowingHistoryRepository(), NewWorkspaceLayout());
 
         await viewModel.InitializeAsync();
 
@@ -222,7 +226,7 @@ public sealed class ViewModelStartupTests
     public async Task History_ManualRefresh_StillWorks()
     {
         var repository = new RecordingHistoryRepository();
-        var viewModel = new TransferHistoryViewModel(repository);
+        var viewModel = new TransferHistoryViewModel(repository, NewWorkspaceLayout());
 
         await viewModel.InitializeAsync();
         await viewModel.RefreshRunsCommand.ExecuteAsync(null);   // scenario 41
@@ -231,6 +235,22 @@ public sealed class ViewModelStartupTests
     }
 
     // ===== Fakes =====
+
+    // Every tab ViewModel owns a workspace page. Layout is irrelevant to these
+    // startup tests, so each gets a service over a throwaway in-memory store.
+    private static WorkspaceLayoutService NewWorkspaceLayout() =>
+        new(new InMemoryUiSettingsStore());
+
+    private sealed class InMemoryUiSettingsStore : IUiSettingsStore
+    {
+        private AppUiSettings _settings = AppUiSettings.Default;
+
+        public string FilePath => "memory://ui-settings.json";
+
+        public AppUiSettings Load() => _settings;
+
+        public void Save(AppUiSettings settings) => _settings = settings;
+    }
 
     private sealed class FakeInstalledGameStatusService : IInstalledGameSaveStatusService
     {

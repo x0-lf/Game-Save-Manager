@@ -6,6 +6,7 @@ using System.Linq;
 using System.Windows.Input;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Automation;
 using Avalonia.Interactivity;
 using Avalonia.VisualTree;
 using CommunityToolkit.Mvvm.Input;
@@ -13,11 +14,16 @@ using Avalonia.Input;
 using GameSaves.App.Models;
 using GameSaves.App.Services;
 using GameSaves.App.ViewModels;
+using GameSaves.Core.Sync;
 
 namespace GameSaves.App.Views
 {
-    public partial class MainWindow : Window
+    public partial class MainWindow : Window, IAppNavigationHost
     {
+        // Marks the placeholder the sections submenu is built into, so the
+        // handler finds it without depending on the menu item order.
+        private const string SectionsMenuTag = "sections";
+
         private readonly TabDetachCoordinator _tabDetach = new(() => new DetachedWindow());
 
         // The rail's original tab order. Captured once because detaching
@@ -134,6 +140,76 @@ namespace GameSaves.App.Views
             }
         }
 
+        // Right-clicking a rail entry offers that page's sections, so section
+        // visibility is reachable without opening Settings and without the rail
+        // needing extra chrome — which is what keeps it working identically on
+        // the left, right, and top. The list is built each time the menu opens,
+        // because the layout it reflects can change from the panel menus too.
+        private void OnTabContextMenuOpening(object? sender, CancelEventArgs e)
+        {
+            if (sender is not ContextMenu { PlacementTarget: TabItem tab } menu ||
+                DataContext is not MainWindowViewModel viewModel)
+            {
+                return;
+            }
+
+            if (menu.Items.OfType<MenuItem>().FirstOrDefault(item =>
+                    string.Equals(item.Tag as string, SectionsMenuTag, StringComparison.Ordinal)) is not { } sections)
+            {
+                return;
+            }
+
+            string? tabKey = _tabsByKey
+                .FirstOrDefault(pair => ReferenceEquals(pair.Value, tab))
+                .Key;
+
+            IReadOnlyList<WorkspacePanelDefinition> definitions = tabKey is null
+                ? Array.Empty<WorkspacePanelDefinition>()
+                : WorkspaceLayoutCatalog.PanelsFor(tabKey)
+                    .Where(definition => definition.CanHide)
+                    .ToArray();
+
+            // A page with nothing hideable gets a disabled entry rather than an
+            // empty submenu that looks broken.
+            sections.IsEnabled = definitions.Count > 0;
+
+            if (definitions.Count == 0 || tabKey is null)
+            {
+                sections.ItemsSource = null;
+                return;
+            }
+
+            IWorkspaceLayoutPage layout = viewModel.WorkspacePageFor(tabKey);
+            var items = new List<Control>();
+
+            foreach (WorkspacePanelDefinition definition in definitions)
+            {
+                bool hidden = layout.Placements.Any(placement =>
+                    string.Equals(placement.Key, definition.Key, StringComparison.Ordinal) &&
+                    placement.Hidden);
+
+                var item = new MenuItem
+                {
+                    Header = definition.Title,
+                    Icon = new CheckBox
+                    {
+                        IsChecked = !hidden,
+                        IsHitTestVisible = false,
+                        Focusable = false,
+                    },
+                };
+
+                string key = definition.Key;
+                bool showing = !hidden;
+                item.Click += (_, _) => layout.SetHidden(key, showing);
+                AutomationProperties.SetName(
+                    item, $"Show the {definition.Title} section");
+                items.Add(item);
+            }
+
+            sections.ItemsSource = items;
+        }
+
         // Context-menu path for detach (right-click or Shift+F10 on a tab).
         // The menu item lives in a popup, so the tab is resolved through the
         // context menu's placement target rather than visual ancestors.
@@ -184,6 +260,7 @@ namespace GameSaves.App.Views
                     option.PropertyChanged -= OnRailTabOptionChanged;
 
                 _railSettings.WorkspaceHost = null;
+                _railSettings.NavigationHost = null;
                 _railSettings = null;
             }
 
@@ -200,6 +277,7 @@ namespace GameSaves.App.Views
                 // assigned whenever the settings view model is attached so
                 // snapshot/apply commands act on the live window.
                 settings.WorkspaceHost = WorkspaceHost;
+                settings.NavigationHost = this;
             }
 
             ApplyNavigationLayout();
@@ -244,6 +322,24 @@ namespace GameSaves.App.Views
                 UiRailLayoutSettings.PositionTop => Dock.Top,
                 _ => Dock.Left,
             };
+
+            // The rail's own chrome — the collapse toggle and the Scan action —
+            // sits on the rail's edge, so it follows the rail to whichever side
+            // it is on instead of staying stranded at the top left.
+            RailChrome.HorizontalAlignment =
+                _railSettings.RailPosition == UiRailLayoutSettings.PositionRight
+                    ? Avalonia.Layout.HorizontalAlignment.Right
+                    : Avalonia.Layout.HorizontalAlignment.Left;
+
+            bool topRail = _railSettings.RailPosition == UiRailLayoutSettings.PositionTop;
+
+            if (Classes.Contains("railTop") != topRail)
+            {
+                if (topRail)
+                    Classes.Add("railTop");
+                else
+                    Classes.Remove("railTop");
+            }
 
             bool collapsed = _railSettings.RailCollapsed;
 
@@ -326,14 +422,25 @@ namespace GameSaves.App.Views
             return tab is not null;
         }
 
-        // The collapsed rail's menu button expands it again; the state itself
-        // is owned by the settings view model, which persists it and whose
-        // change notification re-applies the layout.
-        private void OnExpandNavigationClicked(object? sender, RoutedEventArgs e)
+        // Settings' provider rows route here. SelectOrActivate rather than a
+        // plain selection, because the Sync section may have been floated into
+        // its own window, in which case that window must be surfaced instead of
+        // the click doing nothing. Selecting the provider kind is what reveals
+        // its existing configuration panel; no capability is enabled here.
+        public void ShowSyncProviderConfiguration(SyncProviderKind kind)
         {
-            if (DataContext is MainWindowViewModel { Settings: { } settings })
-                settings.RailCollapsed = false;
+            if (!_tabsByKey.TryGetValue(UiRailLayoutSettings.TabSync, out TabItem? syncTab))
+                return;
+
+            _tabDetach.SelectOrActivate(MainNavigation, syncTab);
+
+            if (DataContext is MainWindowViewModel { Sync: { } sync })
+                sync.SelectedProviderKind = kind;
         }
+
+        // The rail's collapse toggle binds IsChecked straight to the settings
+        // view model, which persists it and whose change notification
+        // re-applies the layout, so no click handler is needed here.
 
         // Keeps a saved window placement on a visible screen when a layout is
         // applied: a saved top-left that still lies in some current working

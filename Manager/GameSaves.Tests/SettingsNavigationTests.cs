@@ -123,22 +123,64 @@ public sealed class SettingsNavigationTests
     }
 
     [Fact]
-    public void MainWindow_DeclaresTheExpandButtonBoundToTheCollapseState()
+    public void MainWindow_DeclaresACollapseToggleOnTheRailItself()
+    {
+        // The rail's collapse control used to be an expand-only button that
+        // appeared only once the rail was already collapsed, which left no
+        // in-rail way to collapse it in the first place. It is now a toggle
+        // that is always present, so the control works in both directions and
+        // in all three rail positions.
+        XDocument view = XDocument.Load(FindAppFile("Views", "MainWindow.axaml"));
+
+        XElement toggle = Assert.Single(
+            view.Descendants(),
+            element => element.Name.LocalName == "ToggleButton" &&
+                Named(element, "CollapseNavigationButton"));
+
+        Assert.Equal(
+            "{Binding Settings.RailCollapsed, Mode=TwoWay}",
+            (string?)toggle.Attribute("IsChecked"));
+
+        // Never conditionally hidden: it is the only way back from a collapsed
+        // rail, so it must not depend on the collapse state it controls.
+        Assert.Null((string?)toggle.Attribute("IsVisible"));
+        Assert.NotNull((string?)toggle.Attribute("AutomationProperties.Name"));
+    }
+
+    [Fact]
+    public void MainWindow_DeclaresTheScanActionOnTheRail()
     {
         XDocument view = XDocument.Load(FindAppFile("Views", "MainWindow.axaml"));
 
-        XElement expand = Assert.Single(
+        XElement scan = Assert.Single(
             view.Descendants(),
             element => element.Name.LocalName == "Button" &&
-                (string?)element.Attribute("AutomationProperties.Name") ==
-                    "Expand navigation");
+                Named(element, "RailScanButton"));
 
+        Assert.Equal("{Binding RefreshCommand}", (string?)scan.Attribute("Command"));
         Assert.Equal(
-            "{Binding Settings.RailCollapsed}",
-            (string?)expand.Attribute("IsVisible"));
+            "{Binding Settings.ShowScanInNavigationRail}",
+            (string?)scan.Attribute("IsVisible"));
         Assert.Equal(
-            "OnExpandNavigationClicked",
-            (string?)expand.Attribute("Click"));
+            "Scan Steam library",
+            (string?)scan.Attribute("AutomationProperties.Name"));
+    }
+
+    [Fact]
+    public void MainWindow_RailChromeIsOutsideTheTabStripSoItSurvivesEveryRailPosition()
+    {
+        // The chrome sits in its own row above the TabControl rather than
+        // inside the generated tab strip, which is what keeps it reachable
+        // when the rail moves to the right edge or to the top.
+        XDocument view = XDocument.Load(FindAppFile("Views", "MainWindow.axaml"));
+
+        XElement chrome = Assert.Single(
+            view.Descendants(),
+            element => Named(element, "RailChrome"));
+
+        Assert.DoesNotContain(
+            chrome.Ancestors(),
+            ancestor => ancestor.Name.LocalName == "TabControl");
     }
 
     [Fact]
@@ -185,6 +227,13 @@ public sealed class SettingsNavigationTests
     // command name is the last segment of the path.
     private static string? ExtractBinding(string? path) =>
         path?.TrimEnd('}').Split('.').LastOrDefault();
+
+
+    // x:Name lives in the XAML namespace, so XLinq cannot find it by the
+    // prefixed string; every lookup here goes through the local name.
+    private static bool Named(XElement element, string name) =>
+        element.Attributes().Any(attribute =>
+            attribute.Name.LocalName == "Name" && attribute.Value == name);
 
     private static string FindAppFile(string folder, string fileName)
     {

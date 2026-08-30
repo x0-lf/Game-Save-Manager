@@ -6,8 +6,9 @@ namespace GameSaves.App.Views
     {
         public TransferHistoryView()
         {
+            // The runs/files split is now the workspace surface's left and
+            // centre regions, so there is no SplitGrid left to make responsive.
             InitializeComponent();
-            ResponsiveSplitGrid.Attach(SplitGrid, threshold: 760);
         }
     }
 }

@@ -304,6 +304,7 @@ namespace GameSaves.Tests
             var store = new UiSettingsStore(path);
             var viewModel = new InstalledGamesViewModel(
                 new EmptyInstalledGameStatusService(),
+                new WorkspaceLayoutService(store),
                 store);
 
             viewModel.ColumnOptions.Single(
@@ -316,6 +317,7 @@ namespace GameSaves.Tests
 
             var restarted = new InstalledGamesViewModel(
                 new EmptyInstalledGameStatusService(),
+                new WorkspaceLayoutService(new UiSettingsStore(path)),
                 new UiSettingsStore(path));
 
             Assert.Equal(AppUiSettings.AppIdColumn, restarted.ColumnOptions[0].Key);
@@ -522,10 +524,15 @@ namespace GameSaves.Tests
             AppUiSettings loaded = new UiSettingsStore(path).Load();
 
             Assert.Equal(AppUiSettings.CurrentSchemaVersion, loaded.SchemaVersion);
-            Assert.Equal(8, AppUiSettings.CurrentSchemaVersion);
+            Assert.Equal(9, AppUiSettings.CurrentSchemaVersion);
             Assert.Equal(AppUiSettings.ThemeDark, loaded.ThemeChoice);
             Assert.Equal(UiRailLayoutSettings.TabDashboard, loaded.StartupTabKey);
             Assert.Equal("Desk", Assert.Single(loaded.WorkspaceLayouts).Name);
+
+            // A layout saved before panels existed carries no pages, so every
+            // page opens on the catalog default rather than on nothing.
+            Assert.Empty(Assert.Single(loaded.WorkspaceLayouts).Pages);
+            Assert.Empty(loaded.WorkspacePages);
         }
 
         [Fact]

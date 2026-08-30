@@ -164,16 +164,23 @@ namespace GameSaves.App.ViewModels
 
         public ObservableCollection<SaveTransferItemResultRowViewModel> ExecutionResults { get; } = new();
 
+        /// <summary>This page's panel arrangement.</summary>
+        public GameSaves.App.Services.IWorkspaceLayoutPage Workspace { get; }
+
         public TransferPreviewViewModel(
             ITransferPreviewService transferPreviewService,
             ISaveTransferService saveTransferService,
             ProfilesViewModel profilesViewModel,
-            InstalledGamesViewModel installedGamesViewModel)
+            InstalledGamesViewModel installedGamesViewModel,
+            GameSaves.App.Services.WorkspaceLayoutService workspaceLayout)
         {
             _transferPreviewService = transferPreviewService;
             _saveTransferService = saveTransferService;
             _profilesViewModel = profilesViewModel;
             _installedGamesViewModel = installedGamesViewModel;
+
+            Workspace = workspaceLayout.Page(
+                GameSaves.App.Services.UiRailLayoutSettings.TabTransferPreview);
         }
 
         // Automatic startup load of the selectable inputs. Reuses the manual

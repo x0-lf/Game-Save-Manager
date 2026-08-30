@@ -433,6 +433,7 @@ public sealed class SyncUiProviderParityTests
             new StubSyncRemoteProfileMigrationService(settings),
             new FixedUtcClock(Now),
             oauth,
+            SyncProviderSelectionTests.NewWorkspaceLayout(),
             roots);
 
     private static string ReadSyncViewModelSource()

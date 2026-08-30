@@ -2,6 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:GameSaves.App.ViewModels"
         xmlns:views="using:GameSaves.App.Views"
+        xmlns:wsp="using:GameSaves.App.Views.Workspace"
         x:Class="GameSaves.App.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="Game Save Manager"
@@ -58,9 +59,23 @@
 		<Style Selector="TabControl#MainNavigation TabItem:pointerover /template/ Border#PART_LayoutRoot">
 			<Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}" />
 		</Style>
+		<!-- The selected section is the app's primary "you are here" marker, so
+		     it carries the accent: an accent-tinted fill at the same 0.12 the
+		     tables use for a selected row, an accent edge, and accent ink on the
+		     glyph and label. Hover keeps the neutral card fill, so hovering an
+		     unselected entry can never be mistaken for the current one. -->
 		<Style Selector="TabControl#MainNavigation TabItem:selected /template/ Border#PART_LayoutRoot">
-			<Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}" />
-			<Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}" />
+			<Setter Property="Background" Value="{DynamicResource AccentSelectionTintBrush}" />
+			<Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+		</Style>
+		<!-- The label takes the primary ink rather than the accent: accent ink
+		     on a 12% accent tint measured below WCAG AA in the light theme on
+		     three of the five accents. The accent still carries the selection
+		     through the tinted fill, the accent edge and the selected pipe,
+		     which is enough signal without putting the text at risk. -->
+		<Style Selector="TabControl#MainNavigation TabItem:selected">
+			<Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
+			<Setter Property="FontWeight" Value="SemiBold" />
 		</Style>
 
 		<!-- Below 900px the rail collapses to icons; the window toggles the
@@ -87,6 +102,21 @@
 		</Style>
 		<Style Selector="Window.railCollapsed TabControl#MainNavigation TabItem Button.navDetach">
 			<Setter Property="IsVisible" Value="False" />
+		</Style>
+		<!-- The rail chrome follows the same collapse rule as the tab headers:
+		     glyphs stay, labels go. The collapse toggle itself never hides —
+		     it is the only way back. -->
+		<Style Selector="Window.railCollapsed StackPanel#RailChrome TextBlock.railChromeLabel">
+			<Setter Property="IsVisible" Value="False" />
+		</Style>
+		<Style Selector="Window.compactNav StackPanel#RailChrome TextBlock.railChromeLabel">
+			<Setter Property="IsVisible" Value="False" />
+		</Style>
+		<!-- On a top rail the chrome sits on the same band as the tabs rather
+		     than in a strip of its own, so the row keeps the app's header
+		     rhythm instead of adding a second one. -->
+		<Style Selector="Window.railTop StackPanel#RailChrome">
+			<Setter Property="Margin" Value="16,6,16,0" />
 		</Style>
 		<Style Selector="TabControl#MainNavigation TabItem TextBlock.navGlyph">
 			<Setter Property="FontFamily" Value="Segoe Fluent Icons, Segoe MDL2 Assets" />
@@ -172,20 +202,41 @@
 		     the collapse state), so the default layout renders unchanged. -->
 		<Grid Grid.Row="1" RowDefinitions="Auto,*">
 
-			<Button x:Name="ExpandNavigationButton"
-			        Grid.Row="0"
-			        Classes="iconButton"
-			        Click="OnExpandNavigationClicked"
-			        IsVisible="{Binding Settings.RailCollapsed}"
-			        HorizontalAlignment="Left"
-			        Margin="10,8,0,0"
-			        AutomationProperties.Name="Expand navigation"
-			        ToolTip.Tip="Show the navigation labels again">
-				<TextBlock Text="&#xE700;"
-				           FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
-				           FontSize="16"
-				           Foreground="{DynamicResource SecondaryTextBrush}" />
-			</Button>
+			<!-- Rail chrome. The collapse toggle and the Scan action belong to
+			     the rail itself, not to a page, so they sit in a strip on the
+			     rail's own edge and stay reachable in all three rail positions.
+			     Code-behind aligns the strip to whichever edge the rail is on.
+			     While the rail is collapsed the labels drop away and only the
+			     glyphs remain, which is the same rule the tab headers follow. -->
+			<StackPanel x:Name="RailChrome"
+			            Grid.Row="0"
+			            Orientation="Horizontal"
+			            Spacing="2"
+			            Margin="10,8,10,0">
+
+				<ToggleButton x:Name="CollapseNavigationButton"
+				              Classes="railChrome"
+				              IsChecked="{Binding Settings.RailCollapsed, Mode=TwoWay}"
+				              AutomationProperties.Name="Collapse the navigation rail"
+				              ToolTip.Tip="Collapse or expand the navigation rail">
+					<TextBlock Text="&#xE700;" Classes="railChromeGlyph" />
+				</ToggleButton>
+
+				<Button x:Name="RailScanButton"
+				        Classes="railChrome"
+				        Command="{Binding RefreshCommand}"
+				        IsVisible="{Binding Settings.ShowScanInNavigationRail}"
+				        AutomationProperties.Name="Scan Steam library"
+				        ToolTip.Tip="Scan Steam library">
+					<StackPanel Orientation="Horizontal" Spacing="6">
+						<TextBlock Text="&#xE72C;" Classes="railChromeGlyph railAccentGlyph" />
+						<TextBlock Text="Scan"
+						           Classes="railChromeLabel"
+						           Foreground="{DynamicResource AccentBrush}"
+						           VerticalAlignment="Center" />
+					</StackPanel>
+				</Button>
+			</StackPanel>
 
 			<TabControl Grid.Row="1"
 	                    x:Name="MainNavigation"
@@ -193,10 +244,16 @@
 
 			<TabItem AutomationProperties.Name="Dashboard">
 				<TabItem.ContextMenu>
-					<ContextMenu>
+					<ContextMenu Opening="OnTabContextMenuOpening">
 						<MenuItem Header="Detach tab"
 						          Click="OnTabDetachMenuClicked"
 						          AutomationProperties.Name="Detach tab" />
+						          <Separator />
+						          <!-- Filled in when the menu opens, from the section catalog for
+						               this page. Right-click reaches it wherever the rail sits. -->
+						          <MenuItem Header="Sections"
+						                    Tag="sections"
+						                    AutomationProperties.Name="Show or hide sections on this page" />
 					</ContextMenu>
 				</TabItem.ContextMenu>
 				<TabItem.Header>
@@ -212,77 +269,54 @@
 						</Button>
 					</Grid>
 				</TabItem.Header>
-				<ScrollViewer Classes="pageScroll" VerticalContentAlignment="Stretch">
-					<StackPanel Spacing="10" MaxWidth="1100" Margin="0,12,24,14">
+				<wsp:WorkspaceSurface Layout="{Binding Workspace}"
+				                      MaxWidth="1100"
+				                      Margin="0,12,24,14">
+					<wsp:WorkspaceSurface.Panels>
 
-						<Border Background="{DynamicResource CardBackgroundBrush}"
-                                BorderBrush="{DynamicResource CardBorderBrush}"
-                                BorderThickness="1"
-                                CornerRadius="14"
-                                Padding="16,10">
-							<Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-								<StackPanel Grid.Column="0" Spacing="2">
-									<TextBlock Text="Dashboard" Classes="h1" />
-									<TextBlock Text="Your Steam library and save mappings at a glance."
-                                               Foreground="{DynamicResource SecondaryTextBrush}"
-                                               FontSize="{DynamicResource FontSizeBody}"
-                                               TextWrapping="Wrap" />
-									<TextBlock Text="{Binding StatusMessage}"
-                                               Foreground="{DynamicResource MutedTextBrush}"
-                                               FontSize="{DynamicResource FontSizeBody}"
-                                               TextWrapping="Wrap" />
-								</StackPanel>
-								<Button Grid.Column="1"
-                                        Content="Scan Steam library"
-                                        Command="{Binding RefreshCommand}"
-                                        IsVisible="{Binding !IsSteamMissing}"
-                                        VerticalAlignment="Center" />
-							</Grid>
-						</Border>
+						<wsp:WorkspacePanel PanelKey="dashboard.intro"
+						                    Classes="pageHeader"
+						                    Title="Dashboard"
+						                    Subtitle="Your Steam library and save mappings at a glance."
+						                    CanHide="False"
+						                    MinPanelWidth="320">
+							<wsp:WorkspacePanel.HeaderActions>
+								<!-- Settings can drop the Scan action from this page. The
+								     rail action and the guided first-run path below always
+								     keep a way to scan, so it can never be turned off
+								     everywhere at once. -->
+								<Panel IsVisible="{Binding Settings.ShowScanOnDashboard}">
+									<Button Content="Scan Steam library"
+									        Command="{Binding RefreshCommand}"
+									        IsVisible="{Binding !IsSteamMissing}"
+									        VerticalAlignment="Center" />
+								</Panel>
+							</wsp:WorkspacePanel.HeaderActions>
+							<TextBlock Text="{Binding StatusMessage}"
+							           Foreground="{DynamicResource MutedTextBrush}"
+							           FontSize="{DynamicResource FontSizeBody}"
+							           TextWrapping="Wrap" />
+						</wsp:WorkspacePanel>
 
 						<!-- The one condition that makes the whole app inert
 						     gets the most designed treatment on the page. -->
-						<Border IsVisible="{Binding IsSteamMissing}"
-                                Background="{DynamicResource WarningTintBrush}"
-                                BorderBrush="{DynamicResource WarningEdgeBrush}"
-                                BorderThickness="1"
-                                CornerRadius="12"
-                                Padding="12,8">
-							<Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
-								<TextBlock Grid.Column="0"
-                                           Text="&#xE7BA;"
-                                           FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
-                                           FontSize="20"
-                                           VerticalAlignment="Center"
-                                           Foreground="{DynamicResource WarningBrush}" />
-								<StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
-									<TextBlock Text="Steam was not found on this computer"
-                                               Foreground="{DynamicResource PrimaryTextBrush}"
-                                               FontSize="{DynamicResource FontSizeBodyLarge}"
-                                               FontWeight="SemiBold" />
-									<TextBlock Text="Game discovery, profiles and backups need a Steam installation. Install Steam, or scan again if it was just installed."
-                                               Foreground="{DynamicResource SecondaryTextBrush}"
-                                               FontSize="{DynamicResource FontSizeBody}"
-                                               MaxWidth="760"
-                                               HorizontalAlignment="Left"
-                                               TextWrapping="Wrap" />
-								</StackPanel>
-							</Grid>
-						</Border>
+						<wsp:WorkspacePanel PanelKey="dashboard.steamMissing"
+						                    Classes="warning"
+						                    Glyph="&#xE7BA;"
+						                    Title="Steam was not found on this computer"
+						                    Subtitle="Game discovery, profiles and backups need a Steam installation. Install Steam, or scan again if it was just installed."
+						                    CanCollapse="False"
+						                    CanFloat="False"
+						                    IsVisible="{Binding IsSteamMissing}"
+						                    MinPanelWidth="320" />
 
 						<!-- First run with no Steam: a guided path, not a
 						     wall of zeros. -->
-						<Border IsVisible="{Binding IsSteamMissing}"
-                                Background="{DynamicResource CardBackgroundBrush}"
-                                BorderBrush="{DynamicResource CardBorderBrush}"
-                                BorderThickness="1"
-                                CornerRadius="16"
-                                Padding="18">
+						<wsp:WorkspacePanel PanelKey="dashboard.getSetUp"
+						                    Title="Get set up"
+						                    IsVisible="{Binding IsSteamMissing}"
+						                    MinPanelWidth="320">
 							<StackPanel Spacing="14">
-								<TextBlock MaxWidth="640" HorizontalAlignment="Left" Text="Get set up"
-                                           Foreground="{DynamicResource PrimaryTextBrush}"
-                                           FontSize="{DynamicResource FontSizeBodyLarge}"
-                                           FontWeight="SemiBold" />
 								<StackPanel Spacing="10" MaxWidth="640" HorizontalAlignment="Left">
 									<Grid ColumnDefinitions="Auto,*" ColumnSpacing="10" MinHeight="32">
 										<TextBlock Text="1" Width="22" TextAlignment="Center" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center" />
@@ -293,164 +327,106 @@
 										<TextBlock Grid.Column="1" Text="Scan to discover your libraries, games and profiles." Foreground="{DynamicResource PrimaryTextBrush}" FontSize="{DynamicResource FontSizeSubtitle}" VerticalAlignment="Center" />
 									</Grid>
 									<Button Content="Scan Steam library"
-                                            Classes="primary"
-                                            Command="{Binding RefreshCommand}"
-                                            Margin="32,0,0,0"
-                                            HorizontalAlignment="Left" />
+									        Classes="primary"
+									        Command="{Binding RefreshCommand}"
+									        Margin="32,0,0,0"
+									        HorizontalAlignment="Left" />
 									<Grid ColumnDefinitions="Auto,*" ColumnSpacing="10" MinHeight="32">
 										<TextBlock Text="3" Width="22" TextAlignment="Center" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center" />
 										<TextBlock Grid.Column="1" Text="Create your first backup from the Manual backup section." Foreground="{DynamicResource PrimaryTextBrush}" FontSize="{DynamicResource FontSizeSubtitle}" VerticalAlignment="Center" />
 									</Grid>
 								</StackPanel>
 								<TextBlock Text="Every backup is copy-only: nothing is ever overwritten or deleted."
-                                           Foreground="{DynamicResource SecondaryTextBrush}"
-                                           FontSize="{DynamicResource FontSizeBody}" />
+								           Foreground="{DynamicResource SecondaryTextBrush}"
+								           FontSize="{DynamicResource FontSizeBody}" />
 							</StackPanel>
-						</Border>
+						</wsp:WorkspacePanel>
 
-						<Grid ColumnDefinitions="*,*,*"
-                              RowDefinitions="Auto,Auto"
-                              ColumnSpacing="14"
-                              RowSpacing="14"
-                              IsVisible="{Binding !IsSteamMissing}">
+						<!-- The six stat sections. Each keeps the quiet label
+						     idiom and flows three across, exactly as the fixed
+						     grid did, and each is independently movable. -->
+						<wsp:WorkspacePanel PanelKey="dashboard.libraries"
+						                    Classes="quiet"
+						                    Title="Libraries"
+						                    PreferredWidth="300"
+						                    MinPanelWidth="200"
+						                    IsVisible="{Binding !IsSteamMissing}">
+							<TextBlock Text="{Binding LibraryCount}"
+							           Classes="statValue"
+							           Classes.accent="{Binding HasLibraries}" />
+						</wsp:WorkspacePanel>
 
-							<!-- Libraries -->
-							<Border Grid.Row="0"
-                                    Grid.Column="0"
-                                    Background="{DynamicResource CardBackgroundBrush}"
-                                    BorderBrush="{DynamicResource CardBorderBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="16"
-                                    Padding="18">
+						<wsp:WorkspacePanel PanelKey="dashboard.installedGames"
+						                    Classes="quiet"
+						                    Title="Installed games"
+						                    PreferredWidth="300"
+						                    MinPanelWidth="200"
+						                    IsVisible="{Binding !IsSteamMissing}">
+							<TextBlock Text="{Binding InstalledGameCount}"
+							           Classes="statValue"
+							           Classes.good="{Binding HasInstalledGames}" />
+						</wsp:WorkspacePanel>
 
-								<StackPanel Spacing="8">
-									<TextBlock Text="Libraries"
-                                               Foreground="{DynamicResource SecondaryTextBrush}"
-                                               FontSize="{DynamicResource FontSizeSubtitle}"
-                                               TextWrapping="Wrap" />
+						<wsp:WorkspacePanel PanelKey="dashboard.steamProfiles"
+						                    Classes="quiet"
+						                    Title="Steam profiles"
+						                    PreferredWidth="300"
+						                    MinPanelWidth="200"
+						                    IsVisible="{Binding !IsSteamMissing}">
+							<TextBlock Text="{Binding SteamProfileCount}"
+							           Classes="statValue"
+							           Classes.accent="{Binding HasSteamProfiles}" />
+						</wsp:WorkspacePanel>
 
-									<TextBlock Text="{Binding LibraryCount}"
-                                               Classes="statValue"
-                                               Classes.accent="{Binding HasLibraries}" />
-								</StackPanel>
-							</Border>
+						<wsp:WorkspacePanel PanelKey="dashboard.approvedMappings"
+						                    Classes="quiet"
+						                    Title="Approved mappings"
+						                    PreferredWidth="300"
+						                    MinPanelWidth="200"
+						                    IsVisible="{Binding !IsSteamMissing}">
+							<TextBlock Text="{Binding ApprovedMappingCount}"
+							           Classes="statValue"
+							           Classes.good="{Binding HasApprovedMappings}" />
+						</wsp:WorkspacePanel>
 
-							<!-- Installed games -->
-							<Border Grid.Row="0"
-                                    Grid.Column="1"
-                                    Background="{DynamicResource CardBackgroundBrush}"
-                                    BorderBrush="{DynamicResource CardBorderBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="16"
-                                    Padding="18">
+						<wsp:WorkspacePanel PanelKey="dashboard.pendingMappings"
+						                    Classes="quiet"
+						                    Title="Pending mappings"
+						                    PreferredWidth="300"
+						                    MinPanelWidth="200"
+						                    IsVisible="{Binding !IsSteamMissing}">
+							<TextBlock Text="{Binding PendingMappingCount}"
+							           Classes="statValue"
+							           Classes.warn="{Binding HasPendingMappings}" />
+						</wsp:WorkspacePanel>
 
-								<StackPanel Spacing="8">
-									<TextBlock Text="Installed games"
-                                               Foreground="{DynamicResource SecondaryTextBrush}"
-                                               FontSize="{DynamicResource FontSizeSubtitle}"
-                                               TextWrapping="Wrap" />
+						<wsp:WorkspacePanel PanelKey="dashboard.needsAttention"
+						                    Classes="quiet"
+						                    Title="Needs attention"
+						                    PreferredWidth="300"
+						                    MinPanelWidth="200"
+						                    IsVisible="{Binding !IsSteamMissing}">
+							<TextBlock Text="{Binding NeedsFixMappingCount}"
+							           Classes="statValue"
+							           Classes.bad="{Binding HasNeedsFixMappings}" />
+						</wsp:WorkspacePanel>
 
-									<TextBlock Text="{Binding InstalledGameCount}"
-                                               Classes="statValue"
-                                               Classes.good="{Binding HasInstalledGames}" />
-								</StackPanel>
-							</Border>
-
-							<!-- Profiles -->
-							<Border Grid.Row="0"
-                                    Grid.Column="2"
-                                    Background="{DynamicResource CardBackgroundBrush}"
-                                    BorderBrush="{DynamicResource CardBorderBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="16"
-                                    Padding="18">
-
-								<StackPanel Spacing="8">
-									<TextBlock Text="Steam profiles"
-                                               Foreground="{DynamicResource SecondaryTextBrush}"
-                                               FontSize="{DynamicResource FontSizeSubtitle}"
-                                               TextWrapping="Wrap" />
-
-									<TextBlock Text="{Binding SteamProfileCount}"
-                                               Classes="statValue"
-                                               Classes.accent="{Binding HasSteamProfiles}" />
-								</StackPanel>
-							</Border>
-
-							<!-- Approved mappings -->
-							<Border Grid.Row="1"
-                                    Grid.Column="0"
-                                    Background="{DynamicResource CardBackgroundBrush}"
-                                    BorderBrush="{DynamicResource CardBorderBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="16"
-                                    Padding="18">
-
-								<StackPanel Spacing="8">
-									<TextBlock Text="Approved mappings"
-                                               Foreground="{DynamicResource SecondaryTextBrush}"
-                                               FontSize="{DynamicResource FontSizeSubtitle}"
-                                               TextWrapping="Wrap" />
-
-									<TextBlock Text="{Binding ApprovedMappingCount}"
-                                               Classes="statValue"
-                                               Classes.good="{Binding HasApprovedMappings}" />
-								</StackPanel>
-							</Border>
-
-							<!-- Pending mappings -->
-							<Border Grid.Row="1"
-                                    Grid.Column="1"
-                                    Background="{DynamicResource CardBackgroundBrush}"
-                                    BorderBrush="{DynamicResource CardBorderBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="16"
-                                    Padding="18">
-
-								<StackPanel Spacing="8">
-									<TextBlock Text="Pending mappings"
-                                               Foreground="{DynamicResource SecondaryTextBrush}"
-                                               FontSize="{DynamicResource FontSizeSubtitle}"
-                                               TextWrapping="Wrap" />
-
-									<TextBlock Text="{Binding PendingMappingCount}"
-                                               Classes="statValue"
-                                               Classes.warn="{Binding HasPendingMappings}" />
-								</StackPanel>
-							</Border>
-
-							<!-- NeedsFix mappings -->
-							<Border Grid.Row="1"
-                                    Grid.Column="2"
-                                    Background="{DynamicResource CardBackgroundBrush}"
-                                    BorderBrush="{DynamicResource CardBorderBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="16"
-                                    Padding="18">
-
-								<StackPanel Spacing="8">
-									<TextBlock Text="Needs attention"
-                                               Foreground="{DynamicResource SecondaryTextBrush}"
-                                               FontSize="{DynamicResource FontSizeSubtitle}"
-                                               TextWrapping="Wrap" />
-
-									<TextBlock Text="{Binding NeedsFixMappingCount}"
-                                               Classes="statValue"
-                                               Classes.bad="{Binding HasNeedsFixMappings}" />
-								</StackPanel>
-							</Border>
-
-						</Grid>
-					</StackPanel>
-				</ScrollViewer>
+					</wsp:WorkspaceSurface.Panels>
+				</wsp:WorkspaceSurface>
 			</TabItem>
 
 			<TabItem AutomationProperties.Name="Installed games">
 				<TabItem.ContextMenu>
-					<ContextMenu>
+					<ContextMenu Opening="OnTabContextMenuOpening">
 						<MenuItem Header="Detach tab"
 						          Click="OnTabDetachMenuClicked"
 						          AutomationProperties.Name="Detach tab" />
+						          <Separator />
+						          <!-- Filled in when the menu opens, from the section catalog for
+						               this page. Right-click reaches it wherever the rail sits. -->
+						          <MenuItem Header="Sections"
+						                    Tag="sections"
+						                    AutomationProperties.Name="Show or hide sections on this page" />
 					</ContextMenu>
 				</TabItem.ContextMenu>
 				<TabItem.Header>
@@ -471,10 +447,16 @@
 
 			<TabItem AutomationProperties.Name="Profiles">
 				<TabItem.ContextMenu>
-					<ContextMenu>
+					<ContextMenu Opening="OnTabContextMenuOpening">
 						<MenuItem Header="Detach tab"
 						          Click="OnTabDetachMenuClicked"
 						          AutomationProperties.Name="Detach tab" />
+						          <Separator />
+						          <!-- Filled in when the menu opens, from the section catalog for
+						               this page. Right-click reaches it wherever the rail sits. -->
+						          <MenuItem Header="Sections"
+						                    Tag="sections"
+						                    AutomationProperties.Name="Show or hide sections on this page" />
 					</ContextMenu>
 				</TabItem.ContextMenu>
 				<TabItem.Header>
@@ -493,21 +475,27 @@
 				<views:ProfilesView DataContext="{Binding Profiles}" />
 			</TabItem>
 
-			<TabItem AutomationProperties.Name="Transfer preview">
+			<TabItem AutomationProperties.Name="Transfer profiles">
 				<TabItem.ContextMenu>
-					<ContextMenu>
+					<ContextMenu Opening="OnTabContextMenuOpening">
 						<MenuItem Header="Detach tab"
 						          Click="OnTabDetachMenuClicked"
 						          AutomationProperties.Name="Detach tab" />
+						          <Separator />
+						          <!-- Filled in when the menu opens, from the section catalog for
+						               this page. Right-click reaches it wherever the rail sits. -->
+						          <MenuItem Header="Sections"
+						                    Tag="sections"
+						                    AutomationProperties.Name="Show or hide sections on this page" />
 					</ContextMenu>
 				</TabItem.ContextMenu>
 				<TabItem.Header>
-					<Grid ColumnDefinitions="Auto,*,Auto" ToolTip.Tip="Transfer preview (Ctrl+4)">
+					<Grid ColumnDefinitions="Auto,*,Auto" ToolTip.Tip="Transfer profiles (Ctrl+4)">
 						<TextBlock Grid.Column="0" Classes="navGlyph" Text="&#xE8AB;" Margin="0,0,10,0" />
-						<TextBlock Grid.Column="1" Classes="navLabel" Text="Transfer preview" />
+						<TextBlock Grid.Column="1" Classes="navLabel" Text="Transfer profiles" />
 						<Button Grid.Column="2" Classes="navDetach"
 						        Click="OnTabDetachClicked"
-        AutomationProperties.Name="Detach Transfer preview"
+        AutomationProperties.Name="Detach Transfer profiles"
 							        AutomationProperties.HelpText="Detaches this tab into a separate window; close the window to reattach"
 							        ToolTip.Tip="Move this tab to its own window">
 							<TextBlock Text="&#xE8A7;" />
@@ -519,10 +507,16 @@
 
 			<TabItem AutomationProperties.Name="Manual backup">
 				<TabItem.ContextMenu>
-					<ContextMenu>
+					<ContextMenu Opening="OnTabContextMenuOpening">
 						<MenuItem Header="Detach tab"
 						          Click="OnTabDetachMenuClicked"
 						          AutomationProperties.Name="Detach tab" />
+						          <Separator />
+						          <!-- Filled in when the menu opens, from the section catalog for
+						               this page. Right-click reaches it wherever the rail sits. -->
+						          <MenuItem Header="Sections"
+						                    Tag="sections"
+						                    AutomationProperties.Name="Show or hide sections on this page" />
 					</ContextMenu>
 				</TabItem.ContextMenu>
 				<TabItem.Header>
@@ -543,10 +537,16 @@
 
 			<TabItem AutomationProperties.Name="Backups">
 				<TabItem.ContextMenu>
-					<ContextMenu>
+					<ContextMenu Opening="OnTabContextMenuOpening">
 						<MenuItem Header="Detach tab"
 						          Click="OnTabDetachMenuClicked"
 						          AutomationProperties.Name="Detach tab" />
+						          <Separator />
+						          <!-- Filled in when the menu opens, from the section catalog for
+						               this page. Right-click reaches it wherever the rail sits. -->
+						          <MenuItem Header="Sections"
+						                    Tag="sections"
+						                    AutomationProperties.Name="Show or hide sections on this page" />
 					</ContextMenu>
 				</TabItem.ContextMenu>
 				<TabItem.Header>
@@ -567,10 +567,16 @@
 
 			<TabItem AutomationProperties.Name="Sync">
 				<TabItem.ContextMenu>
-					<ContextMenu>
+					<ContextMenu Opening="OnTabContextMenuOpening">
 						<MenuItem Header="Detach tab"
 						          Click="OnTabDetachMenuClicked"
 						          AutomationProperties.Name="Detach tab" />
+						          <Separator />
+						          <!-- Filled in when the menu opens, from the section catalog for
+						               this page. Right-click reaches it wherever the rail sits. -->
+						          <MenuItem Header="Sections"
+						                    Tag="sections"
+						                    AutomationProperties.Name="Show or hide sections on this page" />
 					</ContextMenu>
 				</TabItem.ContextMenu>
 				<TabItem.Header>
@@ -591,10 +597,16 @@
 
 			<TabItem AutomationProperties.Name="History">
 				<TabItem.ContextMenu>
-					<ContextMenu>
+					<ContextMenu Opening="OnTabContextMenuOpening">
 						<MenuItem Header="Detach tab"
 						          Click="OnTabDetachMenuClicked"
 						          AutomationProperties.Name="Detach tab" />
+						          <Separator />
+						          <!-- Filled in when the menu opens, from the section catalog for
+						               this page. Right-click reaches it wherever the rail sits. -->
+						          <MenuItem Header="Sections"
+						                    Tag="sections"
+						                    AutomationProperties.Name="Show or hide sections on this page" />
 					</ContextMenu>
 				</TabItem.ContextMenu>
 				<TabItem.Header>
@@ -615,10 +627,16 @@
 
 			<TabItem x:Name="SettingsTab" AutomationProperties.Name="Settings">
 				<TabItem.ContextMenu>
-					<ContextMenu>
+					<ContextMenu Opening="OnTabContextMenuOpening">
 						<MenuItem Header="Detach tab"
 						          Click="OnTabDetachMenuClicked"
 						          AutomationProperties.Name="Detach tab" />
+						          <Separator />
+						          <!-- Filled in when the menu opens, from the section catalog for
+						               this page. Right-click reaches it wherever the rail sits. -->
+						          <MenuItem Header="Sections"
+						                    Tag="sections"
+						                    AutomationProperties.Name="Show or hide sections on this page" />
 					</ContextMenu>
 				</TabItem.ContextMenu>
 				<TabItem.Header>

@@ -357,6 +357,7 @@ public sealed class SyncProviderCapabilityTests
             new SyncRemoteProfileService(repository, new InMemorySecretStore()),
             new StubSyncRemoteProfileMigrationService(SyncUiSettings.Default),
             new FixedUtcClock(DateTimeOffset.Parse("2026-07-20T12:00:00Z")),
-            new StubGoogleDriveOAuthService());
+            new StubGoogleDriveOAuthService(),
+            SyncProviderSelectionTests.NewWorkspaceLayout());
     }
 }

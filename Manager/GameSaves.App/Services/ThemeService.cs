@@ -22,7 +22,23 @@ namespace GameSaves.App.Services
     public sealed class ThemeService
     {
         internal const string SystemAccentColorKey = "SystemAccentColor";
+
+        // Fluent derives every accent *hover* and *pressed* state from these
+        // six shades, and Avalonia seeds them from the operating system's
+        // accent colour, not from SystemAccentColor. Left alone they make a
+        // checkbox, radio, slider, toggle switch or tab pipe flash the Windows
+        // accent the moment it is hovered, whatever the user picked here. They
+        // are published as Colors, because Fluent consumes them as Colors.
+        internal const string SystemAccentColorLight1Key = "SystemAccentColorLight1";
+        internal const string SystemAccentColorLight2Key = "SystemAccentColorLight2";
+        internal const string SystemAccentColorLight3Key = "SystemAccentColorLight3";
+        internal const string SystemAccentColorDark1Key = "SystemAccentColorDark1";
+        internal const string SystemAccentColorDark2Key = "SystemAccentColorDark2";
+        internal const string SystemAccentColorDark3Key = "SystemAccentColorDark3";
+
         internal const string AccentBrushKey = "AccentBrush";
+        internal const string AccentPreviewTintBrushKey = "AccentPreviewTintBrush";
+        internal const string AccentSelectionTintBrushKey = "AccentSelectionTintBrush";
         internal const string BrandBrushKey = "BrandBrush";
         internal const string AccentHoverBrushKey = "AccentHoverBrush";
         internal const string AccentPressedBrushKey = "AccentPressedBrush";
@@ -54,6 +70,19 @@ namespace GameSaves.App.Services
             "ScrollBarOpacityTransitions";
 
         /// <summary>
+        /// The docking guide's fade. Docking is an occasional, deliberate
+        /// action, so the guide is allowed a short entrance — but it is a
+        /// movement-adjacent affordance, so Reduce Motion removes it entirely
+        /// rather than shortening it. Same swap-the-collection mechanism as the
+        /// scrollbar fade.
+        /// </summary>
+        internal const string WorkspaceOverlayTransitionsKey =
+            "WorkspaceOverlayTransitions";
+
+        internal static readonly TimeSpan DefaultOverlayFade =
+            TimeSpan.FromMilliseconds(120);
+
+        /// <summary>
         /// The app's only animation: the scrollbar opacity fade in
         /// <c>Tokens.axaml</c>. Reduce Motion swaps the transition
         /// collection for an empty one, so state changes are instant.
@@ -65,6 +94,11 @@ namespace GameSaves.App.Services
         internal const string LightVariantKey = "Light";
 
         private ResourceDictionary? _overrides;
+
+        // The last settings applied, kept so the overrides can be recomputed
+        // when the active variant changes underneath us.
+        private AppUiSettings? _applied;
+        private bool _watchingVariant;
 
         // Set by WindowMaterialService: true only while the platform has
         // confirmed it is compositing the requested window material. While
@@ -99,25 +133,92 @@ namespace GameSaves.App.Services
             {
                 yield return new(SystemAccentColorKey, SystemAccentColor);
                 yield return new(AccentBrushKey, Accent);
+                yield return new(AccentPreviewTintBrushKey, WithOpacity(Accent, PreviewTintOpacity));
+                yield return new(AccentSelectionTintBrushKey, WithOpacity(Accent, SelectionTintOpacity));
                 yield return new(BrandBrushKey, Brand);
                 yield return new(AccentHoverBrushKey, AccentHover);
                 yield return new(AccentPressedBrushKey, AccentPressed);
                 yield return new(PrimaryButtonBrushKey, PrimaryButton);
                 yield return new(PrimaryButtonHoverBrushKey, PrimaryButtonHover);
                 yield return new(PrimaryButtonPressedBrushKey, PrimaryButtonPressed);
+
+                // Step 1 in each direction is the shade this app already tuned
+                // for that interaction, so a Fluent control's hover and pressed
+                // states land on the same colours the app's own buttons use.
+                // Steps 2 and 3 continue in the same direction; Fluent uses
+                // them only for secondary chrome.
+                yield return new(SystemAccentColorLight1Key, PrimaryButtonHover);
+                yield return new(SystemAccentColorLight2Key, Shade(PrimaryButtonHover, ShadeStep));
+                yield return new(SystemAccentColorLight3Key, Shade(PrimaryButtonHover, ShadeStep * 2));
+                yield return new(SystemAccentColorDark1Key, PrimaryButtonPressed);
+                yield return new(SystemAccentColorDark2Key, Shade(PrimaryButtonPressed, -ShadeStep));
+                yield return new(SystemAccentColorDark3Key, Shade(PrimaryButtonPressed, -ShadeStep * 2));
             }
+        }
+
+        /// <summary>The wash a docking preview paints over the space a panel would take.</summary>
+        internal const double PreviewTintOpacity = 0.18;
+
+        /// <summary>
+        /// The weight every "this one is current" surface carries — a selected
+        /// table row, a selected list row, the selected navigation section.
+        /// </summary>
+        internal const double SelectionTintOpacity = 0.12;
+
+        /// <summary>One lightness step between consecutive Fluent accent shades.</summary>
+        internal const double ShadeStep = 0.10;
+
+        /// <summary>
+        /// Moves a colour's lightness by <paramref name="amount"/>, keeping hue
+        /// and saturation. Used only for the second and third Fluent accent
+        /// shades; the first step in each direction is a hand-tuned palette
+        /// value rather than a computed one.
+        /// </summary>
+        internal static Color Shade(Color color, double amount)
+        {
+            HslColor hsl = color.ToHsl();
+
+            return new HslColor(
+                hsl.A,
+                hsl.H,
+                hsl.S,
+                Math.Clamp(hsl.L + amount, 0.0, 1.0)).ToRgb();
         }
 
         internal static readonly IReadOnlyList<string> AccentResourceKeys = new[]
         {
             SystemAccentColorKey,
             AccentBrushKey,
+            AccentPreviewTintBrushKey,
+            AccentSelectionTintBrushKey,
             BrandBrushKey,
             AccentHoverBrushKey,
             AccentPressedBrushKey,
             PrimaryButtonBrushKey,
             PrimaryButtonHoverBrushKey,
             PrimaryButtonPressedBrushKey,
+            SystemAccentColorLight1Key,
+            SystemAccentColorLight2Key,
+            SystemAccentColorLight3Key,
+            SystemAccentColorDark1Key,
+            SystemAccentColorDark2Key,
+            SystemAccentColorDark3Key,
+        };
+
+        /// <summary>
+        /// The accent keys Fluent reads as <see cref="Color"/> rather than as a
+        /// brush. Publishing one of these as a brush silently does nothing,
+        /// which is exactly how the hover and pressed states went unnoticed.
+        /// </summary>
+        internal static readonly IReadOnlyList<string> AccentColorValuedKeys = new[]
+        {
+            SystemAccentColorKey,
+            SystemAccentColorLight1Key,
+            SystemAccentColorLight2Key,
+            SystemAccentColorLight3Key,
+            SystemAccentColorDark1Key,
+            SystemAccentColorDark2Key,
+            SystemAccentColorDark3Key,
         };
 
         // Indigo entries must match Tokens.axaml byte for byte; the tests
@@ -140,9 +241,13 @@ namespace GameSaves.App.Services
                     Brand: Color.Parse("#7EE8DB"),
                     AccentHover: Color.Parse("#4CDCCB"),
                     AccentPressed: Color.Parse("#17B5A4"),
-                    PrimaryButton: Color.Parse("#0F9D8F"),
-                    PrimaryButtonHover: Color.Parse("#17AFA0"),
-                    PrimaryButtonPressed: Color.Parse("#0D8A7E")),
+                    // Deepened from #0F9D8F: white on that measured 3.37:1,
+                    // below WCAG AA. The primary button paints OnAccentBrush on
+                    // this fill, and the shipped indigo clears 4.58:1, so every
+                    // accent has to clear the same bar.
+                    PrimaryButton: Color.Parse("#0B7A70"),
+                    PrimaryButtonHover: Color.Parse("#0C857A"),
+                    PrimaryButtonPressed: Color.Parse("#096A61")),
                 [AppUiSettings.AccentRose] = new(
                     SystemAccentColor: Color.Parse("#DC264F"),
                     Accent: Color.Parse("#FB7185"),
@@ -158,18 +263,23 @@ namespace GameSaves.App.Services
                     Brand: Color.Parse("#FDE68A"),
                     AccentHover: Color.Parse("#FCC63D"),
                     AccentPressed: Color.Parse("#EBAF17"),
-                    PrimaryButton: Color.Parse("#D97706"),
-                    PrimaryButtonHover: Color.Parse("#E18408"),
-                    PrimaryButtonPressed: Color.Parse("#C06705")),
+                    // Deepened from #D97706 (white measured 3.19:1). Amber is
+                    // the hardest accent to put white on; this is the shade the
+                    // light variant already uses and it clears 5.0:1.
+                    PrimaryButton: Color.Parse("#B45309"),
+                    PrimaryButtonHover: Color.Parse("#BB570A"),
+                    PrimaryButtonPressed: Color.Parse("#9A4708")),
                 [AppUiSettings.AccentViolet] = new(
                     SystemAccentColor: Color.Parse("#8B5CF6"),
                     Accent: Color.Parse("#A78BFA"),
                     Brand: Color.Parse("#C4B5FD"),
                     AccentHover: Color.Parse("#B39DFB"),
                     AccentPressed: Color.Parse("#9674F8"),
-                    PrimaryButton: Color.Parse("#8B5CF6"),
-                    PrimaryButtonHover: Color.Parse("#9669F7"),
-                    PrimaryButtonPressed: Color.Parse("#7C4AEF")),
+                    // Deepened from #8B5CF6 (white measured 4.23:1, just under
+                    // the bar) to the shade that was its pressed value.
+                    PrimaryButton: Color.Parse("#7C4AEF"),
+                    PrimaryButtonHover: Color.Parse("#8757F2"),
+                    PrimaryButtonPressed: Color.Parse("#6C3ADB")),
             };
 
         private static readonly IReadOnlyDictionary<string, AccentPalette> LightAccents =
@@ -457,6 +567,29 @@ namespace GameSaves.App.Services
         /// motion is reduced. XAML cannot author this collection because a
         /// transition's property resolves only inside a style scope.
         /// </summary>
+        /// <summary>
+        /// The docking guide's transition collection: a short opacity fade, or
+        /// an empty collection when motion is reduced, in which case the guide
+        /// simply appears.
+        /// </summary>
+        internal static Transitions BuildOverlayTransitions(bool reduceMotion)
+        {
+            if (reduceMotion)
+                return new Transitions();
+
+            return new Transitions
+            {
+                new DoubleTransition
+                {
+                    Property = Visual.OpacityProperty,
+                    Duration = DefaultOverlayFade,
+                    // Ease out, never in: the first frame is the one the user
+                    // is watching while dragging.
+                    Easing = new Avalonia.Animation.Easings.CubicEaseOut(),
+                },
+            };
+        }
+
         internal static Transitions BuildScrollBarTransitions(bool reduceMotion)
         {
             if (reduceMotion)
@@ -505,6 +638,25 @@ namespace GameSaves.App.Services
             if (Application.Current is not { } application)
                 return;
 
+            _applied = settings;
+
+            // Every override below is computed against the variant that is
+            // active right now, and they are written into Application.Resources
+            // where they outrank the per-variant token dictionaries. So when
+            // the variant changes — which it does on its own whenever the
+            // theme choice is "system" and the OS switches — they must be
+            // recomputed, or the new variant's surfaces would be painted with
+            // the old variant's accent and transparency.
+            if (!_watchingVariant)
+            {
+                _watchingVariant = true;
+                application.ActualThemeVariantChanged += (_, _) =>
+                {
+                    if (_applied is { } current)
+                        Apply(current);
+                };
+            }
+
             bool isDark = application.ActualThemeVariant != ThemeVariant.Light;
             string variantKey = isDark ? DarkVariantKey : LightVariantKey;
 
@@ -514,7 +666,7 @@ namespace GameSaves.App.Services
 
             foreach ((string key, Color color) in palette.AsResources())
             {
-                if (key == SystemAccentColorKey)
+                if (AccentColorValuedKeys.Contains(key))
                     overrides[key] = color;
                 else
                     overrides[key] = new ImmutableSolidColorBrush(color);
@@ -590,6 +742,8 @@ namespace GameSaves.App.Services
             // fallback) from the same table the tests pin.
             overrides[ScrollBarOpacityTransitionsKey] =
                 BuildScrollBarTransitions(accessibility.ReduceMotion);
+            overrides[WorkspaceOverlayTransitionsKey] =
+                BuildOverlayTransitions(accessibility.ReduceMotion);
 
             if (_overrides is { } previous)
                 application.Resources.MergedDictionaries.Remove(previous);

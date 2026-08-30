@@ -29,9 +29,17 @@ namespace GameSaves.App.ViewModels
 
         public ObservableCollection<TransferRunItemRowViewModel> RunItems { get; } = new();
 
-        public TransferHistoryViewModel(ITransferHistoryRepository historyRepository)
+        /// <summary>This page's panel arrangement.</summary>
+        public GameSaves.App.Services.IWorkspaceLayoutPage Workspace { get; }
+
+        public TransferHistoryViewModel(
+            ITransferHistoryRepository historyRepository,
+            GameSaves.App.Services.WorkspaceLayoutService workspaceLayout)
         {
             _historyRepository = historyRepository;
+
+            Workspace = workspaceLayout.Page(
+                GameSaves.App.Services.UiRailLayoutSettings.TabHistory);
         }
 
         // Automatic startup load of the operation history. Reuses the manual

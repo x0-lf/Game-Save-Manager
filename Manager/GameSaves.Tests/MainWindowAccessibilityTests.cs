@@ -55,15 +55,32 @@ public sealed class MainWindowAccessibilityTests
                     tab.Elements(),
                     element => element.Name.LocalName == "TabItem.ContextMenu"));
 
-            XElement menuItem = Assert.Single(
-                menuContainer.Descendants(),
-                element => element.Name.LocalName == "MenuItem");
+            XElement[] menuItems = menuContainer.Descendants()
+                .Where(element => element.Name.LocalName == "MenuItem")
+                .ToArray();
 
-            Assert.Equal("Detach tab", (string?)menuItem.Attribute("Header"));
+            XElement detach = Assert.Single(
+                menuItems,
+                element => (string?)element.Attribute("Header") == "Detach tab");
+
             Assert.Equal(
                 "Detach tab",
-                (string?)menuItem.Attribute("AutomationProperties.Name"));
-            Assert.Equal("OnTabDetachMenuClicked", (string?)menuItem.Attribute("Click"));
+                (string?)detach.Attribute("AutomationProperties.Name"));
+            Assert.Equal("OnTabDetachMenuClicked", (string?)detach.Attribute("Click"));
+
+            // The section list is the keyboard- and pointer-reachable route to
+            // showing and hiding a page's sections, and it lives on the rail
+            // entry so it works with the rail on any edge. It is populated when
+            // the menu opens, so it carries no items in the markup — only its
+            // name and the tag the handler finds it by.
+            XElement sections = Assert.Single(
+                menuItems,
+                element => (string?)element.Attribute("Header") == "Sections");
+
+            Assert.Equal("sections", (string?)sections.Attribute("Tag"));
+            Assert.False(
+                string.IsNullOrWhiteSpace(
+                    (string?)sections.Attribute("AutomationProperties.Name")));
         }
     }
 

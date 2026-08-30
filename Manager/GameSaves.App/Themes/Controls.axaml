@@ -53,6 +53,20 @@
     <Style Selector="CheckBox:checked:disabled">
         <Setter Property="Opacity" Value="0.95" />
     </Style>
+    <!-- Slider was the one interactive control with no disabled treatment. The
+         transparency sliders are disabled whenever a window material is
+         selected or high contrast is on — both routine — so a disabled slider
+         that still read as a live accent bar would be a standing lie about
+         what the control does. -->
+    <Style Selector="Slider:disabled">
+        <Setter Property="Opacity" Value="0.6" />
+    </Style>
+    <Style Selector="RadioButton:disabled">
+        <Setter Property="Opacity" Value="0.85" />
+    </Style>
+    <Style Selector="RadioButton:checked:disabled">
+        <Setter Property="Opacity" Value="0.95" />
+    </Style>
 
     <!-- Inputs are inset-filled so they can never be mistaken for the
          ghost-outline buttons, including when a button is disabled. -->
@@ -192,6 +206,110 @@
         <Setter Property="Padding" Value="6" />
     </Style>
 
+    <!-- Workspace panel chrome: the collapse chevron and the panel menu. Same
+         anatomy as the header gear (24px square, transparent, 4px radius,
+         muted glyph), so the layout affordances read as part of the product
+         rather than as an IDE toolbar bolted on. The focus ring rebalances
+         padding by the border width, keeping the glyph pixel-stable. -->
+    <Style Selector="Button.panelChrome, ToggleButton.panelChrome">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="4" />
+        <Setter Property="MinWidth" Value="24" />
+        <Setter Property="MinHeight" Value="24" />
+        <Setter Property="Height" Value="24" />
+        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBlock.panelChromeGlyph">
+        <Setter Property="FontFamily" Value="Segoe Fluent Icons, Segoe MDL2 Assets" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.panelChrome:pointerover TextBlock.panelChromeGlyph">
+        <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
+    </Style>
+    <Style Selector="ToggleButton.panelChrome:pointerover TextBlock.panelChromeGlyph">
+        <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
+    </Style>
+    <Style Selector="Button.panelChrome:focus-visible">
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+        <Setter Property="BorderThickness" Value="2" />
+        <Setter Property="Padding" Value="2" />
+    </Style>
+    <Style Selector="ToggleButton.panelChrome:focus-visible">
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+        <Setter Property="BorderThickness" Value="2" />
+        <Setter Property="Padding" Value="2" />
+    </Style>
+
+    <!-- Navigation-rail chrome: the collapse toggle and the Scan action. Same
+         anatomy as the rail's own entries (32px tall, 8px radius, muted glyph)
+         so they read as part of the rail rather than as floating buttons, and
+         the same accent focus ring as every other icon control. -->
+    <Style Selector="Button.railChrome, ToggleButton.railChrome">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="8,6" />
+        <Setter Property="MinWidth" Value="32" />
+        <Setter Property="MinHeight" Value="32" />
+        <Setter Property="CornerRadius" Value="8" />
+    </Style>
+    <Style Selector="TextBlock.railChromeGlyph">
+        <Setter Property="FontFamily" Value="Segoe Fluent Icons, Segoe MDL2 Assets" />
+        <Setter Property="FontSize" Value="16" />
+        <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <!-- The Scan action is the app's one recurring primary verb, so it carries
+         the accent wherever it appears. -->
+    <Style Selector="TextBlock.railAccentGlyph">
+        <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+    </Style>
+    <Style Selector="TextBlock.railChromeLabel">
+        <Setter Property="FontSize" Value="{DynamicResource FontSizeBody}" />
+        <Setter Property="FontWeight" Value="Medium" />
+    </Style>
+    <Style Selector="Button.railChrome:pointerover, ToggleButton.railChrome:pointerover">
+        <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}" />
+    </Style>
+    <Style Selector="Button.railChrome:focus-visible, ToggleButton.railChrome:focus-visible">
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+        <Setter Property="BorderThickness" Value="2" />
+        <Setter Property="Padding" Value="6,4" />
+    </Style>
+
+    <!-- The docking guide. The targets are cards, the preview is an accent
+         wash: both are the app's own surfaces, so the guide reads as this
+         product's own affordance and follows the chosen accent. -->
+    <Style Selector="Border.dockTarget">
+        <Setter Property="Background" Value="{DynamicResource CardBackgroundBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource CardBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="10" />
+        <Setter Property="BoxShadow" Value="0 2 8 0 #33000000" />
+    </Style>
+    <Style Selector="Border.dockTarget.active">
+        <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+    </Style>
+    <Style Selector="Border.dockTarget TextBlock.dockTargetGlyph">
+        <Setter Property="FontFamily" Value="Segoe Fluent Icons, Segoe MDL2 Assets" />
+        <Setter Property="FontSize" Value="16" />
+        <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}" />
+    </Style>
+    <Style Selector="Border.dockTarget.active TextBlock.dockTargetGlyph">
+        <Setter Property="Foreground" Value="{DynamicResource OnAccentBrush}" />
+    </Style>
+    <Style Selector="Border.dockPreview">
+        <Setter Property="Background" Value="{DynamicResource AccentPreviewTintBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+        <Setter Property="BorderThickness" Value="2" />
+        <Setter Property="CornerRadius" Value="10" />
+    </Style>
+
     <Style Selector="Button.primary:disabled /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}" />
@@ -260,6 +378,64 @@
     <Style Selector="DataGridRow:selected:pointerover /template/ Rectangle#BackgroundRectangle">
         <Setter Property="Fill" Value="{DynamicResource AccentBrush}" />
         <Setter Property="Opacity" Value="0.18" />
+    </Style>
+
+    <!-- List selection uses the same accent tint as a selected table row.
+         Fluent's own ListBoxItem selection is a 40-90% accent slab, which is a
+         different idiom from this app's tables and reads as a second design
+         system inside the same window. The keys are set inline in Fluent's
+         control theme, so the states are restated here rather than retargeted
+         through a resource. -->
+    <Style Selector="ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+        <Setter Property="Opacity" Value="0.12" />
+    </Style>
+    <Style Selector="ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+        <Setter Property="Opacity" Value="0.18" />
+    </Style>
+
+    <!-- Keyboard focus on the text inputs and selects. The resting BorderBrush
+         setters above are unconditional Styles, which outrank Fluent's own
+         focused-border setter in its ControlTheme, so without these two rules
+         a focused TextBox or ComboBox shows no ring at all. -->
+    <Style Selector="TextBox:focus-within">
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+    </Style>
+    <Style Selector="ComboBox:focus">
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+    </Style>
+
+    <!-- The keyboard focus ring follows the accent everywhere, not only on the
+         handful of icon-button classes that got one by hand. Fluent draws the
+         ring as a two-tone outline: an outer stroke that must read against the
+         page and an inner stroke that must read against the control's own fill.
+         Only the OUTER stroke takes the accent — putting the accent on both
+         would make the ring vanish on an accent-filled primary button, which is
+         exactly why Fluent's own default is neutral. The inner stroke keeps its
+         contrasting neutral, so the ring stays visible on every surface. -->
+    <Style Selector=":is(Control)">
+        <Setter Property="FocusAdorner">
+            <FocusAdornerTemplate>
+                <Border BorderBrush="{DynamicResource AccentBrush}"
+                        BorderThickness="2"
+                        CornerRadius="4"
+                        Margin="-2" />
+            </FocusAdornerTemplate>
+        </Setter>
+    </Style>
+
+    <!-- The Transfer profiles copy gate. Its checked state is a tinted band
+         that has to follow the accent like every other selection fill; the
+         fixed inset token left an armed gate looking identical to an unarmed
+         one. The rules live here, not in the view, because the panel that
+         carries the gate can be floated into its own window, where a
+         UserControl's own Styles no longer reach it. -->
+    <Style Selector="Border.confirmGate">
+        <Setter Property="Background" Value="{DynamicResource InsetBackgroundBrush}" />
+    </Style>
+    <Style Selector="Border.confirmGate.armed">
+        <Setter Property="Background" Value="{DynamicResource AccentSelectionTintBrush}" />
     </Style>
 
 </Styles>

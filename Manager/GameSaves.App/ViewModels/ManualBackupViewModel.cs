@@ -94,13 +94,17 @@ namespace GameSaves.App.ViewModels
 
         public ObservableCollection<BackupPresetRowViewModel> Presets { get; } = new();
 
+        /// <summary>This page's panel arrangement.</summary>
+        public GameSaves.App.Services.IWorkspaceLayoutPage Workspace { get; }
+
         public ManualBackupViewModel(
             IManualBackupService manualBackupService,
             IBackupHistoryService backupHistoryService,
             IFolderPickerService folderPickerService,
             IManualBackupPresetRepository presetRepository,
             ProfilesViewModel profilesViewModel,
-            InstalledGamesViewModel installedGamesViewModel)
+            InstalledGamesViewModel installedGamesViewModel,
+            GameSaves.App.Services.WorkspaceLayoutService workspaceLayout)
         {
             _manualBackupService = manualBackupService;
             _backupHistoryService = backupHistoryService;
@@ -110,6 +114,9 @@ namespace GameSaves.App.ViewModels
             _installedGamesViewModel = installedGamesViewModel;
 
             destinationPath = _backupHistoryService.GetBackupBasePath();
+
+            Workspace = workspaceLayout.Page(
+                GameSaves.App.Services.UiRailLayoutSettings.TabManualBackup);
         }
 
         public string PresetStatusDisplay => SelectedPreset is null

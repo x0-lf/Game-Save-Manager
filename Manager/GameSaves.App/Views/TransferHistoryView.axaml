@@ -3,90 +3,48 @@
              xmlns:vm="using:GameSaves.App.ViewModels"
              xmlns:models="using:GameSaves.App.Models"
              xmlns:views="using:GameSaves.App.Views"
+             xmlns:wsp="using:GameSaves.App.Views.Workspace"
              x:Class="GameSaves.App.Views.TransferHistoryView"
              x:DataType="vm:TransferHistoryViewModel"
              Background="{DynamicResource PageBackgroundBrush}">
 
+    <wsp:WorkspaceSurface Layout="{Binding Workspace}"
+                          MaxWidth="1100"
+                          Margin="0,12,24,14">
+        <wsp:WorkspaceSurface.Panels>
 
-    <ScrollViewer Classes="pageScroll"
-                  VerticalScrollBarVisibility="Auto"
-                  HorizontalScrollBarVisibility="Disabled">
-    <Grid RowDefinitions="Auto,*"
-          RowSpacing="10"
-          Margin="0,12,24,14"
-          MaxWidth="1100">
+            <wsp:WorkspacePanel PanelKey="history.header"
+                                Classes="pageHeader"
+                                Title="History"
+                                Subtitle="A record of every copy, restore and backup."
+                                CanHide="False"
+                                MinPanelWidth="320">
+                <wsp:WorkspacePanel.HeaderActions>
+                    <Button Content="Refresh"
+                            Command="{Binding RefreshRunsCommand}"
+                            VerticalAlignment="Center" />
+                </wsp:WorkspacePanel.HeaderActions>
 
-        <!-- Header -->
-        <Border Grid.Row="0"
-                Background="{DynamicResource CardBackgroundBrush}"
-                BorderBrush="{DynamicResource CardBorderBrush}"
-                BorderThickness="1"
-                CornerRadius="14"
-                Padding="14,10">
+                <TextBlock Text="{Binding StatusMessage}"
+                           Foreground="{DynamicResource MutedTextBrush}"
+                           FontSize="{DynamicResource FontSizeBody}"
+                           TextWrapping="Wrap" />
+            </wsp:WorkspacePanel>
 
-            <Grid ColumnDefinitions="*,Auto"
-                  ColumnSpacing="12">
+            <!-- The run list and the selected run's files used to be a fixed
+                 two-column split grid. The surface's own left/centre regions
+                 and their splitter carry that now, so the page no longer
+                 builds one of its own. -->
+            <wsp:WorkspacePanel PanelKey="history.runs"
+                                Classes="table"
+                                Title="Executed runs"
+                                Subtitle="Recorded automatically."
+                                CanHide="False"
+                                MinPanelWidth="280"
+                                MaxPanelWidth="640">
 
-                <StackPanel Grid.Column="0"
-                            Spacing="2">
-                    <TextBlock Text="History" Classes="h1" />
-
-                    <TextBlock Text="A record of every copy, restore and backup."
-                               Foreground="{DynamicResource SecondaryTextBrush}"
-                               FontSize="{DynamicResource FontSizeBody}"
-                               TextWrapping="Wrap" />
-
-                    <TextBlock Text="{Binding StatusMessage}"
-                               Foreground="{DynamicResource MutedTextBrush}"
-                               FontSize="{DynamicResource FontSizeBody}"
-                               TextWrapping="Wrap" />
-                </StackPanel>
-
-                <Button Grid.Column="1"
-                        Content="Refresh"
-                        Command="{Binding RefreshRunsCommand}"
-                        VerticalAlignment="Center" />
-            </Grid>
-        </Border>
-
-        <!-- Runs / items (resizable) -->
-        <Grid Grid.Row="1" x:Name="SplitGrid">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="2*" MinWidth="260" MaxWidth="640" />
-                <ColumnDefinition Width="8" />
-                <ColumnDefinition Width="3*" MinWidth="380" />
-            </Grid.ColumnDefinitions>
-
-            <!-- Runs list -->
-            <Border Grid.Column="0"
-                    Background="{DynamicResource CardBackgroundBrush}"
-                    BorderBrush="{DynamicResource CardBorderBrush}"
-                    BorderThickness="1"
-                    CornerRadius="14"
-                    Padding="0">
-
-                <Grid RowDefinitions="Auto,*">
-
-                    <Border Grid.Row="0"
-                            Padding="12,8"
-                            BorderBrush="{DynamicResource CardBorderBrush}"
-                            BorderThickness="0,0,0,1">
-
-                        <StackPanel Spacing="2">
-                            <TextBlock Text="Executed runs"
-                                       Foreground="{DynamicResource PrimaryTextBrush}"
-                                       FontSize="{DynamicResource FontSizeBodyLarge}"
-                                       FontWeight="SemiBold" />
-
-                            <TextBlock Text="Recorded automatically."
-                                       Foreground="{DynamicResource MutedTextBrush}"
-                                       FontSize="{DynamicResource FontSizeBody}"
-                                       TextWrapping="Wrap" />
-                        </StackPanel>
-                    </Border>
-
-                    <ListBox Grid.Row="1"
-                             ItemsSource="{Binding Runs}"
+                <Grid>
+                    <ListBox ItemsSource="{Binding Runs}"
                              SelectedItem="{Binding SelectedRun}"
                              Background="Transparent">
                         <ListBox.ItemTemplate>
@@ -134,53 +92,23 @@
                         </ListBox.ItemTemplate>
                     </ListBox>
 
-                    <views:EmptyState Grid.Row="1"
-                                      Glyph="&#xE81C;"
+                    <views:EmptyState Glyph="&#xE81C;"
                                       Title="No runs yet"
                                       Message="Executed transfers appear here after you copy, restore, or back up saves."
                                       IsVisible="{Binding !Runs.Count}" />
                 </Grid>
-            </Border>
+            </wsp:WorkspacePanel>
 
-            <GridSplitter Grid.Column="1"
-                          Width="8"
-                          Margin="1,0"
-                          Background="Transparent"
-                          ResizeDirection="Columns" />
+            <wsp:WorkspacePanel PanelKey="history.files"
+                                Classes="table"
+                                Title="Run files"
+                                Subtitle="Exactly what was copied, skipped, or failed, per file."
+                                MinPanelWidth="380"
+                                MinPanelHeight="160">
 
-            <!-- Items of the selected run -->
-            <Border Grid.Column="2"
-                    Background="{DynamicResource CardBackgroundBrush}"
-                    BorderBrush="{DynamicResource CardBorderBrush}"
-                    BorderThickness="1"
-                    CornerRadius="14"
-                    Padding="0">
-
-                <Grid RowDefinitions="Auto,Auto,Auto,*">
+                <Grid RowDefinitions="Auto,Auto,*">
 
                     <Border Grid.Row="0"
-                            Padding="12,8"
-                            BorderBrush="{DynamicResource CardBorderBrush}"
-                            BorderThickness="0,0,0,1">
-
-                        <StackPanel Spacing="2">
-                            <TextBlock Text="Files in this run"
-                                       Foreground="{DynamicResource PrimaryTextBrush}"
-                                       FontSize="{DynamicResource FontSizeBodyLarge}"
-                                       FontWeight="SemiBold" IsVisible="{Binding !!Runs.Count}" />
-                            <TextBlock Text="Run files"
-                                       Foreground="{DynamicResource PrimaryTextBrush}"
-                                       FontSize="{DynamicResource FontSizeBodyLarge}"
-                                       FontWeight="SemiBold" IsVisible="{Binding !Runs.Count}" />
-
-                            <TextBlock Text="Exactly what was copied, skipped, or failed, per file."
-                                       Foreground="{DynamicResource MutedTextBrush}"
-                                       FontSize="{DynamicResource FontSizeBody}"
-                                       TextWrapping="Wrap" />
-                        </StackPanel>
-                    </Border>
-
-                    <Border Grid.Row="1"
                             Padding="12,6"
                             BorderBrush="{DynamicResource CardBorderBrush}"
                             BorderThickness="0,0,0,1"
@@ -192,7 +120,9 @@
                                    TextWrapping="Wrap" />
                     </Border>
 
-                    <Border Grid.Row="2"
+                    <!-- The column band and the rows below share one padding so
+                         their columns line up, and it matches BackupHistoryView. -->
+                    <Border Grid.Row="1"
                             Padding="10,6"
                             BorderBrush="{DynamicResource CardBorderBrush}"
                             BorderThickness="0,0,0,1"
@@ -233,13 +163,13 @@
                         </Grid>
                     </Border>
 
-                    <views:EmptyState Grid.Row="3"
+                    <views:EmptyState Grid.Row="2"
                                       Glyph="&#xE7C3;"
                                       Title="No files yet"
                                       Message="Files will appear here once a run exists."
                                       IsVisible="{Binding !Runs.Count}" />
 
-                    <views:EmptyState Grid.Row="3"
+                    <views:EmptyState Grid.Row="2"
                                       Glyph="&#xE7C3;"
                                       Title="No run selected"
                                       Message="Select a run to see the files it copied.">
@@ -251,7 +181,7 @@
                         </views:EmptyState.IsVisible>
                     </views:EmptyState>
 
-                    <ScrollViewer Grid.Row="3"
+                    <ScrollViewer Grid.Row="2"
                                   IsVisible="{Binding !!RunItems.Count}">
                         <ItemsControl ItemsSource="{Binding RunItems}">
                             <ItemsControl.ItemTemplate>
@@ -308,8 +238,8 @@
                         </ItemsControl>
                     </ScrollViewer>
                 </Grid>
-            </Border>
-        </Grid>
-    </Grid>
-    </ScrollViewer>
+            </wsp:WorkspacePanel>
+
+        </wsp:WorkspaceSurface.Panels>
+    </wsp:WorkspaceSurface>
 </UserControl>

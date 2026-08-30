@@ -697,6 +697,9 @@ namespace GameSaves.App.ViewModels
                 GoogleDriveRootFolderStatus.Ready or
                 GoogleDriveRootFolderStatus.Moved;
 
+        /// <summary>This page's panel arrangement.</summary>
+        public GameSaves.App.Services.IWorkspaceLayoutPage Workspace { get; }
+
         public SyncViewModel(
             ISyncProviderFactory syncProviderFactory,
             ISyncProviderCatalog providerCatalog,
@@ -707,8 +710,12 @@ namespace GameSaves.App.ViewModels
             ISyncRemoteProfileMigrationService profileMigrationService,
             IUtcClock clock,
             IGoogleDriveOAuthService googleDriveOAuthService,
+            GameSaves.App.Services.WorkspaceLayoutService workspaceLayout,
             IGoogleDriveRootFolderService? googleDriveRootFolderService = null)
         {
+            Workspace = workspaceLayout.Page(
+                GameSaves.App.Services.UiRailLayoutSettings.TabSync);
+
             _syncProviderFactory = syncProviderFactory;
             _providerCatalog = providerCatalog;
             _folderPickerService = folderPickerService;

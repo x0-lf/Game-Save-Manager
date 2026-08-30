@@ -413,6 +413,7 @@ public sealed class GoogleDriveRootFolderViewModelTests
             new StubSyncRemoteProfileMigrationService(settings),
             new FixedUtcClock(Now),
             oauth,
+            SyncProviderSelectionTests.NewWorkspaceLayout(),
             roots);
     }
 

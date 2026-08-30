@@ -101,16 +101,21 @@ public sealed class SettingsSurfaceTests
             element => element.Name.LocalName == "TextBlock" &&
                 (string?)element.Attribute("Text") == "{Binding Status}");
 
-        // The configuration pointer is plain text, not a button or link that
-        // could pretend to navigate.
-        Assert.Contains(
-            providersTab.Descendants(),
-            element => element.Name.LocalName == "TextBlock" &&
-                (((string?)element.Attribute("Text") ?? string.Empty)
-                    .Contains("Configure sync providers in the Sync tab.")));
-        Assert.DoesNotContain(
-            providersTab.Descendants(),
+        // Each row now carries a real setup action. It is navigation only — it
+        // opens the panel that already exists on the Sync page — and it is
+        // gated on the catalog's own implemented flag, so a provider this build
+        // cannot use is never offered a route it could not honour.
+        XElement setUp = Assert.Single(
+            template.Descendants(),
             element => element.Name.LocalName == "Button");
+
+        Assert.Equal("Set up", (string?)setUp.Attribute("Content"));
+        Assert.Equal("{Binding IsConfigurable}", (string?)setUp.Attribute("IsEnabled"));
+        Assert.Contains(
+            "ConfigureProviderCommand",
+            (string?)setUp.Attribute("Command") ?? string.Empty,
+            StringComparison.Ordinal);
+        Assert.NotNull((string?)setUp.Attribute("AutomationProperties.Name"));
     }
 
     [Fact]

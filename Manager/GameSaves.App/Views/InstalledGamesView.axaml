@@ -3,6 +3,7 @@
              xmlns:vm="using:GameSaves.App.ViewModels"
              xmlns:models="using:GameSaves.App.Models"
              xmlns:views="using:GameSaves.App.Views"
+             xmlns:wsp="using:GameSaves.App.Views.Workspace"
              x:Class="GameSaves.App.Views.InstalledGamesView"
              x:DataType="vm:InstalledGamesViewModel"
              Background="{DynamicResource PageBackgroundBrush}">
@@ -17,6 +18,7 @@
         <Style Selector="DataGrid.installedGamesTable:pointerover /template/ ScrollBar:horizontal">
             <Setter Property="Opacity" Value="1" />
         </Style>
+
         <Style Selector="TextBlock.countApproved">
             <Setter Property="Foreground" Value="{DynamicResource SuccessBrush}" />
         </Style>
@@ -43,292 +45,272 @@
         </Style>
     </UserControl.Styles>
 
-    <Grid RowDefinitions="Auto,*"
-          RowSpacing="10"
-          Margin="0,12,24,14"
-          MaxWidth="1100">
+    <wsp:WorkspaceSurface Layout="{Binding Workspace}"
+                          MaxWidth="1100"
+                          Margin="0,12,24,14">
+        <wsp:WorkspaceSurface.Panels>
 
-        <!-- Header, plus the blocking Steam-missing banner: the same
-             condition gets the same escalation on every affected view. -->
-        <StackPanel Grid.Row="0" Spacing="10">
-        <Border Background="{DynamicResource CardBackgroundBrush}"
-                BorderBrush="{DynamicResource CardBorderBrush}"
-                BorderThickness="1"
-                CornerRadius="14"
-                Padding="14,10">
+            <wsp:WorkspacePanel PanelKey="installedGames.header"
+                                Classes="pageHeader"
+                                Title="Installed games"
+                                Subtitle="Discovered games and whether their saves are mapped."
+                                CanHide="False"
+                                MinPanelWidth="320">
+                <wsp:WorkspacePanel.HeaderActions>
+                    <!-- Settings can drop the Scan action from this page; the rail
+                         action always remains, so scanning is never unreachable. -->
+                    <Panel IsVisible="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).Settings.ShowScanOnInstalledGames}">
+                        <Button Content="Scan Steam library"
+                                IsVisible="{Binding !!Games.Count}"
+                                Command="{Binding RefreshCommand}"
+                                VerticalAlignment="Center" />
+                    </Panel>
+                </wsp:WorkspacePanel.HeaderActions>
+                <TextBlock Text="{Binding StatusMessage}"
+                           Foreground="{DynamicResource MutedTextBrush}"
+                           FontSize="{DynamicResource FontSizeBody}"
+                           TextWrapping="Wrap" />
+            </wsp:WorkspacePanel>
 
-            <Grid ColumnDefinitions="*,Auto"
-                  ColumnSpacing="12">
+            <!-- The blocking Steam-missing banner: the same condition gets the
+                 same escalation on every affected view. -->
+            <wsp:WorkspacePanel PanelKey="installedGames.steamMissing"
+                                Classes="warning"
+                                Glyph="&#xE7BA;"
+                                Title="Steam was not found on this computer"
+                                Subtitle="Game discovery needs a Steam installation. Install Steam, or scan again if it was just installed."
+                                CanHide="False"
+                                CanCollapse="False"
+                                CanFloat="False"
+                                IsVisible="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).IsSteamMissing}"
+                                MinPanelWidth="320" />
 
-                <StackPanel Grid.Column="0"
-                            Spacing="2">
-                    <TextBlock Text="Installed games" Classes="h1" />
+            <!-- DataGrid owns one shared column measure for headers and every
+                 row. Headers can be reordered/resized; visibility and order
+                 persist. This is the panel that absorbs the page's slack. -->
+            <wsp:WorkspacePanel PanelKey="installedGames.table"
+                                Classes="table"
+                                Title="Games"
+                                SizeMode="Fill"
+                                CanHide="False"
+                                MinPanelWidth="320"
+                                MinPanelHeight="200">
+                <Grid>
 
-                    <TextBlock Text="Discovered games and whether their saves are mapped."
-                               Foreground="{DynamicResource SecondaryTextBrush}"
-                               FontSize="{DynamicResource FontSizeBody}"
-                               TextWrapping="Wrap" />
+                    <DataGrid x:Name="GamesGrid"
+                              Classes="installedGamesTable"
+                              ItemsSource="{Binding Games}"
+                              SelectedItem="{Binding SelectedGame}"
+                              IsVisible="{Binding !!Games.Count}"
+                              AutoGenerateColumns="False"
+                              IsReadOnly="True"
+                              CanUserReorderColumns="True"
+                              CanUserResizeColumns="True"
+                              CanUserSortColumns="True"
+                              GridLinesVisibility="Horizontal"
+                              HorizontalScrollBarVisibility="Auto"
+                              VerticalScrollBarVisibility="Auto"
+                              RowHeight="44"
+                              Background="Transparent"
+                              BorderThickness="0"
+                              ColumnReordered="OnColumnReordered">
 
-                    <TextBlock Text="{Binding StatusMessage}"
-                               Foreground="{DynamicResource MutedTextBrush}"
-                               FontSize="{DynamicResource FontSizeBody}"
-                               TextWrapping="Wrap" />
-                </StackPanel>
+                        <DataGrid.Columns>
+                            <DataGridTemplateColumn Header="Game"
+                                                    Tag="game"
+                                                    Width="140"
+                                                    SortMemberPath="GameName">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="models:InstalledGameRowViewModel">
+                                        <TextBlock Text="{Binding GameName}"
+                                                   ToolTip.Tip="{Binding GameName}"
+                                                   Foreground="{DynamicResource PrimaryTextBrush}"
+                                                   FontSize="{DynamicResource FontSizeBody}"
+                                                   FontWeight="SemiBold"
+                                                   VerticalAlignment="Center"
+                                                   Margin="12,0,12,0"
+                                                   TextTrimming="CharacterEllipsis" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
 
-                <Button Grid.Column="1"
-                        Content="Scan Steam library"
-                        IsVisible="{Binding !!Games.Count}"
-                        Command="{Binding RefreshCommand}"
-                        VerticalAlignment="Center" />
-            </Grid>
-        </Border>
+                            <DataGridTextColumn Header="AppID"
+                                                Tag="appId"
+                                                Binding="{Binding AppId}"
+                                                Width="80"
+                                                Foreground="{DynamicResource MutedTextBrush}"
+                                                FontSize="{DynamicResource FontSizeBody}" />
 
-            <Border IsVisible="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).IsSteamMissing}"
-                    Background="{DynamicResource WarningTintBrush}"
-                    BorderBrush="{DynamicResource WarningEdgeBrush}"
-                    BorderThickness="1"
-                    CornerRadius="12"
-                    Padding="12,8">
-                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="12">
-                    <TextBlock Grid.Column="0"
-                               Text="&#xE7BA;"
-                               FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
-                               FontSize="20"
-                               VerticalAlignment="Center"
-                               Foreground="{DynamicResource WarningBrush}" />
-                    <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
-                        <TextBlock Text="Steam was not found on this computer"
-                                   Foreground="{DynamicResource PrimaryTextBrush}"
-                                   FontSize="{DynamicResource FontSizeBodyLarge}"
-                                   FontWeight="SemiBold" />
-                        <TextBlock Text="Game discovery needs a Steam installation. Install Steam, or scan again if it was just installed."
-                                   Foreground="{DynamicResource SecondaryTextBrush}"
-                                   FontSize="{DynamicResource FontSizeBody}"
-                                   MaxWidth="760"
-                                   HorizontalAlignment="Left"
-                                   TextWrapping="Wrap" />
-                    </StackPanel>
+                            <DataGridTemplateColumn Header="Install path"
+                                                    Tag="installPath"
+                                                    Width="160"
+                                                    SortMemberPath="InstallPath">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="models:InstalledGameRowViewModel">
+                                        <!-- Prefix ellipsis keeps the distinguishing
+                                             tail of a path visible; end-truncation
+                                             collapsed every row to the same
+                                             ".../steamapps/common/..." prefix. -->
+                                        <TextBlock Text="{Binding InstallPath}"
+                                                   ToolTip.Tip="{Binding InstallPath}"
+                                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                                   FontSize="{DynamicResource FontSizeBody}"
+                                                   VerticalAlignment="Center"
+                                                   Margin="12,0,12,0"
+                                                   TextTrimming="PrefixCharacterEllipsis" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <DataGridTemplateColumn Header="Library"
+                                                    Tag="library"
+                                                    Width="115"
+                                                    SortMemberPath="LibraryPath">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="models:InstalledGameRowViewModel">
+                                        <TextBlock Text="{Binding LibraryPath}"
+                                                   ToolTip.Tip="{Binding LibraryPath}"
+                                                   Foreground="{DynamicResource MutedTextBrush}"
+                                                   FontSize="{DynamicResource FontSizeBody}"
+                                                   VerticalAlignment="Center"
+                                                   Margin="12,0,12,0"
+                                                   TextTrimming="CharacterEllipsis" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <DataGridTemplateColumn Header="Approved"
+                                                    Tag="approved"
+                                                    Width="100"
+                                                    SortMemberPath="ApprovedMappings">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="models:InstalledGameRowViewModel">
+                                        <TextBlock Text="{Binding ApprovedMappings, StringFormat='{}{0}'}"
+                                                   Classes="countApproved"
+                                                   FontWeight="Medium"
+                                                   Classes.zero="{Binding !ApprovedMappings}"
+                                                   FontSize="{DynamicResource FontSizeBody}"
+                                                   Margin="12,0,0,0"
+                                                   VerticalAlignment="Center" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <DataGridTemplateColumn Header="Pending"
+                                                    Tag="pending"
+                                                    Width="95"
+                                                    SortMemberPath="PendingMappings">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="models:InstalledGameRowViewModel">
+                                        <TextBlock Text="{Binding PendingMappings, StringFormat='{}{0}'}"
+                                                   Classes="countPending"
+                                                   FontWeight="Medium"
+                                                   Classes.zero="{Binding !PendingMappings}"
+                                                   FontSize="{DynamicResource FontSizeBody}"
+                                                   Margin="12,0,0,0"
+                                                   VerticalAlignment="Center" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <DataGridTemplateColumn Header="Needs fix"
+                                                    Tag="needsFix"
+                                                    Width="95"
+                                                    SortMemberPath="NeedsFixMappings">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="models:InstalledGameRowViewModel">
+                                        <TextBlock Text="{Binding NeedsFixMappings, StringFormat='{}{0}'}"
+                                                   Classes="countNeedsFix"
+                                                   FontWeight="Medium"
+                                                   Classes.zero="{Binding !NeedsFixMappings}"
+                                                   FontSize="{DynamicResource FontSizeBody}"
+                                                   Margin="12,0,0,0"
+                                                   VerticalAlignment="Center" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <DataGridTemplateColumn Header="Exists"
+                                                    Tag="exists"
+                                                    Width="85"
+                                                    SortMemberPath="SavePathExists">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="models:InstalledGameRowViewModel">
+                                        <TextBlock Text="{Binding SavePathExistsDisplay}"
+                                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                                   FontSize="{DynamicResource FontSizeBody}"
+                                                   Margin="12,0,0,0"
+                                                   VerticalAlignment="Center" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <DataGridTemplateColumn Header="Files"
+                                                    Tag="files"
+                                                    Width="85"
+                                                    SortMemberPath="FileCount">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="models:InstalledGameRowViewModel">
+                                        <StackPanel VerticalAlignment="Center" Margin="12,0,0,0">
+                                            <TextBlock Text="{Binding FileCount}"
+                                                       FontWeight="Medium"
+                                                       Foreground="{DynamicResource PrimaryTextBrush}"
+                                                       FontSize="{DynamicResource FontSizeBody}" />
+                                            <TextBlock Text="{Binding TotalSizeDisplay}"
+                                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                                       FontSize="{DynamicResource FontSizeMicro}" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <!-- The last column absorbs the slack so the table
+                                 never leaves a headerless filler column against
+                                 the card edge, and never overflows into a
+                                 horizontal scrollbar when the widths are a few
+                                 pixels over the content width. -->
+                            <DataGridTemplateColumn Header="Status"
+                                                    Tag="status"
+                                                    Width="*"
+                                                    MinWidth="120"
+                                                    SortMemberPath="Status">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="models:InstalledGameRowViewModel">
+                                        <TextBlock Text="{Binding Status}"
+                                                   Classes="statusCell"
+                                                   Classes.healthy="{Binding IsStatusHealthy}"
+                                                   Classes.caution="{Binding IsStatusCaution}"
+                                                   Classes.blocked="{Binding IsStatusBlocked}"
+                                                   FontSize="{DynamicResource FontSizeBody}"
+                                                   FontWeight="SemiBold"
+                                                   Margin="12,0,0,0"
+                                                   VerticalAlignment="Center" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <!-- Empty state: shown only when there are no games and no load is
+                         in progress (avoids flashing during the startup scan). -->
+                    <views:EmptyState Glyph="&#xE8FD;"
+                                      Title="No games found"
+                                      Message="Scan your Steam libraries to see installed games and their save status.">
+                        <views:EmptyState.IsVisible>
+                            <MultiBinding Converter="{x:Static BoolConverters.And}">
+                                <Binding Path="!Games.Count" />
+                                <Binding Path="!IsLoading" />
+                            </MultiBinding>
+                        </views:EmptyState.IsVisible>
+                        <views:EmptyState.ActionContent>
+                            <Button Content="Scan Steam library"
+                                    Classes="primary"
+                                    Command="{Binding RefreshCommand}" />
+                        </views:EmptyState.ActionContent>
+                    </views:EmptyState>
                 </Grid>
-            </Border>
-        </StackPanel>
+            </wsp:WorkspacePanel>
 
-        <!-- DataGrid owns one shared column measure for headers and every row.
-             Headers can be reordered/resized; visibility and order persist. -->
-        <Border Grid.Row="1"
-                Background="{DynamicResource CardBackgroundBrush}"
-                BorderBrush="{DynamicResource CardBorderBrush}"
-                BorderThickness="1"
-                CornerRadius="14"
-                Padding="10">
-
-            <Grid>
-
-            <DataGrid x:Name="GamesGrid"
-                      Classes="installedGamesTable"
-                      ItemsSource="{Binding Games}"
-                      SelectedItem="{Binding SelectedGame}"
-                      IsVisible="{Binding !!Games.Count}"
-                      AutoGenerateColumns="False"
-                      IsReadOnly="True"
-                      CanUserReorderColumns="True"
-                      CanUserResizeColumns="True"
-                      CanUserSortColumns="True"
-                      GridLinesVisibility="Horizontal"
-                      HorizontalScrollBarVisibility="Auto"
-                      VerticalScrollBarVisibility="Auto"
-                      RowHeight="44"
-                      Background="Transparent"
-                      BorderThickness="0"
-                      ColumnReordered="OnColumnReordered">
-
-                <DataGrid.Columns>
-                    <DataGridTemplateColumn Header="Game"
-                                            Tag="game"
-                                            Width="140"
-                                            SortMemberPath="GameName">
-                        <DataGridTemplateColumn.CellTemplate>
-                            <DataTemplate x:DataType="models:InstalledGameRowViewModel">
-                                <TextBlock Text="{Binding GameName}"
-                                           ToolTip.Tip="{Binding GameName}"
-                                           Foreground="{DynamicResource PrimaryTextBrush}"
-                                           FontSize="{DynamicResource FontSizeBody}"
-                                           FontWeight="SemiBold"
-                                           VerticalAlignment="Center"
-                                           Margin="12,0,12,0"
-                                           TextTrimming="CharacterEllipsis" />
-                            </DataTemplate>
-                        </DataGridTemplateColumn.CellTemplate>
-                    </DataGridTemplateColumn>
-
-                    <DataGridTextColumn Header="AppID"
-                                        Tag="appId"
-                                        Binding="{Binding AppId}"
-                                        Width="80"
-                                        Foreground="{DynamicResource MutedTextBrush}"
-                                        FontSize="{DynamicResource FontSizeBody}" />
-
-                    <DataGridTemplateColumn Header="Install path"
-                                            Tag="installPath"
-                                            Width="160"
-                                            SortMemberPath="InstallPath">
-                        <DataGridTemplateColumn.CellTemplate>
-                            <DataTemplate x:DataType="models:InstalledGameRowViewModel">
-                                <!-- Prefix ellipsis keeps the distinguishing
-                                     tail of a path visible; end-truncation
-                                     collapsed every row to the same
-                                     ".../steamapps/common/..." prefix. -->
-                                <TextBlock Text="{Binding InstallPath}"
-                                           ToolTip.Tip="{Binding InstallPath}"
-                                           Foreground="{DynamicResource SecondaryTextBrush}"
-                                           FontSize="{DynamicResource FontSizeBody}"
-                                           VerticalAlignment="Center"
-                                           Margin="12,0,12,0"
-                                           TextTrimming="PrefixCharacterEllipsis" />
-                            </DataTemplate>
-                        </DataGridTemplateColumn.CellTemplate>
-                    </DataGridTemplateColumn>
-
-                    <DataGridTemplateColumn Header="Library"
-                                            Tag="library"
-                                            Width="115"
-                                            SortMemberPath="LibraryPath">
-                        <DataGridTemplateColumn.CellTemplate>
-                            <DataTemplate x:DataType="models:InstalledGameRowViewModel">
-                                <TextBlock Text="{Binding LibraryPath}"
-                                           ToolTip.Tip="{Binding LibraryPath}"
-                                           Foreground="{DynamicResource MutedTextBrush}"
-                                           FontSize="{DynamicResource FontSizeBody}"
-                                           VerticalAlignment="Center"
-                                           Margin="12,0,12,0"
-                                           TextTrimming="CharacterEllipsis" />
-                            </DataTemplate>
-                        </DataGridTemplateColumn.CellTemplate>
-                    </DataGridTemplateColumn>
-
-                    <DataGridTemplateColumn Header="Approved"
-                                            Tag="approved"
-                                            Width="100"
-                                            SortMemberPath="ApprovedMappings">
-                        <DataGridTemplateColumn.CellTemplate>
-                            <DataTemplate x:DataType="models:InstalledGameRowViewModel">
-                                <TextBlock Text="{Binding ApprovedMappings, StringFormat='{}{0}'}"
-                                           Classes="countApproved"
-                                           FontWeight="Medium"
-                                           Classes.zero="{Binding !ApprovedMappings}"
-                                           FontSize="{DynamicResource FontSizeBody}"
-                                           Margin="12,0,0,0"
-                                           VerticalAlignment="Center" />
-                            </DataTemplate>
-                        </DataGridTemplateColumn.CellTemplate>
-                    </DataGridTemplateColumn>
-
-                    <DataGridTemplateColumn Header="Pending"
-                                            Tag="pending"
-                                            Width="95"
-                                            SortMemberPath="PendingMappings">
-                        <DataGridTemplateColumn.CellTemplate>
-                            <DataTemplate x:DataType="models:InstalledGameRowViewModel">
-                                <TextBlock Text="{Binding PendingMappings, StringFormat='{}{0}'}"
-                                           Classes="countPending"
-                                           FontWeight="Medium"
-                                           Classes.zero="{Binding !PendingMappings}"
-                                           FontSize="{DynamicResource FontSizeBody}"
-                                           Margin="12,0,0,0"
-                                           VerticalAlignment="Center" />
-                            </DataTemplate>
-                        </DataGridTemplateColumn.CellTemplate>
-                    </DataGridTemplateColumn>
-
-                    <DataGridTemplateColumn Header="Needs fix"
-                                            Tag="needsFix"
-                                            Width="95"
-                                            SortMemberPath="NeedsFixMappings">
-                        <DataGridTemplateColumn.CellTemplate>
-                            <DataTemplate x:DataType="models:InstalledGameRowViewModel">
-                                <TextBlock Text="{Binding NeedsFixMappings, StringFormat='{}{0}'}"
-                                           Classes="countNeedsFix"
-                                           FontWeight="Medium"
-                                           Classes.zero="{Binding !NeedsFixMappings}"
-                                           FontSize="{DynamicResource FontSizeBody}"
-                                           Margin="12,0,0,0"
-                                           VerticalAlignment="Center" />
-                            </DataTemplate>
-                        </DataGridTemplateColumn.CellTemplate>
-                    </DataGridTemplateColumn>
-
-                    <DataGridTemplateColumn Header="Exists"
-                                            Tag="exists"
-                                            Width="85"
-                                            SortMemberPath="SavePathExists">
-                        <DataGridTemplateColumn.CellTemplate>
-                            <DataTemplate x:DataType="models:InstalledGameRowViewModel">
-                                <TextBlock Text="{Binding SavePathExistsDisplay}"
-                                           Foreground="{DynamicResource SecondaryTextBrush}"
-                                           FontSize="{DynamicResource FontSizeBody}"
-                                           Margin="12,0,0,0"
-                                           VerticalAlignment="Center" />
-                            </DataTemplate>
-                        </DataGridTemplateColumn.CellTemplate>
-                    </DataGridTemplateColumn>
-
-                    <DataGridTemplateColumn Header="Files"
-                                            Tag="files"
-                                            Width="85"
-                                            SortMemberPath="FileCount">
-                        <DataGridTemplateColumn.CellTemplate>
-                            <DataTemplate x:DataType="models:InstalledGameRowViewModel">
-                                <StackPanel VerticalAlignment="Center" Margin="12,0,0,0">
-                                    <TextBlock Text="{Binding FileCount}"
-                                               FontWeight="Medium"
-                                               Foreground="{DynamicResource PrimaryTextBrush}"
-                                               FontSize="{DynamicResource FontSizeBody}" />
-                                    <TextBlock Text="{Binding TotalSizeDisplay}"
-                                               Foreground="{DynamicResource SecondaryTextBrush}"
-                                               FontSize="{DynamicResource FontSizeMicro}" />
-                                </StackPanel>
-                            </DataTemplate>
-                        </DataGridTemplateColumn.CellTemplate>
-                    </DataGridTemplateColumn>
-
-                    <DataGridTemplateColumn Header="Status"
-                                            Tag="status"
-                                            Width="120"
-                                            SortMemberPath="Status">
-                        <DataGridTemplateColumn.CellTemplate>
-                            <DataTemplate x:DataType="models:InstalledGameRowViewModel">
-                                <TextBlock Text="{Binding Status}"
-                                           Classes="statusCell"
-                                           Classes.healthy="{Binding IsStatusHealthy}"
-                                           Classes.caution="{Binding IsStatusCaution}"
-                                           Classes.blocked="{Binding IsStatusBlocked}"
-                                           FontSize="{DynamicResource FontSizeBody}"
-                                           FontWeight="SemiBold"
-                                           Margin="12,0,0,0"
-                                           VerticalAlignment="Center" />
-                            </DataTemplate>
-                        </DataGridTemplateColumn.CellTemplate>
-                    </DataGridTemplateColumn>
-                </DataGrid.Columns>
-            </DataGrid>
-
-            <!-- Empty state: shown only when there are no games and no load is
-                 in progress (avoids flashing during the startup scan). -->
-            <views:EmptyState Glyph="&#xE8FD;"
-                              Title="No games found"
-                              Message="Scan your Steam libraries to see installed games and their save status.">
-                <views:EmptyState.IsVisible>
-                    <MultiBinding Converter="{x:Static BoolConverters.And}">
-                        <Binding Path="!Games.Count" />
-                        <Binding Path="!IsLoading" />
-                    </MultiBinding>
-                </views:EmptyState.IsVisible>
-                <views:EmptyState.ActionContent>
-                    <Button Content="Scan Steam library"
-                            Classes="primary"
-                            Command="{Binding RefreshCommand}" />
-                </views:EmptyState.ActionContent>
-            </views:EmptyState>
-            </Grid>
-        </Border>
-    </Grid>
+        </wsp:WorkspaceSurface.Panels>
+    </wsp:WorkspaceSurface>
 </UserControl>

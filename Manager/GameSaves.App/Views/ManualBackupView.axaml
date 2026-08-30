@@ -3,678 +3,544 @@
              xmlns:vm="using:GameSaves.App.ViewModels"
              xmlns:models="using:GameSaves.App.Models"
              xmlns:views="using:GameSaves.App.Views"
+             xmlns:wsp="using:GameSaves.App.Views.Workspace"
              x:Class="GameSaves.App.Views.ManualBackupView"
              x:DataType="vm:ManualBackupViewModel"
              Background="{DynamicResource PageBackgroundBrush}">
 
+    <!-- The surface owns the page's chrome, scrolling and the split between
+         the options rail and the run column, so the page declares sections
+         rather than a layout: the arrangement is the user's to change. -->
+    <wsp:WorkspaceSurface Layout="{Binding Workspace}"
+                          MaxWidth="1100"
+                          Margin="0,12,24,14">
+        <wsp:WorkspaceSurface.Panels>
 
-    <ScrollViewer Classes="pageScroll"
-                  VerticalScrollBarVisibility="Auto"
-                  HorizontalScrollBarVisibility="Disabled">
-    <Grid RowDefinitions="Auto,Auto,Auto,*"
-          RowSpacing="10"
-          Margin="0,12,24,14"
-          MaxWidth="1100">
+            <wsp:WorkspacePanel PanelKey="manualBackup.header"
+                                Classes="pageHeader"
+                                Title="Manual backup"
+                                Subtitle="Create a backup of any game&#8217;s saves on demand."
+                                CanHide="False"
+                                MinPanelWidth="320">
+                <wsp:WorkspacePanel.HeaderActions>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Content="Refresh"
+                                Command="{Binding RefreshInputsCommand}"
+                                VerticalAlignment="Center" />
 
-        <!-- Header -->
-        <Border Grid.Row="0"
-                Background="{DynamicResource CardBackgroundBrush}"
-                BorderBrush="{DynamicResource CardBorderBrush}"
-                BorderThickness="1"
-                CornerRadius="14"
-                Padding="14,10">
+                        <Button Content="Preview backup"
+                                ToolTip.Tip="Dry run: nothing is copied until you confirm."
+                                IsEnabled="{Binding !!Profiles.Count}"
+                                Classes="primary"
+                                Command="{Binding PreviewBackupCommand}"
+                                VerticalAlignment="Center" />
+                    </StackPanel>
+                </wsp:WorkspacePanel.HeaderActions>
 
-            <Grid ColumnDefinitions="*,Auto,Auto"
-                  ColumnSpacing="8">
+                <TextBlock Text="{Binding StatusMessage}"
+                           Foreground="{DynamicResource MutedTextBrush}"
+                           FontSize="{DynamicResource FontSizeBody}"
+                           TextWrapping="Wrap" />
+            </wsp:WorkspacePanel>
 
-                <StackPanel Grid.Column="0"
-                            Spacing="2"
-                            VerticalAlignment="Center">
-                    <TextBlock Text="Manual backup" Classes="h1" />
+            <!-- Nothing on this page can run without a profile, so the banner
+                 is pinned: it can be moved, never hidden or folded away. -->
+            <wsp:WorkspacePanel PanelKey="manualBackup.noProfiles"
+                                Classes="warning"
+                                Glyph="&#xE7BA;"
+                                Title="No profiles found"
+                                Subtitle="Scan for profiles first, then come back to create a backup."
+                                CanHide="False"
+                                CanCollapse="False"
+                                CanFloat="False"
+                                IsVisible="{Binding !Profiles.Count}"
+                                MinPanelWidth="320">
+                <wsp:WorkspacePanel.HeaderActions>
+                    <Button Content="Go to Profiles"
+                            Click="OnGoToProfilesClick"
+                            Foreground="{DynamicResource PrimaryTextBrush}"
+                            FontSize="{DynamicResource FontSizeBody}"
+                            VerticalAlignment="Center" />
+                </wsp:WorkspacePanel.HeaderActions>
+            </wsp:WorkspacePanel>
 
-                    <TextBlock Text="Create a backup of any game&#8217;s saves on demand."
-                               Foreground="{DynamicResource SecondaryTextBrush}"
-                               FontSize="{DynamicResource FontSizeBody}"
-                               TextWrapping="Wrap" />
+            <!-- The selectors card lives in the full-width top band, so it keeps
+                 the two-column form it shipped with: what to back up on the left,
+                 where it goes on the right. MinPanelWidth states the measure that
+                 form needs, because a rail now honours it. -->
+            <wsp:WorkspacePanel PanelKey="manualBackup.selectors"
+                                Title="Backup options"
+                                MinPanelWidth="520">
+                <Grid ColumnDefinitions="*,*"
+                      ColumnSpacing="14">
 
-                    <TextBlock Text="{Binding StatusMessage}"
-                               Foreground="{DynamicResource MutedTextBrush}"
-                               FontSize="{DynamicResource FontSizeBody}"
-                               TextWrapping="Wrap" />
-                </StackPanel>
+                    <StackPanel Grid.Column="0"
+                                Spacing="16">
 
-                <Button Grid.Column="1"
-                        Content="Refresh"
-                        Command="{Binding RefreshInputsCommand}"
-                        VerticalAlignment="Center" />
-
-                <Button Grid.Column="2"
-                        Content="Preview backup"
-                        ToolTip.Tip="Dry run: nothing is copied until you confirm."
-                        IsEnabled="{Binding !!Profiles.Count}"
-                            Classes="primary"
-                        Command="{Binding PreviewBackupCommand}"
-                        VerticalAlignment="Center" />
-            </Grid>
-        </Border>
-
-        <!-- Selectors -->
-        
-        <Border Grid.Row="1"
-                Background="{DynamicResource WarningTintBrush}"
-                BorderBrush="{DynamicResource WarningEdgeBrush}"
-                BorderThickness="1"
-                CornerRadius="12"
-                Padding="12,8"
-                Margin="0,0,0,0"
-                IsVisible="{Binding !Profiles.Count}">
-            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
-                <TextBlock Grid.Column="0"
-                           Text="&#xE7BA;"
-                           FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
-                           FontSize="20"
-                           VerticalAlignment="Center"
-                           Foreground="{DynamicResource WarningBrush}" />
-                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
-                    <TextBlock Text="No profiles found"
-                               Foreground="{DynamicResource PrimaryTextBrush}"
-                               FontSize="{DynamicResource FontSizeBodyLarge}"
-                               FontWeight="SemiBold" />
-                    <TextBlock Text="Scan for profiles first, then come back to create a backup."
-                               Foreground="{DynamicResource SecondaryTextBrush}"
-                               FontSize="{DynamicResource FontSizeBody}"
-                               TextWrapping="Wrap" />
-                </StackPanel>
-                <Button Grid.Column="2"
-                        Content="Go to Profiles"
-                        Click="OnGoToProfilesClick"
-                        Foreground="{DynamicResource PrimaryTextBrush}"
-                        FontSize="{DynamicResource FontSizeBody}"
-                        VerticalAlignment="Center" />
-            </Grid>
-        </Border>
-
-        <Border Grid.Row="2"
-                Background="{DynamicResource CardBackgroundBrush}"
-                BorderBrush="{DynamicResource CardBorderBrush}"
-                BorderThickness="1"
-                CornerRadius="14"
-                Padding="14,8">
-
-            <Grid ColumnDefinitions="*,*"
-                  ColumnSpacing="14">
-
-                <StackPanel Grid.Column="0"
-                            Spacing="16">
-                  <StackPanel Spacing="4">
-                    <TextBlock Text="Profile"
-                               Foreground="{DynamicResource SecondaryTextBrush}"
-                               FontSize="{DynamicResource FontSizeBody}"
-                               FontWeight="SemiBold" />
-
-                    <Panel>
-                        <ComboBox ItemsSource="{Binding Profiles}"
-                              SelectedItem="{Binding SelectedProfile}"
-                              HorizontalAlignment="Stretch" />
-                        <TextBlock Text="Select a profile"
-                                   Foreground="{DynamicResource MutedTextBrush}"
-                                   FontSize="{DynamicResource FontSizeSubtitle}"
-                                   Margin="12,0,32,0"
-                                   VerticalAlignment="Center"
-                                   IsHitTestVisible="False"
-                                   IsVisible="{Binding SelectedProfile, Converter={x:Static ObjectConverters.IsNull}}" />
-                    </Panel>
-
-                    <TextBlock Text="Installed game"
-                               Foreground="{DynamicResource SecondaryTextBrush}"
-                               FontSize="{DynamicResource FontSizeBody}"
-                               FontWeight="SemiBold"
-                               Margin="0,2,0,0" />
-
-                    <Panel>
-                        <ComboBox ItemsSource="{Binding Games}"
-                              SelectedItem="{Binding SelectedGame}"
-                              HorizontalAlignment="Stretch" />
-                        <TextBlock Text="Select a game"
-                                   Foreground="{DynamicResource MutedTextBrush}"
-                                   FontSize="{DynamicResource FontSizeSubtitle}"
-                                   Margin="12,0,32,0"
-                                   VerticalAlignment="Center"
-                                   IsHitTestVisible="False"
-                                   IsVisible="{Binding SelectedGame, Converter={x:Static ObjectConverters.IsNull}}" />
-                    </Panel>
-                  </StackPanel>
-
-                  <StackPanel Spacing="4">
-                    <TextBlock Text="Backup source"
-                               Foreground="{DynamicResource SecondaryTextBrush}"
-                               FontSize="{DynamicResource FontSizeBody}"
-                               FontWeight="SemiBold" />
-
-                    <CheckBox Content="Include Steam userdata game folder"
-                              IsChecked="{Binding IncludeSteamUserDataGameFolder}"
-                              FontSize="{DynamicResource FontSizeBody}"
-                              ToolTip.Tip="Backs up the full &lt;SteamRoot&gt;\userdata\&lt;profile&gt;\&lt;AppId&gt; folder for the selected profile." />
-
-                    <CheckBox Content="Include approved save-path mappings"
-                              IsChecked="{Binding IncludeApprovedMappings}"
-                              FontSize="{DynamicResource FontSizeBody}"
-                              ToolTip.Tip="Backs up save locations from the approved mapping database (gamesave.db), expanded for the selected profile." />
-
-                    <TextBlock Text="Select at least one backup source."
-                               IsVisible="{Binding !HasAnyBackupSource}"
-                               Foreground="{DynamicResource WarningBrush}"
-                               FontSize="{DynamicResource FontSizeBody}"
-                               TextWrapping="Wrap" />
-                  </StackPanel>
-                </StackPanel>
-
-                <StackPanel Grid.Column="1"
-                            Spacing="16">
-                  <StackPanel Spacing="4">
-                    <TextBlock Text="Backup destination"
-                               Foreground="{DynamicResource SecondaryTextBrush}"
-                               FontSize="{DynamicResource FontSizeBody}"
-                               FontWeight="SemiBold" />
-
-                    <TextBox Text="{Binding DestinationPath}"
-                             PlaceholderText="Select where this backup should be stored."
-                             ToolTip.Tip="{Binding DestinationPath}" />
-
-                      <WrapPanel ItemSpacing="8" LineSpacing="4" Margin="0,4,0,0">
-                        <Button Content="Choose folder…"
-                                Command="{Binding ChooseDestinationFolderCommand}"
-                                ToolTip.Tip="Select where this backup should be stored."
-                                FontSize="{DynamicResource FontSizeBody}" />
-
-                        <Button Content="Reset to default"
-                                Command="{Binding UseDefaultDestinationCommand}"
-                                FontSize="{DynamicResource FontSizeBody}" />
-                      </WrapPanel>
-
-                    <TextBlock Text="Each run creates a timestamped folder here. Backups in the default location also appear in Backups."
-                               MaxWidth="560"
-                               HorizontalAlignment="Left"
-                               Foreground="{DynamicResource MutedTextBrush}"
-                               FontSize="{DynamicResource FontSizeBody}"
-                               TextWrapping="Wrap" />
-                  </StackPanel>
-
-                  <StackPanel Spacing="4">
-                    <TextBlock Text="Backup preset"
-                               Foreground="{DynamicResource SecondaryTextBrush}"
-                               FontSize="{DynamicResource FontSizeBody}"
-                               FontWeight="SemiBold" />
-
-                    <Panel>
-                        <ComboBox ItemsSource="{Binding Presets}"
-                              SelectedItem="{Binding SelectedPreset}"
-                              HorizontalAlignment="Stretch"
-                              ToolTip.Tip="Applying a preset fills the destination and backup sources. Presets never start a backup by themselves." />
-                        <TextBlock Text="Apply a saved preset…"
-                               Foreground="{DynamicResource MutedTextBrush}"
-                               FontSize="{DynamicResource FontSizeSubtitle}"
-                               Margin="12,0,32,0"
-                               VerticalAlignment="Center"
-                               IsHitTestVisible="False"
-                               IsVisible="{Binding SelectedPreset, Converter={x:Static ObjectConverters.IsNull}}" />
-                    </Panel>
-
-                    <Panel Margin="0,4,0,0">
-                        <TextBox Text="{Binding PresetName}" />
-                        <TextBlock Text="Preset name"
-                                   Foreground="{DynamicResource MutedTextBrush}"
-                                   FontSize="{DynamicResource FontSizeSubtitle}"
-                                   Margin="12,0"
-                                   VerticalAlignment="Center"
-                                   IsHitTestVisible="False"
-                                   IsVisible="{Binding !PresetName.Length}" />
-                    </Panel>
-
-                    <WrapPanel ItemSpacing="8" LineSpacing="4" Margin="0,4,0,0">
-                        <Button Content="Save preset"
-                                IsEnabled="{Binding !!PresetName.Length}"
-                                Command="{Binding SavePresetCommand}"
-                                FontSize="{DynamicResource FontSizeBody}"
-                                ToolTip.Tip="Saves the current destination and backup sources under this name. Saving an existing name updates that preset." />
-
-                        <Button Content="Delete preset"
-                                Classes="danger"
-                                IsEnabled="{Binding SelectedPreset, Converter={x:Static ObjectConverters.IsNotNull}}"
-                                Command="{Binding DeletePresetCommand}"
-                                FontSize="{DynamicResource FontSizeBody}"
-                                ToolTip.Tip="Deletes the selected preset. Backups already created are not affected." />
-
-                        <Button Content="Clear preset"
-                                IsEnabled="{Binding SelectedPreset, Converter={x:Static ObjectConverters.IsNotNull}}"
-                                Command="{Binding ClearPresetSelectionCommand}"
-                                FontSize="{DynamicResource FontSizeBody}"
-                                ToolTip.Tip="Clears the preset selection. The current settings are kept and the backup runs without a preset." />
-                    </WrapPanel>
-
-                    <TextBlock Text="{Binding PresetStatusDisplay}"
-                               Foreground="{DynamicResource MutedTextBrush}"
-                               FontSize="{DynamicResource FontSizeBody}"
-                               TextWrapping="Wrap" />
-                  </StackPanel>
-                </StackPanel>
-            </Grid>
-        </Border>
-
-        <!-- Main area -->
-        <Grid Grid.Row="3" x:Name="SplitGrid">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="2*" MinWidth="220" MaxWidth="520" />
-                <ColumnDefinition Width="8" />
-                <ColumnDefinition Width="3*" MinWidth="420" />
-            </Grid.ColumnDefinitions>
-
-            <!-- Summary -->
-            <Border Grid.Column="0"
-                    VerticalAlignment="Top"
-                    Background="{DynamicResource CardBackgroundBrush}"
-                    BorderBrush="{DynamicResource CardBorderBrush}"
-                    BorderThickness="1"
-                    CornerRadius="14"
-                    Padding="0">
-
-
-                <!-- Same header-band idiom as the sibling card on this row:
-                     a 12,8 band with a subtitle and a bottom rule, pinned
-                     above the scrolling body. The two cards share a top edge,
-                     so two different header idioms put their titles 6 px out
-                     of register. History's card pair is the reference.
-                     See Round 41 P1-3. -->
-                <Grid RowDefinitions="Auto,*">
-
-                    <Border Grid.Row="0"
-                            Padding="12,8"
-                            BorderBrush="{DynamicResource CardBorderBrush}"
-                            BorderThickness="0,0,0,1">
-
-                        <StackPanel Spacing="2">
-                            <TextBlock Text="Summary"
-                                       Foreground="{DynamicResource PrimaryTextBrush}"
-                                       FontSize="{DynamicResource FontSizeBodyLarge}"
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Profile"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                       FontSize="{DynamicResource FontSizeBody}"
                                        FontWeight="SemiBold" />
 
-                            <TextBlock Text="Totals and backup controls."
-                                       Foreground="{DynamicResource MutedTextBrush}"
+                            <Panel>
+                                <ComboBox ItemsSource="{Binding Profiles}"
+                                      SelectedItem="{Binding SelectedProfile}"
+                                      HorizontalAlignment="Stretch" />
+                                <TextBlock Text="Select a profile"
+                                           Foreground="{DynamicResource MutedTextBrush}"
+                                           FontSize="{DynamicResource FontSizeSubtitle}"
+                                           Margin="12,0,32,0"
+                                           VerticalAlignment="Center"
+                                           IsHitTestVisible="False"
+                                           IsVisible="{Binding SelectedProfile, Converter={x:Static ObjectConverters.IsNull}}" />
+                            </Panel>
+
+                            <TextBlock Text="Installed game"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
                                        FontSize="{DynamicResource FontSizeBody}"
-                                       TextWrapping="Wrap" />
+                                       FontWeight="SemiBold"
+                                       Margin="0,2,0,0" />
+
+                            <Panel>
+                                <ComboBox ItemsSource="{Binding Games}"
+                                      SelectedItem="{Binding SelectedGame}"
+                                      HorizontalAlignment="Stretch" />
+                                <TextBlock Text="Select a game"
+                                           Foreground="{DynamicResource MutedTextBrush}"
+                                           FontSize="{DynamicResource FontSizeSubtitle}"
+                                           Margin="12,0,32,0"
+                                           VerticalAlignment="Center"
+                                           IsHitTestVisible="False"
+                                           IsVisible="{Binding SelectedGame, Converter={x:Static ObjectConverters.IsNull}}" />
+                            </Panel>
                         </StackPanel>
-                    </Border>
 
-                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-                    <StackPanel Spacing="6"
-                                Margin="14">
-
-                        <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" RowSpacing="2" ColumnSpacing="16" MaxWidth="420" HorizontalAlignment="Left">
-                            <TextBlock Text="Files to back up" Foreground="{DynamicResource MutedTextBrush}" FontSize="{DynamicResource FontSizeBody}" />
-                            <TextBlock Grid.Column="1" Text="{Binding TotalFiles, StringFormat='{}{0}'}" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="{DynamicResource FontSizeBody}" FontWeight="SemiBold" />
-                            <TextBlock Grid.Row="1" Text="Total size" Foreground="{DynamicResource MutedTextBrush}" FontSize="{DynamicResource FontSizeBody}" />
-                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding TotalSizeDisplay, StringFormat='{}{0}'}" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="{DynamicResource FontSizeBody}" FontWeight="SemiBold" />
-                        </Grid>
-                        <TextBlock Text="Backup only. Source files are never deleted or modified. Every run is a new timestamped folder with a SHA-256 manifest — nothing existing is overwritten."
-                                   Foreground="{DynamicResource SecondaryTextBrush}"
-                                   FontSize="{DynamicResource FontSizeBody}"
-                                   TextWrapping="Wrap" />
-
-                        <Border Background="{DynamicResource InsetBackgroundBrush}"
-                                CornerRadius="8"
-                                Padding="10,6">
-                            <CheckBox Content="I understand this will copy save files to the destination"
-                                  IsChecked="{Binding ConfirmBackup}"
-                                  FontSize="{DynamicResource FontSizeBody}" />
-                        </Border>
-
-                        <Button Content="Back up now"
-                                Command="{Binding ExecuteBackupCommand}"
-                                IsEnabled="{Binding CanExecuteBackup}"
-                                HorizontalAlignment="Stretch" />
-
-                        <TextBlock Text="{Binding ExecutionStatusMessage}"
-                                   Foreground="{DynamicResource SecondaryTextBrush}"
-                                   FontSize="{DynamicResource FontSizeBody}"
-                                   TextWrapping="Wrap" />
-
-                        <StackPanel Spacing="6"
-                                    IsVisible="{Binding !!ExecutionResults.Count}">
-                            <TextBlock Text="{Binding FilesBackedUp, StringFormat='Backed up: {0} file(s)'}"
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Backup source"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
                                        FontSize="{DynamicResource FontSizeBody}"
-                                       Foreground="{DynamicResource SuccessBrush}" />
+                                       FontWeight="SemiBold" />
 
-                            <TextBlock Text="{Binding BytesBackedUpDisplay, StringFormat='Bytes backed up: {0}'}"
-                                       FontSize="{DynamicResource FontSizeBody}"
-                                       Foreground="{DynamicResource MutedTextBrush}" />
+                            <CheckBox Content="Include Steam userdata game folder"
+                                      IsChecked="{Binding IncludeSteamUserDataGameFolder}"
+                                      FontSize="{DynamicResource FontSizeBody}"
+                                      ToolTip.Tip="Backs up the full &lt;SteamRoot&gt;\userdata\&lt;profile&gt;\&lt;AppId&gt; folder for the selected profile." />
 
-                            <TextBlock Text="{Binding BackupLocationMessage}"
-                                       Foreground="{DynamicResource AccentBrush}"
+                            <CheckBox Content="Include approved save-path mappings"
+                                      IsChecked="{Binding IncludeApprovedMappings}"
+                                      FontSize="{DynamicResource FontSizeBody}"
+                                      ToolTip.Tip="Backs up save locations from the approved mapping database (gamesave.db), expanded for the selected profile." />
+
+                            <TextBlock Text="Select at least one backup source."
+                                       IsVisible="{Binding !HasAnyBackupSource}"
+                                       Foreground="{DynamicResource WarningBrush}"
                                        FontSize="{DynamicResource FontSizeBody}"
                                        TextWrapping="Wrap" />
                         </StackPanel>
                     </StackPanel>
-                </ScrollViewer>
+
+                    <StackPanel Grid.Column="1"
+                                Spacing="16">
+
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Backup destination"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                       FontSize="{DynamicResource FontSizeBody}"
+                                       FontWeight="SemiBold" />
+
+                            <TextBox Text="{Binding DestinationPath}"
+                                     PlaceholderText="Select where this backup should be stored."
+                                     ToolTip.Tip="{Binding DestinationPath}" />
+
+                            <WrapPanel ItemSpacing="8" LineSpacing="4" Margin="0,4,0,0">
+                                <Button Content="Choose folder…"
+                                        Command="{Binding ChooseDestinationFolderCommand}"
+                                        ToolTip.Tip="Select where this backup should be stored."
+                                        FontSize="{DynamicResource FontSizeBody}" />
+
+                                <Button Content="Reset to default"
+                                        Command="{Binding UseDefaultDestinationCommand}"
+                                        FontSize="{DynamicResource FontSizeBody}" />
+                            </WrapPanel>
+
+                            <TextBlock Text="Each run creates a timestamped folder here. Backups in the default location also appear in Backups."
+                                       MaxWidth="560"
+                                       HorizontalAlignment="Left"
+                                       Foreground="{DynamicResource MutedTextBrush}"
+                                       FontSize="{DynamicResource FontSizeBody}"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Backup preset"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                       FontSize="{DynamicResource FontSizeBody}"
+                                       FontWeight="SemiBold" />
+
+                            <Panel>
+                                <ComboBox ItemsSource="{Binding Presets}"
+                                      SelectedItem="{Binding SelectedPreset}"
+                                      HorizontalAlignment="Stretch"
+                                      ToolTip.Tip="Applying a preset fills the destination and backup sources. Presets never start a backup by themselves." />
+                                <TextBlock Text="Apply a saved preset…"
+                                       Foreground="{DynamicResource MutedTextBrush}"
+                                       FontSize="{DynamicResource FontSizeSubtitle}"
+                                       Margin="12,0,32,0"
+                                       VerticalAlignment="Center"
+                                       IsHitTestVisible="False"
+                                       IsVisible="{Binding SelectedPreset, Converter={x:Static ObjectConverters.IsNull}}" />
+                            </Panel>
+
+                            <Panel Margin="0,4,0,0">
+                                <TextBox Text="{Binding PresetName}" />
+                                <TextBlock Text="Preset name"
+                                           Foreground="{DynamicResource MutedTextBrush}"
+                                           FontSize="{DynamicResource FontSizeSubtitle}"
+                                           Margin="12,0"
+                                           VerticalAlignment="Center"
+                                           IsHitTestVisible="False"
+                                           IsVisible="{Binding !PresetName.Length}" />
+                            </Panel>
+
+                            <WrapPanel ItemSpacing="8" LineSpacing="4" Margin="0,4,0,0">
+                                <Button Content="Save preset"
+                                        IsEnabled="{Binding !!PresetName.Length}"
+                                        Command="{Binding SavePresetCommand}"
+                                        FontSize="{DynamicResource FontSizeBody}"
+                                        ToolTip.Tip="Saves the current destination and backup sources under this name. Saving an existing name updates that preset." />
+
+                                <Button Content="Delete preset"
+                                        Classes="danger"
+                                        IsEnabled="{Binding SelectedPreset, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                        Command="{Binding DeletePresetCommand}"
+                                        FontSize="{DynamicResource FontSizeBody}"
+                                        ToolTip.Tip="Deletes the selected preset. Backups already created are not affected." />
+
+                                <Button Content="Clear preset"
+                                        IsEnabled="{Binding SelectedPreset, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                        Command="{Binding ClearPresetSelectionCommand}"
+                                        FontSize="{DynamicResource FontSizeBody}"
+                                        ToolTip.Tip="Clears the preset selection. The current settings are kept and the backup runs without a preset." />
+                            </WrapPanel>
+
+                            <TextBlock Text="{Binding PresetStatusDisplay}"
+                                       Foreground="{DynamicResource MutedTextBrush}"
+                                       FontSize="{DynamicResource FontSizeBody}"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                    </StackPanel>
                 </Grid>
-            </Border>
+            </wsp:WorkspacePanel>
 
-            <GridSplitter Grid.Column="1"
-                          Width="8"
-                          Margin="1,0"
-                          Background="Transparent"
-                          ResizeDirection="Columns" />
+            <wsp:WorkspacePanel PanelKey="manualBackup.summary"
+                                Title="Summary"
+                                Subtitle="Totals and backup controls."
+                                MinPanelWidth="280">
+                <StackPanel Spacing="6">
 
-            <!-- Preview items, warnings, results -->
-            <ScrollViewer Grid.Column="2"
-                          VerticalScrollBarVisibility="Auto">
-                <StackPanel Spacing="10">
+                    <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" RowSpacing="2" ColumnSpacing="16" MaxWidth="420" HorizontalAlignment="Left">
+                        <TextBlock Text="Files to back up" Foreground="{DynamicResource MutedTextBrush}" FontSize="{DynamicResource FontSizeBody}" />
+                        <TextBlock Grid.Column="1" Text="{Binding TotalFiles, StringFormat='{}{0}'}" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="{DynamicResource FontSizeBody}" FontWeight="SemiBold" />
+                        <TextBlock Grid.Row="1" Text="Total size" Foreground="{DynamicResource MutedTextBrush}" FontSize="{DynamicResource FontSizeBody}" />
+                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding TotalSizeDisplay, StringFormat='{}{0}'}" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="{DynamicResource FontSizeBody}" FontWeight="SemiBold" />
+                    </Grid>
 
-                    <!-- What will be backed up -->
-                    <Border Background="{DynamicResource CardBackgroundBrush}"
+                    <TextBlock Text="Backup only. Source files are never deleted or modified. Every run is a new timestamped folder with a SHA-256 manifest — nothing existing is overwritten."
+                               Foreground="{DynamicResource SecondaryTextBrush}"
+                               FontSize="{DynamicResource FontSizeBody}"
+                               TextWrapping="Wrap" />
+
+                    <Border Background="{DynamicResource InsetBackgroundBrush}"
+                            CornerRadius="8"
+                            Padding="10,6">
+                        <CheckBox Content="I understand this will copy save files to the destination"
+                              IsChecked="{Binding ConfirmBackup}"
+                              FontSize="{DynamicResource FontSizeBody}" />
+                    </Border>
+
+                    <Button Content="Back up now"
+                            Command="{Binding ExecuteBackupCommand}"
+                            IsEnabled="{Binding CanExecuteBackup}"
+                            HorizontalAlignment="Stretch" />
+
+                    <TextBlock Text="{Binding ExecutionStatusMessage}"
+                               Foreground="{DynamicResource SecondaryTextBrush}"
+                               FontSize="{DynamicResource FontSizeBody}"
+                               TextWrapping="Wrap" />
+
+                    <StackPanel Spacing="6"
+                                IsVisible="{Binding !!ExecutionResults.Count}">
+                        <TextBlock Text="{Binding FilesBackedUp, StringFormat='Backed up: {0} file(s)'}"
+                                   FontSize="{DynamicResource FontSizeBody}"
+                                   Foreground="{DynamicResource SuccessBrush}" />
+
+                        <TextBlock Text="{Binding BytesBackedUpDisplay, StringFormat='Bytes backed up: {0}'}"
+                                   FontSize="{DynamicResource FontSizeBody}"
+                                   Foreground="{DynamicResource MutedTextBrush}" />
+
+                        <TextBlock Text="{Binding BackupLocationMessage}"
+                                   Foreground="{DynamicResource AccentBrush}"
+                                   FontSize="{DynamicResource FontSizeBody}"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                </StackPanel>
+            </wsp:WorkspacePanel>
+
+            <wsp:WorkspacePanel PanelKey="manualBackup.preview"
+                                Classes="table"
+                                Title="What will be backed up"
+                                Subtitle="Every save location found for the selected profile and game, grouped by source type."
+                                MinPanelHeight="180"
+                                MinPanelWidth="420">
+
+                <Grid RowDefinitions="Auto,*">
+
+                    <Border Grid.Row="0"
+                            Padding="0,0,0,6"
                             BorderBrush="{DynamicResource CardBorderBrush}"
-                            BorderThickness="1"
-                            CornerRadius="14"
-                            Padding="0">
+                            BorderThickness="0,0,0,1"
+                            IsVisible="{Binding !!Items.Count}">
 
-                        <Grid RowDefinitions="Auto,Auto,Auto">
+                        <Grid ColumnDefinitions="130,2*,60,80,100"
+                              ColumnSpacing="10">
 
-                            <Border Grid.Row="0"
-                                    Padding="12,8"
-                                    BorderBrush="{DynamicResource CardBorderBrush}"
-                                    BorderThickness="0,0,0,1">
+                            <TextBlock Grid.Column="0"
+                                       Text="Source type"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                       FontSize="{DynamicResource FontSizeBody}"
+                                       FontWeight="SemiBold" />
 
-                                <StackPanel Spacing="2">
-                                    <TextBlock Text="What will be backed up"
-                                               Foreground="{DynamicResource PrimaryTextBrush}"
-                                               FontSize="{DynamicResource FontSizeBodyLarge}"
-                                               FontWeight="SemiBold" />
+                            <TextBlock Grid.Column="1"
+                                       Text="Source path"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                       FontSize="{DynamicResource FontSizeBody}"
+                                       FontWeight="SemiBold" />
 
-                                    <TextBlock Text="Every save location found for the selected profile and game, grouped by source type."
-                                               Foreground="{DynamicResource MutedTextBrush}"
-                                               FontSize="{DynamicResource FontSizeBody}"
-                                               TextWrapping="Wrap" />
-                                </StackPanel>
-                            </Border>
+                            <TextBlock Grid.Column="2"
+                                       Text="Source"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                       FontSize="{DynamicResource FontSizeBody}"
+                                       FontWeight="SemiBold" />
 
-                            <Border Grid.Row="1"
-                                    Padding="10,6"
-                                    BorderBrush="{DynamicResource CardBorderBrush}"
-                                    BorderThickness="0,0,0,1"
-                                    IsVisible="{Binding !!Items.Count}">
+                            <TextBlock Grid.Column="3"
+                                       Text="Files"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                       FontSize="{DynamicResource FontSizeBody}"
+                                       FontWeight="SemiBold" />
 
-                                <Grid ColumnDefinitions="130,2*,60,80,100"
-                                      ColumnSpacing="10">
-
-                                    <TextBlock Grid.Column="0"
-                                               Text="Source type"
-                                               Foreground="{DynamicResource SecondaryTextBrush}"
-                                               FontSize="{DynamicResource FontSizeBody}"
-                                               FontWeight="SemiBold" />
-
-                                    <TextBlock Grid.Column="1"
-                                               Text="Source path"
-                                               Foreground="{DynamicResource SecondaryTextBrush}"
-                                               FontSize="{DynamicResource FontSizeBody}"
-                                               FontWeight="SemiBold" />
-
-                                    <TextBlock Grid.Column="2"
-                                               Text="Source"
-                                               Foreground="{DynamicResource SecondaryTextBrush}"
-                                               FontSize="{DynamicResource FontSizeBody}"
-                                               FontWeight="SemiBold" />
-
-                                    <TextBlock Grid.Column="3"
-                                               Text="Files"
-                                               Foreground="{DynamicResource SecondaryTextBrush}"
-                                               FontSize="{DynamicResource FontSizeBody}"
-                                               FontWeight="SemiBold" />
-
-                                    <TextBlock Grid.Column="4"
-                                               Text="Status"
-                                               Foreground="{DynamicResource SecondaryTextBrush}"
-                                               FontSize="{DynamicResource FontSizeBody}"
-                                               FontWeight="SemiBold" />
-                                </Grid>
-                            </Border>
-
-                            <views:EmptyState Grid.Row="2"
-                                              Glyph="&#xE890;"
-                                              Title="No preview yet"
-                                              Message="Choose a profile and game, then use Preview backup to see every save location that will be copied."
-                                              IsVisible="{Binding !Items.Count}" />
-
-                            <ItemsControl Grid.Row="2"
-                                          ItemsSource="{Binding Items}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="models:TransferPreviewItemRowViewModel">
-                                        <Border Padding="10,8"
-                                                BorderBrush="{DynamicResource SubtleBorderBrush}"
-                                                BorderThickness="0,0,0,1">
-
-                                            <StackPanel Spacing="4">
-                                                <Grid ColumnDefinitions="130,2*,60,80,100"
-                                                      ColumnSpacing="10">
-
-                                                    <TextBlock Grid.Column="0"
-                                                               Text="{Binding SourceTypeText}"
-                                                               Foreground="{DynamicResource AccentBrush}"
-                                                               FontSize="{DynamicResource FontSizeBody}" />
-
-                                                    <TextBlock Grid.Column="1"
-                                                               Text="{Binding SourcePath}"
-                                                               Foreground="{DynamicResource SecondaryTextBrush}"
-                                                               ToolTip.Tip="{Binding SourcePath}"
-                                                               FontSize="{DynamicResource FontSizeBody}"
-                                                               TextTrimming="CharacterEllipsis" />
-
-                                                    <TextBlock Grid.Column="2"
-                                                               Text="{Binding SourceExistsText}"
-                                                               FontSize="{DynamicResource FontSizeBody}"
-                                                               Foreground="{DynamicResource AccentBrush}" />
-
-                                                    <StackPanel Grid.Column="3">
-                                                        <TextBlock Text="{Binding FileCount}"
-                                                                   FontSize="{DynamicResource FontSizeBody}"
-                                                                   Foreground="{DynamicResource PrimaryTextBrush}" />
-
-                                                        <TextBlock Text="{Binding TotalSizeDisplay}"
-                                                                   Foreground="{DynamicResource MutedTextBrush}"
-                                                                   FontSize="{DynamicResource FontSizeMicro}" />
-                                                    </StackPanel>
-
-                                                    <TextBlock Grid.Column="4"
-                                                               Text="{Binding StatusText}"
-                                                               Foreground="{DynamicResource PrimaryTextBrush}"
-                                                               FontSize="{DynamicResource FontSizeBody}"
-                                                               FontWeight="SemiBold" />
-                                                </Grid>
-
-                                                <TextBlock Text="{Binding ActionText}"
-                                                           Foreground="{DynamicResource MutedTextBrush}"
-                                                           FontSize="{DynamicResource FontSizeBody}"
-                                                           TextWrapping="Wrap" />
-                                            </StackPanel>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
+                            <TextBlock Grid.Column="4"
+                                       Text="Status"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                       FontSize="{DynamicResource FontSizeBody}"
+                                       FontWeight="SemiBold" />
                         </Grid>
                     </Border>
 
-                    <!-- Warnings (only shown when the preview produced any) -->
-                    <Border Background="{DynamicResource CardBackgroundBrush}"
-                            BorderBrush="{DynamicResource CardBorderBrush}"
-                            BorderThickness="1"
-                            CornerRadius="14"
-                            Padding="0"
-                            IsVisible="{Binding !!Warnings.Count}">
+                    <views:EmptyState Grid.Row="1"
+                                      Glyph="&#xE890;"
+                                      Title="No preview yet"
+                                      Message="Choose a profile and game, then use Preview backup to see every save location that will be copied."
+                                      IsVisible="{Binding !Items.Count}" />
 
-                        <Grid RowDefinitions="Auto,Auto">
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding Items}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:TransferPreviewItemRowViewModel">
+                                    <Border Padding="0,8"
+                                            BorderBrush="{DynamicResource SubtleBorderBrush}"
+                                            BorderThickness="0,0,0,1">
 
-                            <Border Grid.Row="0"
-                                    Padding="12,8"
-                                    BorderBrush="{DynamicResource CardBorderBrush}"
-                                    BorderThickness="0,0,0,1">
-
-                                <TextBlock Text="Warnings"
-                                           Foreground="{DynamicResource PrimaryTextBrush}"
-                                           FontSize="{DynamicResource FontSizeBodyLarge}"
-                                           FontWeight="SemiBold" />
-                            </Border>
-
-                            <ItemsControl Grid.Row="1"
-                                          ItemsSource="{Binding Warnings}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="models:TransferWarningRowViewModel">
-                                        <Border Padding="12,6"
-                                                BorderBrush="{DynamicResource SubtleBorderBrush}"
-                                                BorderThickness="0,0,0,1">
-
-                                            <StackPanel Orientation="Horizontal"
-                                                        Spacing="8">
-                                                <TextBlock Text="{Binding SeverityText}"
-                                                           Foreground="{DynamicResource WarningBrush}"
-                                                           FontSize="{DynamicResource FontSizeBody}"
-                                                           FontWeight="SemiBold"
-                                                           Width="60" />
-
-                                                <TextBlock Text="{Binding Message}"
-                                                           Foreground="{DynamicResource SecondaryTextBrush}"
-                                                           FontSize="{DynamicResource FontSizeBody}"
-                                                           TextWrapping="Wrap" />
-                                            </StackPanel>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </Grid>
-                    </Border>
-
-                    <!-- Execution results -->
-                    <Border Background="{DynamicResource CardBackgroundBrush}"
-                            BorderBrush="{DynamicResource CardBorderBrush}"
-                            BorderThickness="1"
-                            CornerRadius="14"
-                            Padding="0">
-
-                        <Grid RowDefinitions="Auto,Auto,Auto">
-
-                            <Border Grid.Row="0"
-                                    Padding="12,8"
-                                    BorderBrush="{DynamicResource CardBorderBrush}"
-                                    BorderThickness="0,0,0,1">
-
-                                <StackPanel Spacing="2">
-                                    <TextBlock Text="Execution results"
-                                               Foreground="{DynamicResource PrimaryTextBrush}"
-                                               FontSize="{DynamicResource FontSizeBodyLarge}"
-                                               FontWeight="SemiBold" />
-
-                                    <TextBlock Text="Exactly what was backed up or failed during the last backup."
-                                               Foreground="{DynamicResource MutedTextBrush}"
-                                               FontSize="{DynamicResource FontSizeBody}"
-                                               TextWrapping="Wrap" />
-                                </StackPanel>
-                            </Border>
-
-                            <Border Grid.Row="1"
-                                    Padding="10,6"
-                                    BorderBrush="{DynamicResource CardBorderBrush}"
-                                    BorderThickness="0,0,0,1"
-                                    IsVisible="{Binding !!ExecutionResults.Count}">
-
-                                <Grid ColumnDefinitions="2*,2*,70,100,*"
-                                      ColumnSpacing="10">
-
-                                    <TextBlock Grid.Column="0"
-                                               Text="Source file"
-                                               Foreground="{DynamicResource SecondaryTextBrush}"
-                                               FontSize="{DynamicResource FontSizeBody}"
-                                               FontWeight="SemiBold" />
-
-                                    <TextBlock Grid.Column="1"
-                                               Text="Backup file"
-                                               Foreground="{DynamicResource SecondaryTextBrush}"
-                                               FontSize="{DynamicResource FontSizeBody}"
-                                               FontWeight="SemiBold" />
-
-                                    <TextBlock Grid.Column="2"
-                                               Text="Size"
-                                               Foreground="{DynamicResource SecondaryTextBrush}"
-                                               FontSize="{DynamicResource FontSizeBody}"
-                                               FontWeight="SemiBold" />
-
-                                    <TextBlock Grid.Column="3"
-                                               Text="Status"
-                                               Foreground="{DynamicResource SecondaryTextBrush}"
-                                               FontSize="{DynamicResource FontSizeBody}"
-                                               FontWeight="SemiBold" />
-
-                                    <TextBlock Grid.Column="4"
-                                               Text="Details"
-                                               Foreground="{DynamicResource SecondaryTextBrush}"
-                                               FontSize="{DynamicResource FontSizeBody}"
-                                               FontWeight="SemiBold" />
-                                </Grid>
-                            </Border>
-
-                            <views:EmptyState Grid.Row="2"
-                                              Glyph="&#xE74E;"
-                                              Title="No backup run yet"
-                                              Message="Results appear here after you use Back Up Now."
-                                              IsVisible="{Binding !ExecutionResults.Count}" />
-
-                            <ItemsControl Grid.Row="2"
-                                          ItemsSource="{Binding ExecutionResults}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="models:SaveTransferItemResultRowViewModel">
-                                        <Border Padding="10,6"
-                                                BorderBrush="{DynamicResource SubtleBorderBrush}"
-                                                BorderThickness="0,0,0,1">
-
-                                            <Grid ColumnDefinitions="2*,2*,70,100,*"
+                                        <StackPanel Spacing="4">
+                                            <Grid ColumnDefinitions="130,2*,60,80,100"
                                                   ColumnSpacing="10">
 
                                                 <TextBlock Grid.Column="0"
-                                                           Text="{Binding SourceFile}"
-                                                           Foreground="{DynamicResource SecondaryTextBrush}"
-                                                           ToolTip.Tip="{Binding SourceFile}"
-                                                           FontSize="{DynamicResource FontSizeBody}"
-                                                           TextTrimming="CharacterEllipsis" />
+                                                           Text="{Binding SourceTypeText}"
+                                                           Foreground="{DynamicResource AccentBrush}"
+                                                           FontSize="{DynamicResource FontSizeBody}" />
 
                                                 <TextBlock Grid.Column="1"
-                                                           Text="{Binding TargetFile}"
+                                                           Text="{Binding SourcePath}"
                                                            Foreground="{DynamicResource SecondaryTextBrush}"
-                                                           ToolTip.Tip="{Binding TargetFile}"
+                                                           ToolTip.Tip="{Binding SourcePath}"
                                                            FontSize="{DynamicResource FontSizeBody}"
                                                            TextTrimming="CharacterEllipsis" />
 
                                                 <TextBlock Grid.Column="2"
-                                                           Text="{Binding SizeDisplay}"
+                                                           Text="{Binding SourceExistsText}"
                                                            FontSize="{DynamicResource FontSizeBody}"
-                                                           Foreground="{DynamicResource MutedTextBrush}" />
+                                                           Foreground="{DynamicResource AccentBrush}" />
 
-                                                <TextBlock Grid.Column="3"
-                                                           Text="{Binding Status}"
+                                                <StackPanel Grid.Column="3">
+                                                    <TextBlock Text="{Binding FileCount}"
+                                                               FontSize="{DynamicResource FontSizeBody}"
+                                                               Foreground="{DynamicResource PrimaryTextBrush}" />
+
+                                                    <TextBlock Text="{Binding TotalSizeDisplay}"
+                                                               Foreground="{DynamicResource MutedTextBrush}"
+                                                               FontSize="{DynamicResource FontSizeMicro}" />
+                                                </StackPanel>
+
+                                                <TextBlock Grid.Column="4"
+                                                           Text="{Binding StatusText}"
                                                            Foreground="{DynamicResource PrimaryTextBrush}"
                                                            FontSize="{DynamicResource FontSizeBody}"
                                                            FontWeight="SemiBold" />
-
-                                                <TextBlock Grid.Column="4"
-                                                           Text="{Binding Error}"
-                                                           Foreground="{DynamicResource WarningBrush}"
-                                                           FontSize="{DynamicResource FontSizeBody}"
-                                                           TextWrapping="Wrap" />
                                             </Grid>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
+
+                                            <TextBlock Text="{Binding ActionText}"
+                                                       Foreground="{DynamicResource MutedTextBrush}"
+                                                       FontSize="{DynamicResource FontSizeBody}"
+                                                       TextWrapping="Wrap" />
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Grid>
+            </wsp:WorkspacePanel>
+
+            <!-- Warnings only exist once a preview has produced some, so the
+                 whole section comes and goes with them. -->
+            <wsp:WorkspacePanel PanelKey="manualBackup.warnings"
+                                Title="Warnings"
+                                IsVisible="{Binding !!Warnings.Count}"
+                                MinPanelWidth="420">
+
+                <ItemsControl ItemsSource="{Binding Warnings}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:TransferWarningRowViewModel">
+                            <Border Padding="0,6"
+                                    BorderBrush="{DynamicResource SubtleBorderBrush}"
+                                    BorderThickness="0,0,0,1">
+
+                                <StackPanel Orientation="Horizontal"
+                                            Spacing="8">
+                                    <TextBlock Text="{Binding SeverityText}"
+                                               Foreground="{DynamicResource WarningBrush}"
+                                               FontSize="{DynamicResource FontSizeBody}"
+                                               FontWeight="SemiBold"
+                                               Width="60" />
+
+                                    <TextBlock Text="{Binding Message}"
+                                               Foreground="{DynamicResource SecondaryTextBrush}"
+                                               FontSize="{DynamicResource FontSizeBody}"
+                                               TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </wsp:WorkspacePanel>
+
+            <wsp:WorkspacePanel PanelKey="manualBackup.results"
+                                Classes="table"
+                                Title="Execution results"
+                                Subtitle="Exactly what was backed up or failed during the last backup."
+                                MinPanelHeight="180"
+                                MinPanelWidth="420">
+
+                <Grid RowDefinitions="Auto,*">
+
+                    <Border Grid.Row="0"
+                            Padding="0,0,0,6"
+                            BorderBrush="{DynamicResource CardBorderBrush}"
+                            BorderThickness="0,0,0,1"
+                            IsVisible="{Binding !!ExecutionResults.Count}">
+
+                        <Grid ColumnDefinitions="2*,2*,70,100,*"
+                              ColumnSpacing="10">
+
+                            <TextBlock Grid.Column="0"
+                                       Text="Source file"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                       FontSize="{DynamicResource FontSizeBody}"
+                                       FontWeight="SemiBold" />
+
+                            <TextBlock Grid.Column="1"
+                                       Text="Backup file"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                       FontSize="{DynamicResource FontSizeBody}"
+                                       FontWeight="SemiBold" />
+
+                            <TextBlock Grid.Column="2"
+                                       Text="Size"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                       FontSize="{DynamicResource FontSizeBody}"
+                                       FontWeight="SemiBold" />
+
+                            <TextBlock Grid.Column="3"
+                                       Text="Status"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                       FontSize="{DynamicResource FontSizeBody}"
+                                       FontWeight="SemiBold" />
+
+                            <TextBlock Grid.Column="4"
+                                       Text="Details"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                       FontSize="{DynamicResource FontSizeBody}"
+                                       FontWeight="SemiBold" />
                         </Grid>
                     </Border>
-                </StackPanel>
-            </ScrollViewer>
-        </Grid>
-    </Grid>
-    </ScrollViewer>
+
+                    <views:EmptyState Grid.Row="1"
+                                      Glyph="&#xE74E;"
+                                      Title="No backup run yet"
+                                      Message="Results appear here after you use Back Up Now."
+                                      IsVisible="{Binding !ExecutionResults.Count}" />
+
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding ExecutionResults}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:SaveTransferItemResultRowViewModel">
+                                    <Border Padding="0,6"
+                                            BorderBrush="{DynamicResource SubtleBorderBrush}"
+                                            BorderThickness="0,0,0,1">
+
+                                        <Grid ColumnDefinitions="2*,2*,70,100,*"
+                                              ColumnSpacing="10">
+
+                                            <TextBlock Grid.Column="0"
+                                                       Text="{Binding SourceFile}"
+                                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                                       ToolTip.Tip="{Binding SourceFile}"
+                                                       FontSize="{DynamicResource FontSizeBody}"
+                                                       TextTrimming="CharacterEllipsis" />
+
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding TargetFile}"
+                                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                                       ToolTip.Tip="{Binding TargetFile}"
+                                                       FontSize="{DynamicResource FontSizeBody}"
+                                                       TextTrimming="CharacterEllipsis" />
+
+                                            <TextBlock Grid.Column="2"
+                                                       Text="{Binding SizeDisplay}"
+                                                       FontSize="{DynamicResource FontSizeBody}"
+                                                       Foreground="{DynamicResource MutedTextBrush}" />
+
+                                            <TextBlock Grid.Column="3"
+                                                       Text="{Binding Status}"
+                                                       Foreground="{DynamicResource PrimaryTextBrush}"
+                                                       FontSize="{DynamicResource FontSizeBody}"
+                                                       FontWeight="SemiBold" />
+
+                                            <TextBlock Grid.Column="4"
+                                                       Text="{Binding Error}"
+                                                       Foreground="{DynamicResource WarningBrush}"
+                                                       FontSize="{DynamicResource FontSizeBody}"
+                                                       TextWrapping="Wrap" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Grid>
+            </wsp:WorkspacePanel>
+
+        </wsp:WorkspaceSurface.Panels>
+    </wsp:WorkspaceSurface>
 </UserControl>

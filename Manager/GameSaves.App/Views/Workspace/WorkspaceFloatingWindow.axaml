@@ -1,0 +1,18 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="GameSaves.App.Views.Workspace.WorkspaceFloatingWindow"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        Width="480"
+        Height="480"
+        MinWidth="320"
+        MinHeight="200"
+        Padding="12"
+        Background="{DynamicResource PageBackgroundBrush}">
+
+    <!-- Escape docks the panel back, the same way Escape reattaches a
+         detached tab. The command is attached in code-behind. -->
+    <Window.KeyBindings>
+        <KeyBinding Gesture="Escape" />
+    </Window.KeyBindings>
+</Window>

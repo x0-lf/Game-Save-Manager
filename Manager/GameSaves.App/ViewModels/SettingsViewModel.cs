@@ -24,6 +24,7 @@ namespace GameSaves.App.ViewModels
         private readonly IUiSettingsStore _uiSettingsStore;
         private readonly ThemeService _themeService;
         private readonly WindowMaterialService _windowMaterialService;
+        private readonly WorkspaceLayoutService _workspaceLayout;
 
         // "system", "light" or "dark".
         [ObservableProperty]
@@ -75,6 +76,11 @@ namespace GameSaves.App.ViewModels
         [ObservableProperty]
         private bool railCollapsed;
 
+        // The Scan Steam library action on the navigation rail. Turning it off
+        // never removes the ability to scan: the Dashboard always offers it.
+        [ObservableProperty]
+        private bool showScanInNavigationRail = true;
+
         // The tab the main window selects once at startup. One of the nine
         // stable rail tab keys; the main window falls back to Dashboard when
         // the saved tab is hidden, detached, or unknown. Changes persist
@@ -103,6 +109,26 @@ namespace GameSaves.App.ViewModels
         // treat null as "nothing to snapshot or apply".
         public IWorkspaceLayoutHost? WorkspaceHost { get; set; }
 
+        // The shell's navigation bridge, assigned by the main window alongside
+        // WorkspaceHost. Null means "no window yet", and every command that
+        // uses it is a no-op in that state rather than a crash.
+        public IAppNavigationHost? NavigationHost { get; set; }
+
+        /// <summary>
+        /// Takes the user to the provider's existing setup experience on the
+        /// Sync page. It navigates and preselects, nothing more: a provider
+        /// this build cannot use is never offered the action at all, so the
+        /// button can never imply a capability that is not there.
+        /// </summary>
+        [RelayCommand]
+        private void ConfigureProvider(ProviderStatusOption? provider)
+        {
+            if (provider is not { IsConfigurable: true })
+                return;
+
+            NavigationHost?.ShowSyncProviderConfiguration(provider.Kind);
+        }
+
         public SettingsViewModel(
             IUiSettingsStore uiSettingsStore,
             ThemeService themeService,
@@ -111,9 +137,11 @@ namespace GameSaves.App.ViewModels
             ISyncSettingsStore syncSettingsStore,
             ISyncProviderCatalog providerCatalog,
             string platform,
-            string databasePath)
+            string databasePath,
+            WorkspaceLayoutService workspaceLayout)
         {
             _uiSettingsStore = uiSettingsStore;
+            _workspaceLayout = workspaceLayout;
             _themeService = themeService;
             _windowMaterialService = windowMaterialService;
             InstalledGames = installedGames;
@@ -135,7 +163,9 @@ namespace GameSaves.App.ViewModels
                     descriptor.DisplayName,
                     descriptor.IsImplemented
                         ? "Available"
-                        : descriptor.UnavailableMessage ?? "Not implemented"))
+                        : descriptor.UnavailableMessage ?? "Not implemented",
+                    descriptor.Kind,
+                    descriptor.IsImplemented))
                 .ToArray();
 
             AppUiSettings settings = uiSettingsStore.Load();
@@ -173,6 +203,76 @@ namespace GameSaves.App.ViewModels
             railPosition = settings.RailLayout.Position;
             railCollapsed = settings.RailLayout.Collapsed;
             startupTabKey = settings.StartupTabKey;
+            showScanInNavigationRail = settings.ScanAction.ShowInNavigationRail;
+
+            // Per-page scan visibility. Only the pages that actually offer a
+            // scan action of their own get a row, so the list cannot imply a
+            // control that does not exist.
+            ScanPages = new ObservableCollection<ScanPageOption>(
+                UiScanActionSettings.ScannablePages.Select(key => new ScanPageOption(
+                    key,
+                    GetRailTabHeader(key),
+                    isVisible: settings.ScanAction.IsVisibleOn(key))));
+
+            foreach (ScanPageOption option in ScanPages)
+                option.PropertyChanged += OnScanPageChanged;
+
+            // Section visibility, grouped by page. The catalog is the source of
+            // truth for what sections exist, so this list can never offer a
+            // section the page does not have.
+            SectionGroups = new ObservableCollection<WorkspaceSectionGroup>(
+                WorkspaceLayoutCatalog.Pages.Select(pageKey => new WorkspaceSectionGroup(
+                    pageKey,
+                    GetRailTabHeader(pageKey),
+                    workspaceLayout.Page(pageKey))));
+        }
+
+        // Per-page scan rows, in rail order.
+        public ObservableCollection<ScanPageOption> ScanPages { get; }
+
+        /// <summary>
+        /// Section visibility, one group per page. Settings and Diagnostics
+        /// have no movable sections and therefore no group.
+        /// </summary>
+        public ObservableCollection<WorkspaceSectionGroup> SectionGroups { get; }
+
+        /// <summary>
+        /// Whether a page offers its own Scan action. Bound directly by the
+        /// pages that have one, so a page keeps its own additional conditions
+        /// (a scan button hidden because Steam is missing stays hidden) without
+        /// this having to know about them.
+        /// </summary>
+        public bool ShowScanOnDashboard => IsScanVisibleOn(UiRailLayoutSettings.TabDashboard);
+
+        public bool ShowScanOnInstalledGames =>
+            IsScanVisibleOn(UiRailLayoutSettings.TabInstalledGames);
+
+        public bool ShowScanOnProfiles => IsScanVisibleOn(UiRailLayoutSettings.TabProfiles);
+
+        private bool IsScanVisibleOn(string pageKey) =>
+            ScanPages.FirstOrDefault(option =>
+                string.Equals(option.Key, pageKey, StringComparison.Ordinal))
+                ?.IsVisible ?? true;
+
+        private void OnScanPageChanged(object? sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName != nameof(ScanPageOption.IsVisible))
+                return;
+
+            OnPropertyChanged(nameof(ShowScanOnDashboard));
+            OnPropertyChanged(nameof(ShowScanOnInstalledGames));
+            OnPropertyChanged(nameof(ShowScanOnProfiles));
+
+            SaveAndApply(settings => settings with
+            {
+                ScanAction = settings.ScanAction with
+                {
+                    HiddenPages = UiScanActionSettings.NormalizeHiddenPages(
+                        ScanPages
+                            .Where(option => !option.IsVisible)
+                            .Select(option => option.Key)),
+                },
+            });
         }
 
         /// <summary>
@@ -220,6 +320,15 @@ namespace GameSaves.App.ViewModels
             IsResetArmed ? "Confirm reset" : "Reset workspace";
 
         public string Platform { get; }
+
+        // Diagnostics paints the platform value in its own identity colour, so
+        // the row is scannable at a glance. These are the only three the app
+        // ships on; anything else keeps the neutral ink.
+        public bool IsWindowsPlatform =>
+            string.Equals(Platform, "windows", StringComparison.OrdinalIgnoreCase);
+
+        public bool IsLinuxPlatform =>
+            string.Equals(Platform, "linux", StringComparison.OrdinalIgnoreCase);
 
         public string DatabasePath { get; }
 
@@ -340,6 +449,12 @@ namespace GameSaves.App.ViewModels
                 RailLayout = settings.RailLayout with { Position = value },
             });
         }
+
+        partial void OnShowScanInNavigationRailChanged(bool value) =>
+            SaveAndApply(settings => settings with
+            {
+                ScanAction = settings.ScanAction with { ShowInNavigationRail = value },
+            });
 
         partial void OnRailCollapsedChanged(bool value) =>
             SaveAndApply(settings => settings with
@@ -505,7 +620,11 @@ namespace GameSaves.App.ViewModels
                 WorkspaceHost?.CaptureDetachedTabs()
                     ?? Array.Empty<UiDetachedWindowSettings>();
 
-            if (UiWorkspaceLayoutSettings.TryCreate(name, detached) is not { } layout)
+            // A named layout captures the whole workspace: which sections sit
+            // where on every page, and which tabs are floating. Saving only the
+            // floating windows would make "apply" a half-restore.
+            if (UiWorkspaceLayoutSettings.TryCreate(
+                    name, detached, _workspaceLayout.Capture()) is not { } layout)
             {
                 WorkspaceStatus = "The layout could not be saved.";
                 return;
@@ -528,6 +647,11 @@ namespace GameSaves.App.ViewModels
                 return;
 
             DisarmReset();
+
+            // Pages first, then windows: applying the page arrangements settles
+            // what each section looks like, and the detach step then places the
+            // floating windows around that.
+            _workspaceLayout.Apply(layout.Pages);
             WorkspaceHost?.ApplyDetachedTabs(layout.Detached);
             WorkspaceStatus = $"Applied layout '{layout.Name}'.";
         }
@@ -638,9 +762,15 @@ namespace GameSaves.App.ViewModels
             }
 
             DisarmReset();
+
+            // The full reset: every section back where the catalog puts it,
+            // every window back in the rail, and the saved layouts cleared. The
+            // rail layout, table columns and appearance settings are
+            // deliberately untouched — this resets the workspace, not the app.
+            _workspaceLayout.ResetAll();
             WorkspaceHost?.ReattachAllDetachedTabs();
             ReplaceWorkspaceLayouts(Array.Empty<UiWorkspaceLayoutSettings>());
-            WorkspaceStatus = "Workspace reset: every window is back in the rail and the saved layouts are cleared.";
+            WorkspaceStatus = "Workspace reset: every section and window is back to the default layout and the saved layouts are cleared.";
         }
 
         private UiWorkspaceLayoutSettings? FindWorkspaceLayout(string? name)

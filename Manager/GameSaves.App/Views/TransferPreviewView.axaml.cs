@@ -9,7 +9,9 @@ namespace GameSaves.App.Views
         public TransferPreviewView()
         {
             InitializeComponent();
-            ResponsiveSplitGrid.Attach(SplitGrid, threshold: 760);
+
+            // No responsive split grid any more: the workspace surface owns
+            // this page's regions and splitters.
         }
 
         // View-level navigation: banners and empty states may point the user

@@ -9,7 +9,19 @@
 
          The ToggleButton* and ExpanderHeader*/ExpanderContent* keys override
          Fluent control resources application-wide so control chrome follows
-         the same surfaces as the cards instead of the theme's own bands. -->
+         the same surfaces as the cards instead of the theme's own bands.
+
+         Do not add literals for the accent-driven control states here —
+         CheckBoxCheckBackgroundFillChecked, RadioButtonOuterEllipseChecked*,
+         SliderTrackValueFill*, SliderThumbBackground, TabItemHeaderSelectedPipeFill
+         and the ToggleSwitch on-states. Fluent already resolves all of them
+         through SystemAccentColor and its six shade colours, which ThemeService
+         republishes for the chosen accent. A literal here shadows that path and
+         pins the control to indigo for every user who picks teal, rose, amber
+         or violet; that was the defect these keys used to cause. The *Disabled
+         twins below are deliberately fixed: a disabled control must read as
+         grey and must never look active. -->
+
 
     <ResourceDictionary.ThemeDictionaries>
 
@@ -43,30 +55,40 @@
             <SolidColorBrush x:Key="AccentHoverBrush" Color="#93AEFF" />
             <SolidColorBrush x:Key="AccentPressedBrush" Color="#6B8BF0" />
             <SolidColorBrush x:Key="OnAccentBrush" Color="#FFFFFF" />
+            <!-- The docking preview wash: the accent at 18% over whatever
+                 surface it covers. Overridden per accent at runtime. -->
+            <SolidColorBrush x:Key="AccentPreviewTintBrush" Color="#2E7C9CFF" />
+            <!-- Selection tint: the accent at 12%, the same weight a selected
+                 table row carries, so every "current" surface agrees. -->
+            <SolidColorBrush x:Key="AccentSelectionTintBrush" Color="#1F7C9CFF" />
             <SolidColorBrush x:Key="PrimaryButtonBrush" Color="#4F6EDB" />
             <SolidColorBrush x:Key="PrimaryButtonHoverBrush" Color="#5B7BE8" />
             <SolidColorBrush x:Key="PrimaryButtonPressedBrush" Color="#3F5CC4" />
-            <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillChecked" Color="#4F6EDB" />
-            <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillCheckedPointerOver" Color="#5B7BE8" />
-            <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillCheckedPressed" Color="#3F5CC4" />
-            <SolidColorBrush x:Key="CheckBoxCheckBackgroundStrokeChecked" Color="#4F6EDB" />
-            <SolidColorBrush x:Key="RadioButtonOuterEllipseCheckedFill" Color="#4F6EDB" />
-            <SolidColorBrush x:Key="RadioButtonOuterEllipseCheckedStroke" Color="#4F6EDB" />
-            <SolidColorBrush x:Key="RadioButtonOuterEllipseCheckedFillPointerOver" Color="#5B7BE8" />
-            <SolidColorBrush x:Key="RadioButtonOuterEllipseCheckedStrokePointerOver" Color="#5B7BE8" />
-            <SolidColorBrush x:Key="SliderTrackValueFill" Color="#4F6EDB" />
-            <SolidColorBrush x:Key="SliderTrackValueFillPointerOver" Color="#5B7BE8" />
-            <SolidColorBrush x:Key="SliderTrackValueFillPressed" Color="#3F5CC4" />
-            <SolidColorBrush x:Key="SliderThumbBackground" Color="#4F6EDB" />
-            <SolidColorBrush x:Key="TabItemHeaderSelectedPipeFill" Color="#4F6EDB" />
             <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillCheckedDisabled" Color="#474A59" />
             <SolidColorBrush x:Key="CheckBoxCheckBackgroundStrokeCheckedDisabled" Color="#474A59" />
             <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundCheckedDisabled" Color="#CBD0DA" />
+            <!-- Disabled control states are deliberately NOT accent-driven: a
+                 disabled control must read as unavailable, never as an active
+                 accent. The checkbox trio above is the pattern; the slider and
+                 the radio follow it. The transparency sliders are disabled
+                 whenever a window material is chosen or high contrast is on,
+                 both routine, so this state is on screen often. -->
+            <SolidColorBrush x:Key="SliderTrackValueFillDisabled" Color="#474A59" />
+            <SolidColorBrush x:Key="SliderThumbBackgroundDisabled" Color="#474A59" />
+            <SolidColorBrush x:Key="RadioButtonOuterEllipseCheckedFillDisabled" Color="#474A59" />
+            <SolidColorBrush x:Key="RadioButtonOuterEllipseCheckedStrokeDisabled" Color="#474A59" />
             <SolidColorBrush x:Key="SuccessBrush" Color="#45C98C" />
             <SolidColorBrush x:Key="WarningBrush" Color="#DDAB40" />
             <SolidColorBrush x:Key="WarningTintBrush" Color="#23252E" />
             <SolidColorBrush x:Key="WarningEdgeBrush" Color="#6E5A28" />
             <SolidColorBrush x:Key="DangerBrush" Color="#FF8F8F" />
+            <!-- Platform identification in Diagnostics. These are identity
+                 colours, not accent: the platform a build runs on does not
+                 change when the user picks a different accent. macOS has no
+                 brand colour that is safe in both variants, so it takes the
+                 neutral primary ink instead of a tinted one.  -->
+            <SolidColorBrush x:Key="PlatformWindowsBrush" Color="#4CC2FF" />
+            <SolidColorBrush x:Key="PlatformLinuxBrush" Color="#F0A73A" />
 
             <SolidColorBrush x:Key="ToggleButtonBackground" Color="Transparent" />
             <SolidColorBrush x:Key="ToggleButtonBackgroundChecked" Color="Transparent" />
@@ -109,30 +131,27 @@
             <SolidColorBrush x:Key="AccentHoverBrush" Color="#2C4BB0" />
             <SolidColorBrush x:Key="AccentPressedBrush" Color="#243F99" />
             <SolidColorBrush x:Key="OnAccentBrush" Color="#FFFFFF" />
+            <!-- The docking preview wash: the accent at 18% over whatever
+                 surface it covers. Overridden per accent at runtime. -->
+            <SolidColorBrush x:Key="AccentPreviewTintBrush" Color="#2E3557C7" />
+            <SolidColorBrush x:Key="AccentSelectionTintBrush" Color="#1F3557C7" />
             <SolidColorBrush x:Key="PrimaryButtonBrush" Color="#3557C7" />
             <SolidColorBrush x:Key="PrimaryButtonHoverBrush" Color="#2C4BB0" />
             <SolidColorBrush x:Key="PrimaryButtonPressedBrush" Color="#243F99" />
-            <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillChecked" Color="#3557C7" />
-            <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillCheckedPointerOver" Color="#2C4BB0" />
-            <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillCheckedPressed" Color="#243F99" />
-            <SolidColorBrush x:Key="CheckBoxCheckBackgroundStrokeChecked" Color="#3557C7" />
-            <SolidColorBrush x:Key="RadioButtonOuterEllipseCheckedFill" Color="#3557C7" />
-            <SolidColorBrush x:Key="RadioButtonOuterEllipseCheckedStroke" Color="#3557C7" />
-            <SolidColorBrush x:Key="RadioButtonOuterEllipseCheckedFillPointerOver" Color="#2C4BB0" />
-            <SolidColorBrush x:Key="RadioButtonOuterEllipseCheckedStrokePointerOver" Color="#2C4BB0" />
-            <SolidColorBrush x:Key="SliderTrackValueFill" Color="#3557C7" />
-            <SolidColorBrush x:Key="SliderTrackValueFillPointerOver" Color="#2C4BB0" />
-            <SolidColorBrush x:Key="SliderTrackValueFillPressed" Color="#243F99" />
-            <SolidColorBrush x:Key="SliderThumbBackground" Color="#3557C7" />
-            <SolidColorBrush x:Key="TabItemHeaderSelectedPipeFill" Color="#3557C7" />
             <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillCheckedDisabled" Color="#DEDEDE" />
             <SolidColorBrush x:Key="CheckBoxCheckBackgroundStrokeCheckedDisabled" Color="#C4C4C4" />
             <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundCheckedDisabled" Color="#5F6470" />
+            <SolidColorBrush x:Key="SliderTrackValueFillDisabled" Color="#C4C4C4" />
+            <SolidColorBrush x:Key="SliderThumbBackgroundDisabled" Color="#C4C4C4" />
+            <SolidColorBrush x:Key="RadioButtonOuterEllipseCheckedFillDisabled" Color="#C4C4C4" />
+            <SolidColorBrush x:Key="RadioButtonOuterEllipseCheckedStrokeDisabled" Color="#C4C4C4" />
             <SolidColorBrush x:Key="SuccessBrush" Color="#0F6340" />
             <SolidColorBrush x:Key="WarningBrush" Color="#75510B" />
             <SolidColorBrush x:Key="WarningTintBrush" Color="#FBF3E0" />
             <SolidColorBrush x:Key="WarningEdgeBrush" Color="#E0C070" />
             <SolidColorBrush x:Key="DangerBrush" Color="#A82A34" />
+            <SolidColorBrush x:Key="PlatformWindowsBrush" Color="#005A9E" />
+            <SolidColorBrush x:Key="PlatformLinuxBrush" Color="#8A4B00" />
 
             <SolidColorBrush x:Key="ToggleButtonBackground" Color="Transparent" />
             <SolidColorBrush x:Key="ToggleButtonBackgroundChecked" Color="Transparent" />

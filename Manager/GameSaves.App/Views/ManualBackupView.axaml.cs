@@ -8,8 +8,10 @@ namespace GameSaves.App.Views
     {
         public ManualBackupView()
         {
+            // No split grid to make responsive any more: the workspace surface
+            // owns the options-rail/run-column split and its narrow-window
+            // behaviour, so the page no longer wires one up.
             InitializeComponent();
-            ResponsiveSplitGrid.Attach(SplitGrid, threshold: 760);
         }
 
         // View-level navigation: banners and empty states may point the user

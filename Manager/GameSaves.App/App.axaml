@@ -9,6 +9,7 @@
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <ResourceInclude Source="avares://GameSaves.App/Themes/Tokens.axaml" />
+                <ResourceInclude Source="avares://GameSaves.App/Themes/Workspace.axaml" />
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>

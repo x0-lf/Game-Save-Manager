@@ -476,7 +476,8 @@ public sealed class GoogleDriveOAuthViewModelTests
             new SyncRemoteProfileService(repository, new InMemorySecretStore()),
             new StubSyncRemoteProfileMigrationService(settings),
             new FixedUtcClock(Now),
-            oauth);
+            oauth,
+            SyncProviderSelectionTests.NewWorkspaceLayout());
     }
 
     private static SyncRemoteProfile GoogleProfile(

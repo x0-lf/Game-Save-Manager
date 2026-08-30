@@ -9,7 +9,10 @@ namespace GameSaves.App.Views
         public BackupHistoryView()
         {
             InitializeComponent();
-            ResponsiveSplitGrid.Attach(SplitGrid, threshold: 760);
+
+            // The runs/details split is a workspace region boundary now, so
+            // the surface owns both the splitter and the narrow-window
+            // collapse that ResponsiveSplitGrid used to provide here.
         }
 
         // View-level navigation: banners and empty states may point the user

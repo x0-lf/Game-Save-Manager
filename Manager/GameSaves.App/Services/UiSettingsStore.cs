@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 
 namespace GameSaves.App.Services
@@ -49,7 +50,24 @@ namespace GameSaves.App.Services
         string StartupTabKey,
         IReadOnlyList<UiWorkspaceLayoutSettings> WorkspaceLayouts)
     {
-        public const int CurrentSchemaVersion = 8;
+        public const int CurrentSchemaVersion = 9;
+
+        /// <summary>
+        /// The live per-page panel arrangement (schema v9). An init property
+        /// rather than a positional parameter so every existing construction
+        /// of this record keeps compiling and simply gets the default layout.
+        /// Unlike <see cref="WorkspaceLayouts"/>, which are named snapshots the
+        /// user applies deliberately, this is restored automatically at start.
+        /// </summary>
+        public IReadOnlyList<UiPageLayout> WorkspacePages { get; init; } =
+            Array.Empty<UiPageLayout>();
+
+        /// <summary>
+        /// Where the Scan Steam library action is offered (schema v9). An init
+        /// property for the same reason as <see cref="WorkspacePages"/>.
+        /// </summary>
+        public UiScanActionSettings ScanAction { get; init; } =
+            UiScanActionSettings.Default;
 
         public const string ThemeSystem = "system";
         public const string ThemeLight = "light";
@@ -164,6 +182,54 @@ namespace GameSaves.App.Services
             ExistsColumn or
             FilesColumn or
             StatusColumn;
+    }
+
+    /// <summary>
+    /// Where the "Scan Steam library" action is offered. It is the app's one
+    /// recurring primary verb, so it appears on the navigation rail and on
+    /// several pages; a user who does not need it on a given page can turn it
+    /// off there without losing it everywhere.
+    ///
+    /// <see cref="HiddenPages"/> holds stable rail tab keys. Hiding the action
+    /// never disables scanning: the rail action and the Dashboard's guided
+    /// first-run path always remain, so the app can never be left with no way
+    /// to scan.
+    /// </summary>
+    public sealed record UiScanActionSettings(
+        bool ShowInNavigationRail,
+        IReadOnlyList<string> HiddenPages)
+    {
+        public static UiScanActionSettings Default { get; } = new(
+            ShowInNavigationRail: true,
+            HiddenPages: Array.Empty<string>());
+
+        /// <summary>The pages that offer a scan action of their own.</summary>
+        public static IReadOnlyList<string> ScannablePages { get; } = new[]
+        {
+            UiRailLayoutSettings.TabDashboard,
+            UiRailLayoutSettings.TabInstalledGames,
+            UiRailLayoutSettings.TabProfiles,
+        };
+
+        public static IReadOnlyList<string> NormalizeHiddenPages(
+            IEnumerable<string> pageKeys)
+        {
+            var normalized = new List<string>();
+
+            foreach (string key in pageKeys)
+            {
+                if (ScannablePages.Contains(key) && !normalized.Contains(key))
+                    normalized.Add(key);
+            }
+
+            return normalized;
+        }
+
+        public UiScanActionSettings Normalized() => new(
+            ShowInNavigationRail,
+            NormalizeHiddenPages(HiddenPages));
+
+        public bool IsVisibleOn(string pageKey) => !HiddenPages.Contains(pageKey);
     }
 
     /// <summary>
@@ -367,12 +433,22 @@ namespace GameSaves.App.Services
         public const int MaxNameLength = 40;
         public const int MaxSavedLayouts = 8;
 
+        /// <summary>
+        /// The per-page panel arrangement this layout restores, alongside its
+        /// detached windows. An init property rather than a positional
+        /// parameter so a layout saved before panels existed still loads, with
+        /// no pages and therefore the catalog defaults.
+        /// </summary>
+        public IReadOnlyList<UiPageLayout> Pages { get; init; } =
+            Array.Empty<UiPageLayout>();
+
         // Null when the name is empty after trimming; otherwise the
         // normalized layout (trimmed, truncated name; deduplicated,
         // capped entries).
         public static UiWorkspaceLayoutSettings? TryCreate(
             string? name,
-            IEnumerable<UiDetachedWindowSettings> detached)
+            IEnumerable<UiDetachedWindowSettings> detached,
+            IEnumerable<UiPageLayout>? pages = null)
         {
             string trimmed = (name ?? string.Empty).Trim();
 
@@ -396,10 +472,13 @@ namespace GameSaves.App.Services
                 entries.Add(entry);
             }
 
-            return new UiWorkspaceLayoutSettings(trimmed, entries);
+            return new UiWorkspaceLayoutSettings(trimmed, entries)
+            {
+                Pages = UiPageLayout.NormalizeList(pages ?? Array.Empty<UiPageLayout>()),
+            };
         }
 
-        public UiWorkspaceLayoutSettings? Normalized() => TryCreate(Name, Detached);
+        public UiWorkspaceLayoutSettings? Normalized() => TryCreate(Name, Detached, Pages);
 
         // Normalizes a whole list: per-layout normalization, unique names
         // (first wins), and the saved-layout cap. Garbage is dropped rather
@@ -548,7 +627,11 @@ namespace GameSaves.App.Services
                     HiddenInstalledGameColumns: hidden,
                     RailLayout: railLayout,
                     StartupTabKey: startupTabKey,
-                    WorkspaceLayouts: workspaceLayouts);
+                    WorkspaceLayouts: workspaceLayouts)
+                {
+                    WorkspacePages = ReadWorkspacePages(document.RootElement),
+                    ScanAction = ReadScanAction(document.RootElement),
+                };
             }
             catch (Exception exception) when (
                 exception is IOException or JsonException or UnauthorizedAccessException)
@@ -700,12 +783,181 @@ namespace GameSaves.App.Services
                     }
                 }
 
-                if (UiWorkspaceLayoutSettings.TryCreate(name, detached) is { } layout)
+                IReadOnlyList<UiPageLayout> pages =
+                    item.TryGetProperty(
+                        nameof(UiWorkspaceLayoutSettings.Pages),
+                        out JsonElement pagesValue) &&
+                    pagesValue.ValueKind == JsonValueKind.Array
+                        ? ParseWorkspacePages(pagesValue)
+                        : Array.Empty<UiPageLayout>();
+
+                if (UiWorkspaceLayoutSettings.TryCreate(name, detached, pages) is { } layout)
                     layouts.Add(layout);
             }
 
             return UiWorkspaceLayoutSettings.NormalizeList(layouts);
         }
+
+        // Where the scan action is offered (schema v9). A pre-v9 file has no
+        // such property and loads as "everywhere", which is what those users
+        // already had.
+        private static UiScanActionSettings ReadScanAction(JsonElement root)
+        {
+            if (!root.TryGetProperty(
+                    nameof(AppUiSettings.ScanAction), out JsonElement property) ||
+                property.ValueKind != JsonValueKind.Object)
+            {
+                return UiScanActionSettings.Default;
+            }
+
+            bool showInRail = UiScanActionSettings.Default.ShowInNavigationRail;
+
+            if (property.TryGetProperty(
+                    nameof(UiScanActionSettings.ShowInNavigationRail),
+                    out JsonElement railValue))
+            {
+                if (railValue.ValueKind == JsonValueKind.False)
+                    showInRail = false;
+                else if (railValue.ValueKind == JsonValueKind.True)
+                    showInRail = true;
+            }
+
+            return new UiScanActionSettings(
+                showInRail,
+                UiScanActionSettings.NormalizeHiddenPages(
+                    ReadStringArray(property, nameof(UiScanActionSettings.HiddenPages))));
+        }
+
+        // The current per-page panel arrangement (schema v9). Every earlier
+        // file loads as an empty list, which resolves to the catalog default —
+        // so an upgrade always opens on the shipped layout, never on nothing.
+        private static IReadOnlyList<UiPageLayout> ReadWorkspacePages(JsonElement root)
+        {
+            if (!root.TryGetProperty(
+                    nameof(AppUiSettings.WorkspacePages), out JsonElement property) ||
+                property.ValueKind != JsonValueKind.Array)
+            {
+                return Array.Empty<UiPageLayout>();
+            }
+
+            return ParseWorkspacePages(property);
+        }
+
+        // Shared with the export/import payload path. Forgiving in exactly one
+        // direction: a malformed page, panel, or region is dropped, never
+        // defaulted into something the user did not ask for. What survives is
+        // re-resolved against the catalog before it reaches the screen.
+        internal static IReadOnlyList<UiPageLayout> ParseWorkspacePages(JsonElement array)
+        {
+            var pages = new List<UiPageLayout>();
+
+            foreach (JsonElement item in array.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.Object)
+                    continue;
+
+                string? pageKey = null;
+
+                if (item.TryGetProperty(
+                        nameof(UiPageLayout.PageKey), out JsonElement keyValue) &&
+                    keyValue.ValueKind == JsonValueKind.String)
+                {
+                    pageKey = keyValue.GetString();
+                }
+
+                var panels = new List<UiPanelPlacement>();
+
+                if (item.TryGetProperty(
+                        nameof(UiPageLayout.Panels), out JsonElement panelsValue) &&
+                    panelsValue.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (JsonElement entry in panelsValue.EnumerateArray())
+                    {
+                        if (ReadPanelPlacement(entry) is { } placement)
+                            panels.Add(placement);
+                    }
+                }
+
+                var regions = new List<UiRegionSize>();
+
+                if (item.TryGetProperty(
+                        nameof(UiPageLayout.Regions), out JsonElement regionsValue) &&
+                    regionsValue.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (JsonElement entry in regionsValue.EnumerateArray())
+                    {
+                        if (ReadRegionSize(entry) is { } region)
+                            regions.Add(region);
+                    }
+                }
+
+                if (UiPageLayout.TryCreate(pageKey, panels, regions) is { } page)
+                    pages.Add(page);
+            }
+
+            return UiPageLayout.NormalizeList(pages);
+        }
+
+        private static UiPanelPlacement? ReadPanelPlacement(JsonElement entry)
+        {
+            if (entry.ValueKind != JsonValueKind.Object)
+                return null;
+
+            return UiPanelPlacement.TryCreate(
+                ReadString(entry, nameof(UiPanelPlacement.Key)),
+                ReadString(entry, nameof(UiPanelPlacement.Region)),
+                ReadInt32(entry, nameof(UiPanelPlacement.Order)),
+                ReadFiniteDouble(entry, nameof(UiPanelPlacement.Size)),
+                ReadBoolean(entry, nameof(UiPanelPlacement.Collapsed)),
+                ReadBoolean(entry, nameof(UiPanelPlacement.Hidden)),
+                ReadFiniteDouble(entry, nameof(UiPanelPlacement.Left)),
+                ReadFiniteDouble(entry, nameof(UiPanelPlacement.Top)),
+                ReadFiniteDouble(entry, nameof(UiPanelPlacement.Width)),
+                ReadFiniteDouble(entry, nameof(UiPanelPlacement.Height))) is { } placement
+                ? placement with
+                {
+                    DockedRegion = ReadDockedRegion(entry),
+                }
+                : null;
+        }
+
+        // The region a floating panel came from. Anything that is not a docked
+        // region reads as "no memory", which falls back to the catalog home.
+        private static string? ReadDockedRegion(JsonElement entry)
+        {
+            string? value = ReadString(entry, nameof(UiPanelPlacement.DockedRegion));
+
+            return value is not null &&
+                UiPanelRegion.IsRegion(value) &&
+                value != UiPanelRegion.Float
+                    ? value
+                    : null;
+        }
+
+        private static UiRegionSize? ReadRegionSize(JsonElement entry)
+        {
+            if (entry.ValueKind != JsonValueKind.Object)
+                return null;
+
+            return UiRegionSize.TryCreate(
+                ReadString(entry, nameof(UiRegionSize.Region)),
+                ReadFiniteDouble(entry, nameof(UiRegionSize.Size)));
+        }
+
+        private static string? ReadString(JsonElement container, string propertyName) =>
+            container.TryGetProperty(propertyName, out JsonElement value) &&
+            value.ValueKind == JsonValueKind.String
+                ? value.GetString()
+                : null;
+
+        // A non-integer or out-of-range order is not salvageable as a number;
+        // the placement's own clamp turns it into a valid slot.
+        private static int ReadInt32(JsonElement container, string propertyName) =>
+            container.TryGetProperty(propertyName, out JsonElement value) &&
+            value.ValueKind == JsonValueKind.Number &&
+            value.TryGetInt32(out int number)
+                ? number
+                : 0;
 
         // An entry needs a known tab key and all four finite coordinates; a
         // missing or malformed coordinate drops the entry instead of

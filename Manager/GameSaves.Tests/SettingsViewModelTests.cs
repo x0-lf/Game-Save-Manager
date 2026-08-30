@@ -31,11 +31,13 @@ namespace GameSaves.Tests
                 new WindowMaterialService(themeService),
                 new InstalledGamesViewModel(
                     new EmptyInstalledGameStatusService(),
+                    new WorkspaceLayoutService(store),
                     store),
                 new SyncSettingsStore(syncPath),
                 new SyncProviderCatalog(),
                 "windows",
-                @"C:\data\games.db");
+                @"C:\data\games.db",
+                new WorkspaceLayoutService(store));
             viewModel.WorkspaceHost = workspaceHost;
             return viewModel;
         }
@@ -370,6 +372,7 @@ namespace GameSaves.Tests
                 viewModel.InstalledGames.ColumnOptions.Select(option => option.Key),
                 new InstalledGamesViewModel(
                     new EmptyInstalledGameStatusService(),
+                    new WorkspaceLayoutService(new UiSettingsStore(path)),
                     new UiSettingsStore(path))
                     .ColumnOptions
                     .Select(option => option.Key));

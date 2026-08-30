@@ -140,6 +140,15 @@ namespace GameSaves.UiCapture
                 window, Avalonia.Media.TextRenderingMode.Antialias);
             window.Show();
 
+            // The real app applies the theme during framework initialization
+            // (App.axaml.cs). The harness builds its own service graph, so it
+            // must do the same or every capture renders the raw token values
+            // with no accent, transparency, text-scale or motion overrides —
+            // which is not what any user ever sees.
+            var themeService = provider.GetRequiredService<ThemeService>();
+            IUiSettingsStore settingsStore = provider.GetRequiredService<IUiSettingsStore>();
+            themeService.Apply(settingsStore.Load());
+
             IStartupInitializer initializer =
                 provider.GetRequiredService<IStartupInitializer>();
             await initializer.InitializeAllAsync(CancellationToken.None);
@@ -155,6 +164,11 @@ namespace GameSaves.UiCapture
             foreach (ThemeVariant theme in new[]
                 { ThemeVariant.Light, ThemeVariant.Dark })
             {
+                // Application-level, so ThemeService's overrides (written into
+                // Application.Resources) are recomputed for this variant. A
+                // window-level variant alone would pair one variant's surfaces
+                // with the other variant's accent.
+                Application.Current!.RequestedThemeVariant = theme;
                 window.RequestedThemeVariant = theme;
                 string themeSlug = theme == ThemeVariant.Dark ? "dark" : "light";
 
@@ -186,6 +200,65 @@ namespace GameSaves.UiCapture
                 }
             }
 
+            // Accent sweep. Every accent-driven control state in the product —
+            // radios, checkboxes, toggle switches, slider tracks and thumbs,
+            // the selected inner tab's underline and the selected rail
+            // section — is on one of these two pages, so one capture per
+            // accent per variant is enough to prove the accent actually
+            // reaches them instead of stopping at the eight semantic tokens.
+            foreach (string accent in new[]
+            {
+                AppUiSettings.AccentIndigo,
+                AppUiSettings.AccentTeal,
+                AppUiSettings.AccentRose,
+                AppUiSettings.AccentAmber,
+                AppUiSettings.AccentViolet,
+            })
+            {
+                foreach (ThemeVariant theme in new[]
+                    { ThemeVariant.Light, ThemeVariant.Dark })
+                {
+                    // The variant must be set on the Application, not the
+                    // window: ThemeService computes its overrides against
+                    // Application.ActualThemeVariant and writes them into
+                    // Application.Resources, which outrank a window-level
+                    // variant. Setting only the window would pair one
+                    // variant's surfaces with the other variant's text.
+                    Application.Current!.RequestedThemeVariant = theme;
+                    window.RequestedThemeVariant = theme;
+                    string themeSlug = theme == ThemeVariant.Dark ? "dark" : "light";
+
+                    themeService.Apply(
+                        settingsStore.Load() with { AccentTheme = accent });
+
+                    window.Width = 1400;
+                    window.Height = 900;
+                    tabs.SelectedIndex = 8;
+                    Dispatcher.UIThread.RunJobs();
+
+                    using var accentFrame = window.CaptureRenderedFrame();
+                    if (accentFrame is null)
+                    {
+                        throw new InvalidOperationException(
+                            "Headless rendering produced no accent frame.");
+                    }
+
+                    accentFrame.Save(
+                        Path.Combine(
+                            outputDirectory,
+                            $"accent-{accent}_{themeSlug}_settings.png"),
+                        new Avalonia.Media.Imaging.PngBitmapEncoderOptions());
+                    written++;
+                }
+            }
+
+            // Back to the shipped accent so the remaining captures are the
+            // product's default look.
+            Application.Current!.RequestedThemeVariant = ThemeVariant.Default;
+            themeService.Apply(settingsStore.Load());
+
+            written += CaptureWorkspaceStates(window, tabs, viewModel, outputDirectory);
+
             PopulateInstalledGames(viewModel.InstalledGames);
             // Populated rows imply Steam was found; leaving the missing flag
             // set would render a banner contradicting the table (round 33).
@@ -195,6 +268,11 @@ namespace GameSaves.UiCapture
             foreach (ThemeVariant theme in new[]
                 { ThemeVariant.Light, ThemeVariant.Dark })
             {
+                // Application-level, so ThemeService's overrides (written into
+                // Application.Resources) are recomputed for this variant. A
+                // window-level variant alone would pair one variant's surfaces
+                // with the other variant's accent.
+                Application.Current!.RequestedThemeVariant = theme;
                 window.RequestedThemeVariant = theme;
                 string themeSlug = theme == ThemeVariant.Dark ? "dark" : "light";
 
@@ -221,6 +299,79 @@ namespace GameSaves.UiCapture
             }
 
             return written;
+        }
+
+        // The workspace layout is state, not a static page, so a screenshot of
+        // the default arrangement proves almost nothing on its own. These
+        // captures walk the states a reviewer actually has to judge: a section
+        // collapsed, a section docked to another region, a section hidden, and
+        // then the same page after Reset — which must come back identical to
+        // the default capture taken earlier in this run.
+        private static int CaptureWorkspaceStates(
+            GameSaves.App.Views.MainWindow window,
+            TabControl tabs,
+            MainWindowViewModel viewModel,
+            string outputDirectory)
+        {
+            IWorkspaceLayoutPage layout = viewModel.Workspace;
+            IReadOnlyList<WorkspacePanelDefinition> panels =
+                WorkspaceLayoutCatalog.PanelsFor(UiRailLayoutSettings.TabDashboard);
+
+            // Steam is absent in the harness, so the stat sections are hidden
+            // by their own bindings; drive the sections that are actually on
+            // screen in that state.
+            viewModel.IsSteamMissing = true;
+
+            window.Width = 1400;
+            window.Height = 900;
+            tabs.SelectedIndex = 0;
+            Dispatcher.UIThread.RunJobs();
+
+            int written = 0;
+
+            written += Shot(window, outputDirectory, "workspace-00-default");
+
+            layout.SetCollapsed(panels[2].Key, true);
+            written += Shot(window, outputDirectory, "workspace-01-collapsed");
+
+            layout.MovePanel(panels[2].Key, UiPanelRegion.Left, int.MaxValue);
+            written += Shot(window, outputDirectory, "workspace-02-docked-left");
+
+            layout.SetCollapsed(panels[2].Key, false);
+            layout.SetHidden(panels[2].Key, true);
+            written += Shot(window, outputDirectory, "workspace-03-hidden");
+
+            layout.ResetPage();
+            written += Shot(window, outputDirectory, "workspace-04-reset");
+
+            // 1080p is the stated target, so the default layout is also
+            // captured at exactly that content width.
+            window.Width = 1920;
+            window.Height = 1080;
+            Dispatcher.UIThread.RunJobs();
+            written += Shot(window, outputDirectory, "workspace-05-reset-1080p");
+
+            window.Width = 1400;
+            window.Height = 900;
+            viewModel.IsSteamMissing = false;
+            Dispatcher.UIThread.RunJobs();
+
+            return written;
+        }
+
+        private static int Shot(Window window, string outputDirectory, string name)
+        {
+            Dispatcher.UIThread.RunJobs();
+
+            using var frame = window.CaptureRenderedFrame();
+            if (frame is null)
+                throw new InvalidOperationException($"No frame for {name}.");
+
+            frame.Save(
+                Path.Combine(outputDirectory, name + ".png"),
+                new Avalonia.Media.Imaging.PngBitmapEncoderOptions());
+
+            return 1;
         }
 
         private static void PopulateInstalledGames(InstalledGamesViewModel viewModel)

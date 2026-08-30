@@ -18,6 +18,7 @@ namespace GameSaves.App.ViewModels
         private readonly ISavePathMappingRepository _mappingRepository;
         private readonly ICurrentPlatformProvider _platformProvider;
         private readonly IAppDatabasePathProvider _databasePathProvider;
+        private readonly GameSaves.App.Services.WorkspaceLayoutService _workspaceLayout;
         private bool _dashboardInitialized;
 
         [ObservableProperty]
@@ -94,6 +95,18 @@ namespace GameSaves.App.ViewModels
 
         public SettingsViewModel Settings { get; }
 
+        /// <summary>The Dashboard's panel arrangement.</summary>
+        public GameSaves.App.Services.IWorkspaceLayoutPage Workspace { get; }
+
+        /// <summary>
+        /// Any page's arrangement, by its stable rail tab key. The shell needs
+        /// this to offer a section list on a rail entry's context menu, which
+        /// is the route that keeps section visibility reachable whichever edge
+        /// the rail is on.
+        /// </summary>
+        public GameSaves.App.Services.IWorkspaceLayoutPage WorkspacePageFor(string tabKey) =>
+            _workspaceLayout.Page(tabKey);
+
         public MainWindowViewModel(
             GameSaves.App.Services.IUiSettingsStore uiSettingsStore,
             GameSaves.App.Services.ThemeService themeService,
@@ -111,8 +124,10 @@ namespace GameSaves.App.ViewModels
             BackupHistoryViewModel backupHistory,
             ManualBackupViewModel manualBackup,
             TransferHistoryViewModel transferHistory,
-            SyncViewModel sync)
+            SyncViewModel sync,
+            GameSaves.App.Services.WorkspaceLayoutService workspaceLayout)
         {
+            _workspaceLayout = workspaceLayout;
             _steamDiscoveryService = steamDiscoveryService;
             _steamProfileDetector = steamProfileDetector;
             _mappingRepository = mappingRepository;
@@ -121,6 +136,12 @@ namespace GameSaves.App.ViewModels
 
             DatabasePath = _databasePathProvider.GetDatabasePath();
             Platform = _platformProvider.GetCurrentPlatformKey();
+
+            // The Dashboard's content lives in the shell rather than in its own
+            // view, so the shell owns its workspace page too. Every other page
+            // gets its own from the same service.
+            Workspace = workspaceLayout.Page(
+                GameSaves.App.Services.UiRailLayoutSettings.TabDashboard);
 
             InstalledGames = installedGames;
             Profiles = profiles;
@@ -138,7 +159,8 @@ namespace GameSaves.App.ViewModels
                 syncSettingsStore,
                 providerCatalog,
                 Platform,
-                DatabasePath);
+                DatabasePath,
+                workspaceLayout);
         }
 
         // Automatic startup load of the Dashboard. Reuses the same load path as

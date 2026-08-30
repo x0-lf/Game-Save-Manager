@@ -32,12 +32,19 @@ namespace GameSaves.App.ViewModels
 
         public ObservableCollection<InstalledGameColumnOption> ColumnOptions { get; }
 
+        /// <summary>This page's panel arrangement.</summary>
+        public GameSaves.App.Services.IWorkspaceLayoutPage Workspace { get; }
+
         public InstalledGamesViewModel(
             IInstalledGameSaveStatusService statusService,
+            GameSaves.App.Services.WorkspaceLayoutService workspaceLayout,
             IUiSettingsStore? uiSettingsStore = null)
         {
             _statusService = statusService;
             _uiSettingsStore = uiSettingsStore;
+
+            Workspace = workspaceLayout.Page(
+                GameSaves.App.Services.UiRailLayoutSettings.TabInstalledGames);
 
             AppUiSettings settings = uiSettingsStore?.Load() ?? AppUiSettings.Default;
             var hidden = new HashSet<string>(

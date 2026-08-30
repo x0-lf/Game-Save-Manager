@@ -311,6 +311,187 @@ namespace GameSaves.Tests
                 element => element.Name.LocalName == "Transitions");
         }
 
+        [Theory]
+        [MemberData(nameof(Accents))]
+        public void EveryAccent_PublishesTheFluentShadeColours(string accent)
+        {
+            // Fluent derives every accent hover and pressed state from these six
+            // shades, and Avalonia seeds them from the OPERATING SYSTEM accent,
+            // not from SystemAccentColor. If they are not republished here, a
+            // hovered checkbox, radio, slider, toggle or tab pipe flashes the
+            // Windows accent instead of the one the user chose.
+            string[] shadeKeys =
+            {
+                ThemeService.SystemAccentColorLight1Key,
+                ThemeService.SystemAccentColorLight2Key,
+                ThemeService.SystemAccentColorLight3Key,
+                ThemeService.SystemAccentColorDark1Key,
+                ThemeService.SystemAccentColorDark2Key,
+                ThemeService.SystemAccentColorDark3Key,
+            };
+
+            foreach (bool isDark in new[] { true, false })
+            {
+                var colors = ThemeService.GetPalette(accent, isDark)
+                    .AsResources()
+                    .ToDictionary(pair => pair.Key, pair => pair.Value);
+
+                foreach (string key in shadeKeys)
+                    Assert.True(colors.ContainsKey(key), $"{accent}/{isDark}: {key}");
+
+                // Step one in each direction is the shade the app already tuned
+                // for that interaction, so a Fluent control's hover and pressed
+                // states land on the app's own colours.
+                Assert.Equal(
+                    colors[ThemeService.PrimaryButtonHoverBrushKey],
+                    colors[ThemeService.SystemAccentColorLight1Key]);
+                Assert.Equal(
+                    colors[ThemeService.PrimaryButtonPressedBrushKey],
+                    colors[ThemeService.SystemAccentColorDark1Key]);
+            }
+        }
+
+        [Fact]
+        public void TheShadeColoursArePublishedAsColorsNotBrushes()
+        {
+            // Fluent reads these as Colors. Publishing one as a brush silently
+            // does nothing, which is exactly how the hover states went unnoticed.
+            // Every colour-valued key must also be in the published set, or it
+            // would be computed and then never written.
+            Assert.Superset(
+                ThemeService.AccentColorValuedKeys.ToHashSet(),
+                ThemeService.AccentResourceKeys.ToHashSet());
+
+            Assert.Contains(
+                ThemeService.SystemAccentColorLight1Key,
+                ThemeService.AccentColorValuedKeys);
+            Assert.DoesNotContain(
+                ThemeService.AccentBrushKey,
+                ThemeService.AccentColorValuedKeys);
+        }
+
+        [Theory]
+        [MemberData(nameof(Accents))]
+        public void TheSelectionAndPreviewTints_FollowTheAccent(string accent)
+        {
+            foreach (bool isDark in new[] { true, false })
+            {
+                var colors = ThemeService.GetPalette(accent, isDark)
+                    .AsResources()
+                    .ToDictionary(pair => pair.Key, pair => pair.Value);
+
+                Avalonia.Media.Color selection =
+                    colors[ThemeService.AccentSelectionTintBrushKey];
+                Avalonia.Media.Color preview =
+                    colors[ThemeService.AccentPreviewTintBrushKey];
+                Avalonia.Media.Color solid = colors[ThemeService.AccentBrushKey];
+
+                // Same hue as the accent, differing only in how much of it shows.
+                Assert.Equal(solid.R, selection.R);
+                Assert.Equal(solid.G, selection.G);
+                Assert.Equal(solid.B, selection.B);
+                Assert.InRange(selection.A, 1, 254);
+                Assert.True(preview.A > selection.A);
+            }
+        }
+
+        [Fact]
+        public void TokensAxaml_DeclaresNoAccentDrivenControlLiterals()
+        {
+            // These keys resolve through SystemAccentColor in stock Fluent. A
+            // literal here shadows that path and pins the control to indigo for
+            // everyone who picks another accent — the defect this file's
+            // override list exists to prevent recurring.
+            string[] forbidden =
+            {
+                "CheckBoxCheckBackgroundFillChecked",
+                "CheckBoxCheckBackgroundFillCheckedPointerOver",
+                "CheckBoxCheckBackgroundFillCheckedPressed",
+                "RadioButtonOuterEllipseCheckedFill",
+                "RadioButtonOuterEllipseCheckedStroke",
+                "RadioButtonOuterEllipseCheckedFillPointerOver",
+                "RadioButtonOuterEllipseCheckedStrokePointerOver",
+                "SliderTrackValueFill",
+                "SliderTrackValueFillPointerOver",
+                "SliderTrackValueFillPressed",
+                "SliderThumbBackground",
+                "TabItemHeaderSelectedPipeFill",
+                "ToggleSwitchFillOn",
+            };
+
+            string[] declared = XDocument
+                .Load(FindAppFile(Path.Combine("Themes", "Tokens.axaml")))
+                .Descendants()
+                .Select(element => element.Attributes()
+                    .FirstOrDefault(attribute => attribute.Name.LocalName == "Key")?.Value)
+                .Where(key => key is not null)
+                .Select(key => key!)
+                .ToArray();
+
+            string[] offenders = declared.Intersect(forbidden).OrderBy(key => key).ToArray();
+
+            Assert.True(
+                offenders.Length == 0,
+                "Tokens.axaml pins accent-driven control states to a literal: " +
+                string.Join(", ", offenders));
+
+            // The disabled twins are deliberately fixed and must stay.
+            Assert.Contains("CheckBoxCheckBackgroundFillCheckedDisabled", declared);
+            Assert.Contains("SliderTrackValueFillDisabled", declared);
+            Assert.Contains("RadioButtonOuterEllipseCheckedFillDisabled", declared);
+        }
+
+        [Theory]
+        [MemberData(nameof(Accents))]
+        public void EveryAccentsPrimaryButton_ClearsWcagAaAgainstItsInk(string accent)
+        {
+            // Button.primary paints OnAccentBrush on PrimaryButtonBrush at 14px
+            // SemiBold, so the pair has to clear 4.5:1 in both variants. The
+            // shipped indigo does; an accent that does not would be a
+            // regression introduced by the accent system itself.
+            foreach (bool isDark in new[] { true, false })
+            {
+                ThemeService.AccentPalette palette =
+                    ThemeService.GetPalette(accent, isDark);
+
+                // OnAccentBrush is white in both variants (Tokens.axaml).
+                double ratio = ContrastRatio(
+                    palette.PrimaryButton, Avalonia.Media.Color.Parse("#FFFFFF"));
+
+                Assert.True(
+                    ratio >= 4.5,
+                    $"{accent}/{(isDark ? "dark" : "light")}: primary button " +
+                    $"{palette.PrimaryButton} against white is {ratio:F2}:1.");
+            }
+        }
+
+        // WCAG 2.x relative luminance and contrast ratio.
+        private static double ContrastRatio(
+            Avalonia.Media.Color first,
+            Avalonia.Media.Color second)
+        {
+            double a = RelativeLuminance(first);
+            double b = RelativeLuminance(second);
+
+            return a > b
+                ? (a + 0.05) / (b + 0.05)
+                : (b + 0.05) / (a + 0.05);
+        }
+
+        private static double RelativeLuminance(Avalonia.Media.Color color) =>
+            (0.2126 * Channel(color.R)) +
+            (0.7152 * Channel(color.G)) +
+            (0.0722 * Channel(color.B));
+
+        private static double Channel(byte value)
+        {
+            double channel = value / 255.0;
+
+            return channel <= 0.04045
+                ? channel / 12.92
+                : Math.Pow((channel + 0.055) / 1.055, 2.4);
+        }
+
         private static string FindAppFile(string relativePath)
         {
             DirectoryInfo? directory = new(AppContext.BaseDirectory);

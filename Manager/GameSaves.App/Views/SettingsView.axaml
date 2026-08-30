@@ -8,6 +8,33 @@
              x:DataType="vm:SettingsViewModel"
              Background="{DynamicResource PageBackgroundBrush}">
 
+    <UserControl.Styles>
+        <!-- Diagnostics rows. The category label carries the accent so the
+             card is scannable by category; the value carries the reading ink,
+             because the value is the content. -->
+        <Style Selector="TextBlock.diagnosticLabel">
+            <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+            <Setter Property="FontSize" Value="{DynamicResource FontSizeBody}" />
+            <Setter Property="FontWeight" Value="Medium" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="TextBlock.diagnosticValue">
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryTextBrush}" />
+            <Setter Property="FontSize" Value="{DynamicResource FontSizeBody}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <!-- The platform value is identified by its own colour rather than the
+             accent: which OS a build runs on does not change with the accent.
+             Both values are chosen to clear contrast in their own variant, so
+             neither depends on the theme being dark. -->
+        <Style Selector="TextBlock.diagnosticValue.platformWindows">
+            <Setter Property="Foreground" Value="{DynamicResource PlatformWindowsBrush}" />
+        </Style>
+        <Style Selector="TextBlock.diagnosticValue.platformLinux">
+            <Setter Property="Foreground" Value="{DynamicResource PlatformLinuxBrush}" />
+        </Style>
+    </UserControl.Styles>
+
     <ScrollViewer Classes="pageScroll"
                   VerticalContentAlignment="Stretch">
         <StackPanel Spacing="10"
@@ -538,6 +565,93 @@
                             </StackPanel>
                         </Border>
 
+                        <!-- Section visibility, grouped by page. A flat list of
+                             every section in the app would give no way to tell
+                             which page a row belongs to, so each page owns its
+                             own block and the page's own panel menu edits the
+                             same state. -->
+                        <Border Background="{DynamicResource CardBackgroundBrush}"
+                                BorderBrush="{DynamicResource CardBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="14"
+                                Padding="14"
+                                HorizontalAlignment="Left"
+                                MinWidth="360">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Page sections"
+                                           Foreground="{DynamicResource PrimaryTextBrush}"
+                                           FontSize="{DynamicResource FontSizeBodyLarge}"
+                                           FontWeight="SemiBold" />
+                                <TextBlock Text="Choose which sections each page shows. Every section can also be moved, resized, collapsed or floated from its own header menu, and each page can be put back with Reset this page's layout there."
+                                           Foreground="{DynamicResource MutedTextBrush}"
+                                           FontSize="{DynamicResource FontSizeBody}"
+                                           TextWrapping="Wrap" />
+                                <ItemsControl ItemsSource="{Binding SectionGroups}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="models:WorkspaceSectionGroup">
+                                            <StackPanel Spacing="4"
+                                                        Margin="0,6,0,0"
+                                                        IsVisible="{Binding HasSections}">
+                                                <TextBlock Text="{Binding Header}"
+                                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                                           FontSize="{DynamicResource FontSizeBody}"
+                                                           FontWeight="SemiBold" />
+                                                <ItemsControl ItemsSource="{Binding Sections}"
+                                                              Margin="8,0,0,0">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate x:DataType="models:WorkspaceSectionOption">
+                                                            <CheckBox Content="{Binding Header}"
+                                                                      IsChecked="{Binding IsVisible, Mode=TwoWay}"
+                                                                      AutomationProperties.Name="{Binding Header, StringFormat='Show the {0} section'}" />
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Where the Scan action appears. It is the app's one
+                             recurring primary verb, so it is offered in several
+                             places; turning it off on a page it is not needed on
+                             never removes the ability to scan. -->
+                        <Border Background="{DynamicResource CardBackgroundBrush}"
+                                BorderBrush="{DynamicResource CardBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="14"
+                                Padding="14"
+                                HorizontalAlignment="Left"
+                                MinWidth="360">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Scan Steam library action"
+                                           Foreground="{DynamicResource PrimaryTextBrush}"
+                                           FontSize="{DynamicResource FontSizeBodyLarge}"
+                                           FontWeight="SemiBold" />
+                                <TextBlock Text="Choose where the Scan Steam library action is offered. The Dashboard always keeps a way to scan, so turning these off can never leave the app with none."
+                                           Foreground="{DynamicResource MutedTextBrush}"
+                                           FontSize="{DynamicResource FontSizeBody}"
+                                           TextWrapping="Wrap" />
+                                <CheckBox Content="On the navigation rail"
+                                          IsChecked="{Binding ShowScanInNavigationRail, Mode=TwoWay}"
+                                          AutomationProperties.Name="Show the scan action on the navigation rail" />
+                                <TextBlock Text="On these pages"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                           FontSize="{DynamicResource FontSizeBody}"
+                                           Margin="0,4,0,0" />
+                                <ItemsControl ItemsSource="{Binding ScanPages}" Margin="8,0,0,0">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="models:ScanPageOption">
+                                            <CheckBox Content="{Binding Header}"
+                                                      IsChecked="{Binding IsVisible, Mode=TwoWay}"
+                                                      AutomationProperties.Name="{Binding Header, StringFormat='Show the scan action on {0}'}" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+
                         <Border Background="{DynamicResource CardBackgroundBrush}"
                                 BorderBrush="{DynamicResource CardBorderBrush}"
                                 BorderThickness="1"
@@ -627,20 +741,22 @@
                                 CornerRadius="14"
                                 Padding="14"
                                 HorizontalAlignment="Left"
-                                MinWidth="360">
+                                MinWidth="420">
                             <StackPanel Spacing="8">
                                 <TextBlock Text="Sync providers"
                                            Foreground="{DynamicResource PrimaryTextBrush}"
                                            FontSize="{DynamicResource FontSizeBodyLarge}"
                                            FontWeight="SemiBold" />
-                                <TextBlock Text="The providers this version of the app can synchronize through. Configure sync providers in the Sync tab."
+                                <TextBlock Text="The providers this version of the app can synchronize through. Set one up to open its configuration on the Sync page."
                                            Foreground="{DynamicResource MutedTextBrush}"
                                            FontSize="{DynamicResource FontSizeBody}"
                                            TextWrapping="Wrap" />
                                 <ItemsControl ItemsSource="{Binding ProviderStatuses}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="models:ProviderStatusOption">
-                                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                                            <Grid ColumnDefinitions="*,Auto,Auto"
+                                                  ColumnSpacing="12"
+                                                  Margin="0,2">
                                                 <TextBlock Grid.Column="0"
                                                            Text="{Binding Name}"
                                                            Foreground="{DynamicResource PrimaryTextBrush}"
@@ -652,6 +768,17 @@
                                                            Foreground="{DynamicResource SecondaryTextBrush}"
                                                            FontSize="{DynamicResource FontSizeBody}"
                                                            VerticalAlignment="Center" />
+                                                <!-- Navigation only: this opens the provider's own
+                                                     setup panel on the Sync page. It is disabled for a
+                                                     provider this build cannot use, so the action can
+                                                     never imply a capability that is not there. -->
+                                                <Button Grid.Column="2"
+                                                        Content="Set up"
+                                                        IsEnabled="{Binding IsConfigurable}"
+                                                        Command="{Binding $parent[UserControl].((vm:SettingsViewModel)DataContext).ConfigureProviderCommand}"
+                                                        CommandParameter="{Binding}"
+                                                        AutomationProperties.Name="{Binding Name, StringFormat='Set up {0}'}"
+                                                        ToolTip.Tip="Open this provider's settings on the Sync page" />
                                             </Grid>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
@@ -677,46 +804,53 @@
                                            Foreground="{DynamicResource MutedTextBrush}"
                                            FontSize="{DynamicResource FontSizeBody}"
                                            TextWrapping="Wrap" />
-                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                                <!-- The path is the content and the word beside it is chrome, so
+                                     the path carries the primary ink and the label is muted. The
+                                     tooltip carries the whole path, because trimming from the
+                                     front still hides the beginning of a long one. -->
+                                <Grid ColumnDefinitions="140,*" ColumnSpacing="10">
                                     <TextBlock Grid.Column="0"
                                                Text="Database"
-                                               Foreground="{DynamicResource SecondaryTextBrush}"
+                                               Foreground="{DynamicResource MutedTextBrush}"
                                                FontSize="{DynamicResource FontSizeBody}"
                                                VerticalAlignment="Center" />
                                     <TextBlock Grid.Column="1"
                                                Text="{Binding DatabasePath}"
-                                               Foreground="{DynamicResource MutedTextBrush}"
+                                               Foreground="{DynamicResource PrimaryTextBrush}"
                                                FontSize="{DynamicResource FontSizeBody}"
                                                TextTrimming="PrefixCharacterEllipsis"
                                                VerticalAlignment="Center"
+                                               ToolTip.Tip="{Binding DatabasePath}"
                                                AutomationProperties.Name="Database location" />
                                 </Grid>
-                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                                <Grid ColumnDefinitions="140,*" ColumnSpacing="10">
                                     <TextBlock Grid.Column="0"
                                                Text="Interface settings"
-                                               Foreground="{DynamicResource SecondaryTextBrush}"
+                                               Foreground="{DynamicResource MutedTextBrush}"
                                                FontSize="{DynamicResource FontSizeBody}"
                                                VerticalAlignment="Center" />
                                     <TextBlock Grid.Column="1"
                                                Text="{Binding UiSettingsPath}"
-                                               Foreground="{DynamicResource MutedTextBrush}"
+                                               Foreground="{DynamicResource PrimaryTextBrush}"
                                                FontSize="{DynamicResource FontSizeBody}"
                                                TextTrimming="PrefixCharacterEllipsis"
                                                VerticalAlignment="Center"
+                                               ToolTip.Tip="{Binding UiSettingsPath}"
                                                AutomationProperties.Name="Interface settings location" />
                                 </Grid>
-                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                                <Grid ColumnDefinitions="140,*" ColumnSpacing="10">
                                     <TextBlock Grid.Column="0"
                                                Text="Sync settings"
-                                               Foreground="{DynamicResource SecondaryTextBrush}"
+                                               Foreground="{DynamicResource MutedTextBrush}"
                                                FontSize="{DynamicResource FontSizeBody}"
                                                VerticalAlignment="Center" />
                                     <TextBlock Grid.Column="1"
                                                Text="{Binding SyncSettingsPath}"
-                                               Foreground="{DynamicResource MutedTextBrush}"
+                                               Foreground="{DynamicResource PrimaryTextBrush}"
                                                FontSize="{DynamicResource FontSizeBody}"
                                                TextTrimming="PrefixCharacterEllipsis"
                                                VerticalAlignment="Center"
+                                               ToolTip.Tip="{Binding SyncSettingsPath}"
                                                AutomationProperties.Name="Sync settings location" />
                                 </Grid>
                             </StackPanel>
@@ -732,30 +866,62 @@
                                 CornerRadius="14"
                                 Padding="14"
                                 HorizontalAlignment="Left"
-                                MinWidth="360">
-                            <StackPanel Spacing="2">
-                                <TextBlock Text="Diagnostics"
+                                MinWidth="420">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="About this build"
                                            Foreground="{DynamicResource PrimaryTextBrush}"
                                            FontSize="{DynamicResource FontSizeBodyLarge}"
                                            FontWeight="SemiBold" />
-                                <TextBlock Text="{Binding ApplicationVersion, StringFormat='App version: {0}'}"
-                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                <TextBlock Text="What to quote when reporting a problem. Read-only information."
+                                           Foreground="{DynamicResource MutedTextBrush}"
                                            FontSize="{DynamicResource FontSizeBody}"
-                                           AutomationProperties.Name="App version" />
-                                <TextBlock Text="{Binding Platform, StringFormat='Platform: {0}'}"
-                                           Foreground="{DynamicResource SecondaryTextBrush}"
-                                           FontSize="{DynamicResource FontSizeBody}"
-                                           AutomationProperties.Name="Platform" />
-                                <TextBlock Text="{Binding OperatingSystemVersion, StringFormat='Operating system: {0}'}"
-                                           Foreground="{DynamicResource SecondaryTextBrush}"
-                                           FontSize="{DynamicResource FontSizeBody}"
-                                           TextTrimming="CharacterEllipsis"
-                                           AutomationProperties.Name="Operating system" />
-                                <TextBlock Text="{Binding RuntimeDescription, StringFormat='Runtime: {0}'}"
-                                           Foreground="{DynamicResource SecondaryTextBrush}"
-                                           FontSize="{DynamicResource FontSizeBody}"
-                                           TextTrimming="CharacterEllipsis"
-                                           AutomationProperties.Name="Runtime" />
+                                           TextWrapping="Wrap" />
+                                <!-- Same label/value split as Data locations, so the two read-only
+                                     cards on this page share one treatment. The category label
+                                     carries the accent; the value carries the reading ink, except
+                                     the platform, which is identified by its own colour. -->
+                                <Grid ColumnDefinitions="140,*" ColumnSpacing="10">
+                                    <TextBlock Grid.Column="0"
+                                               Text="App version"
+                                               Classes="diagnosticLabel" />
+                                    <TextBlock Grid.Column="1"
+                                               Text="{Binding ApplicationVersion}"
+                                               Classes="diagnosticValue"
+                                               AutomationProperties.Name="App version" />
+                                </Grid>
+                                <Grid ColumnDefinitions="140,*" ColumnSpacing="10">
+                                    <TextBlock Grid.Column="0"
+                                               Text="Platform"
+                                               Classes="diagnosticLabel" />
+                                    <TextBlock Grid.Column="1"
+                                               Text="{Binding Platform}"
+                                               Classes="diagnosticValue"
+                                               Classes.platformWindows="{Binding IsWindowsPlatform}"
+                                               Classes.platformLinux="{Binding IsLinuxPlatform}"
+                                               AutomationProperties.Name="Platform" />
+                                </Grid>
+                                <Grid ColumnDefinitions="140,*" ColumnSpacing="10">
+                                    <TextBlock Grid.Column="0"
+                                               Text="Operating system"
+                                               Classes="diagnosticLabel" />
+                                    <TextBlock Grid.Column="1"
+                                               Text="{Binding OperatingSystemVersion}"
+                                               Classes="diagnosticValue"
+                                               TextTrimming="CharacterEllipsis"
+                                               ToolTip.Tip="{Binding OperatingSystemVersion}"
+                                               AutomationProperties.Name="Operating system" />
+                                </Grid>
+                                <Grid ColumnDefinitions="140,*" ColumnSpacing="10">
+                                    <TextBlock Grid.Column="0"
+                                               Text="Runtime"
+                                               Classes="diagnosticLabel" />
+                                    <TextBlock Grid.Column="1"
+                                               Text="{Binding RuntimeDescription}"
+                                               Classes="diagnosticValue"
+                                               TextTrimming="CharacterEllipsis"
+                                               ToolTip.Tip="{Binding RuntimeDescription}"
+                                               AutomationProperties.Name="Runtime" />
+                                </Grid>
                             </StackPanel>
                         </Border>
                     </StackPanel>

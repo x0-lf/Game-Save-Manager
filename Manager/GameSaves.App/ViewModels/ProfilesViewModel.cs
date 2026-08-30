@@ -71,12 +71,19 @@ namespace GameSaves.App.ViewModels
             }
         }
 
+        /// <summary>This page's panel arrangement.</summary>
+        public GameSaves.App.Services.IWorkspaceLayoutPage Workspace { get; }
+
         public ProfilesViewModel(
             ISteamDiscoveryService steamDiscoveryService,
-            ISteamProfileDetector steamProfileDetector)
+            ISteamProfileDetector steamProfileDetector,
+            GameSaves.App.Services.WorkspaceLayoutService workspaceLayout)
         {
             _steamDiscoveryService = steamDiscoveryService;
             _steamProfileDetector = steamProfileDetector;
+
+            Workspace = workspaceLayout.Page(
+                GameSaves.App.Services.UiRailLayoutSettings.TabProfiles);
         }
 
         // Automatic startup load. Reuses the manual Refresh path (including its
