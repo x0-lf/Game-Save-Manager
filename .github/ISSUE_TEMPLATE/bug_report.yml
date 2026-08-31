@@ -37,7 +37,7 @@ body:
     attributes:
       label: Environment
       description: Include the operating system, architecture, and .NET runtime when relevant. Do not include a local username or private path.
-      placeholder: "For example: Windows 11 x64, .NET 8"
+      placeholder: "For example: Windows 11 x64, .NET 10"
     validations:
       required: true
 

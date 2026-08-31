@@ -206,7 +206,7 @@ namespace GameSaves
             Console.WriteLine($" - Output: {result.OutputPath}");
             Console.WriteLine();
             Console.WriteLine("Next command:");
-            Console.WriteLine($"  dotnet run -- pcgw-harvest-appids External/Titles \"SaveGameManager/0.1 (https://github.com/nickname; user@mail.com) .NET/8.0\" \"{result.OutputPath}\"");
+            Console.WriteLine($"  dotnet run -- pcgw-harvest-appids External/Titles \"SaveGameManager/0.1 (https://github.com/nickname; user@mail.com) .NET/10.0\" \"{result.OutputPath}\"");
         }
         private static async Task RunSteamCatalogFetch(string[] args, string dbPath)
         {
@@ -274,7 +274,7 @@ namespace GameSaves
                     Kind = kind,
                     MaxResultsPerPage = 50_000,
                     MaxAppsToFetch = maxApps,
-                    UserAgent = "SaveGameManager/0.1 .NET/8.0"
+                    UserAgent = "SaveGameManager/0.1 .NET/10.0"
                 };
 
                 var service = new SteamCatalogService(options);
@@ -327,7 +327,7 @@ namespace GameSaves
             Console.WriteLine($" - Output: {result.OutputPath}");
             Console.WriteLine();
             Console.WriteLine("Next command example:");
-            Console.WriteLine($"  dotnet run -- pcgw-harvest-appids External/Titles \"SaveGameManager/0.1 (https://github.com/nickname; user@mail.com) .NET/8.0\" \"{result.OutputPath}\"");
+            Console.WriteLine($"  dotnet run -- pcgw-harvest-appids External/Titles \"SaveGameManager/0.1 (https://github.com/nickname; user@mail.com) .NET/10.0\" \"{result.OutputPath}\"");
         }
 
         private static async Task RunPcgwHarvestAppIds(string[] args, string dbPath)
@@ -338,10 +338,10 @@ namespace GameSaves
                 Console.WriteLine("  pcgw-harvest-appids <output-root> <user-agent> <appid|appid-file> [more-appids]");
                 Console.WriteLine();
                 Console.WriteLine("Example:");
-                Console.WriteLine("  dotnet run -- pcgw-harvest-appids External/Titles \"SaveGameManager/0.1 (https://github.com/mynickname; myemail@email.com) .NET/8\" 413150");
+                Console.WriteLine("  dotnet run -- pcgw-harvest-appids External/Titles \"SaveGameManager/0.1 (https://github.com/mynickname; myemail@email.com) .NET/10\" 413150");
                 Console.WriteLine();
                 Console.WriteLine("Example with file:");
-                Console.WriteLine("  dotnet run -- pcgw-harvest-appids External/Titles \"SaveGameManager/0.1 (https://github.com/mynickname; myemail@email.com) .NET/8\" appids.txt");
+                Console.WriteLine("  dotnet run -- pcgw-harvest-appids External/Titles \"SaveGameManager/0.1 (https://github.com/mynickname; myemail@email.com) .NET/10\" appids.txt");
                 return;
             }
 
@@ -384,7 +384,7 @@ namespace GameSaves
                 Console.WriteLine("  pcgw-harvest-installed <output-root> <user-agent> [max-games]");
                 Console.WriteLine();
                 Console.WriteLine("Example:");
-                Console.WriteLine("  dotnet run -- pcgw-harvest-installed External/Titles \"SaveGameManager/0.1 (https://github.com/mynickname; myemail@email.com) .NET/8\" 10");
+                Console.WriteLine("  dotnet run -- pcgw-harvest-installed External/Titles \"SaveGameManager/0.1 (https://github.com/mynickname; myemail@email.com) .NET/10\" 10");
                 return;
             }
 
@@ -523,7 +523,7 @@ namespace GameSaves
         //        Console.WriteLine("  pcgw-harvest <output-root> <user-agent> [max-titles]");
         //        Console.WriteLine();
         //        Console.WriteLine("Example:");
-        //        Console.WriteLine("  dotnet run -- pcgw-harvest External/Titles \"SteamSaveManagerHarvester/0.1 (https://example.org/SteamSaveManager; you@example.org) .NET/8\" 100");
+        //        Console.WriteLine("  dotnet run -- pcgw-harvest External/Titles \"SteamSaveManagerHarvester/0.1 (https://example.org/SteamSaveManager; you@example.org) .NET/10\" 100");
         //        return;
         //    }
 

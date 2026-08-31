@@ -58,9 +58,9 @@ For broad features, schema changes, new providers, new dependencies, or changes 
 
 ## Development prerequisites
 
-The solution targets .NET 8. Install:
+The solution targets .NET 10. Install:
 
-- the .NET 8 SDK or a compatible newer SDK capable of targeting .NET 8;
+- the .NET 10 SDK or a compatible newer SDK capable of targeting .NET 10;
 - Git;
 - a development environment with C# and Avalonia support, if desired; and
 - Windows for complete manual verification of Windows registry discovery and current-user DPAPI secret storage.
@@ -76,8 +76,8 @@ Internet access is required to restore packages and for developer commands that 
 | Windows 10 or 11 | Primary development and manual-verification environment | Required for complete verification of Steam registry discovery and Windows DPAPI secret storage. |
 | Linux | Partial development environment | Provider-neutral code may build and run, but Windows-specific behavior and the complete desktop workflow are not currently claimed as fully supported. |
 | macOS | Partial development environment | Provider-neutral code may build and run, but Windows-specific behavior and the complete desktop workflow are not currently claimed as fully supported. |
-| .NET 8 SDK | Supported target toolchain | All projects target `net8.0`. Use this SDK for the most representative development environment. |
-| Compatible newer .NET SDK | Supported for development | It must remain capable of targeting .NET 8. Do not change target frameworks as an incidental contribution. |
+| .NET 10 SDK | Supported target toolchain | All projects target `net10.0`. Use this SDK for the most representative development environment. |
+| Compatible newer .NET SDK | Supported for development | It must remain capable of targeting .NET 10. Do not change target frameworks as an incidental contribution. |
 | Offline automated test environment | Supported after package restore | The regression suite must use deterministic fakes and temporary resources rather than personal external services. |
 | Live Steam, SFTP, or Google services | Optional, feature-specific manual verification | Use only accounts, hosts, and test data you are authorized to use, and report results without personal values. |
 

@@ -1,6 +1,6 @@
 # Game Save Manager
 
-Game Save Manager is a .NET 8 desktop tool for discovering installed Steam games and Steam profiles, resolving known save-game locations, and **safely copying saves between local Steam profiles** - with automatic backups, SHA-256 integrity checking, and a full restore workflow.
+Game Save Manager is a .NET 10 desktop tool for discovering installed Steam games and Steam profiles, resolving known save-game locations, and **safely copying saves between local Steam profiles** - with automatic backups, SHA-256 integrity checking, and a full restore workflow.
 
 The project ships two front ends over a shared core:
 
@@ -268,7 +268,7 @@ Remote writes now make mutability explicit. Backup-run text content uses create-
 
 ## Requirements
 
-* .NET 8 SDK
+* .NET 10 SDK
 * Steam installed on the machine
 * Windows (registry-based Steam discovery; other platforms are planned)
 * Internet access only for Steam catalog / PCGamingWiki harvesting commands

@@ -25,7 +25,7 @@ Game Save Manager is currently developed as a pre-release project. The repositor
 
 Security fixes normally land on `main`. A maintainer may ask a reporter to confirm that an issue still exists on the latest commit before triage continues. This does not require a reporter to retest a destructive proof of concept against real data.
 
-The currently supported end-user environment is Windows with .NET 8. Registry-based Steam discovery and the DPAPI secret-store implementation are Windows-specific. Linux Secret Service and macOS Keychain implementations are planned but are not currently supported security boundaries.
+The currently supported end-user environment is Windows with .NET 10. Registry-based Steam discovery and the DPAPI secret-store implementation are Windows-specific. Linux Secret Service and macOS Keychain implementations are planned but are not currently supported security boundaries.
 
 ## Reporting a vulnerability
 

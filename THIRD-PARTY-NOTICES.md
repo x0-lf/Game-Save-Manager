@@ -30,7 +30,6 @@ dependencies are added, removed, or upgraded.
 | Microsoft.Data.Sqlite | 10.0.10 | MIT | SQLite ADO.NET provider. |
 | SQLitePCLRaw.bundle_e_sqlite3 | 2.1.12 | Apache-2.0 | Explicit native SQLite bundle constraint used by the projects that directly own SQLite initialization. |
 | System.Security.Cryptography.ProtectedData | 10.0.0 | MIT | Windows DPAPI access for current-user secret protection. |
-| System.Text.Json | 10.0.9 | MIT | JSON serialization used by sync settings and regression tests. |
 | ValveKeyValue | 0.20.0.417 | MIT | Selected .NET 8-compatible KeyValues1 parser used for Steam VDF files; referenced only by Infrastructure. |
 | SSH.NET | 2026.0.0 | MIT | SFTP/SSH client used by the SFTP sync provider. |
 | Microsoft.NET.Test.Sdk | 17.14.1 | MIT | .NET test host and discovery support; test project only. |
@@ -105,6 +104,8 @@ or persisted-format change.
 ### System.Text.Json
 
 System.Text.Json is used to read, migrate, and write the non-secret Sync UI settings.
+It is supplied by the `Microsoft.NETCore.App` shared framework rather than by a
+NuGet package reference, so no separate package version is pinned for it.
 
 ### System.Security.Cryptography.ProtectedData
 
