@@ -59,10 +59,16 @@ namespace GameSaves.UiCapture
         // rewriting the product-look captures the rest of this harness owns.
         private static bool _layoutOnly;
 
+        // Set by the "rail" argument: capture only the navigation rail's
+        // Scan/Refresh action across every page and rail arrangement.
+        private static bool _railOnly;
+
         public static int Main(string[] args)
         {
             _layoutOnly = args.Length > 1 &&
                 string.Equals(args[1], "layout", StringComparison.OrdinalIgnoreCase);
+            _railOnly = args.Length > 1 &&
+                string.Equals(args[1], "rail", StringComparison.OrdinalIgnoreCase);
 
             string outputDirectory = args.Length > 0
                 ? args[0]
@@ -168,6 +174,16 @@ namespace GameSaves.UiCapture
                 .First();
 
             int written = 0;
+
+            if (_railOnly)
+            {
+                return RailScanSweep.Run(
+                    window,
+                    tabs,
+                    viewModel,
+                    outputDirectory,
+                    name => Shot(window, outputDirectory, name));
+            }
 
             if (_layoutOnly)
             {

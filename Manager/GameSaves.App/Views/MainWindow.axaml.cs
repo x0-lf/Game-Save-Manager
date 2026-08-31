@@ -86,10 +86,11 @@ namespace GameSaves.App.Views
             foreach (KeyBinding binding in KeyBindings)
                 binding.Command = binding.CommandParameter is null ? openSettings : selectTab;
 
-            // The rail's layout action belongs to whichever page is selected,
-            // so it follows the selection rather than being wired once.
-            MainNavigation.SelectionChanged += (_, _) => UpdateRailLayoutButton();
-            UpdateRailLayoutButton();
+            // The rail's layout and scan actions belong to whichever page is
+            // selected, so they follow the selection rather than being wired
+            // once.
+            MainNavigation.SelectionChanged += (_, _) => UpdateRailChrome();
+            UpdateRailChrome();
 
             // Shift+F10 / Menu key on a focused tab opens its context menu,
             // so the detach action is reachable without a mouse.
@@ -291,11 +292,21 @@ namespace GameSaves.App.Views
                     ReferenceEquals(pair.Value, MainNavigation.SelectedItem))
                 .Key;
 
-        // Hidden on a page with no configurable layout, so the rail never
-        // offers an action that would do nothing.
-        private void UpdateRailLayoutButton() =>
+        // The rail actions that depend on which page is selected. The layout
+        // button is hidden on a page with no configurable layout, so the rail
+        // never offers an action that would do nothing. The scan action needs
+        // only the page key: the view model maps that to the page's own
+        // refresh command and to the wording that describes it.
+        private void UpdateRailChrome()
+        {
+            string? key = SelectedTabKey();
+
             RailLayoutButton.IsVisible =
-                SelectedTabKey() is { } key && WorkspaceLayoutCatalog.Pages.Contains(key);
+                key is not null && WorkspaceLayoutCatalog.Pages.Contains(key);
+
+            if (key is not null && DataContext is MainWindowViewModel viewModel)
+                viewModel.ActiveTabKey = key;
+        }
 
         // Context-menu path for detach (right-click or Shift+F10 on a tab).
         // The menu item lives in a popup, so the tab is resolved through the
@@ -369,6 +380,11 @@ namespace GameSaves.App.Views
 
             ApplyNavigationLayout();
             ApplyStartupSelection();
+
+            // The startup selection only raises SelectionChanged when it moves
+            // the selection, so push the rail's page-dependent state once here
+            // for the case where the restored page is already the selected one.
+            UpdateRailChrome();
         }
 
         private void OnRailSettingsPropertyChanged(

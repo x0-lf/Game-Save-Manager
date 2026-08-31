@@ -157,13 +157,27 @@ public sealed class SettingsNavigationTests
             element => element.Name.LocalName == "Button" &&
                 Named(element, "RailScanButton"));
 
-        Assert.Equal("{Binding RefreshCommand}", (string?)scan.Attribute("Command"));
+        // Every one of these follows the active page. The view names no page
+        // and no page command: the whole mapping lives in the view model, so
+        // the button cannot drift out of step with the page it is sitting on.
+        Assert.Equal("{Binding RailScanCommand}", (string?)scan.Attribute("Command"));
+        Assert.Equal("{Binding IsRailScanVisible}", (string?)scan.Attribute("IsVisible"));
         Assert.Equal(
-            "{Binding Settings.ShowScanInNavigationRail}",
-            (string?)scan.Attribute("IsVisible"));
-        Assert.Equal(
-            "Scan Steam library",
+            "{Binding RailScanDescription}",
             (string?)scan.Attribute("AutomationProperties.Name"));
+
+        // The accessible name and the tooltip say the same thing, so the
+        // action stays self-describing while the rail is collapsed and the
+        // visible label is not rendered.
+        Assert.Equal(
+            "{Binding RailScanDescription}", (string?)scan.Attribute("ToolTip.Tip"));
+
+        XElement label = Assert.Single(
+            scan.Descendants(),
+            element => element.Name.LocalName == "TextBlock" &&
+                ((string?)element.Attribute("Classes"))?.Contains("railChromeLabel") == true);
+
+        Assert.Equal("{Binding RailScanLabel}", (string?)label.Attribute("Text"));
     }
 
     [Fact]

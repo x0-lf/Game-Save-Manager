@@ -6,8 +6,10 @@ using GameSaves.Core.Save;
 using GameSaves.Core.Steam;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows.Input;
 
 namespace GameSaves.App.ViewModels
 {
@@ -107,6 +109,103 @@ namespace GameSaves.App.ViewModels
         public GameSaves.App.Services.IWorkspaceLayoutPage WorkspacePageFor(string tabKey) =>
             _workspaceLayout.Page(tabKey);
 
+        /// <summary>
+        /// One row of the navigation rail's Scan/Refresh action: how it
+        /// presents itself on a page, and which of that page's own commands it
+        /// runs. Holding the command rather than a copy of its work is what
+        /// keeps the rail and the page's own Refresh button on one code path,
+        /// so loading state, status text, error reporting and availability are
+        /// whatever the page already does.
+        /// </summary>
+        internal sealed record RailScanAction(
+            string TabKey,
+            string Label,
+            string Description,
+            Func<MainWindowViewModel, ICommand> Command);
+
+        /// <summary>
+        /// The whole active-page-to-command mapping. A page with no row has no
+        /// rail action, which is how Settings hides it: absence, rather than a
+        /// disabled button or a gap where one used to be.
+        /// </summary>
+        internal static readonly IReadOnlyList<RailScanAction> RailScanActions =
+            new RailScanAction[]
+            {
+                new(GameSaves.App.Services.UiRailLayoutSettings.TabDashboard,
+                    "Scan",
+                    "Scan Steam library and refresh Dashboard",
+                    viewModel => viewModel.RefreshCommand),
+                new(GameSaves.App.Services.UiRailLayoutSettings.TabInstalledGames,
+                    "Scan",
+                    "Scan installed games",
+                    viewModel => viewModel.InstalledGames.RefreshCommand),
+                new(GameSaves.App.Services.UiRailLayoutSettings.TabProfiles,
+                    "Refresh",
+                    "Refresh profiles",
+                    viewModel => viewModel.Profiles.RefreshProfilesCommand),
+                new(GameSaves.App.Services.UiRailLayoutSettings.TabTransferPreview,
+                    "Refresh",
+                    "Refresh Transfer Profiles",
+                    viewModel => viewModel.TransferPreview.RefreshInputsCommand),
+                new(GameSaves.App.Services.UiRailLayoutSettings.TabManualBackup,
+                    "Refresh",
+                    "Refresh Manual Backup",
+                    viewModel => viewModel.ManualBackup.RefreshInputsCommand),
+                new(GameSaves.App.Services.UiRailLayoutSettings.TabBackups,
+                    "Refresh",
+                    "Refresh backups",
+                    viewModel => viewModel.BackupHistory.RefreshRunsCommand),
+                new(GameSaves.App.Services.UiRailLayoutSettings.TabSync,
+                    "Refresh",
+                    "Refresh Sync status",
+                    viewModel => viewModel.Sync.CheckSyncStatusCommand),
+                new(GameSaves.App.Services.UiRailLayoutSettings.TabHistory,
+                    "Refresh",
+                    "Refresh history",
+                    viewModel => viewModel.TransferHistory.RefreshRunsCommand),
+            };
+
+        // The page the rail is pointing at. The shell pushes it on every
+        // navigation change; the rail action follows from it and nothing else.
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(RailScanCommand))]
+        [NotifyPropertyChangedFor(nameof(RailScanLabel))]
+        [NotifyPropertyChangedFor(nameof(RailScanDescription))]
+        [NotifyPropertyChangedFor(nameof(IsRailScanVisible))]
+        private string activeTabKey =
+            GameSaves.App.Services.UiRailLayoutSettings.TabDashboard;
+
+        private RailScanAction? ActiveRailScanAction =>
+            RailScanActions.FirstOrDefault(
+                action => string.Equals(
+                    action.TabKey, ActiveTabKey, StringComparison.Ordinal));
+
+        /// <summary>
+        /// The active page's own refresh command. Binding the command itself
+        /// means the rail button disables while that command runs, so a second
+        /// press cannot start a duplicate, and an operation already in flight
+        /// keeps belonging to the page that started it even if the user
+        /// navigates away.
+        /// </summary>
+        public ICommand? RailScanCommand => ActiveRailScanAction?.Command(this);
+
+        /// <summary>The rail action's visible text on the active page.</summary>
+        public string RailScanLabel => ActiveRailScanAction?.Label ?? "Refresh";
+
+        /// <summary>
+        /// The rail action's tooltip and accessible name. It stays accurate
+        /// while the rail is collapsed, where the label is not rendered.
+        /// </summary>
+        public string RailScanDescription =>
+            ActiveRailScanAction?.Description ?? string.Empty;
+
+        /// <summary>
+        /// False on a page with no refresh, and false while the user has the
+        /// action switched off in Settings.
+        /// </summary>
+        public bool IsRailScanVisible =>
+            ActiveRailScanAction is not null && Settings.ShowScanInNavigationRail;
+
         public MainWindowViewModel(
             GameSaves.App.Services.IUiSettingsStore uiSettingsStore,
             GameSaves.App.Services.ThemeService themeService,
@@ -161,6 +260,17 @@ namespace GameSaves.App.ViewModels
                 Platform,
                 DatabasePath,
                 workspaceLayout);
+
+            // The rail action can also be switched off entirely in Settings,
+            // so its visibility depends on that setting as well as the page.
+            Settings.PropertyChanged += (_, args) =>
+            {
+                if (args.PropertyName is null or
+                    nameof(SettingsViewModel.ShowScanInNavigationRail))
+                {
+                    OnPropertyChanged(nameof(IsRailScanVisible));
+                }
+            };
         }
 
         // Automatic startup load of the Dashboard. Reuses the same load path as

@@ -222,15 +222,20 @@
 					<TextBlock Text="&#xE700;" Classes="railChromeGlyph" />
 				</ToggleButton>
 
+				<!-- Context sensitive: it runs the active page's own refresh
+				     command, and carries that page's wording. The view model
+				     owns the whole page-to-command mapping; nothing here knows
+				     what any page refreshes. Absent on a page with no refresh,
+				     so Settings shows no gap rather than a dead button. -->
 				<Button x:Name="RailScanButton"
 				        Classes="railChrome"
-				        Command="{Binding RefreshCommand}"
-				        IsVisible="{Binding Settings.ShowScanInNavigationRail}"
-				        AutomationProperties.Name="Scan Steam library"
-				        ToolTip.Tip="Scan Steam library">
+				        Command="{Binding RailScanCommand}"
+				        IsVisible="{Binding IsRailScanVisible}"
+				        AutomationProperties.Name="{Binding RailScanDescription}"
+				        ToolTip.Tip="{Binding RailScanDescription}">
 					<StackPanel Orientation="Horizontal" Spacing="6">
 						<TextBlock Text="&#xE72C;" Classes="railChromeGlyph railAccentGlyph" />
-						<TextBlock Text="Scan"
+						<TextBlock Text="{Binding RailScanLabel}"
 						           Classes="railChromeLabel"
 						           Foreground="{DynamicResource AccentBrush}"
 						           VerticalAlignment="Center" />
