@@ -617,17 +617,44 @@ namespace GameSaves.App.Services
                 : UiTransparencySettings.NormalizeOpacity(opacity);
 
         /// <summary>
+        /// How much of the app's own page colour survives while a window
+        /// material composites.
+        ///
+        /// A material hands the window background to the OS backdrop, and the
+        /// app used to hand over all of it. Over a bright desktop the app's ink
+        /// was then read against whatever happened to be behind the window: the
+        /// dark theme's secondary text (#A7AAB4) measures about 1.1:1 on white,
+        /// which is what made the navigation rail, the page and the settings
+        /// tab strip unreadable.
+        ///
+        /// Alpha is the only control on this path — Avalonia's material hint
+        /// carries no separate luminosity layer to clamp the backdrop with, the
+        /// way WinUI acrylic does — so the app keeps a luminosity floor of its
+        /// own. At 0.92 every ink the app calls normal text still clears WCAG
+        /// AA against the worst backdrop in either variant; the binding case is
+        /// the light theme's muted ink on a black desktop, at 4.6:1. The
+        /// backdrop still shows through and still blurs, so the material
+        /// remains a material — it just no longer decides the luminance the
+        /// text is read against.
+        ///
+        /// The test derives the pairs from the token dictionary rather than
+        /// repeating them, so a repalette or a lower floor fails the build
+        /// instead of quietly costing readability.
+        /// </summary>
+        internal const double WindowMaterialSurfaceFloor = 0.92;
+
+        /// <summary>
         /// The opacity the window-level page background renders with. While a
-        /// material is compositing, the OS backdrop replaces the page
-        /// background entirely, so it becomes fully transparent regardless of
-        /// the (inert) window opacity setting. High contrast still wins: the
-        /// material service never confirms a material under high contrast,
+        /// material is compositing, the window opacity setting is inert (the
+        /// material replaces the background) and the surface renders at
+        /// <see cref="WindowMaterialSurfaceFloor"/>. High contrast still wins:
+        /// the material service never confirms a material under high contrast,
         /// and this stays defensive about it.
         /// </summary>
         internal static double EffectiveWindowSurfaceOpacity(
             double opacity, bool highContrast, bool materialActive) =>
             materialActive && !highContrast
-                ? 0.0
+                ? WindowMaterialSurfaceFloor
                 : EffectiveSurfaceOpacity(opacity, highContrast);
 
         public void Apply(AppUiSettings settings)

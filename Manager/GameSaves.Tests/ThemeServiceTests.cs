@@ -260,12 +260,15 @@ namespace GameSaves.Tests
         [Theory]
         [InlineData(0.4, false, false, 0.4)]
         [InlineData(0.4, true, false, 1.0)]
-        [InlineData(1.0, false, true, 0.0)]
-        [InlineData(0.2, false, true, 0.0)]
+        // A compositing material makes the window opacity setting inert and
+        // pins the surface to the readability floor. It used to drop to 0.0,
+        // which handed the app's ink to whatever was behind the window.
+        [InlineData(1.0, false, true, ThemeService.WindowMaterialSurfaceFloor)]
+        [InlineData(0.2, false, true, ThemeService.WindowMaterialSurfaceFloor)]
         // High contrast always wins: even a stale material confirmation
         // must not thin a high-contrast surface.
         [InlineData(0.2, true, true, 1.0)]
-        public void WindowSurfaceOpacity_IsTransparentOnlyWhileAMaterialComposites(
+        public void WindowSurfaceOpacity_HoldsTheMaterialFloorWhileOneComposites(
             double stored, bool highContrast, bool materialActive, double expected)
         {
             Assert.Equal(
@@ -273,6 +276,84 @@ namespace GameSaves.Tests
                 ThemeService.EffectiveWindowSurfaceOpacity(
                     stored, highContrast, materialActive));
         }
+
+        [Theory]
+        [InlineData("Dark")]
+        [InlineData("Light")]
+        public void TheMaterialFloor_KeepsNormalTextReadableOverAnyDesktop(
+            string variant)
+        {
+            // The reported failure: Acrylic let the desktop decide the
+            // luminance the app's ink was read against, and dark secondary text
+            // measures about 1.1:1 on white. The colours are read from the
+            // token dictionary rather than repeated here, so a repalette is
+            // caught too; both extremes are tested so the floor cannot be tuned
+            // to one desktop. Every ink the app treats as normal text has to
+            // clear AA — including the muted one, which is dimmer than the
+            // secondary one in both variants and is the binding case.
+            IReadOnlyDictionary<string, Avalonia.Media.Color> tokens =
+                VariantColors(variant);
+
+            Avalonia.Media.Color page = tokens["PageBackgroundBrush"];
+
+            foreach (string inkKey in new[]
+            {
+                "PrimaryTextBrush", "SecondaryTextBrush", "MutedTextBrush",
+            })
+            {
+                foreach (string desktop in new[] { "#FFFFFF", "#000000" })
+                {
+                    // What the compositor actually produces: the page colour
+                    // drawn at the floor's alpha over what the material shows.
+                    Avalonia.Media.Color composited = Composite(
+                        page,
+                        Avalonia.Media.Color.Parse(desktop),
+                        ThemeService.WindowMaterialSurfaceFloor);
+
+                    double ratio = ContrastRatio(composited, tokens[inkKey]);
+
+                    Assert.True(
+                        ratio >= 4.5,
+                        $"{variant}/{inkKey} over {page} at " +
+                        $"{ThemeService.WindowMaterialSurfaceFloor:F2} alpha on a " +
+                        $"{desktop} desktop is {ratio:F2}:1, below WCAG AA.");
+                }
+            }
+        }
+
+        // The SolidColorBrush colours declared for one theme variant in
+        // Tokens.axaml, so a contrast assertion measures what actually ships.
+        private static IReadOnlyDictionary<string, Avalonia.Media.Color> VariantColors(
+            string variant)
+        {
+            XDocument tokens = XDocument.Load(
+                FindAppFile(Path.Combine("Themes", "Tokens.axaml")));
+
+            XElement dictionary = tokens
+                .Descendants()
+                .Single(element => element.Attributes().Any(attribute =>
+                    attribute.Name.LocalName == "Key" && attribute.Value == variant));
+
+            return dictionary
+                .Descendants()
+                .Where(element => element.Name.LocalName == "SolidColorBrush")
+                .ToDictionary(
+                    element => element.Attributes().Single(
+                        attribute => attribute.Name.LocalName == "Key").Value,
+                    element => Avalonia.Media.Color.Parse(
+                        element.Attribute("Color")!.Value));
+        }
+
+        // Source-over alpha compositing, which is what the window surface and
+        // the material backdrop actually do.
+        private static Avalonia.Media.Color Composite(
+            Avalonia.Media.Color surface,
+            Avalonia.Media.Color backdrop,
+            double alpha) =>
+            Avalonia.Media.Color.FromRgb(
+                (byte)Math.Round((alpha * surface.R) + ((1 - alpha) * backdrop.R)),
+                (byte)Math.Round((alpha * surface.G) + ((1 - alpha) * backdrop.G)),
+                (byte)Math.Round((alpha * surface.B) + ((1 - alpha) * backdrop.B)));
 
         [Fact]
         public void MotionDurationFast_IsInstantWhenReducedAndShippedOtherwise()

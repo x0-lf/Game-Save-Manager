@@ -571,6 +571,169 @@ public sealed class WorkspaceLayoutTests
         Assert.Equal(0, GameSaves.App.Views.Workspace.WorkspaceDockOverlay.ShareFromWeight(0));
     }
 
+    [Theory]
+    // What a GridSplitter leaves behind: the new pixel extent, written into
+    // the definition as its star value. Divided by the reference definition's
+    // extent it is the proportion the user chose; stored raw it saturated at
+    // MaxSize on the first drag, after which the region owned the whole page
+    // and the equality guard made every later drag a silent no-op. A live
+    // settings file was found holding history/left = 10 from exactly this.
+    [InlineData(420.0, 680.0, 0.618)]
+    [InlineData(680.0, 420.0, 1.619)]
+    [InlineData(500.0, 500.0, 1.0)]
+    public void AResizedRegion_StoresAProportionRatherThanAPixelExtent(
+        double extent, double reference, double expected)
+    {
+        double weight = UiPanelPlacement.WeightFromExtent(extent, reference);
+
+        Assert.Equal(expected, weight, 3);
+        Assert.InRange(weight, UiPanelPlacement.MinSize, UiPanelPlacement.MaxSize);
+        Assert.NotEqual(UiPanelPlacement.MaxSize, weight);
+    }
+
+    [Theory]
+    [InlineData(double.NaN, 500.0)]
+    [InlineData(500.0, double.NaN)]
+    [InlineData(double.PositiveInfinity, 500.0)]
+    [InlineData(500.0, 0.0)]
+    [InlineData(500.0, -1.0)]
+    public void AnUnusableSplitterResult_FallsBackToTheDefaultWeight(
+        double extent, double reference)
+    {
+        Assert.Equal(
+            UiPanelPlacement.DefaultSize,
+            UiPanelPlacement.WeightFromExtent(extent, reference));
+    }
+
+    [Theory]
+    // A pixel magnitude from a splitter drag, a weight carried over from a
+    // much wider display, and a collapsed-to-nothing rail. None may survive
+    // restoration as-is: the first two pin the rail open and squeeze the
+    // centre onto its minimum, the third makes the rail unusable. The expected
+    // value is pinned rather than range-checked, because a clamp satisfies any
+    // range by construction and would pass even sending everything one way.
+    [InlineData(3840.0, UiRegionSize.MaxWeight)]
+    [InlineData(10.0, UiRegionSize.MaxWeight)]
+    [InlineData(0.0, UiRegionSize.MinWeight)]
+    [InlineData(-5.0, UiRegionSize.MinWeight)]
+    [InlineData(double.NaN, UiPanelPlacement.DefaultSize)]
+    [InlineData(1.5, 1.5)]
+    public void AnUnusableRegionWeight_IsClampedBackIntoTheUsableBand(
+        double stored, double expected)
+    {
+        var store = new InMemoryUiSettingsStore();
+        WorkspacePage page = new WorkspaceLayoutService(store).Page(Dashboard);
+
+        page.ResizeRegion(UiPanelRegion.Left, stored);
+
+        Assert.Equal(expected, page.RegionSize(UiPanelRegion.Left), 3);
+    }
+
+    [Fact]
+    public void ASavedLayoutHoldingASaturatedWeight_ComesBackUsable()
+    {
+        // Exactly what a live settings file was found holding after one
+        // splitter drag on the pre-fix build: the clamp ceiling itself, which
+        // left the rail owning the page and the centre on its minimum.
+        var store = new InMemoryUiSettingsStore
+        {
+            Settings = AppUiSettings.Default with
+            {
+                WorkspacePages = new[]
+                {
+                    new UiPageLayout(
+                        Dashboard,
+                        WorkspaceLayoutCatalog.DefaultPlacements(Dashboard),
+                        new[] { new UiRegionSize(UiPanelRegion.Left, 10.0) }),
+                },
+            },
+        };
+
+        WorkspacePage page = new WorkspaceLayoutService(store).Page(Dashboard);
+
+        Assert.Equal(
+            UiRegionSize.MaxWeight, page.RegionSize(UiPanelRegion.Left), 3);
+    }
+
+    [Fact]
+    public void ResettingOnePage_LeavesEveryOtherPageAlone()
+    {
+        var store = new InMemoryUiSettingsStore();
+        var service = new WorkspaceLayoutService(store);
+
+        WorkspacePage dashboard = service.Page(Dashboard);
+        WorkspacePage sync = service.Page(UiRailLayoutSettings.TabSync);
+
+        string dashboardPanel = WorkspaceLayoutCatalog.PanelsFor(Dashboard)[2].Key;
+        string syncPanel =
+            WorkspaceLayoutCatalog.PanelsFor(UiRailLayoutSettings.TabSync)[2].Key;
+
+        dashboard.MovePanel(dashboardPanel, UiPanelRegion.Left, int.MaxValue);
+        sync.MovePanel(syncPanel, UiPanelRegion.Right, int.MaxValue);
+        sync.SetHidden(syncPanel, true);
+        sync.ResizeRegion(UiPanelRegion.Right, 0.5);
+
+        dashboard.ResetPage();
+
+        Assert.Equal(
+            WorkspaceLayoutCatalog.DefaultPlacements(Dashboard),
+            dashboard.Placements);
+
+        // The other page keeps everything the user did to it.
+        UiPanelPlacement kept = Find(sync, syncPanel);
+        Assert.Equal(UiPanelRegion.Right, kept.Region);
+        Assert.True(kept.Hidden);
+        Assert.Equal(0.5, sync.RegionSize(UiPanelRegion.Right), 3);
+    }
+
+    [Fact]
+    public void EverySectionOnAPage_ComesBackAfterHidingAllOfThem()
+    {
+        // The state the rail's layout menu has to recover from: nothing left
+        // on the page to carry a per-section menu.
+        var store = new InMemoryUiSettingsStore();
+        WorkspacePage page = new WorkspaceLayoutService(store).Page(Dashboard);
+
+        foreach (WorkspacePanelDefinition definition in
+                 WorkspaceLayoutCatalog.PanelsFor(Dashboard))
+        {
+            page.SetHidden(definition.Key, true);
+        }
+
+        Assert.Contains(page.Placements, placement => placement.Hidden);
+
+        // What "Show all sections" does.
+        foreach (WorkspacePanelDefinition definition in
+                 WorkspaceLayoutCatalog.PanelsFor(Dashboard))
+        {
+            page.SetHidden(definition.Key, false);
+        }
+
+        Assert.DoesNotContain(page.Placements, placement => placement.Hidden);
+
+        // And it survives the restart, so recovery is not a session-only fix.
+        WorkspacePage restarted = new WorkspaceLayoutService(store).Page(Dashboard);
+        Assert.DoesNotContain(restarted.Placements, placement => placement.Hidden);
+    }
+
+    [Fact]
+    public void EveryPageWithAConfigurableLayout_IsAKnownRailTab()
+    {
+        // The rail's layout action is shown only for these pages, so the two
+        // lists have to agree or the button appears on a page it cannot serve.
+        foreach (string pageKey in WorkspaceLayoutCatalog.Pages)
+        {
+            Assert.True(
+                UiRailLayoutSettings.IsTabKey(pageKey),
+                $"{pageKey} has a layout but is not a rail tab.");
+            Assert.NotEmpty(WorkspaceLayoutCatalog.PanelsFor(pageKey));
+        }
+
+        // Settings has no movable sections, so the action must stay hidden there.
+        Assert.DoesNotContain(
+            UiRailLayoutSettings.TabSettings, WorkspaceLayoutCatalog.Pages);
+    }
+
     private static UiPanelPlacement Find(IWorkspaceLayoutPage page, string key) =>
         page.Placements.Single(placement =>
             string.Equals(placement.Key, key, StringComparison.Ordinal));

@@ -119,6 +119,7 @@
                             <DataGridTemplateColumn Header="Game"
                                                     Tag="game"
                                                     Width="140"
+                                                    MinWidth="140"
                                                     SortMemberPath="GameName">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate x:DataType="models:InstalledGameRowViewModel">
@@ -138,12 +139,14 @@
                                                 Tag="appId"
                                                 Binding="{Binding AppId}"
                                                 Width="80"
+                                                MinWidth="80"
                                                 Foreground="{DynamicResource MutedTextBrush}"
                                                 FontSize="{DynamicResource FontSizeBody}" />
 
                             <DataGridTemplateColumn Header="Install path"
                                                     Tag="installPath"
                                                     Width="160"
+                                                    MinWidth="160"
                                                     SortMemberPath="InstallPath">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate x:DataType="models:InstalledGameRowViewModel">
@@ -165,6 +168,7 @@
                             <DataGridTemplateColumn Header="Library"
                                                     Tag="library"
                                                     Width="115"
+                                                    MinWidth="115"
                                                     SortMemberPath="LibraryPath">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate x:DataType="models:InstalledGameRowViewModel">
@@ -182,6 +186,7 @@
                             <DataGridTemplateColumn Header="Approved"
                                                     Tag="approved"
                                                     Width="100"
+                                                    MinWidth="100"
                                                     SortMemberPath="ApprovedMappings">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate x:DataType="models:InstalledGameRowViewModel">
@@ -199,6 +204,7 @@
                             <DataGridTemplateColumn Header="Pending"
                                                     Tag="pending"
                                                     Width="95"
+                                                    MinWidth="95"
                                                     SortMemberPath="PendingMappings">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate x:DataType="models:InstalledGameRowViewModel">
@@ -216,6 +222,7 @@
                             <DataGridTemplateColumn Header="Needs fix"
                                                     Tag="needsFix"
                                                     Width="95"
+                                                    MinWidth="95"
                                                     SortMemberPath="NeedsFixMappings">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate x:DataType="models:InstalledGameRowViewModel">
@@ -233,6 +240,7 @@
                             <DataGridTemplateColumn Header="Exists"
                                                     Tag="exists"
                                                     Width="85"
+                                                    MinWidth="85"
                                                     SortMemberPath="SavePathExists">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate x:DataType="models:InstalledGameRowViewModel">
@@ -248,6 +256,7 @@
                             <DataGridTemplateColumn Header="Files"
                                                     Tag="files"
                                                     Width="85"
+                                                    MinWidth="85"
                                                     SortMemberPath="FileCount">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate x:DataType="models:InstalledGameRowViewModel">

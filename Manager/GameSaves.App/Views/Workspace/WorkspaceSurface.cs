@@ -45,12 +45,6 @@ namespace GameSaves.App.Views.Workspace
         /// </summary>
         private const double NarrowThreshold = 760;
 
-        /// <summary>
-        /// The gutter a scrolling region leaves for its scrollbar, so the bar
-        /// sits beside the cards rather than on top of them.
-        /// </summary>
-        private const double ScrollGutter = 14;
-
         public static readonly StyledProperty<IWorkspaceLayoutPage?> LayoutProperty =
             AvaloniaProperty.Register<WorkspaceSurface, IWorkspaceLayoutPage?>(nameof(Layout));
 
@@ -59,9 +53,19 @@ namespace GameSaves.App.Views.Workspace
             AvaloniaProperty.Register<WorkspaceSurface, int>(nameof(FlowColumns), 3);
 
         private readonly Grid _root = new();
+        private readonly ScrollViewer _pageScroll = new();
+        private readonly WorkspacePageHost _pageHost;
+        private readonly Panel _parked = new();
         private readonly WorkspaceDockOverlay _overlay = new();
         private readonly Dictionary<string, WorkspacePanel> _panelsByKey = new(StringComparer.Ordinal);
         private readonly HashSet<WorkspacePanel> _menuWired = new();
+
+        // The panels currently taking star space. Held so the page's minimum
+        // height can be probed with them pinned to their declared minimum.
+        private readonly List<WorkspacePanel> _fillPanels = new();
+        /// <summary>How many times one rebuild may re-run itself before giving up.</summary>
+        private const int RebuildPassLimit = 4;
+
         private bool _rebuilding;
 
         // Whether the side rails are currently folded into the centre column.
@@ -80,7 +84,25 @@ namespace GameSaves.App.Views.Workspace
             Panels.CollectionChanged += OnPanelsChanged;
 
             _overlay.IsVisible = false;
-            Children.Add(_root);
+
+            // One scroller for the whole page. The regions inside it do not
+            // scroll themselves, which is what keeps a section from hiding
+            // behind its own scrollbar three levels down.
+            _pageHost = new WorkspacePageHost(_fillPanels) { Child = _root };
+            _pageScroll.Content = _pageHost;
+            _pageScroll.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+            _pageScroll.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
+            _pageScroll.Classes.Add("pageScroll");
+
+            // Sections whose own bindings currently hide them are parked here
+            // rather than left with no parent. A detached panel inherits no
+            // DataContext, so its IsVisible binding stops evaluating and it
+            // reports itself visible again — which put an empty section back
+            // into a region and let that region keep a full column of the page.
+            _parked.IsVisible = false;
+
+            Children.Add(_pageScroll);
+            Children.Add(_parked);
             Children.Add(_overlay);
         }
 
@@ -118,6 +140,15 @@ namespace GameSaves.App.Views.Workspace
             Rebuild();
         }
 
+
+        protected override Size MeasureOverride(Size availableSize)
+        {
+            // The height the page should fill. Only a resize changes it, and a
+            // resize always measures the surface, so reading it here is enough.
+            _pageHost.ViewportHeight = availableSize.Height;
+            return base.MeasureOverride(availableSize);
+        }
+
         protected override Size ArrangeOverride(Size finalSize)
         {
             // The first rebuild happens before the surface has been measured, so
@@ -133,6 +164,123 @@ namespace GameSaves.App.Views.Workspace
             }
 
             return base.ArrangeOverride(finalSize);
+        }
+
+        /// <summary>
+        /// Sits between the page scroller and the page, and decides how tall
+        /// the page actually is.
+        ///
+        /// A ScrollViewer offers its content infinite height, and a Grid's star
+        /// rows measured against infinity behave like Auto rows — so the page
+        /// would be as tall as its content wanted, a table would grow to its
+        /// full row count, and the page would never simply fill the window.
+        ///
+        /// So the page is measured twice. The first pass asks what it needs at
+        /// minimum, with the filling panels pinned to their declared minimum so
+        /// a long table cannot make the page grow without bound. The second
+        /// gives it the greater of that minimum and the viewport: it fills the
+        /// window while it fits, and grows past it only when the panels' own
+        /// minimums no longer do — which is exactly when the scroller should
+        /// have something to scroll, and what stops a section being arranged
+        /// past the bottom of the window with no way to reach it.
+        ///
+        /// This lives in the content rather than in the surface because a
+        /// ScrollViewer is a measure boundary: content that grows on its own —
+        /// a card gaining a line when data loads — re-measures this host but
+        /// never reaches the surface, and a minimum computed up there would go
+        /// stale exactly when it mattered.
+        /// </summary>
+        private sealed class WorkspacePageHost : Decorator
+        {
+            private readonly IReadOnlyList<WorkspacePanel> _fills;
+            private double _width;
+            private double _height;
+
+            public WorkspacePageHost(IReadOnlyList<WorkspacePanel> fills) =>
+                _fills = fills;
+
+            /// <summary>The height the page should fill, set by the surface.</summary>
+            public double ViewportHeight { get; set; }
+
+            protected override Size MeasureOverride(Size availableSize)
+            {
+                if (Child is not { } child)
+                    return default;
+
+                _width = double.IsFinite(availableSize.Width) ? availableSize.Width : 0;
+                _height = PageHeight(child, _width);
+
+                child.Measure(new Size(_width, _height));
+                return new Size(_width, _height);
+            }
+
+            protected override Size ArrangeOverride(Size finalSize)
+            {
+                Child?.Arrange(new Rect(finalSize));
+
+                if (Child is not { } child)
+                    return finalSize;
+
+                // Content can grow at an unchanged window size — a card gaining
+                // lines when a preview fills in. A Grid clamps its own desired
+                // height to whatever it was measured against, so that growth
+                // never reaches this host as an invalidation: it is absorbed by
+                // squeezing the filling pane onto its minimum, and once that is
+                // spent the rest of the page is arranged past the bottom of the
+                // window with nothing able to scroll to it. Re-checking the
+                // minimum after the arrange is what turns the growth into a
+                // re-measure. It settles in one extra pass, because the next
+                // measure adopts the height this just computed.
+                double target = PageHeight(child, _width);
+
+                if (Math.Abs(target - _height) > 0.5)
+                    InvalidateMeasure();
+                else
+                    child.Measure(new Size(_width, _height));
+
+                return finalSize;
+            }
+
+            private double PageHeight(Control child, double width)
+            {
+                double viewport = double.IsFinite(ViewportHeight) && ViewportHeight > 0
+                    ? ViewportHeight
+                    : 0;
+
+                double height = Math.Max(viewport, Minimum(child, width));
+
+                return double.IsFinite(height) ? height : viewport;
+            }
+
+            // The height the page cannot go below. Filling panels are pinned to
+            // their declared minimum for the measure: left free they would
+            // report a table's full row count and the page would grow without
+            // bound instead of ever simply filling the window.
+            private double Minimum(Control child, double width)
+            {
+                // Snapshot: a rebuild reached from inside the measure would
+                // otherwise repopulate the live list and strand the panels
+                // pinned at their minimum for good.
+                WorkspacePanel[] fills = _fills.ToArray();
+                var restore = new double[fills.Length];
+
+                for (int index = 0; index < fills.Length; index++)
+                {
+                    restore[index] = fills[index].MaxHeight;
+                    fills[index].MaxHeight = fills[index].MinPanelHeight;
+                }
+
+                try
+                {
+                    child.Measure(new Size(width, double.PositiveInfinity));
+                    return child.DesiredSize.Height;
+                }
+                finally
+                {
+                    for (int index = 0; index < fills.Length; index++)
+                        fills[index].MaxHeight = restore[index];
+                }
+            }
         }
 
         private void AttachLayout(IWorkspaceLayoutPage? layout)
@@ -164,7 +312,11 @@ namespace GameSaves.App.Views.Workspace
                 // surface rebuilds rather than leaving a star-sized gap where
                 // the section would have been.
                 panel.GetObservable(IsVisibleProperty).Subscribe(
-                    new AnonymousObserver<bool>(_ => Rebuild()));
+                    new AnonymousObserver<bool>(_ =>
+                    {
+                        if (!_rebuilding)
+                            Rebuild();
+                    }));
 
                 // A panel's collapse state can also be driven from the page's
                 // own view model — the Sync sections bind theirs two-way to
@@ -251,14 +403,35 @@ namespace GameSaves.App.Views.Workspace
         /// </summary>
         private void Rebuild()
         {
-            if (_attachedLayout is null || Panels.Count == 0 || _rebuilding)
+            if (_attachedLayout is null || Panels.Count == 0)
+                return;
+
+            // Reparenting re-evaluates the bindings that decide whether a
+            // section is shown at all, so one pass can change the answer it was
+            // built from. A nested request is therefore folded into the pass
+            // already running rather than dropped — dropping it left the page
+            // rendering a region whose panels had all since become invisible:
+            // an empty rail still holding its share of the width, which is the
+            // blank half-page in the reports.
+            if (_rebuilding)
                 return;
 
             _rebuilding = true;
 
             try
             {
-                RebuildCore();
+                // Re-run only while the set of visible sections actually
+                // changed. Testing that, rather than "did anything ask again",
+                // matters because detaching a panel drops its DataContext and
+                // parking it restores it — so something always asks again, and
+                // a request-counting loop burned every pass on every rebuild.
+                // Bounded anyway: a binding that flipped on every pass would
+                // otherwise spin here instead of drawing anything at all.
+                for (int pass = 0; pass < RebuildPassLimit; pass++)
+                {
+                    if (!RebuildCore())
+                        break;
+                }
             }
             finally
             {
@@ -276,16 +449,56 @@ namespace GameSaves.App.Views.Workspace
         /// centre, and right rail. A page header dropped in the top band spans
         /// the page exactly as its card used to.
         /// </summary>
-        private void RebuildCore()
+        /// <returns>
+        /// True when reparenting changed which sections are visible, so the
+        /// page it just drew no longer matches the answer it was built from.
+        /// </returns>
+        private bool RebuildCore()
         {
             IndexPanels();
 
+            // Read before anything moves. A panel inherits its DataContext from
+            // its parent, so once it is detached its IsVisible binding stops
+            // evaluating and it reports itself visible again — which is how an
+            // empty section kept claiming a full column of the page.
+            var visible = new Dictionary<string, bool>(StringComparer.Ordinal);
+
             foreach (WorkspacePanel panel in Panels)
+                visible[panel.PanelKey] = panel.IsVisible;
+
+            // A panel that is staying in its own window must not be detached.
+            // SyncFloatingWindows only ever reparents into a window it has just
+            // created, so detaching one that was already floating left the
+            // panel in no visual tree at all: a blank floating window, no card
+            // on the page, and no way back except closing the window.
+            //
+            // The test is "still floating", not "currently in a window": a
+            // panel being docked back is leaving its window this pass and has
+            // to be released, or placing it into a region would hand a control
+            // that still has a visual parent to a second one.
+            var stayFloating = new HashSet<string>(StringComparer.Ordinal);
+
+            foreach (UiPanelPlacement placement in _attachedLayout!.Placements)
+            {
+                if (placement.IsFloating && !placement.Hidden)
+                    stayFloating.Add(placement.Key);
+            }
+
+            foreach (WorkspacePanel panel in Panels)
+            {
+                if (panel.Parent is WorkspaceFloatingWindow &&
+                    stayFloating.Contains(panel.PanelKey))
+                {
+                    continue;
+                }
+
                 Detach(panel);
+            }
 
             _root.Children.Clear();
             _root.ColumnDefinitions.Clear();
             _root.RowDefinitions.Clear();
+            _fillPanels.Clear();
 
             var byRegion = new Dictionary<string, List<WorkspacePanel>>(StringComparer.Ordinal);
 
@@ -296,9 +509,16 @@ namespace GameSaves.App.Views.Workspace
 
                 if (placement.Hidden ||
                     placement.Region == UiPanelRegion.Float ||
-                    known is null ||
-                    !known.IsVisible)
+                    known is null)
                 {
+                    continue;
+                }
+
+                // Not placed, but kept in a parented home so its bindings go on
+                // deciding whether it should come back.
+                if (!visible.GetValueOrDefault(placement.Key, true))
+                {
+                    _parked.Children.Add(known);
                     continue;
                 }
 
@@ -332,7 +552,12 @@ namespace GameSaves.App.Views.Workspace
                 AddAt(_root, BuildSplitter(GridResizeDirection.Rows, UiPanelRegion.Top), 1, 0);
             }
 
-            AddAt(_root, BuildBody(byRegion), 2, 0);
+            // A band's weight is measured against the body, so the body is the
+            // reference the root grid's splitters normalize against — the same
+            // role the centre column plays inside the body.
+            Control body = BuildBody(byRegion);
+            body.Tag = UiPanelRegion.Center;
+            AddAt(_root, body, 2, 0);
 
             if (hasBottom)
             {
@@ -341,6 +566,17 @@ namespace GameSaves.App.Views.Workspace
             }
 
             SyncFloatingWindows();
+
+            // Did placing the panels change the answer? Reparenting hands a
+            // panel its DataContext back, so a section whose own binding hides
+            // it only reports that once it is somewhere in the tree.
+            foreach (WorkspacePanel panel in Panels)
+            {
+                if (visible.GetValueOrDefault(panel.PanelKey, true) != panel.IsVisible)
+                    return true;
+            }
+
+            return false;
         }
 
         // Left rail, centre, right rail. The rails are full height between the
@@ -348,32 +584,85 @@ namespace GameSaves.App.Views.Workspace
         // like before the bands existed.
         private Control BuildBody(Dictionary<string, List<WorkspacePanel>> byRegion)
         {
-            bool hasLeft = byRegion.ContainsKey(UiPanelRegion.Left);
-            bool hasRight = byRegion.ContainsKey(UiPanelRegion.Right);
-
             var body = new Grid();
-            body.ColumnDefinitions.Add(RailColumn(hasLeft, UiPanelRegion.Left, byRegion));
-            body.ColumnDefinitions.Add(GapColumn(hasLeft));
-            body.ColumnDefinitions.Add(CentreColumn(byRegion));
-            body.ColumnDefinitions.Add(GapColumn(hasRight));
-            body.ColumnDefinitions.Add(RailColumn(hasRight, UiPanelRegion.Right, byRegion));
 
-            if (hasLeft)
+            // Only the regions that actually hold a panel become columns. An
+            // empty centre used to keep a full star column between the two
+            // rails, which is what left a third of the page blank whenever a
+            // user moved everything out to the sides.
+            var occupied = new List<string>();
+
+            foreach (string region in new[]
+                { UiPanelRegion.Left, UiPanelRegion.Center, UiPanelRegion.Right })
             {
-                AddAt(body, BuildRegion(UiPanelRegion.Left, byRegion[UiPanelRegion.Left]), 0, 0);
-                AddAt(body, BuildSplitter(GridResizeDirection.Columns, UiPanelRegion.Left), 0, 1);
+                if (byRegion.TryGetValue(region, out List<WorkspacePanel>? present) &&
+                    present.Count > 0)
+                {
+                    occupied.Add(region);
+                }
             }
 
-            if (byRegion.TryGetValue(UiPanelRegion.Center, out List<WorkspacePanel>? centre))
-                AddAt(body, BuildRegion(UiPanelRegion.Center, centre), 0, 2);
-
-            if (hasRight)
+            for (int index = 0; index < occupied.Count; index++)
             {
-                AddAt(body, BuildSplitter(GridResizeDirection.Columns, UiPanelRegion.Right), 0, 3);
-                AddAt(body, BuildRegion(UiPanelRegion.Right, byRegion[UiPanelRegion.Right]), 0, 4);
+                if (index > 0)
+                {
+                    body.ColumnDefinitions.Add(GapColumn(true));
+                    AddAt(
+                        body,
+                        BuildSplitter(
+                            GridResizeDirection.Columns, SplitterRegion(occupied, index)),
+                        0,
+                        body.ColumnDefinitions.Count - 1);
+                }
+
+                string region = occupied[index];
+                List<WorkspacePanel> panels = byRegion[region];
+
+                body.ColumnDefinitions.Add(BodyColumn(region, panels, occupied.Count));
+                AddAt(body, BuildRegion(region, panels), 0, body.ColumnDefinitions.Count - 1);
             }
 
             return body;
+        }
+
+        // Which region's stored weight a splitter writes. The centre is the
+        // reference every other weight is measured against, so a splitter that
+        // borders it persists the rail on the other side of itself.
+        private static string SplitterRegion(IReadOnlyList<string> occupied, int index) =>
+            occupied[index] == UiPanelRegion.Center ? occupied[index - 1] : occupied[index];
+
+        // A column's share of the body. The centre is the reference weight; a
+        // rail takes the share the layout stored for it.
+        private ColumnDefinition BodyColumn(
+            string region,
+            List<WorkspacePanel> panels,
+            int columnCount)
+        {
+            double weight = region == UiPanelRegion.Center
+                ? UiPanelPlacement.DefaultSize
+                : _attachedLayout!.RegionSize(region);
+
+            var column = new ColumnDefinition(new GridLength(weight, GridUnitType.Star))
+            {
+                MinWidth = panels.Max(panel => panel.MinPanelWidth),
+            };
+
+            // A rail's declared maximum only applies while another column can
+            // absorb the slack, and only when every panel in the rail declares
+            // one: Enumerable.Max skips NaN, so a rail holding one capped panel
+            // beside an uncapped one used to inherit the cap and strand the
+            // rest of the page as dead space.
+            if (region != UiPanelRegion.Center &&
+                columnCount > 1 &&
+                panels.All(panel => !double.IsNaN(panel.MaxPanelWidth)))
+            {
+                double max = panels.Max(panel => panel.MaxPanelWidth);
+
+                if (max > 0 && max >= column.MinWidth)
+                    column.MaxWidth = max;
+            }
+
+            return column;
         }
 
         // Narrow windows get one column: the rails' panels join the centre in
@@ -431,7 +720,7 @@ namespace GameSaves.App.Views.Workspace
                 if (run.Count == 0)
                     return;
 
-                AddGap(grid, resizable: false, panelKey: null, ref first);
+                AddGap(grid, resizable: false, panel: null, ref first);
                 grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
                 AddAt(grid, BuildFlowBlock(run), grid.RowDefinitions.Count - 1, 0);
                 run.Clear();
@@ -454,7 +743,7 @@ namespace GameSaves.App.Views.Workspace
                 // drag converts to a fixed height. Anything else gets the
                 // page's ordinary card gutter, because a drag handle that
                 // resizes nothing is a lie about what it does.
-                AddGap(grid, previousFills || previousIsRun, panel.PanelKey, ref first);
+                AddGap(grid, previousFills || previousIsRun, panel, ref first);
 
                 grid.RowDefinitions.Add(
                     new RowDefinition(new GridLength(SizeOf(panel), GridUnitType.Star))
@@ -462,6 +751,7 @@ namespace GameSaves.App.Views.Workspace
                         MinHeight = panel.MinPanelHeight,
                     });
                 AddAt(grid, panel, grid.RowDefinitions.Count - 1, 0);
+                _fillPanels.Add(panel);
                 previousFills = true;
                 previousIsRun = false;
             }
@@ -470,37 +760,17 @@ namespace GameSaves.App.Views.Workspace
 
             grid.Tag = region;
 
-            // A region that contains a filling panel is BOUNDED: the filling
-            // panel is the thing that absorbs the slack, and it needs a real
-            // height so a table inside it scrolls internally with its column
-            // headers pinned. Wrapping it in a scroller would measure it with
-            // unbounded height, the table would grow to its full content
-            // height, and both the pinned headers and the page's own scrolling
-            // would be lost. This is why the two pages that deliberately had no
-            // page-level scroller are the two whose panels fill.
-            if (panels.Any(FillsSpace))
-                return grid;
-
-            // A region of only content-height cards scrolls, which is the
-            // page-level scroller every stacked-card page already had. The
-            // right margin keeps the bar in the page gutter instead of over
-            // the cards.
-            grid.Margin = new Thickness(0, 0, ScrollGutter, 0);
-
-            var scroller = new ScrollViewer
-            {
-                Content = grid,
-                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            };
-            scroller.Classes.Add("pageScroll");
-
-            return scroller;
+            // A region never scrolls on its own any more. The page owns the
+            // vertical overflow (see UpdatePageMinimum), which is what stops a
+            // section ending up behind a scrollbar three levels down and lets
+            // a filling panel keep a real height so a table inside it scrolls
+            // internally with its column headers pinned.
+            return grid;
         }
 
         // The gutter or splitter between two blocks. Nothing is emitted before
         // the first block, so a region never opens with a stray gap.
-        private void AddGap(Grid grid, bool resizable, string? panelKey, ref bool first)
+        private void AddGap(Grid grid, bool resizable, WorkspacePanel? panel, ref bool first)
         {
             if (first)
             {
@@ -512,11 +782,11 @@ namespace GameSaves.App.Views.Workspace
                 new RowDefinition(new GridLength(
                     resizable ? SplitterExtent : PanelGutter)));
 
-            if (resizable && panelKey is not null)
+            if (resizable && panel is not null)
             {
                 AddAt(
                     grid,
-                    BuildPanelSplitter(GridResizeDirection.Rows, panelKey),
+                    BuildPanelSplitter(GridResizeDirection.Rows, panel),
                     grid.RowDefinitions.Count - 1,
                     0);
             }
@@ -571,148 +841,180 @@ namespace GameSaves.App.Views.Workspace
             };
         }
 
-        private ColumnDefinition RailColumn(
-            bool present,
-            string region,
-            Dictionary<string, List<WorkspacePanel>> byRegion)
-        {
-            if (!present)
-                return new ColumnDefinition(new GridLength(0));
-
-            List<WorkspacePanel> panels = byRegion[region];
-
-            var column = new ColumnDefinition(
-                new GridLength(_attachedLayout!.RegionSize(region), GridUnitType.Star))
-            {
-                MinWidth = panels.Max(panel => panel.MinPanelWidth),
-            };
-
-            // A rail that declares a maximum keeps it, so a wide window cannot
-            // stretch a form column past the measure it was designed for.
-            double max = panels.Max(panel => panel.MaxPanelWidth);
-
-            if (!double.IsNaN(max) && max > 0)
-                column.MaxWidth = max;
-
-            return column;
-        }
-
-        // The centre takes the slack, but never below the widest minimum its
-        // own panels declare — otherwise a splitter drag could squeeze the
-        // page's main pane to nothing.
-        private static ColumnDefinition CentreColumn(
-            Dictionary<string, List<WorkspacePanel>> byRegion)
-        {
-            var column = new ColumnDefinition(new GridLength(1, GridUnitType.Star));
-
-            if (byRegion.TryGetValue(UiPanelRegion.Center, out List<WorkspacePanel>? panels) &&
-                panels.Count > 0)
-            {
-                column.MinWidth = panels.Max(panel => panel.MinPanelWidth);
-            }
-
-            return column;
-        }
-
         private static ColumnDefinition GapColumn(bool present) =>
             new(new GridLength(present ? SplitterExtent : 0));
 
         private static RowDefinition GapRow(bool present) =>
             new(new GridLength(present ? SplitterExtent : 0));
 
-        // The app's existing splitter idiom: an 8px transparent grab strip with
-        // a 1px margin, so the gutter reads as space rather than a rule.
-        private GridSplitter BuildSplitter(GridResizeDirection direction, string region)
-        {
-            var splitter = new GridSplitter
+        // The app's splitter idiom: an 8px grab strip with a 1px breathing
+        // margin, so the gutter reads as space rather than as a rule. It
+        // carries the resize cursor for its direction; the hover tint and the
+        // focus ring come from the GridSplitter styles in Themes/Controls.axaml
+        // — which is why no Background is set here, since a local value would
+        // outrank those style triggers and neither would ever show.
+        private static GridSplitter NewSplitter(GridResizeDirection direction) =>
+            new()
             {
                 ResizeDirection = direction,
-                Background = Avalonia.Media.Brushes.Transparent,
                 Margin = direction == GridResizeDirection.Columns
                     ? new Thickness(1, 0)
                     : new Thickness(0, 1),
+                Cursor = new Cursor(direction == GridResizeDirection.Columns
+                    ? StandardCursorType.SizeWestEast
+                    : StandardCursorType.SizeNorthSouth),
             };
+
+        private GridSplitter BuildSplitter(GridResizeDirection direction, string region)
+        {
+            GridSplitter splitter = NewSplitter(direction);
 
             AutomationProperties.SetName(
                 splitter, $"Resize the {UiPanelRegion.DisplayName(region).ToLowerInvariant()} region");
 
-            splitter.DragCompleted += (_, _) => PersistRegionSize(splitter, direction, region);
-            return splitter;
-        }
-
-        private GridSplitter BuildPanelSplitter(GridResizeDirection direction, string panelKey)
-        {
-            var splitter = new GridSplitter
+            splitter.DragCompleted += (_, _) =>
             {
-                ResizeDirection = direction,
-                Background = Avalonia.Media.Brushes.Transparent,
-                Margin = direction == GridResizeDirection.Columns
-                    ? new Thickness(1, 0)
-                    : new Thickness(0, 1),
+                if (splitter.Parent is Grid grid)
+                    PersistRegionSizes(grid, direction);
             };
 
-            splitter.DragCompleted += (_, _) => PersistPanelSize(splitter, direction, panelKey);
             return splitter;
         }
 
-        // A splitter drag rewrites the grid definition's star value in place;
-        // reading it back after the drag is the only way to learn the ratio the
-        // user chose. Nothing is persisted mid-drag, so a cancelled drag leaves
-        // the saved layout untouched.
-        private void PersistRegionSize(
-            GridSplitter splitter,
+        private GridSplitter BuildPanelSplitter(
             GridResizeDirection direction,
-            string region)
+            WorkspacePanel panel)
         {
-            if (splitter.Parent is not Grid grid)
-                return;
+            GridSplitter splitter = NewSplitter(direction);
 
-            int index = direction == GridResizeDirection.Columns
-                ? Grid.GetColumn(splitter)
-                : Grid.GetRow(splitter);
+            AutomationProperties.SetName(
+                splitter,
+                string.IsNullOrEmpty(panel.Title)
+                    ? "Resize this section"
+                    : $"Resize {panel.Title}");
 
-            // The region definition is the one the splitter borders: the
-            // definition before it for left/top, after it for right/bottom.
-            bool leading = region is UiPanelRegion.Left or UiPanelRegion.Top;
-            int target = leading ? index - 1 : index + 1;
+            splitter.DragCompleted += (_, _) =>
+            {
+                if (splitter.Parent is Grid grid)
+                    PersistPanelSizes(grid);
+            };
 
-            if (target < 0)
-                return;
-
-            GridLength length = direction == GridResizeDirection.Columns
-                ? grid.ColumnDefinitions[target].Width
-                : grid.RowDefinitions[target].Height;
-
-            if (length.IsStar)
-                _attachedLayout?.ResizeRegion(region, length.Value);
+            return splitter;
         }
 
-        private void PersistPanelSize(
-            GridSplitter splitter,
-            GridResizeDirection direction,
-            string panelKey)
+        /// <summary>
+        /// Rewrites this grid's stored region weights after a drag.
+        ///
+        /// A <see cref="GridSplitter"/> resizes by writing the new *pixel*
+        /// extent into the bordering definitions as their star value, so the
+        /// number left behind is a measurement, not the ratio the layout
+        /// stores. Persisting it raw drove the weight straight to its clamp
+        /// ceiling on the very first drag — a live settings file showed
+        /// <c>history / left = 10</c> — after which the rail took the whole
+        /// page and the equality guard made every later drag a silent no-op.
+        ///
+        /// Every star definition in the grid is therefore re-expressed as a
+        /// ratio against the centre, which is what the weight means. Rewriting
+        /// all of them rather than only the two the splitter touched also stops
+        /// the untouched regions keeping stale weights on a different scale.
+        /// Nothing is written mid-drag, so a cancelled drag changes nothing.
+        ///
+        /// A band of content-height cards is an Auto row, and Avalonia resizes
+        /// an Auto definition by rewriting it in pixels rather than touching
+        /// the star beside it. There is no ratio to recover in that case, so
+        /// dragging the edge of such a band holds for the session and is not
+        /// persisted — the early return below is where that is decided.
+        /// </summary>
+        private void PersistRegionSizes(Grid grid, GridResizeDirection direction)
         {
-            if (splitter.Parent is not Grid grid)
+            if (_attachedLayout is null)
                 return;
 
-            int index = Grid.GetRow(splitter);
+            var weights = new Dictionary<string, double>(StringComparer.Ordinal);
+            double reference = 0;
 
-            foreach (int target in new[] { index - 1, index + 1 })
+            foreach (Control child in grid.Children.OfType<Control>())
             {
-                if (target < 0 || target >= grid.RowDefinitions.Count)
+                if (child.Tag is not string region || !UiPanelRegion.IsRegion(region))
                     continue;
 
-                Control? neighbour = grid.Children
-                    .OfType<Control>()
-                    .FirstOrDefault(child => Grid.GetRow(child) == target);
+                int index = direction == GridResizeDirection.Columns
+                    ? Grid.GetColumn(child)
+                    : Grid.GetRow(child);
 
-                if (neighbour is not WorkspacePanel panel)
+                GridLength length = direction == GridResizeDirection.Columns
+                    ? grid.ColumnDefinitions[index].Width
+                    : grid.RowDefinitions[index].Height;
+
+                if (!length.IsStar || length.Value <= 0)
                     continue;
 
-                GridLength length = grid.RowDefinitions[target].Height;
+                weights[region] = length.Value;
 
-                if (length.IsStar)
-                    _attachedLayout?.ResizePanel(panel.PanelKey, length.Value);
+                if (region == UiPanelRegion.Center)
+                    reference = length.Value;
+            }
+
+            if (weights.Count == 0)
+                return;
+
+            // A page with everything in the rails has no centre to measure
+            // against, so the largest share becomes the unit; the ratio
+            // between the rails is what the user actually set.
+            if (reference <= 0)
+                reference = weights.Values.Max();
+
+            foreach ((string region, double value) in weights)
+            {
+                if (region != UiPanelRegion.Center)
+                {
+                    _attachedLayout.ResizeRegion(
+                        region, UiPanelPlacement.WeightFromExtent(value, reference));
+                }
+            }
+        }
+
+        /// <summary>
+        /// The same correction for the panel weights inside one region. They
+        /// are normalized to a mean of one, so a region dragged repeatedly
+        /// keeps proportions that stay inside the stored range instead of
+        /// drifting to the clamp.
+        /// </summary>
+        private void PersistPanelSizes(Grid grid)
+        {
+            if (_attachedLayout is null)
+                return;
+
+            var sizes = new List<(string Key, double Value)>();
+
+            foreach (Control child in grid.Children.OfType<Control>())
+            {
+                if (child is not WorkspacePanel panel)
+                    continue;
+
+                GridLength length = grid.RowDefinitions[Grid.GetRow(child)].Height;
+
+                if (length.IsStar && length.Value > 0)
+                    sizes.Add((panel.PanelKey, length.Value));
+            }
+
+            // Fewer than two star rows means nothing was proportioned against
+            // anything: Avalonia resizes an Auto row against a star one by
+            // rewriting only the Auto side, so the star value is unchanged and
+            // normalising it against itself would silently reset a pane the
+            // user had sized to 1.0 — while still not persisting the drag.
+            if (sizes.Count < 2)
+                return;
+
+            double mean = sizes.Average(entry => entry.Value);
+
+            if (mean <= 0)
+                return;
+
+            foreach ((string key, double value) in sizes)
+            {
+                _attachedLayout.ResizePanel(
+                    key, UiPanelPlacement.WeightFromExtent(value, mean));
             }
         }
 
@@ -1046,3 +1348,4 @@ namespace GameSaves.App.Views.Workspace
         }
     }
 }
+

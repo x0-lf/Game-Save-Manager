@@ -127,6 +127,23 @@ namespace GameSaves.App.Services
                 NormalizeExtent(height));
         }
 
+        /// <summary>
+        /// A stored weight recovered from a splitter drag.
+        ///
+        /// A <see cref="Avalonia.Controls.GridSplitter"/> resizes by writing
+        /// the new pixel extent into the definition as its star value, so what
+        /// it leaves behind is a measurement and not the ratio this record
+        /// stores. Persisting that raw number drove the weight straight to
+        /// <see cref="MaxSize"/> on the first drag, after which the region took
+        /// the whole page and every later drag was a no-op. Dividing by the
+        /// reference definition's extent turns the measurement back into the
+        /// proportion the user actually chose.
+        /// </summary>
+        public static double WeightFromExtent(double extent, double reference) =>
+            double.IsFinite(extent) && double.IsFinite(reference) && reference > 0
+                ? NormalizeSize(extent / reference)
+                : DefaultSize;
+
         public static double NormalizeSize(double value) =>
             double.IsFinite(value) ? Math.Clamp(value, MinSize, MaxSize) : DefaultSize;
 
@@ -147,13 +164,34 @@ namespace GameSaves.App.Services
     /// </summary>
     public sealed record UiRegionSize(string Region, double Size)
     {
+        /// <summary>
+        /// Region weights get a tighter band than panel weights, because a
+        /// region weight is measured against the centre: at 3.0 the rail
+        /// already takes three quarters of the page, and past that the centre
+        /// collapses onto its minimum width and the rail owns the window.
+        ///
+        /// Restoring re-clamps rather than trusting the stored number, so a
+        /// layout written by a build that persisted raw splitter pixels — one
+        /// live settings file held <c>history / left = 10</c>, the clamp
+        /// ceiling itself — comes back usable instead of unusable.
+        /// </summary>
+        public const double MinWeight = 0.2;
+
+        /// <inheritdoc cref="MinWeight"/>
+        public const double MaxWeight = 3.0;
+
+        public static double NormalizeWeight(double value) =>
+            double.IsFinite(value)
+                ? Math.Clamp(value, MinWeight, MaxWeight)
+                : UiPanelPlacement.DefaultSize;
+
         public static UiRegionSize? TryCreate(string? region, double size)
         {
             // Floating panels have no region extent to remember.
             if (!UiPanelRegion.IsRegion(region) || region == UiPanelRegion.Float)
                 return null;
 
-            return new UiRegionSize(region!, UiPanelPlacement.NormalizeSize(size));
+            return new UiRegionSize(region!, NormalizeWeight(size));
         }
 
         public static IReadOnlyList<UiRegionSize> NormalizeList(

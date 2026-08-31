@@ -54,8 +54,16 @@ namespace GameSaves.UiCapture
             ("wide", 1400, 900),
         };
 
+        // Set by the "layout" argument: capture only the workspace-layout
+        // acceptance matrix, so a layout change can be reviewed without
+        // rewriting the product-look captures the rest of this harness owns.
+        private static bool _layoutOnly;
+
         public static int Main(string[] args)
         {
+            _layoutOnly = args.Length > 1 &&
+                string.Equals(args[1], "layout", StringComparison.OrdinalIgnoreCase);
+
             string outputDirectory = args.Length > 0
                 ? args[0]
                 : Path.Combine("artifacts", "ui-captures");
@@ -160,6 +168,21 @@ namespace GameSaves.UiCapture
                 .First();
 
             int written = 0;
+
+            if (_layoutOnly)
+            {
+                // The table acceptance cases are about columns, so the layout
+                // sweep runs against populated rows rather than an empty state.
+                PopulateInstalledGames(viewModel.InstalledGames);
+                viewModel.IsSteamMissing = false;
+
+                return LayoutSweep.Run(
+                    window,
+                    tabs,
+                    viewModel,
+                    outputDirectory,
+                    name => Shot(window, outputDirectory, name));
+            }
 
             foreach (ThemeVariant theme in new[]
                 { ThemeVariant.Light, ThemeVariant.Dark })

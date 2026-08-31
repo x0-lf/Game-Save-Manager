@@ -236,6 +236,27 @@
 						           VerticalAlignment="Center" />
 					</StackPanel>
 				</Button>
+
+				<!-- The page's own layout menu. It belongs on the rail rather
+				     than on the page because a page whose sections are all
+				     hidden has no panel headers left to carry it, and because
+				     the rail keeps it reachable when docked left, right or
+				     top and while collapsed to glyphs. Code-behind hides it
+				     on pages that have no configurable layout. -->
+				<Button x:Name="RailLayoutButton"
+				        Classes="railChrome"
+				        Click="OnRailLayoutClicked"
+				        AutomationProperties.Name="Page layout"
+				        AutomationProperties.HelpText="Show hidden sections on this page, or reset the page layout"
+				        ToolTip.Tip="Page layout — show hidden sections or reset this page">
+					<StackPanel Orientation="Horizontal" Spacing="6">
+						<TextBlock Text="&#xE8A9;" Classes="railChromeGlyph" />
+						<TextBlock Text="Layout"
+						           Classes="railChromeLabel"
+						           Foreground="{DynamicResource SecondaryTextBrush}"
+						           VerticalAlignment="Center" />
+					</StackPanel>
+				</Button>
 			</StackPanel>
 
 			<TabControl Grid.Row="1"

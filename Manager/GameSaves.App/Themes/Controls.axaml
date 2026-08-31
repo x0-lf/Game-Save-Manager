@@ -438,4 +438,21 @@
         <Setter Property="Background" Value="{DynamicResource AccentSelectionTintBrush}" />
     </Style>
 
+    <!-- The drag handle between two docked workspace panels. At rest it is the
+         page's ordinary gutter, so a page still reads as cards separated by
+         space rather than as a grid of rules. Pointing at it paints the app's
+         splitter colour, which is what makes the handle discoverable without
+         putting permanent furniture between every pair of sections; keyboard
+         focus uses the accent, matching every other focus ring here. The
+         workspace surface sets the matching resize cursor. -->
+    <Style Selector="GridSplitter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="GridSplitter:pointerover">
+        <Setter Property="Background" Value="{DynamicResource SplitterBrush}" />
+    </Style>
+    <Style Selector="GridSplitter:focus-visible">
+        <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+    </Style>
+
 </Styles>

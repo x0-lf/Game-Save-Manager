@@ -248,7 +248,7 @@ namespace GameSaves.App.Services
             if (!UiPanelRegion.IsRegion(region) || region == UiPanelRegion.Float)
                 return;
 
-            double normalized = UiPanelPlacement.NormalizeSize(size);
+            double normalized = UiRegionSize.NormalizeWeight(size);
 
             if (_regionSizes.TryGetValue(region, out double current) &&
                 Math.Abs(current - normalized) < 0.001)
@@ -288,8 +288,12 @@ namespace GameSaves.App.Services
             if (saved is null)
                 return;
 
+            // Re-clamped on the way in, not trusted. A layout can arrive from
+            // the settings file, an import, or a record built by another build,
+            // and only this path is common to all three — so an unusable weight
+            // is corrected here however it was produced.
             foreach (UiRegionSize region in saved.Regions)
-                _regionSizes[region.Region] = region.Size;
+                _regionSizes[region.Region] = UiRegionSize.NormalizeWeight(region.Size);
         }
 
         private UiPanelPlacement? Find(string panelKey) =>

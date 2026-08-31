@@ -86,6 +86,11 @@ namespace GameSaves.App.Views
             foreach (KeyBinding binding in KeyBindings)
                 binding.Command = binding.CommandParameter is null ? openSettings : selectTab;
 
+            // The rail's layout action belongs to whichever page is selected,
+            // so it follows the selection rather than being wired once.
+            MainNavigation.SelectionChanged += (_, _) => UpdateRailLayoutButton();
+            UpdateRailLayoutButton();
+
             // Shift+F10 / Menu key on a focused tab opens its context menu,
             // so the detach action is reachable without a mouse.
             MainNavigation.AddHandler(
@@ -163,21 +168,34 @@ namespace GameSaves.App.Views
                 .FirstOrDefault(pair => ReferenceEquals(pair.Value, tab))
                 .Key;
 
-            IReadOnlyList<WorkspacePanelDefinition> definitions = tabKey is null
-                ? Array.Empty<WorkspacePanelDefinition>()
-                : WorkspaceLayoutCatalog.PanelsFor(tabKey)
-                    .Where(definition => definition.CanHide)
-                    .ToArray();
+            IReadOnlyList<Control> items = BuildSectionItems(tabKey, viewModel);
 
             // A page with nothing hideable gets a disabled entry rather than an
             // empty submenu that looks broken.
-            sections.IsEnabled = definitions.Count > 0;
+            sections.IsEnabled = items.Count > 0;
+            sections.ItemsSource = items.Count > 0 ? items : null;
+        }
 
-            if (definitions.Count == 0 || tabKey is null)
-            {
-                sections.ItemsSource = null;
-                return;
-            }
+        /// <summary>
+        /// One checked row per hideable section on a page, writing straight
+        /// through to that page's live layout. Shared by the rail's layout menu
+        /// and the rail tab's context menu, so the two routes into section
+        /// visibility can never drift into offering different sections.
+        /// </summary>
+        private IReadOnlyList<Control> BuildSectionItems(
+            string? tabKey,
+            MainWindowViewModel viewModel)
+        {
+            if (tabKey is null)
+                return Array.Empty<Control>();
+
+            IReadOnlyList<WorkspacePanelDefinition> definitions =
+                WorkspaceLayoutCatalog.PanelsFor(tabKey)
+                    .Where(definition => definition.CanHide)
+                    .ToArray();
+
+            if (definitions.Count == 0)
+                return Array.Empty<Control>();
 
             IWorkspaceLayoutPage layout = viewModel.WorkspacePageFor(tabKey);
             var items = new List<Control>();
@@ -202,13 +220,82 @@ namespace GameSaves.App.Views
                 string key = definition.Key;
                 bool showing = !hidden;
                 item.Click += (_, _) => layout.SetHidden(key, showing);
+
+                // The row toggles, so it must announce what it will do rather
+                // than always claiming to show the section.
                 AutomationProperties.SetName(
-                    item, $"Show the {definition.Title} section");
+                    item,
+                    showing
+                        ? $"Hide the {definition.Title} section"
+                        : $"Show the {definition.Title} section");
                 items.Add(item);
             }
 
-            sections.ItemsSource = items;
+            return items;
         }
+
+        /// <summary>
+        /// The page-level layout menu, opened from the navigation rail.
+        ///
+        /// This is the only route into a page whose sections are all hidden:
+        /// the per-section menus live on panel headers, and in that state there
+        /// are no headers left. Living on the rail also means it keeps working
+        /// with the rail docked left, right, or top, and while the rail is
+        /// collapsed to glyphs.
+        /// </summary>
+        private void OnRailLayoutClicked(object? sender, RoutedEventArgs e)
+        {
+            if (sender is not Control target ||
+                DataContext is not MainWindowViewModel viewModel ||
+                SelectedTabKey() is not { } tabKey ||
+                !WorkspaceLayoutCatalog.Pages.Contains(tabKey))
+            {
+                return;
+            }
+
+            IWorkspaceLayoutPage layout = viewModel.WorkspacePageFor(tabKey);
+
+            var reset = new MenuItem { Header = "Reset this page layout" };
+            reset.Click += (_, _) => layout.ResetPage();
+            AutomationProperties.SetName(
+                reset, "Reset this page's layout to the default arrangement");
+
+            var items = new List<Control> { reset };
+            IReadOnlyList<Control> sections = BuildSectionItems(tabKey, viewModel);
+
+            if (sections.Count > 0)
+            {
+                var showAll = new MenuItem { Header = "Show all sections" };
+                showAll.Click += (_, _) =>
+                {
+                    foreach (WorkspacePanelDefinition definition in
+                        WorkspaceLayoutCatalog.PanelsFor(tabKey))
+                    {
+                        layout.SetHidden(definition.Key, false);
+                    }
+                };
+                AutomationProperties.SetName(
+                    showAll, "Show every section on this page");
+
+                items.Add(showAll);
+                items.Add(new Separator());
+                items.AddRange(sections);
+            }
+
+            new MenuFlyout { ItemsSource = items }.ShowAt(target);
+        }
+
+        private string? SelectedTabKey() =>
+            _tabsByKey
+                .FirstOrDefault(pair =>
+                    ReferenceEquals(pair.Value, MainNavigation.SelectedItem))
+                .Key;
+
+        // Hidden on a page with no configurable layout, so the rail never
+        // offers an action that would do nothing.
+        private void UpdateRailLayoutButton() =>
+            RailLayoutButton.IsVisible =
+                SelectedTabKey() is { } key && WorkspaceLayoutCatalog.Pages.Contains(key);
 
         // Context-menu path for detach (right-click or Shift+F10 on a tab).
         // The menu item lives in a popup, so the tab is resolved through the
