@@ -84,16 +84,17 @@ Complete commands and environment-specific limitations are in the
 ## Disclaimer
 
 This software is provided without warranty under the [MIT License](LICENSE).
-Save formats, Steam layouts, provider behavior, and third-party services can
-change. Review every preview and keep independent backups.
+Save formats, Steam layouts, provider behavior, and third-party software and 
+dependencies used by this project remain under their
+own licenses. Review every preview and keep independent backups.
 
-This project contains a combination of developer-written code and AI-assisted
-contributions. Primarily tests and the UI screenshot harness, and selected implementation tasks.
+This project contains a combination of developer-written code and AI-assisted contributions.
+Primarily tests and the UI screenshot harness, and selected implementation tasks.
+
 In some cases, AI-generated code may not represent the most optimized or ideal solution and
 has been integrated in its current form for development and evaluation purposes.
 All AI-assisted changes are reviewed and verified before being committed.
-Additional code audits, testing, optimization, and refactoring are planned
-before release. The current version should be considered an experimental,
-early-alpha release of Game Save Manager. Features, behavior, and internal
-implementation details may change significantly before the planned public
-release later this year.
+Additional code audits, testing, optimization, and refactoring are planned before release. 
+
+The current version should be considered an experimental, early-alpha release of Game Save Manager.
+Features, behavior, and internal implementation details may change significantly before the planned public release later this year.
