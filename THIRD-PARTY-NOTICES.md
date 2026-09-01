@@ -30,7 +30,7 @@ dependencies are added, removed, or upgraded.
 | Microsoft.Data.Sqlite | 10.0.10 | MIT | SQLite ADO.NET provider. |
 | SQLitePCLRaw.bundle_e_sqlite3 | 2.1.12 | Apache-2.0 | Explicit native SQLite bundle constraint used by the projects that directly own SQLite initialization. |
 | System.Security.Cryptography.ProtectedData | 10.0.0 | MIT | Windows DPAPI access for current-user secret protection. |
-| ValveKeyValue | 0.20.0.417 | MIT | Selected .NET 8-compatible KeyValues1 parser used for Steam VDF files; referenced only by Infrastructure. |
+| ValveKeyValue | 0.20.0.417 | MIT | KeyValues1 parser used for Steam VDF files; referenced only by Infrastructure. |
 | SSH.NET | 2026.0.0 | MIT | SFTP/SSH client used by the SFTP sync provider. |
 | Microsoft.NET.Test.Sdk | 17.14.1 | MIT | .NET test host and discovery support; test project only. |
 | xunit | 2.9.3 | Apache-2.0 | Regression test framework; test project only. |
@@ -65,8 +65,9 @@ CommunityToolkit.Mvvm is used for the MVVM application structure, including:
 library. `Google.Apis.Auth` provides OAuth 2.0 authorization and credential
 primitives for the official Google API Client Library for .NET. Both packages
 are referenced only by `GameSaves.Infrastructure`; no Google SDK type is part
-of Core or App APIs, and adding these packages does not implement Google Drive
-sync or OAuth login.
+of Core or App APIs. They implement Google Drive OAuth and backup-run sync
+inside Infrastructure; provider behavior and limits are documented in
+`docs/sync-providers.md`.
 
 Official project and package information:
 
@@ -115,7 +116,7 @@ Core and App do not reference DPAPI types.
 
 ### ValveKeyValue
 
-`ValveKeyValue` 0.20.0.417 is the selected .NET 8-compatible release used to
+`ValveKeyValue` 0.20.0.417 is used to
 parse Steam KeyValues1 library and application-manifest data. The package is
 licensed under MIT according to its official package metadata and is referenced
 only by `GameSaves.Infrastructure`. The CLI consumes provider-neutral Steam

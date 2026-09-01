@@ -2,7 +2,7 @@
 
 This guide explains how to use the internal PCGamingWiki mapping reviewer.
 
-The reviewer is a developer-only Windows Forms tool used to review save-path mappings created by the PCGamingWiki harvester.
+The reviewer is a developer-only Avalonia tool used to review save-path mappings created by the PCGamingWiki harvester.
 
 Normal users should not need this tool. Normal users should use the prepared reviewed database and the normal commands:
 
@@ -73,7 +73,7 @@ This keeps the internal curation tool separate from the main end-user save manag
 By default, the reviewer opens:
 
 ```text
-C:\Users\<YourUser>\AppData\Local\GameSave\gamesave.db
+%LOCALAPPDATA%\GameSave\gamesave.db
 ```
 
 This is the same SQLite database used by the main `GameSaves` CLI.
@@ -81,24 +81,23 @@ This is the same SQLite database used by the main `GameSaves` CLI.
 You can also pass a database path manually:
 
 ```powershell
-dotnet run -- "C:\Users\MikeAbrams\AppData\Local\GameSave\gamesave.db"
+dotnet run --project Manager/GameSaves.Reviewer/GameSaves.Reviewer.csproj -- "$env:LOCALAPPDATA\GameSave\gamesave.db"
 ```
 
 ---
 
 ## Run the reviewer
 
-From the reviewer project folder:
+From the repository root:
 
 ```powershell
-cd C:\Users\MikeAbrams\Documents\Game-Save-Manager\Manager\GameSaves.Reviewer
-dotnet run
+dotnet run --project Manager/GameSaves.Reviewer/GameSaves.Reviewer.csproj
 ```
 
 Or run with an explicit database path:
 
 ```powershell
-dotnet run -- "C:\Users\MikeAbrams\AppData\Local\GameSave\gamesave.db"
+dotnet run --project Manager/GameSaves.Reviewer/GameSaves.Reviewer.csproj -- "$env:LOCALAPPDATA\GameSave\gamesave.db"
 ```
 
 ---
@@ -374,11 +373,10 @@ These may be config/cache data rather than save data.
 
 ## After approving mappings
 
-Run verification from the main project:
+Run verification from the repository root:
 
 ```powershell
-cd C:\Users\MikeAbrams\Documents\Game-Save-Manager\Manager\GameSaves
-dotnet run -- verify
+dotnet run --project Manager/GameSaves/GameSaves.csproj -- verify
 ```
 
 The verifier only checks mappings for installed Steam games.

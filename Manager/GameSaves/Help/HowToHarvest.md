@@ -106,7 +106,7 @@ Stores extracted save-path candidates in the same JSON format used by the save-p
 The SQLite database is stored at:
 
 ```text
-C:\Users\<YourUser>\AppData\Local\GameSave\gamesave.db
+%LOCALAPPDATA%\GameSave\gamesave.db
 ```
 
 The harvester writes to these tables:
@@ -145,7 +145,7 @@ clientname/version (contact URL; contact email) framework/version
 Example:
 
 ```text
-SaveGameManager/0.1 (https://github.com/user; user@mail.com) .NET/10.0
+SaveGameManager/0.1 (https://github.com/example; developer@example.invalid) .NET/10.0
 ```
 
 Avoid generic User-Agents.
@@ -153,7 +153,7 @@ Avoid generic User-Agents.
 Good:
 
 ```text
-SaveGameManager/0.1 (https://github.com/user; user@mail.com) .NET/10.0
+SaveGameManager/0.1 (https://github.com/example; developer@example.invalid) .NET/10.0
 ```
 
 Bad:
@@ -181,7 +181,7 @@ SaveGameManager
 Run this from the project folder containing the `.csproj` file:
 
 ```bash
-dotnet run -- pcgw-harvest-appids External/Titles "SaveGameManager/0.1 (https://github.com/user; user@mail.com) .NET/10.0" 674020
+dotnet run -- pcgw-harvest-appids External/Titles "SaveGameManager/0.1 (https://github.com/example; developer@example.invalid) .NET/10.0" 674020
 ```
 
 Expected successful output:
@@ -207,7 +207,7 @@ If `Mappings extracted` is `0`, the page may still have useful data, but the ext
 You can pass multiple AppIDs:
 
 ```bash
-dotnet run -- pcgw-harvest-appids External/Titles "SaveGameManager/0.1 (https://github.com/user; user@mail.com) .NET/10.0" 413150 674020 1245620
+dotnet run -- pcgw-harvest-appids External/Titles "SaveGameManager/0.1 (https://github.com/example; developer@example.invalid) .NET/10.0" 413150 674020 1245620
 ```
 
 This will process each AppID one by one.
@@ -234,7 +234,7 @@ Example:
 Then run:
 
 ```bash
-dotnet run -- pcgw-harvest-appids External/Titles "SaveGameManager/0.1 (https://github.com/user; user@mail.com) .NET/10.0" appids.txt
+dotnet run -- pcgw-harvest-appids External/Titles "SaveGameManager/0.1 (https://github.com/example; developer@example.invalid) .NET/10.0" appids.txt
 ```
 
 The command also accepts comma-separated or space-separated values.
@@ -252,7 +252,7 @@ Example:
 This command first discovers installed Steam games locally, then harvests PCGamingWiki data for those installed AppIDs:
 
 ```bash
-dotnet run -- pcgw-harvest-installed External/Titles "SaveGameManager/0.1 (https://github.com/user; user@mail.com) .NET/10.0" 10
+dotnet run -- pcgw-harvest-installed External/Titles "SaveGameManager/0.1 (https://github.com/example; developer@example.invalid) .NET/10.0" 10
 ```
 
 The last argument limits the number of installed games to harvest.
@@ -276,25 +276,25 @@ Start small.
 First test one known AppID:
 
 ```bash
-dotnet run -- pcgw-harvest-appids External/Titles "SaveGameManager/0.1 (https://github.com/user; user@mail.com) .NET/10.0" 674020
+dotnet run -- pcgw-harvest-appids External/Titles "SaveGameManager/0.1 (https://github.com/example; developer@example.invalid) .NET/10.0" 674020
 ```
 
 Then test a few AppIDs:
 
 ```bash
-dotnet run -- pcgw-harvest-appids External/Titles "SaveGameManager/0.1 (https://github.com/user; user@mail.com) .NET/10.0" 413150 674020 1245620
+dotnet run -- pcgw-harvest-appids External/Titles "SaveGameManager/0.1 (https://github.com/example; developer@example.invalid) .NET/10.0" 413150 674020 1245620
 ```
 
 Then test installed games:
 
 ```bash
-dotnet run -- pcgw-harvest-installed External/Titles "SaveGameManager/0.1 (https://github.com/user; user@mail.com) .NET/10.0" 10
+dotnet run -- pcgw-harvest-installed External/Titles "SaveGameManager/0.1 (https://github.com/example; developer@example.invalid) .NET/10.0" 10
 ```
 
 Then test a file:
 
 ```bash
-dotnet run -- pcgw-harvest-appids External/Titles "SaveGameManager/0.1 (https://github.com/user; user@mail.com) .NET/10.0" appids.txt
+dotnet run -- pcgw-harvest-appids External/Titles "SaveGameManager/0.1 (https://github.com/example; developer@example.invalid) .NET/10.0" appids.txt
 ```
 
 Do not start with thousands of AppIDs until the small tests produce correct output.
@@ -534,7 +534,7 @@ If `enabled = 0`, review and enable the mapping manually.
 Check that you are using the same Windows user account and database path:
 
 ```text
-C:\Users\<YourUser>\AppData\Local\GameSave\gamesave.db
+%LOCALAPPDATA%\GameSave\gamesave.db
 ```
 
 Also check that `Mappings extracted` was greater than zero.
@@ -619,25 +619,25 @@ Do not jump directly to a full PCGamingWiki-scale harvest until:
 Harvest one AppID:
 
 ```bash
-dotnet run -- pcgw-harvest-appids External/Titles "SaveGameManager/0.1 (https://github.com/user; user@mail.com) .NET/10.0" 674020
+dotnet run -- pcgw-harvest-appids External/Titles "SaveGameManager/0.1 (https://github.com/example; developer@example.invalid) .NET/10.0" 674020
 ```
 
 Harvest multiple AppIDs:
 
 ```bash
-dotnet run -- pcgw-harvest-appids External/Titles "SaveGameManager/0.1 (https://github.com/user; user@mail.com) .NET/10.0" 413150 674020 1245620
+dotnet run -- pcgw-harvest-appids External/Titles "SaveGameManager/0.1 (https://github.com/example; developer@example.invalid) .NET/10.0" 413150 674020 1245620
 ```
 
 Harvest from file:
 
 ```bash
-dotnet run -- pcgw-harvest-appids External/Titles "SaveGameManager/0.1 (https://github.com/user; user@mail.com) .NET/10.0" appids.txt
+dotnet run -- pcgw-harvest-appids External/Titles "SaveGameManager/0.1 (https://github.com/example; developer@example.invalid) .NET/10.0" appids.txt
 ```
 
 Harvest installed games:
 
 ```bash
-dotnet run -- pcgw-harvest-installed External/Titles "SaveGameManager/0.1 (https://github.com/user; user@mail.com) .NET/10.0" 10
+dotnet run -- pcgw-harvest-installed External/Titles "SaveGameManager/0.1 (https://github.com/example; developer@example.invalid) .NET/10.0" 10
 ```
 
 Review extracted mappings:

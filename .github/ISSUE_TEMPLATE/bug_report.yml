@@ -49,7 +49,7 @@ body:
         - Desktop application
         - Steam discovery or profiles
         - Save-path mappings
-        - Transfer preview or execution
+        - Transfer profiles preview or execution
         - Manual backup, restore, or cleanup
         - Local Folder synchronization
         - SFTP synchronization
@@ -118,4 +118,3 @@ body:
     attributes:
       label: Additional context
       description: Add any other relevant, non-sensitive information or sanitized screenshots.
-

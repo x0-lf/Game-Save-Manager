@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thank you for proposing an improvement. Review the current roadmap in `README.md` before submitting. A proposal does not authorize implementation of a later milestone or weakening of a safety invariant.
+        Thank you for proposing an improvement. Review the current roadmap in `docs/ROADMAP.md` before submitting. Historical milestone files do not define current status. A proposal does not authorize implementation or weakening of a safety invariant.
 
   - type: checkboxes
     id: preflight
@@ -34,6 +34,7 @@ body:
         - Local Folder provider
         - SFTP provider
         - Google Drive provider
+        - WebDAV or OneDrive provider
         - CLI or harvesting tools
         - Mapping Reviewer
         - Database, migration, or secret storage
@@ -91,4 +92,3 @@ body:
     attributes:
       label: Additional context
       description: Add relevant non-sensitive examples, mockups, or links.
-

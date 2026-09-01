@@ -4,7 +4,9 @@ Describe the problem, the intended outcome, and the implementation at a reviewab
 
 ## Related issue or roadmap scope
 
-Link the issue or identify the exact roadmap milestone/slice. State important behavior that deliberately remains out of scope.
+Link the issue or identify the exact ID in `docs/ROADMAP.md`. State important
+behavior that deliberately remains out of scope. Historical milestone files do
+not authorize or complete current work.
 
 ## Type of change
 
@@ -24,7 +26,7 @@ Identify the affected projects and explain why each change belongs there. Confir
 - [ ] Preview and explicit-confirmation behavior remains intact where applicable.
 - [ ] No live save, backup-run, remote object, or credential can be silently deleted, moved, truncated, or overwritten.
 - [ ] Path containment and create-only backup-content rules remain intact.
-- [ ] Unavailable providers cannot silently fall back or become enabled prematurely.
+- [ ] Unavailable providers cannot silently fall back, and implemented providers retain their documented limits.
 - [ ] Cancellation, concurrency, and stale asynchronous results were considered.
 - [ ] Logs, errors, tests, screenshots, and fixtures contain no credentials or personal data.
 - [ ] The final diff contains no local database, downloaded credentials, tokens, private paths, or generated artifacts.
@@ -49,8 +51,9 @@ Describe manual scenarios completed with sanitized test data. Explicitly identif
 
 ## Documentation, persistence, and dependencies
 
-- [ ] User-facing and developer documentation is updated.
-- [ ] Roadmap checkboxes accurately represent completed and verified work.
+- [ ] The authoritative user-facing and developer guides are updated.
+- [ ] Provider behavior changes update `docs/sync-providers.md` and its Definition of Done evidence.
+- [ ] Roadmap entries accurately represent completed and verified work.
 - [ ] Schema, migration, and serialization effects are documented and tested.
 - [ ] New or changed packages are justified and `THIRD-PARTY-NOTICES.md` is current.
 - [ ] No documentation, persistence, or dependency change is required.

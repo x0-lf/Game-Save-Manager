@@ -16,7 +16,8 @@ This project can read and copy live save data, maintain backup history, store pr
 
 Before submitting a change:
 
-- read the [Code of Conduct](CODE_OF_CONDUCT.md) and the relevant sections of the [README](README.md);
+- read the [Code of Conduct](CODE_OF_CONDUCT.md), the
+  [documentation hub](docs/README.md), and the authoritative guide for the change;
 - keep the change focused on one problem or roadmap milestone;
 - preserve the repository's architectural and data-safety boundaries;
 - add deterministic regression tests for changed behavior;
@@ -132,8 +133,9 @@ The main solution is `Manager/Manager.sln`.
 | `Manager/GameSaves.App` | Main Avalonia desktop application, view models, views, and application composition. |
 | `Manager/GameSaves` | Developer CLI for discovery, verification, catalog maintenance, backup testing, and harvesting workflows. |
 | `Manager/GameSaves.Reviewer` | Internal Avalonia tool for reviewing harvested save-path candidates before they are trusted. |
-| `Manager/GameSaves.Tests` | xUnit regression suite covering Core, Infrastructure, App view models, boundaries, and safety behavior. |
-| `docs` | Provider architecture and developer configuration documentation. |
+| `Manager/GameSaves.Tests` | xUnit regression suite covering Core, Infrastructure, CLI, App view models, boundaries, and safety behavior. |
+| `Manager/GameSaves.UiCapture` | Development-only headless UI capture and layout/rail acceptance harness. |
+| `docs` | Current audience-specific guides, roadmap, and labelled historical evidence. |
 | `THIRD-PARTY-NOTICES.md` | Dependency inventory, purpose, version, and license information. |
 
 Do not create another application, test utility, credential manager, or token store when an existing project or abstraction already owns that responsibility.
@@ -203,7 +205,9 @@ Any proposal to change these rules requires explicit maintainer discussion, dedi
 
 ## Roadmap and scope discipline
 
-The roadmap in the README defines both work to perform and work that must remain out of scope. When implementing a milestone or slice:
+The [current roadmap](docs/ROADMAP.md) defines work to perform and work that
+must remain out of scope. Historical milestone files cannot change its status.
+When implementing an item or slice:
 
 - inspect the current implementation and latest relevant commits first;
 - preserve completed milestone behavior;
@@ -282,7 +286,7 @@ dotnet test Manager/Manager.sln
 During development, a focused filter can shorten feedback time:
 
 ```bash
-dotnet test Manager/GameSaves.Tests --filter FullyQualifiedName~GoogleDrive
+dotnet test Manager/GameSaves.Tests/GameSaves.Tests.csproj --filter FullyQualifiedName~GoogleDrive
 ```
 
 A focused run does not replace the full solution test before submission.
@@ -320,7 +324,12 @@ Mandatory boundaries include:
 - treat Drive file and folder IDs as authoritative and names as display or exact-resolution values;
 - escape Drive queries centrally, follow every list page, exclude trashed items, and reject duplicate ambiguity;
 - never expose raw provider exceptions, account metadata, object IDs, or OAuth values in safe results; and
-- do not set Google Drive `IsImplemented = true`, create a provider-factory case, or enable sync UI until the roadmap explicitly completes those features.
+- keep uploads create-only, downloads no-overwrite, manifests last, conflicts
+  unresolved, and remote deletion unavailable;
+- do not claim quota display, arbitrary Drive folder picking, open-in-browser,
+  shared drives, or full Drive browsing unless each behavior is implemented and verified; and
+- preserve the current provider factory and shared-engine route instead of
+  reimplementing sync policy in Google-specific code.
 
 Google tests must use fake authorizers, fake API boundaries, in-memory secret stores, and temporary repositories. Local OAuth environment variables are never required for the default suite.
 
@@ -412,6 +421,17 @@ Update documentation in the same contribution when changing:
 Keep claims precise. Differentiate implemented behavior, configuration-only behavior, planned behavior, automated verification, and live verification. Do not describe future functionality as available.
 
 Use generic example values and sanitized test results. Never place personal configuration in documentation.
+
+Follow the ownership and linking rules in [docs/README.md](docs/README.md).
+Update the authoritative owner instead of copying its content elsewhere. Current
+guides must not take status from `docs/history`, and Wiki or article links must
+not be added until an authoritative URL is verified.
+
+For every new or changed sync provider, update
+[docs/sync-providers.md](docs/sync-providers.md) as part of the provider
+Definition of Done. Update the developer setup guide, security policy, roadmap,
+and third-party notices when their owned facts change. Do not add a manually
+maintained “last reviewed” date without a release process that keeps it accurate.
 
 ## Commit guidance
 

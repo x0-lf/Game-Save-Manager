@@ -134,7 +134,8 @@ Credible data-loss defects should be reported privately when public reproduction
 
 The following are normally handled as bugs, feature requests, or upstream reports unless they cross a documented security boundary:
 
-- missing roadmap functionality, including Google Drive synchronization that is explicitly unavailable;
+- missing roadmap functionality, including WebDAV, OneDrive, and other work
+  explicitly listed as unavailable in the current roadmap;
 - inaccurate or incomplete unapproved harvested save-path candidates;
 - the wording of a third-party consent screen when the application still requests only its documented scope;
 - vulnerabilities in Google, Steam, PCGamingWiki, an SFTP server, the operating system, or another third-party service that are not caused or meaningfully amplified by this project;
@@ -202,11 +203,15 @@ Security-sensitive changes must preserve these established rules:
 
 ### Provider boundaries
 
-- Local Folder and SFTP are the currently implemented sync providers.
+- Local Folder, SFTP, and Google Drive are the currently implemented sync providers.
 - SFTP uses trust on first use for a new host key, records the accepted fingerprint, and rejects later changes until the stored trust entry is explicitly handled.
-- Google Drive supports account authorization and application-root configuration, but Google Drive synchronization remains unavailable until its roadmap work is complete.
+- Google Drive synchronizes completed backup runs through the shared preview and
+  execution engine. Upload is create-only, download is no-overwrite, conflicts
+  are not copied, and remote deletion is unavailable.
 - Google Drive object IDs are authoritative; names are display and resolution values only.
-- Google Drive supports My Drive app-accessible objects under `drive.file`; shared-drive support, full Drive browsing, uploads, downloads, preview, and execution are not available.
+- Google Drive supports My Drive app-accessible objects under `drive.file`;
+  shared drives, full Drive browsing, arbitrary folder picking, quota display,
+  and open-in-browser controls are not available.
 - Provider SDK types remain inside Infrastructure. Core and App consume project-owned, provider-neutral contracts.
 
 ### Harvested mappings
@@ -270,7 +275,10 @@ An advisory match is important evidence but does not by itself establish exploit
 
 Vulnerable dependencies must be upgraded or removed. Do not suppress an advisory, add an exclusion, or add unrelated framework-package references merely to make an audit appear green. For packages that carry native runtime assets, inspect clean publish output and its `.deps.json` in addition to the restored graph. Security package updates must preserve existing database, parser, transfer, backup, authentication, and provider behavior through regression tests.
 
-Steam VDF parsing uses the selected .NET 8-compatible `ValveKeyValue` 0.20.0.417 release only through Infrastructure. The CLI, Core, and App do not directly own parser packages or expose parser-specific types. This replaces the obsolete Gameloop dependency chain rather than suppressing the vulnerable legacy framework packages it introduced.
+Steam VDF parsing uses `ValveKeyValue` 0.20.0.417 only through Infrastructure.
+The CLI, Core, and App do not directly own parser packages or expose
+parser-specific types. This replaces the obsolete Gameloop dependency chain
+rather than suppressing the vulnerable legacy framework packages it introduced.
 
 Do not submit replacement binaries, opaque generated archives, downloaded credential files, or vendored dependencies as a security fix without explicit maintainer agreement. Package and licensing changes must follow [CONTRIBUTING.md](CONTRIBUTING.md) and update [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) when required.
 
@@ -293,7 +301,8 @@ Record the test count, warnings, errors, dependency findings, manual verificatio
 
 - [Contributing Guidelines](CONTRIBUTING.md)
 - [Code of Conduct](CODE_OF_CONDUCT.md)
-- [Provider architecture and security boundaries](docs/sync-providers.md)
+- [Safety model](docs/safety-model.md)
+- [Current provider behavior and security boundaries](docs/sync-providers.md)
 - [Google Drive developer setup and credential handling](docs/google-drive-developer-setup.md)
 - [Third-party notices](THIRD-PARTY-NOTICES.md)
 - [MIT License](LICENSE)

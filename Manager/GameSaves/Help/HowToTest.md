@@ -85,7 +85,7 @@ dotnet run -- init-db
 This creates the local database at:
 
 ```text
-C:\Users\<YourUser>\AppData\Local\GameSave\gamesave.db
+%LOCALAPPDATA%\GameSave\gamesave.db
 ```
 
 You do **not** need Docker, PostgreSQL, MariaDB, SQL Server, or a separate SQLite server. SQLite is only a local `.db` file created and used directly by the application.
@@ -156,7 +156,7 @@ Game: Some Game
 Create a fake test save folder:
 
 ```text
-C:\Users\<YourUser>\GameSaveTest\123456\Saves
+%TEMP%\GameSaveTest\123456\Saves
 ```
 
 Put a dummy file inside it:
@@ -206,7 +206,7 @@ Expected result from `backup-dry-run`:
 
 ```text
 Dry-run backup plan:
- - C:\Users\<YourUser>\GameSaveTest\123456\Saves\test-save.dat
+- %TEMP%\GameSaveTest\123456\Saves\test-save.dat
    -> D:\GameSaveBackups\...
    Copied: False
 ```
@@ -324,7 +324,7 @@ Possible causes:
 The database is stored at:
 
 ```text
-C:\Users\<YourUser>\AppData\Local\GameSave\gamesave.db
+%LOCALAPPDATA%\GameSave\gamesave.db
 ```
 
 It is a normal local SQLite file. No database server is required.

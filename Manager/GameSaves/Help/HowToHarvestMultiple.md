@@ -47,7 +47,7 @@ External/Titles/
 SQLite database:
 
 ```text
-C:\Users\<YourUser>\AppData\Local\GameSave\gamesave.db
+%LOCALAPPDATA%\GameSave\gamesave.db
 ```
 
 ---
@@ -157,7 +157,7 @@ in the harvest queue.
 Run:
 
 ```powershell
-dotnet run -- pcgw-harvest-appids External/Titles "SaveGameManager/0.1 (https://github.com/nickname; user@mail.com) .NET/10.0" External/SteamCatalog/batch-001.txt
+dotnet run -- pcgw-harvest-appids External/Titles "SaveGameManager/0.1 (https://github.com/example; developer@example.invalid) .NET/10.0" External/SteamCatalog/batch-001.txt
 ```
 
 Expected early output:
@@ -193,7 +193,7 @@ If the PCGamingWiki harvest crashes, your PC shuts down, or the terminal is clos
 First rerun the same batch file:
 
 ```powershell
-dotnet run -- pcgw-harvest-appids External/Titles "SaveGameManager/0.1 (https://github.com/nickname; user@mail.com) .NET/10.0" External/SteamCatalog/batch-001.txt
+dotnet run -- pcgw-harvest-appids External/Titles "SaveGameManager/0.1 (https://github.com/example; developer@example.invalid) .NET/10.0" External/SteamCatalog/batch-001.txt
 ```
 
 This is safer because `batch-001.txt` has already been marked as `Exported`.
@@ -256,7 +256,7 @@ dotnet run -- steam-catalog-export-next External/SteamCatalog/batch-002.txt 1000
 Then harvest it:
 
 ```powershell
-dotnet run -- pcgw-harvest-appids External/Titles "SaveGameManager/0.1 (https://github.com/nickname; user@mail.com) .NET/10.0" External/SteamCatalog/batch-002.txt
+dotnet run -- pcgw-harvest-appids External/Titles "SaveGameManager/0.1 (https://github.com/example; developer@example.invalid) .NET/10.0" External/SteamCatalog/batch-002.txt
 ```
 
 Because batch 001 was already marked as `Exported`, batch 002 should contain the next 1000 pending AppIDs.
@@ -269,14 +269,14 @@ Use this pattern:
 
 ```powershell
 dotnet run -- steam-catalog-export-next External/SteamCatalog/batch-003.txt 1000
-dotnet run -- pcgw-harvest-appids External/Titles "SaveGameManager/0.1 (https://github.com/nickname; user@mail.com) .NET/10.0" External/SteamCatalog/batch-003.txt
+dotnet run -- pcgw-harvest-appids External/Titles "SaveGameManager/0.1 (https://github.com/example; developer@example.invalid) .NET/10.0" External/SteamCatalog/batch-003.txt
 ```
 
 Then:
 
 ```powershell
 dotnet run -- steam-catalog-export-next External/SteamCatalog/batch-004.txt 1000
-dotnet run -- pcgw-harvest-appids External/Titles "SaveGameManager/0.1 (https://github.com/nickname; user@mail.com) .NET/10.0" External/SteamCatalog/batch-004.txt
+dotnet run -- pcgw-harvest-appids External/Titles "SaveGameManager/0.1 (https://github.com/example; developer@example.invalid) .NET/10.0" External/SteamCatalog/batch-004.txt
 ```
 
 And so on.
@@ -543,7 +543,7 @@ A safe daily workflow is:
 ```powershell
 dotnet run -- steam-catalog-export-next External/SteamCatalog/batch-002.txt 1000
 
-dotnet run -- pcgw-harvest-appids External/Titles "SaveGameManager/0.1 (https://github.com/nickname; user@mail.com) .NET/10.0" External/SteamCatalog/batch-002.txt
+dotnet run -- pcgw-harvest-appids External/Titles "SaveGameManager/0.1 (https://github.com/example; developer@example.invalid) .NET/10.0" External/SteamCatalog/batch-002.txt
 ```
 
 Then inspect:
@@ -557,7 +557,7 @@ Then later:
 ```powershell
 dotnet run -- steam-catalog-export-next External/SteamCatalog/batch-003.txt 1000
 
-dotnet run -- pcgw-harvest-appids External/Titles "SaveGameManager/0.1 (https://github.com/nickname; user@mail.com) .NET/10.0" External/SteamCatalog/batch-003.txt
+dotnet run -- pcgw-harvest-appids External/Titles "SaveGameManager/0.1 (https://github.com/example; developer@example.invalid) .NET/10.0" External/SteamCatalog/batch-003.txt
 ```
 
 Keep harvesting slow, review extracted mappings, and only enable mappings after checking them.
