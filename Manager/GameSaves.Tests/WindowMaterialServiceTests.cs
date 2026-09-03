@@ -39,6 +39,36 @@ namespace GameSaves.Tests
                 WindowMaterialService.TransparencyLevelForMaterial(string.Empty));
         }
 
+        [Fact]
+        public void AShownWindow_MustReportTheExactRequestedLevel()
+        {
+            Assert.True(WindowMaterialService.IsRequestedLevelActive(
+                WindowTransparencyLevel.AcrylicBlur,
+                WindowTransparencyLevel.AcrylicBlur,
+                hasPlatformHandle: true));
+            Assert.True(WindowMaterialService.IsRequestedLevelActive(
+                WindowTransparencyLevel.Mica,
+                WindowTransparencyLevel.Mica,
+                hasPlatformHandle: true));
+
+            Assert.False(WindowMaterialService.IsRequestedLevelActive(
+                WindowTransparencyLevel.Mica,
+                WindowTransparencyLevel.AcrylicBlur,
+                hasPlatformHandle: true));
+            Assert.False(WindowMaterialService.IsRequestedLevelActive(
+                WindowTransparencyLevel.AcrylicBlur,
+                WindowTransparencyLevel.None,
+                hasPlatformHandle: true));
+            Assert.False(WindowMaterialService.IsRequestedLevelActive(
+                WindowTransparencyLevel.AcrylicBlur,
+                WindowTransparencyLevel.AcrylicBlur,
+                hasPlatformHandle: false));
+            Assert.False(WindowMaterialService.IsRequestedLevelActive(
+                WindowTransparencyLevel.None,
+                WindowTransparencyLevel.None,
+                hasPlatformHandle: true));
+        }
+
         [Theory]
         [InlineData(AppUiSettings.MaterialAcrylic, false, AppUiSettings.MaterialAcrylic)]
         [InlineData(AppUiSettings.MaterialMica, false, AppUiSettings.MaterialMica)]
@@ -79,10 +109,14 @@ namespace GameSaves.Tests
         [Fact]
         public void DetachedWindows_RegisterWithTheMaterialServiceOnCreation()
         {
-            string source = File.ReadAllText(
+            string detachedTab = File.ReadAllText(
                 FindAppFile(Path.Combine("Views", "DetachedWindow.axaml.cs")));
+            string floatingPanel = File.ReadAllText(
+                FindAppFile(Path.Combine(
+                    "Views", "Workspace", "WorkspaceFloatingWindow.axaml.cs")));
 
-            Assert.Contains("App.CurrentWindowMaterial?.Attach(this);", source);
+            Assert.Contains("App.CurrentWindowMaterial?.Attach(this);", detachedTab);
+            Assert.Contains("App.CurrentWindowMaterial?.Attach(this);", floatingPanel);
         }
 
         [Fact]

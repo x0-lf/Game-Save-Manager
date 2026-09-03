@@ -33,6 +33,14 @@
         <Style Selector="TextBlock.diagnosticValue.platformLinux">
             <Setter Property="Foreground" Value="{DynamicResource PlatformLinuxBrush}" />
         </Style>
+        <!-- Keep category navigation opaque without repainting the
+             material-enabled Settings content surface. This style belongs
+             at UserControl scope so it can step into the TabControl template. -->
+        <Style Selector="TabControl#SettingsCategories /template/ ItemsPresenter#PART_ItemsPresenter &gt; WrapPanel">
+            <Setter Property="Background" Value="{DynamicResource NavigationSurfaceBrush}" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="VerticalAlignment" Value="Stretch" />
+        </Style>
     </UserControl.Styles>
 
     <ScrollViewer Classes="pageScroll"
@@ -61,7 +69,7 @@
                  TabControl padding inset the strip to x=249 and the panels to
                  x=253 against the 241 every other view holds.
                  See Round 42 P1-2. -->
-            <TabControl Padding="0">
+            <TabControl x:Name="SettingsCategories" Padding="0">
                 <TabControl.Styles>
                     <!-- Fluent gives each TabItem a left margin, which pushed
                          the strip 8px right of the page column the panels and

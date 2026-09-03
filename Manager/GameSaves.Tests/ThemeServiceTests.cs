@@ -260,15 +260,12 @@ namespace GameSaves.Tests
         [Theory]
         [InlineData(0.4, false, false, 0.4)]
         [InlineData(0.4, true, false, 1.0)]
-        // A compositing material makes the window opacity setting inert and
-        // pins the surface to the readability floor. It used to drop to 0.0,
-        // which handed the app's ink to whatever was behind the window.
-        [InlineData(1.0, false, true, ThemeService.WindowMaterialSurfaceFloor)]
-        [InlineData(0.2, false, true, ThemeService.WindowMaterialSurfaceFloor)]
+        [InlineData(1.0, false, true, 0.0)]
+        [InlineData(0.2, false, true, 0.0)]
         // High contrast always wins: even a stale material confirmation
         // must not thin a high-contrast surface.
         [InlineData(0.2, true, true, 1.0)]
-        public void WindowSurfaceOpacity_HoldsTheMaterialFloorWhileOneComposites(
+        public void WindowSurfaceOpacity_ExposesOnlyAConfirmedMaterial(
             double stored, bool highContrast, bool materialActive, double expected)
         {
             Assert.Equal(
@@ -280,44 +277,45 @@ namespace GameSaves.Tests
         [Theory]
         [InlineData("Dark")]
         [InlineData("Light")]
-        public void TheMaterialFloor_KeepsNormalTextReadableOverAnyDesktop(
+        public void NavigationSurface_IsOpaqueAndKeepsEveryAccentReadable(
             string variant)
         {
-            // The reported failure: Acrylic let the desktop decide the
-            // luminance the app's ink was read against, and dark secondary text
-            // measures about 1.1:1 on white. The colours are read from the
-            // token dictionary rather than repeated here, so a repalette is
-            // caught too; both extremes are tested so the floor cannot be tuned
-            // to one desktop. Every ink the app treats as normal text has to
-            // clear AA — including the muted one, which is dimmer than the
-            // secondary one in both variants and is the binding case.
             IReadOnlyDictionary<string, Avalonia.Media.Color> tokens =
                 VariantColors(variant);
 
-            Avalonia.Media.Color page = tokens["PageBackgroundBrush"];
+            Avalonia.Media.Color navigation =
+                tokens[ThemeService.NavigationSurfaceBrushKey];
+            Assert.Equal(255, navigation.A);
 
             foreach (string inkKey in new[]
             {
                 "PrimaryTextBrush", "SecondaryTextBrush", "MutedTextBrush",
             })
             {
-                foreach (string desktop in new[] { "#FFFFFF", "#000000" })
-                {
-                    // What the compositor actually produces: the page colour
-                    // drawn at the floor's alpha over what the material shows.
-                    Avalonia.Media.Color composited = Composite(
-                        page,
-                        Avalonia.Media.Color.Parse(desktop),
-                        ThemeService.WindowMaterialSurfaceFloor);
+                double ratio = ContrastRatio(navigation, tokens[inkKey]);
+                Assert.True(
+                    ratio >= 4.5,
+                    $"{variant}/{inkKey} on navigation is {ratio:F2}:1.");
+            }
 
-                    double ratio = ContrastRatio(composited, tokens[inkKey]);
+            foreach (string accent in new[]
+            {
+                AppUiSettings.AccentIndigo,
+                AppUiSettings.AccentTeal,
+                AppUiSettings.AccentRose,
+                AppUiSettings.AccentAmber,
+                AppUiSettings.AccentViolet,
+            })
+            {
+                Avalonia.Media.Color selection = Composite(
+                    ThemeService.GetPalette(accent, variant == "Dark").Accent,
+                    navigation,
+                    ThemeService.SelectionTintOpacity);
+                double ratio = ContrastRatio(selection, tokens["PrimaryTextBrush"]);
 
-                    Assert.True(
-                        ratio >= 4.5,
-                        $"{variant}/{inkKey} over {page} at " +
-                        $"{ThemeService.WindowMaterialSurfaceFloor:F2} alpha on a " +
-                        $"{desktop} desktop is {ratio:F2}:1, below WCAG AA.");
-                }
+                Assert.True(
+                    ratio >= 4.5,
+                    $"{variant}/{accent} selected navigation is {ratio:F2}:1.");
             }
         }
 

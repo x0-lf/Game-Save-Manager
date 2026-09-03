@@ -1,6 +1,11 @@
 <Styles xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
+    <!-- Popup navigation must not inherit a transparent page behind its text. -->
+    <Style Selector="ContextMenu, MenuFlyoutPresenter, ToolTip">
+        <Setter Property="Background" Value="{DynamicResource NavigationSurfaceBrush}" />
+    </Style>
+
     <!-- Button hierarchy. Default Fluent buttons are the secondary tier;
          "primary" marks the one safe, non-destructive headline action per surface;
          "danger" marks destructive actions with an outline treatment so it

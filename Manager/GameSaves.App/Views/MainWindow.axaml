@@ -36,6 +36,13 @@
 		<Style Selector="TabControl#MainNavigation">
 			<Setter Property="Padding" Value="16,10,16,16" />
 		</Style>
+		<!-- Only the generated tab-strip panel is opaque. The selected page
+		     remains transparent so Acrylic or Mica can own the content surface. -->
+		<Style Selector="TabControl#MainNavigation /template/ ItemsPresenter#PART_ItemsPresenter &gt; WrapPanel">
+			<Setter Property="Background" Value="{DynamicResource NavigationSurfaceBrush}" />
+			<Setter Property="HorizontalAlignment" Value="Stretch" />
+			<Setter Property="VerticalAlignment" Value="Stretch" />
+		</Style>
 		<Style Selector="TabControl#MainNavigation TabItem">
 			<!-- Stretch so each header's [glyph | label | detach] grid fills
 			     the rail: the detach buttons then share one right edge
@@ -212,6 +219,7 @@
 			            Grid.Row="0"
 			            Orientation="Horizontal"
 			            Spacing="2"
+			            Background="{DynamicResource NavigationSurfaceBrush}"
 			            Margin="10,8,10,0">
 
 				<ToggleButton x:Name="CollapseNavigationButton"

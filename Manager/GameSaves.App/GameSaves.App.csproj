@@ -33,5 +33,6 @@
 
   <ItemGroup>
 	<InternalsVisibleTo Include="GameSaves.Tests" />
+	<InternalsVisibleTo Include="GameSaves.UiCapture" />
   </ItemGroup>
 </Project>

@@ -198,6 +198,44 @@ public sealed class SettingsNavigationTests
     }
 
     [Fact]
+    public void PrimaryAndSettingsNavigation_UseTheOpaqueSemanticSurface()
+    {
+        XDocument main = XDocument.Load(FindAppFile("Views", "MainWindow.axaml"));
+        XDocument settings = XDocument.Load(FindAppFile("Views", "SettingsView.axaml"));
+
+        XElement chrome = Assert.Single(
+            main.Descendants(), element => Named(element, "RailChrome"));
+        Assert.Contains(
+            "NavigationSurfaceBrush",
+            (string?)chrome.Attribute("Background"));
+
+        AssertOpaqueTabStrip(main, "MainNavigation");
+        AssertOpaqueTabStrip(settings, "SettingsCategories");
+    }
+
+    [Fact]
+    public void PopupNavigation_UsesTheOpaqueSemanticSurface()
+    {
+        XDocument controls = XDocument.Load(
+            FindAppFile("Themes", "Controls.axaml"));
+
+        XElement popupStyle = Assert.Single(
+            controls.Descendants(),
+            element => element.Name.LocalName == "Style" &&
+                (string?)element.Attribute("Selector") ==
+                    "ContextMenu, MenuFlyoutPresenter, ToolTip");
+
+        XElement background = Assert.Single(
+            popupStyle.Elements(),
+            element => element.Name.LocalName == "Setter" &&
+                (string?)element.Attribute("Property") == "Background");
+
+        Assert.Contains(
+            "NavigationSurfaceBrush",
+            (string?)background.Attribute("Value"));
+    }
+
+    [Fact]
     public void MainWindow_CollapsedRailStylesHideLabelsAndDetachButtons()
     {
         XDocument view = XDocument.Load(FindAppFile("Views", "MainWindow.axaml"));
@@ -234,6 +272,37 @@ public sealed class SettingsNavigationTests
                 view.Descendants(),
                 element => element.Name.LocalName == "TabItem" &&
                     (string?)element.Attribute("Header") == "Layout"));
+    }
+
+    private static void AssertOpaqueTabStrip(XDocument document, string name)
+    {
+        Assert.Single(
+            document.Descendants(),
+            element => element.Name.LocalName == "TabControl" && Named(element, name));
+
+        XElement style = Assert.Single(
+            document.Descendants(),
+            element => element.Name.LocalName == "Style" &&
+                ((string?)element.Attribute("Selector"))?.Contains(
+                    $"TabControl#{name} /template/ " +
+                    "ItemsPresenter#PART_ItemsPresenter > WrapPanel") == true);
+
+        Assert.Contains(
+            "NavigationSurfaceBrush",
+            (string?)style.Descendants()
+                .Single(element => element.Name.LocalName == "Setter" &&
+                    (string?)element.Attribute("Property") == "Background")
+                .Attribute("Value"));
+
+        foreach (string alignment in new[]
+            { "HorizontalAlignment", "VerticalAlignment" })
+        {
+            Assert.Contains(
+                style.Elements(),
+                element => element.Name.LocalName == "Setter" &&
+                    (string?)element.Attribute("Property") == alignment &&
+                    (string?)element.Attribute("Value") == "Stretch");
+        }
     }
 
     // Compiled-binding paths carry casts like

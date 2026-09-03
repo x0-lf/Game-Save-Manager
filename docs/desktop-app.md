@@ -44,6 +44,20 @@ layouts and reattach detached tabs. Settings also exposes hidden sections and
 tabs so hiding content never makes it permanently unreachable. Saved workspace
 layouts are explicit snapshots and are not applied automatically.
 
+## Window materials
+
+Settings > Appearance offers None, Acrylic, and Mica. None uses the normal app
+surface and is opaque by default. Acrylic and Mica request their corresponding
+Avalonia transparency levels and apply live when Windows accepts the request.
+The main content can expose the system backdrop, while the primary rail,
+Settings categories, menus, and tooltips remain opaque.
+
+If Windows denies or substitutes the requested level, all attached and detached
+windows keep the safe opaque fallback. High Contrast always disables window
+materials and keeps every surface opaque. Remote sessions, older Windows
+versions, power settings, and Windows composition policy can affect support;
+that is a platform fallback, not evidence of save-data corruption.
+
 ## Transfer profiles
 
 1. Choose distinct source and target Steam profiles.

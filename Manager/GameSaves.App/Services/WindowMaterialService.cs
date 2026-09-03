@@ -132,11 +132,18 @@ namespace GameSaves.App.Services
             }
         }
 
-        // A material counts as active only while at least one shown window
-        // reports the platform actually compositing some transparency. When
-        // that verdict flips, the theme pipeline is rerun: the page
-        // background stays opaque until confirmation and returns to opaque
-        // the moment nothing composites the material.
+        internal static bool IsRequestedLevelActive(
+            WindowTransparencyLevel requested,
+            WindowTransparencyLevel actual,
+            bool hasPlatformHandle) =>
+            hasPlatformHandle &&
+            requested != WindowTransparencyLevel.None &&
+            actual == requested;
+
+        // The material is active only when every shown window reports the
+        // exact level requested. A denied or substituted level keeps every
+        // window on the same safe opaque fallback instead of making attached
+        // and detached windows disagree.
         private void Evaluate()
         {
             if (_settings is not { } settings)
@@ -145,12 +152,16 @@ namespace GameSaves.App.Services
             WindowTransparencyLevel requested =
                 TransparencyLevelForMaterial(EffectiveMaterial(settings));
 
+            TrackedWindow[] shown = _windows
+                .Where(tracked => tracked.Window.TryGetPlatformHandle() is not null)
+                .ToArray();
+
             bool confirmed =
-                requested != WindowTransparencyLevel.None &&
-                _windows.Any(tracked =>
-                    tracked.Window.TryGetPlatformHandle() is not null &&
-                    tracked.Window.ActualTransparencyLevel !=
-                        WindowTransparencyLevel.None);
+                shown.Length > 0 &&
+                shown.All(tracked => IsRequestedLevelActive(
+                    requested,
+                    tracked.Window.ActualTransparencyLevel,
+                    hasPlatformHandle: true));
 
             if (confirmed == _materialConfirmed)
                 return;
@@ -179,6 +190,7 @@ namespace GameSaves.App.Services
                 // whenever the achieved level changes (grant, deny, revoke),
                 // which is exactly when the surface decision must be redone.
                 Window.PropertyChanged += OnWindowPropertyChanged;
+                Window.Opened += OnWindowOpened;
                 Window.Closed += OnWindowClosed;
             }
 
@@ -192,9 +204,13 @@ namespace GameSaves.App.Services
                     _owner.Evaluate();
             }
 
+            private void OnWindowOpened(object? sender, EventArgs e) =>
+                _owner.Evaluate();
+
             private void OnWindowClosed(object? sender, EventArgs e)
             {
                 Window.PropertyChanged -= OnWindowPropertyChanged;
+                Window.Opened -= OnWindowOpened;
                 Window.Closed -= OnWindowClosed;
                 _owner.Detach(this);
             }

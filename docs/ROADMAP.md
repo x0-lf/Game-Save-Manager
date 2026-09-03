@@ -9,6 +9,12 @@ required for completion.
 | ID | Title | Product outcome | Dependency | Completion criteria |
 | --- | --- | --- | --- | --- |
 | DOC-020 | Independent reader journeys | A new reader can use the documentation without relying on author knowledge | DOC-001 through DOC-019 | An independent reader completes the prospective-user, contributor, and maintainer scripts with no unanswered question |
+| UI-004 | Windows material regression baseline | None, Acrylic, and Mica have reproducible Windows evidence | Interactive Windows display with sanitized data | Preferred-reference and current captures record requested/effective levels across themes and bright/dark backgrounds |
+| UI-001 | Restore Acrylic and Mica | Each supported material produces its distinct live Windows result without losing later features | UI-004 | None remains safely opaque by default; exact Acrylic and Mica requests work in main and detached windows; unsupported composition falls back safely |
+| UI-002 | Protect navigation over materials | Navigation and transient menus remain readable without disabling the content backdrop | UI-001 | Primary and Settings navigation plus popup surfaces are opaque and readable across themes, accents, positions, collapse states, and High Contrast |
+| UI-005 | Opaque primary rail surface | The complete primary rail remains readable over bright and dark backdrops | UI-001 and UI-004 | Rail chrome and tab strip pass expanded/collapsed left/right/top Windows captures without changing navigation behavior |
+| UI-006 | Opaque Settings category surface | Settings categories remain readable while its content can retain material | UI-001 and UI-004 | All seven categories pass live theme, accent, keyboard, focus, scrolling, and detached-layout checks |
+| UI-003 | Material visual-regression matrix | Maintainers detect material, fallback, and navigation-opacity regressions | UI-001 and UI-002 | Automated semantic sweep passes and the interactive Windows matrix records approved main/detached results for every required dimension |
 
 DOC-020 review scripts:
 

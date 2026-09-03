@@ -63,12 +63,18 @@ namespace GameSaves.UiCapture
         // Scan/Refresh action across every page and rail arrangement.
         private static bool _railOnly;
 
+        // Set by the "material" argument: capture app-owned surface semantics.
+        // Windows blur/Mica still requires the documented interactive pass.
+        private static bool _materialOnly;
+
         public static int Main(string[] args)
         {
             _layoutOnly = args.Length > 1 &&
                 string.Equals(args[1], "layout", StringComparison.OrdinalIgnoreCase);
             _railOnly = args.Length > 1 &&
                 string.Equals(args[1], "rail", StringComparison.OrdinalIgnoreCase);
+            _materialOnly = args.Length > 1 &&
+                string.Equals(args[1], "material", StringComparison.OrdinalIgnoreCase);
 
             string outputDirectory = args.Length > 0
                 ? args[0]
@@ -174,6 +180,18 @@ namespace GameSaves.UiCapture
                 .First();
 
             int written = 0;
+
+            if (_materialOnly)
+            {
+                return MaterialSweep.Run(
+                    window,
+                    tabs,
+                    viewModel,
+                    themeService,
+                    settingsStore,
+                    outputDirectory,
+                    name => Shot(window, outputDirectory, name));
+            }
 
             if (_railOnly)
             {

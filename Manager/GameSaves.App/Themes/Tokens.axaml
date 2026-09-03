@@ -35,6 +35,7 @@
             <SolidColorBrush x:Key="ComboBoxPlaceHolderForegroundFocusedPressed" Color="#949AA8" />
             <SolidColorBrush x:Key="ComboBoxForegroundDisabled" Color="#949AA8" />
             <SolidColorBrush x:Key="PageBackgroundBrush" Color="#111217" />
+            <SolidColorBrush x:Key="NavigationSurfaceBrush" Color="#1D1F27" />
             <SolidColorBrush x:Key="CardBackgroundBrush" Color="#1D1F27" />
             <SolidColorBrush x:Key="CardBorderBrush" Color="#343744" />
             <!-- Control boundaries are a separate role from card edges: a
@@ -114,6 +115,7 @@
             <SolidColorBrush x:Key="ComboBoxPlaceHolderForegroundFocusedPressed" Color="#5F6470" />
             <SolidColorBrush x:Key="ComboBoxForegroundDisabled" Color="#5F6470" />
             <SolidColorBrush x:Key="PageBackgroundBrush" Color="#F4F5F8" />
+            <SolidColorBrush x:Key="NavigationSurfaceBrush" Color="#FFFFFF" />
             <SolidColorBrush x:Key="CardBackgroundBrush" Color="#FFFFFF" />
             <SolidColorBrush x:Key="CardBorderBrush" Color="#DCDFE6" />
             <SolidColorBrush x:Key="ControlBorderBrush" Color="#7E838E" />
