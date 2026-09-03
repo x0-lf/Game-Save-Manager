@@ -36,13 +36,6 @@
 		<Style Selector="TabControl#MainNavigation">
 			<Setter Property="Padding" Value="16,10,16,16" />
 		</Style>
-		<!-- Only the generated tab-strip panel is opaque. The selected page
-		     remains transparent so Acrylic or Mica can own the content surface. -->
-		<Style Selector="TabControl#MainNavigation /template/ ItemsPresenter#PART_ItemsPresenter &gt; WrapPanel">
-			<Setter Property="Background" Value="{DynamicResource NavigationSurfaceBrush}" />
-			<Setter Property="HorizontalAlignment" Value="Stretch" />
-			<Setter Property="VerticalAlignment" Value="Stretch" />
-		</Style>
 		<Style Selector="TabControl#MainNavigation TabItem">
 			<!-- Stretch so each header's [glyph | label | detach] grid fills
 			     the rail: the detach buttons then share one right edge
@@ -202,25 +195,56 @@
 			</Grid>
 		</Border>
 
-		<!-- Navigation rail plus content. The TabControl keeps every section
-		     alive so section state survives navigation, exactly as the old
-		     top tab strip did. The expand button shares the rail's column
-		     and is visible only while the rail is collapsed (it is bound to
-		     the collapse state), so the default layout renders unchanged. -->
-		<Grid Grid.Row="1" RowDefinitions="Auto,*">
+		<!-- The rail is one docked surface: its action row comes first and its
+		     tab headers second. Left and right rails therefore extend upward
+		     around the actions; the top rail becomes a deliberate two-row menu.
+		     Selected page content remains outside this opaque host so Acrylic or
+		     Mica can still own the content surface. -->
+		<TabControl Grid.Row="1"
+		            x:Name="MainNavigation"
+		            TabStripPlacement="Left">
+			<TabControl.Template>
+				<ControlTemplate>
+					<Border BorderBrush="{TemplateBinding BorderBrush}"
+					        BorderThickness="{TemplateBinding BorderThickness}"
+					        CornerRadius="{TemplateBinding CornerRadius}"
+					        Background="{TemplateBinding Background}"
+					        HorizontalAlignment="{TemplateBinding HorizontalAlignment}"
+					        VerticalAlignment="{TemplateBinding VerticalAlignment}">
+						<DockPanel>
+							<Border x:Name="PART_NavigationRail"
+							        Background="{DynamicResource NavigationSurfaceBrush}"
+							        DockPanel.Dock="{TemplateBinding TabStripPlacement}">
+								<StackPanel Orientation="Vertical">
+									<ContentPresenter x:Name="PART_RailChromeHost"
+									                  Content="{TemplateBinding Tag}" />
+									<ItemsPresenter x:Name="PART_ItemsPresenter"
+									                ItemsPanel="{TemplateBinding ItemsPanel}" />
+								</StackPanel>
+							</Border>
+							<Panel ClipToBounds="True">
+								<ContentPresenter x:Name="PART_SelectedContentHost2"
+								                  Margin="{TemplateBinding Padding}"
+								                  HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+								                  VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+								                  IsVisible="False" />
+								<ContentPresenter x:Name="PART_SelectedContentHost"
+								                  Margin="{TemplateBinding Padding}"
+								                  HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+								                  VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+							</Panel>
+						</DockPanel>
+					</Border>
+				</ControlTemplate>
+			</TabControl.Template>
 
-			<!-- Rail chrome. The collapse toggle and the Scan action belong to
-			     the rail itself, not to a page, so they sit in a strip on the
-			     rail's own edge and stay reachable in all three rail positions.
-			     Code-behind aligns the strip to whichever edge the rail is on.
-			     While the rail is collapsed the labels drop away and only the
-			     glyphs remain, which is the same rule the tab headers follow. -->
-			<StackPanel x:Name="RailChrome"
-			            Grid.Row="0"
-			            Orientation="Horizontal"
-			            Spacing="2"
-			            Background="{DynamicResource NavigationSurfaceBrush}"
-			            Margin="10,8,10,0">
+			<TabControl.Tag>
+				<!-- Page-sensitive actions stay inside the shared rail host. Labels
+				     still collapse to icons through the existing window classes. -->
+				<StackPanel x:Name="RailChrome"
+				            Orientation="Horizontal"
+				            Spacing="2"
+				            Margin="10,8,10,0">
 
 				<ToggleButton x:Name="CollapseNavigationButton"
 				              Classes="railChrome"
@@ -270,11 +294,8 @@
 						           VerticalAlignment="Center" />
 					</StackPanel>
 				</Button>
-			</StackPanel>
-
-			<TabControl Grid.Row="1"
-	                    x:Name="MainNavigation"
-	                    TabStripPlacement="Left">
+				</StackPanel>
+			</TabControl.Tag>
 
 			<TabItem AutomationProperties.Name="Dashboard">
 				<TabItem.ContextMenu>
@@ -688,7 +709,6 @@
 				</TabItem.Header>
 				<views:SettingsView DataContext="{Binding Settings}" />
 				</TabItem>
-			</TabControl>
-		</Grid>
+		</TabControl>
 	</Grid>
 </Window>

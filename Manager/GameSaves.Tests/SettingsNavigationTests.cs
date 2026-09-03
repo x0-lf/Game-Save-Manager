@@ -181,20 +181,38 @@ public sealed class SettingsNavigationTests
     }
 
     [Fact]
-    public void MainWindow_RailChromeIsOutsideTheTabStripSoItSurvivesEveryRailPosition()
+    public void MainWindow_RailChromeIsInsideTheDockedNavigationSurface()
     {
-        // The chrome sits in its own row above the TabControl rather than
-        // inside the generated tab strip, which is what keeps it reachable
-        // when the rail moves to the right edge or to the top.
         XDocument view = XDocument.Load(FindAppFile("Views", "MainWindow.axaml"));
+        XElement navigation = Assert.Single(
+            view.Descendants(),
+            element => element.Name.LocalName == "TabControl" &&
+                Named(element, "MainNavigation"));
 
         XElement chrome = Assert.Single(
-            view.Descendants(),
+            navigation.Descendants(),
             element => Named(element, "RailChrome"));
 
-        Assert.DoesNotContain(
+        Assert.Contains(
             chrome.Ancestors(),
-            ancestor => ancestor.Name.LocalName == "TabControl");
+            ancestor => ancestor.Name.LocalName == "TabControl.Tag");
+
+        XElement rail = FindMainRail(view);
+        Assert.Equal(
+            "{TemplateBinding TabStripPlacement}",
+            (string?)rail.Attribute("DockPanel.Dock"));
+
+        XElement stack = Assert.Single(
+            rail.Elements(), element => element.Name.LocalName == "StackPanel");
+        Assert.Equal("Vertical", (string?)stack.Attribute("Orientation"));
+        Assert.Equal(
+            new[] { "ContentPresenter", "ItemsPresenter" },
+            stack.Elements().Select(element => element.Name.LocalName).ToArray());
+
+        XElement chromeHost = stack.Elements().First();
+        Assert.Equal(
+            "{TemplateBinding Tag}",
+            (string?)chromeHost.Attribute("Content"));
     }
 
     [Fact]
@@ -203,13 +221,10 @@ public sealed class SettingsNavigationTests
         XDocument main = XDocument.Load(FindAppFile("Views", "MainWindow.axaml"));
         XDocument settings = XDocument.Load(FindAppFile("Views", "SettingsView.axaml"));
 
-        XElement chrome = Assert.Single(
-            main.Descendants(), element => Named(element, "RailChrome"));
         Assert.Contains(
             "NavigationSurfaceBrush",
-            (string?)chrome.Attribute("Background"));
+            (string?)FindMainRail(main).Attribute("Background"));
 
-        AssertOpaqueTabStrip(main, "MainNavigation");
         AssertOpaqueTabStrip(settings, "SettingsCategories");
     }
 
@@ -273,6 +288,12 @@ public sealed class SettingsNavigationTests
                 element => element.Name.LocalName == "TabItem" &&
                     (string?)element.Attribute("Header") == "Layout"));
     }
+
+    private static XElement FindMainRail(XDocument document) =>
+        Assert.Single(
+            document.Descendants(),
+            element => element.Name.LocalName == "Border" &&
+                Named(element, "PART_NavigationRail"));
 
     private static void AssertOpaqueTabStrip(XDocument document, string name)
     {
