@@ -16,7 +16,7 @@ should link to it instead of maintaining a second explanation.
 
 - [Architecture](architecture.md)
 - [Development and verification](development.md)
-- [Windows material regression baseline](material-regression-baseline.md) **Developer-only; incomplete platform evidence**
+- [Windows material regression baseline](material-regression-baseline.md) **Developer-only**
 - [Database and save-path mappings](database-and-mappings.md)
 - [Sync providers](sync-providers.md)
 - [Google Drive developer setup](google-drive-developer-setup.md) **Developer-only; security-sensitive**

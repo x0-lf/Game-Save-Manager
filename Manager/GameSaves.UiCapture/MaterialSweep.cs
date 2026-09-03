@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Media;
+using Avalonia.Styling;
 using Avalonia.Threading;
 using GameSaves.App.Services;
 using GameSaves.App.ViewModels;
@@ -189,13 +190,28 @@ namespace GameSaves.UiCapture
             return shot(name);
         }
 
-        private static byte BrushAlpha(Window window, string key)
+        // The token dictionary is keyed by Light and Dark. The "system"
+        // choice maps to ThemeVariant.Default, which the headless platform
+        // cannot resolve because there is no OS theme to follow, so a
+        // variant-scoped token has no value to read there. That row is
+        // reported as unresolved rather than crashing the sweep or guessing
+        // a variant; the interactive Windows run in
+        // GameSaves.UiMaterialCapture covers the system theme for real.
+        private static string BrushAlpha(Window window, string key)
         {
             if (window.TryFindResource(
                     key, window.ActualThemeVariant, out object? value) &&
                 value is ISolidColorBrush brush)
             {
-                return brush.Color.A;
+                return brush.Color.A.ToString();
+            }
+
+            object? variant = window.ActualThemeVariant?.Key;
+
+            if (!Equals(variant, ThemeVariant.Light.Key) &&
+                !Equals(variant, ThemeVariant.Dark.Key))
+            {
+                return "unresolved";
             }
 
             throw new InvalidOperationException($"Missing brush resource: {key}");

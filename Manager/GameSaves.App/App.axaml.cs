@@ -4,6 +4,7 @@ using Avalonia.Markup.Xaml;
 using GameSaves.App.Services;
 using GameSaves.App.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -34,9 +35,15 @@ namespace GameSaves.App
             AvaloniaXamlLoader.Load(this);
         }
 
+        // Development-only capture hosts (the interactive Windows material
+        // harness) substitute a temporary database, settings file, and Steam
+        // locator here, so a capture run can never touch real user data.
+        // Null in the shipped app, which builds the real graph.
+        internal static Action<IServiceCollection>? ServiceOverrides { get; set; }
+
         public override void OnFrameworkInitializationCompleted()
         {
-            _serviceProvider = AppServices.Build();
+            _serviceProvider = AppServices.Build(ServiceOverrides);
 
             if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             {

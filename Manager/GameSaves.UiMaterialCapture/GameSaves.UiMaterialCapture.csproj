@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Development-only interactive capture harness. Unlike GameSaves.UiCapture
+       (headless, app-owned surfaces only) this one runs the real app on the
+       real Win32 platform, so Windows actually composites Acrylic and Mica and
+       the achieved transparency level can be read back. Never published, never
+       shipped, never referenced by another project.
+       See docs/development.md, "Window material matrix". -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- Per-monitor DPI awareness, so screen capture rectangles and the
+         window's own coordinates are the same pixels. -->
+    <ApplicationManifest>..\GameSaves.App\app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\GameSaves.App\GameSaves.App.csproj" />
+  </ItemGroup>
+
+</Project>

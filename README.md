@@ -45,7 +45,7 @@ with important data.
 
 ## Repository layout
 
-The solution contains seven projects:
+The solution contains eight projects:
 
 ```text
 Manager/
@@ -55,7 +55,8 @@ Manager/
 |-- GameSaves/                Developer CLI and harvesting tools
 |-- GameSaves.Reviewer/       Independent mapping-review application
 |-- GameSaves.Tests/          Shared xUnit regression coverage
-`-- GameSaves.UiCapture/      Development-only UI capture harness
+|-- GameSaves.UiCapture/      Development-only headless UI capture harness
+`-- GameSaves.UiMaterialCapture/ Development-only Windows material capture harness
 ```
 
 ## Documentation

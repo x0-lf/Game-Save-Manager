@@ -21,6 +21,7 @@ dotnet build Manager/GameSaves/GameSaves.csproj --configuration Release
 dotnet build Manager/GameSaves.Reviewer/GameSaves.Reviewer.csproj --configuration Release
 dotnet build Manager/GameSaves.Tests/GameSaves.Tests.csproj --configuration Release
 dotnet build Manager/GameSaves.UiCapture/GameSaves.UiCapture.csproj --configuration Release
+dotnet build Manager/GameSaves.UiMaterialCapture/GameSaves.UiMaterialCapture.csproj --configuration Release
 ```
 
 Use xUnit filters for feedback, then run the complete suite before submission:
@@ -60,7 +61,9 @@ sweeps. Material mode verifies app-owned opacity and navigation semantics and
 writes `material-report.tsv`. It simulates accepted composition because the
 headless renderer cannot reproduce or report the Windows Acrylic/Mica backdrop;
 its `actual` column therefore says `headless-unavailable` rather than claiming
-platform support.
+platform support. The `system` theme has no OS theme to inherit there, so
+variant-scoped tokens read `unresolved` on those rows; the interactive run
+below covers them.
 
 ## Window material matrix
 
@@ -77,31 +80,49 @@ Validate the full cross-product before release:
 | Contrast | Normal, High Contrast |
 | Composition | Requested level accepted, request denied or substituted |
 
-The automated material sweep covers every value across focused combinations.
-On an interactive Windows test account containing only synthetic or sanitized
-data, repeat the matrix for the combinations that depend on the OS compositor:
+The headless sweep above covers app-owned semantics. The rows that depend on
+the Windows compositor are covered by the interactive harness, which runs the
+real application on the real Win32 platform and reads every number back from
+the composited screen:
 
-1. Use the same Windows build, display scaling, app size, test data, and desktop
-   backgrounds for `e2b744e` and the current working tree. Use `git archive` or
-   another separate directory; do not reset or revert the working tree.
-2. For each row, record the requested `TransparencyLevelHint` and the window's
-   `ActualTransparencyLevel`. Capture the main window and one detached tab.
-3. Confirm None is opaque by default; Acrylic visibly blurs/translucently shows
-   the background; and Mica has a visibly distinct Mica backdrop.
-4. Confirm the primary rail, Settings category strip, context menus, submenus,
-   tooltips, and layout-recovery menus remain opaque and readable.
-5. Change theme, accent, material, rail position, and collapse state while the
-   relevant window is open. No restart is expected when Windows accepts a live
-   change.
-6. Turn on High Contrast and confirm both requested and effective material are
-   None and every surface is opaque.
-7. Record a denied request as an unsupported-platform fallback. Treat an
-   effective non-None level different from the request as a failed matrix row,
-   not as successful Mica or Acrylic.
+```powershell
+dotnet run --project Manager/GameSaves.UiMaterialCapture/GameSaves.UiMaterialCapture.csproj -- artifacts/ui-material-windows
+```
+
+It takes over the screen for a few minutes: it shows a full-screen white and
+then black window behind the application, drives the whole matrix live in one
+process (no restart), and writes one PNG per row plus
+`windows-material-report.tsv`. Its database, settings file, and Steam locator
+are throwaway, so no real user data can reach a capture.
+
+Exit codes:
+
+| Code | Meaning |
+| ---: | --- |
+| `0` | Every requested material was granted and visible, and navigation stayed opaque |
+| `1` | Application regression: a `fail-` row, such as navigation letting the background through |
+| `2` | Windows substituted or denied a requested level; the run records the fallback |
+| `3` | The run did not complete |
+
+Each row records requested versus effective transparency, the page and
+navigation brush alpha, and four measurements: rail, Settings strip, and page
+difference between the white and black backdrop, plus the page difference
+against the same layout with material `none`. An opaque surface measures `0`;
+the `none` comparison is what proves Mica, which samples the desktop wallpaper
+rather than the window underneath.
+
+To compare against a different revision, add a worktree, copy
+`Manager/GameSaves.UiMaterialCapture` into it, and run the harness there. Do
+not reset or revert the working tree.
+
+Two checks still need a person, because no measurement replaces them: whether
+the material looks right, and the readability of context menus, submenus,
+tooltips, and the layout-recovery menu, which are separate top-level surfaces
+painted from `NavigationSurfaceBrush`.
 
 Store approved screenshots and the observed-value report under
-`artifacts/ui-material-windows/`, never in production assets. The current
-source comparison and pending Windows evidence are recorded in the
+`artifacts/ui-material-windows/`, never in production assets. The recorded
+source comparison and Windows evidence are in the
 [material baseline](material-regression-baseline.md).
 
 ## Safe cleanup

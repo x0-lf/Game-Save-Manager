@@ -15,15 +15,16 @@ is documented in the audience-specific guides linked from the
 | `GameSaves.Reviewer` | Independent mapping curation application and its SQLite access | None |
 | `GameSaves.Tests` | Shared regression coverage across Core, Infrastructure, CLI, and App behavior | App, Core, CLI, Infrastructure |
 | `GameSaves.UiCapture` | Development-only headless visual capture harness | App |
+| `GameSaves.UiMaterialCapture` | Development-only interactive Windows material capture harness | App |
 
 Core has no project or package dependencies. Infrastructure references Core and
 owns runtime integrations. App consumes both and keeps provider SDK objects out
 of its models and commands. The CLI owns the harvesting workflow. Reviewer stays
 self-contained so normal application behavior cannot depend on the curation tool.
 
-Avalonia is limited to App, Reviewer, and UiCapture. Google API packages and
-Google SDK types are limited to Infrastructure. UiCapture is not shipped and no
-other project references it.
+Avalonia is limited to App, Reviewer, and the two capture harnesses. Google API
+packages and Google SDK types are limited to Infrastructure. Neither capture
+harness is shipped and no other project references them.
 
 ## Dependency direction
 
@@ -34,6 +35,7 @@ CLI -------> Core
 CLI -------> Infrastructure ------> Core
 Tests -----> App, Core, CLI, Infrastructure
 UiCapture -> App
+UiMaterialCapture -> App
 Reviewer    (independent)
 ```
 
