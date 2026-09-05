@@ -20,6 +20,7 @@ using GameSaves.App.Views;
 using GameSaves.Core.Platform;
 using GameSaves.Core.Steam;
 using Microsoft.Extensions.DependencyInjection;
+using GameSaves.UiCapture.Gallery;
 using AppShell = GameSaves.App.App;
 
 namespace GameSaves.UiMaterialCapture
@@ -85,6 +86,14 @@ namespace GameSaves.UiMaterialCapture
 
         private static int _exitCode;
 
+        // "gallery" and "gallery-full" produce website/QA gallery output from
+        // real Windows composition; anything else keeps the original material
+        // regression sweep.
+        private static string _mode = "material";
+
+        // Read before the working directory moves into the throwaway folder.
+        private static string _commit = "unknown";
+
         [STAThread]
         public static int Main(string[] args)
         {
@@ -93,27 +102,23 @@ namespace GameSaves.UiMaterialCapture
                 : Path.Combine("artifacts", "ui-material-windows"));
             Directory.CreateDirectory(outputDirectory);
 
-            string tempRoot = Path.Combine(
-                Path.GetTempPath(),
-                "gamesave-material-capture-" + Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(tempRoot);
+            _mode = args.Length > 1 ? args[1].ToLowerInvariant() : "material";
+            _commit = GalleryManifest.CurrentCommit();
+
+            string tempRoot = GalleryFixtureServices
+                .CreateTemporaryRoot("material-capture");
 
             string originalDirectory = Environment.CurrentDirectory;
             Environment.CurrentDirectory = tempRoot;
 
             try
             {
+                // Database, UI settings, sync settings, Steam discovery and its
+                // fallback scanner are replaced with throwaway equivalents, and
+                // Google Drive authentication is never consulted. See
+                // GalleryFixtureServices for what each override prevents.
                 AppShell.ServiceOverrides = services =>
-                {
-                    services.AddSingleton<IAppDatabasePathProvider>(
-                        new GameSaves.Infrastructure.Platform
-                            .SchemaInitializingAppDatabasePathProvider(
-                                new FixedDatabasePathProvider("capture.db")));
-                    services.AddSingleton<ISteamRootLocator>(new NoSteamRootLocator());
-                    services.AddSingleton<ISteamFallbackScanner>(new NoSteamFallbackScanner());
-                    services.AddSingleton<IUiSettingsStore>(
-                        new UiSettingsStore("ui-settings.json"));
-                };
+                    GalleryFixtureServices.Register(services);
 
                 var lifetime = new ClassicDesktopStyleApplicationLifetime
                 {
@@ -126,11 +131,16 @@ namespace GameSaves.UiMaterialCapture
                     .WithInterFont()
                     .SetupWithLifetime(lifetime);
 
+                bool gallery = _mode.StartsWith("gallery", StringComparison.Ordinal);
+
                 Dispatcher.UIThread.Post(async () =>
                 {
                     try
                     {
-                        await SweepAsync(lifetime, outputDirectory);
+                        if (gallery)
+                            await GallerySweepAsync(lifetime, outputDirectory);
+                        else
+                            await SweepAsync(lifetime, outputDirectory);
                     }
                     catch (Exception error)
                     {
@@ -144,6 +154,9 @@ namespace GameSaves.UiMaterialCapture
                 });
 
                 lifetime.Start(args);
+
+                if (gallery)
+                    return _exitCode;
 
                 File.WriteAllLines(
                     Path.Combine(outputDirectory, "windows-material-report.tsv"),
@@ -192,6 +205,38 @@ namespace GameSaves.UiMaterialCapture
                 {
                 }
             }
+        }
+
+        // Gallery mode. The archive half is subsampled by default so the run
+        // occupies the screen for minutes rather than most of an hour; pass
+        // "gallery-full" for every material cell the plan defines.
+        private static async Task GallerySweepAsync(
+            IClassicDesktopStyleApplicationLifetime lifetime,
+            string outputDirectory)
+        {
+            var window = (MainWindow)lifetime.MainWindow!;
+            var viewModel = (MainWindowViewModel)window.DataContext!;
+
+            GalleryShowcase.Apply(viewModel);
+            Dispatcher.UIThread.RunJobs();
+
+            IReadOnlyList<GalleryScenario> curated =
+                GalleryPlan.CuratedFor(GalleryEngines.WindowsScreenReadback);
+
+            IReadOnlyList<GalleryScenario> archive = _mode == "gallery-full"
+                ? GalleryPlan.FullFor(GalleryEngines.WindowsScreenReadback)
+                : _mode == "gallery-curated"
+                    ? Array.Empty<GalleryScenario>()
+                    : GalleryPlan.MaterialArchiveSample();
+
+            if (archive.Count > 0)
+            {
+                await GalleryMaterialSweep.RunAsync(
+                    lifetime, outputDirectory, _commit, archive, "full");
+            }
+
+            await GalleryMaterialSweep.RunAsync(
+                lifetime, outputDirectory, _commit, curated, "selected");
         }
 
         private static async Task SweepAsync(

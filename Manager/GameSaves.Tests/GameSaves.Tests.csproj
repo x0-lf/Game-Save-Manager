@@ -23,6 +23,9 @@
     <ProjectReference Include="..\GameSaves.Core\GameSaves.Core.csproj" />
     <ProjectReference Include="..\GameSaves\GameSaves.csproj" />
     <ProjectReference Include="..\GameSaves.Infrastructure\GameSaves.Infrastructure.csproj" />
+    <!-- The gallery plan and its verification rules. Referenced for the plan
+         types only; the harness's own entry point is never started here. -->
+    <ProjectReference Include="..\GameSaves.UiCapture\GameSaves.UiCapture.csproj" />
   </ItemGroup>
 
   <ItemGroup>

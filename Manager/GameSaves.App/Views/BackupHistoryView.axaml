@@ -440,8 +440,11 @@
                                FontWeight="Bold"
                                Margin="0,6,0,0" />
 
-                    <StackPanel Orientation="Horizontal"
-                                Spacing="6">
+                    <!-- Wraps, because this row is a sentence with inputs in it
+                         and it has to survive both a narrow docked region and
+                         a 150% text scale. A horizontal StackPanel pushed the
+                         later words and the day count out of the panel. -->
+                    <WrapPanel ItemSpacing="6" LineSpacing="6">
                         <TextBlock Text="Keep newest"
                                    Foreground="{DynamicResource SecondaryTextBrush}"
                                    FontSize="{DynamicResource FontSizeBody}"
@@ -450,7 +453,12 @@
                         <TextBox Text="{Binding KeepNewestRunsText}"
                                  Width="60" />
 
-                        <TextBlock Text="run(s), delete the rest. Only runs older than"
+                        <TextBlock Text="run(s), delete the rest."
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                   FontSize="{DynamicResource FontSizeBody}"
+                                   VerticalAlignment="Center" />
+
+                        <TextBlock Text="Only runs older than"
                                    Foreground="{DynamicResource SecondaryTextBrush}"
                                    FontSize="{DynamicResource FontSizeBody}"
                                    VerticalAlignment="Center" />
@@ -463,20 +471,19 @@
                                    Foreground="{DynamicResource SecondaryTextBrush}"
                                    FontSize="{DynamicResource FontSizeBody}"
                                    VerticalAlignment="Center" />
-                    </StackPanel>
+                    </WrapPanel>
 
                     <CheckBox Content="I understand this permanently deletes the previewed backup runs"
                               IsChecked="{Binding ConfirmCleanup}"
                               FontSize="{DynamicResource FontSizeBody}" />
 
-                    <StackPanel Orientation="Horizontal"
-                                Spacing="10">
+                    <WrapPanel ItemSpacing="10" LineSpacing="6">
                         <Button Content="Preview Cleanup (Dry Run)"
                                 Command="{Binding PreviewCleanupCommand}" />
 
                         <Button Content="Delete Old Runs"
                                 Command="{Binding ExecuteCleanupCommand}" />
-                    </StackPanel>
+                    </WrapPanel>
 
                     <TextBlock Text="{Binding CleanupStatusMessage}"
                                Foreground="{DynamicResource SecondaryTextBrush}"

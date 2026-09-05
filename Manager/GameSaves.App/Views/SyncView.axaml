@@ -542,10 +542,14 @@
                      one, so there is no inner scroller to trap the list in. -->
                 <Grid RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="4">
 
+                    <!-- The table class gives this panel no horizontal padding
+                         so the rows can reach the card edge. The lines that are
+                         not table rows still need to clear it. -->
                     <TextBlock Grid.Row="0"
                                Text="{Binding SummaryDisplay}"
                                Foreground="{DynamicResource AccentBrush}"
                                FontSize="{DynamicResource FontSizeBody}"
+                               Margin="3,0,0,0"
                                TextWrapping="Wrap" />
 
                     <Grid Grid.Row="1"
@@ -556,6 +560,7 @@
                                    Text="{Binding SelectedSummaryDisplay}"
                                    Foreground="{DynamicResource SecondaryTextBrush}"
                                    FontSize="{DynamicResource FontSizeBody}"
+                                   Margin="3,0,0,0"
                                    VerticalAlignment="Center" />
 
                         <Button Grid.Column="1"
@@ -599,7 +604,13 @@
                                         <Grid ColumnDefinitions="34,2*,90,*,90,90,*"
                                               ColumnSpacing="10">
 
+                                            <!-- Clears the card edge: this panel
+                                                 has no horizontal padding, so
+                                                 without the inset the tick box
+                                                 sits against the card border. -->
                                             <CheckBox Grid.Column="0"
+                                                      Margin="3,3,0,0"
+                                                      VerticalAlignment="Top"
                                                       IsChecked="{Binding IncludeInSync}"
                                                       IsVisible="{Binding IsSelectable}"
                                                       ToolTip.Tip="Untick to exclude this run from the sync." />
@@ -671,19 +682,25 @@
                                         BorderBrush="{DynamicResource SubtleBorderBrush}"
                                         BorderThickness="0,0,0,1">
 
-                                    <StackPanel Orientation="Horizontal"
-                                                Spacing="8">
-                                        <TextBlock Text="{Binding SeverityText}"
+                                    <!-- A Grid, not a horizontal StackPanel: a stack
+                                         measures its children with unbounded
+                                         width, so TextWrapping on the message
+                                         never applied and a long warning ran off
+                                         the panel edge. -->
+                                    <Grid ColumnDefinitions="60,*"
+                                          ColumnSpacing="8">
+                                        <TextBlock Grid.Column="0"
+                                                   Text="{Binding SeverityText}"
                                                    Foreground="{DynamicResource WarningBrush}"
                                                    FontSize="{DynamicResource FontSizeBody}"
-                                                   FontWeight="SemiBold"
-                                                   Width="60" />
+                                                   FontWeight="SemiBold" />
 
-                                        <TextBlock Text="{Binding Message}"
+                                        <TextBlock Grid.Column="1"
+                                                   Text="{Binding Message}"
                                                    Foreground="{DynamicResource SecondaryTextBrush}"
                                                    FontSize="{DynamicResource FontSizeBody}"
                                                    TextWrapping="Wrap" />
-                                    </StackPanel>
+                                    </Grid>
                                 </Border>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>

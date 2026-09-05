@@ -390,14 +390,17 @@
          different idiom from this app's tables and reads as a second design
          system inside the same window. The keys are set inline in Fluent's
          control theme, so the states are restated here rather than retargeted
-         through a resource. -->
+         through a resource.
+
+         The tint is a translucent brush, not an opacity: Opacity on the
+         content presenter fades the row's text along with its background, so
+         selecting a row made it the least readable row in the list. These are
+         the same two tint tokens a selected table row already uses. -->
     <Style Selector="ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
-        <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
-        <Setter Property="Opacity" Value="0.12" />
+        <Setter Property="Background" Value="{DynamicResource AccentSelectionTintBrush}" />
     </Style>
     <Style Selector="ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-        <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
-        <Setter Property="Opacity" Value="0.18" />
+        <Setter Property="Background" Value="{DynamicResource AccentPreviewTintBrush}" />
     </Style>
 
     <!-- Keyboard focus on the text inputs and selects. The resting BorderBrush

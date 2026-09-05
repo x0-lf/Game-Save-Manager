@@ -52,8 +52,12 @@
                                 <StackPanel Spacing="3"
                                             Margin="4">
 
-                                    <StackPanel Orientation="Horizontal"
-                                                Spacing="8">
+                                    <!-- These rows wrap. A horizontal StackPanel
+                                         measures without a width limit, so at a
+                                         larger text scale, or in a narrowed
+                                         region, the last value was cut off
+                                         mid-word inside the list item. -->
+                                    <WrapPanel ItemSpacing="8" LineSpacing="2">
                                         <TextBlock Text="{Binding KindText}"
                                                    Foreground="{DynamicResource AccentBrush}"
                                                    FontWeight="SemiBold"
@@ -63,14 +67,13 @@
                                                    Foreground="{DynamicResource PrimaryTextBrush}"
                                                    FontSize="{DynamicResource FontSizeBody}"
                                                    FontWeight="SemiBold" />
-                                    </StackPanel>
+                                    </WrapPanel>
 
                                     <TextBlock Text="{Binding StartedDisplay}"
                                                Foreground="{DynamicResource SecondaryTextBrush}"
                                                FontSize="{DynamicResource FontSizeBody}" />
 
-                                    <StackPanel Orientation="Horizontal"
-                                                Spacing="8">
+                                    <WrapPanel ItemSpacing="8" LineSpacing="2">
                                         <TextBlock Text="{Binding ProfilesDisplay}"
                                                    Foreground="{DynamicResource MutedTextBrush}"
                                                    FontSize="{DynamicResource FontSizeBody}" />
@@ -82,7 +85,7 @@
                                         <TextBlock Text="{Binding BytesDisplay}"
                                                    Foreground="{DynamicResource MutedTextBrush}"
                                                    FontSize="{DynamicResource FontSizeBody}" />
-                                    </StackPanel>
+                                    </WrapPanel>
 
                                     <TextBlock Text="{Binding FlagsDisplay}"
                                                Foreground="{DynamicResource WarningBrush}"

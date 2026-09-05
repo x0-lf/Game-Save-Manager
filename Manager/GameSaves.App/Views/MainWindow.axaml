@@ -406,7 +406,7 @@
 						                    PreferredWidth="300"
 						                    MinPanelWidth="200"
 						                    IsVisible="{Binding !IsSteamMissing}">
-							<TextBlock Text="{Binding LibraryCount}"
+							<TextBlock Text="{Binding LibraryCount, StringFormat='{}{0:N0}'}"
 							           Classes="statValue"
 							           Classes.accent="{Binding HasLibraries}" />
 						</wsp:WorkspacePanel>
@@ -417,7 +417,7 @@
 						                    PreferredWidth="300"
 						                    MinPanelWidth="200"
 						                    IsVisible="{Binding !IsSteamMissing}">
-							<TextBlock Text="{Binding InstalledGameCount}"
+							<TextBlock Text="{Binding InstalledGameCount, StringFormat='{}{0:N0}'}"
 							           Classes="statValue"
 							           Classes.good="{Binding HasInstalledGames}" />
 						</wsp:WorkspacePanel>
@@ -428,7 +428,7 @@
 						                    PreferredWidth="300"
 						                    MinPanelWidth="200"
 						                    IsVisible="{Binding !IsSteamMissing}">
-							<TextBlock Text="{Binding SteamProfileCount}"
+							<TextBlock Text="{Binding SteamProfileCount, StringFormat='{}{0:N0}'}"
 							           Classes="statValue"
 							           Classes.accent="{Binding HasSteamProfiles}" />
 						</wsp:WorkspacePanel>
@@ -439,7 +439,7 @@
 						                    PreferredWidth="300"
 						                    MinPanelWidth="200"
 						                    IsVisible="{Binding !IsSteamMissing}">
-							<TextBlock Text="{Binding ApprovedMappingCount}"
+							<TextBlock Text="{Binding ApprovedMappingCount, StringFormat='{}{0:N0}'}"
 							           Classes="statValue"
 							           Classes.good="{Binding HasApprovedMappings}" />
 						</wsp:WorkspacePanel>
@@ -450,7 +450,7 @@
 						                    PreferredWidth="300"
 						                    MinPanelWidth="200"
 						                    IsVisible="{Binding !IsSteamMissing}">
-							<TextBlock Text="{Binding PendingMappingCount}"
+							<TextBlock Text="{Binding PendingMappingCount, StringFormat='{}{0:N0}'}"
 							           Classes="statValue"
 							           Classes.warn="{Binding HasPendingMappings}" />
 						</wsp:WorkspacePanel>
@@ -461,7 +461,7 @@
 						                    PreferredWidth="300"
 						                    MinPanelWidth="200"
 						                    IsVisible="{Binding !IsSteamMissing}">
-							<TextBlock Text="{Binding NeedsFixMappingCount}"
+							<TextBlock Text="{Binding NeedsFixMappingCount, StringFormat='{}{0:N0}'}"
 							           Classes="statValue"
 							           Classes.bad="{Binding HasNeedsFixMappings}" />
 						</wsp:WorkspacePanel>

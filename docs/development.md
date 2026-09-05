@@ -65,6 +65,104 @@ platform support. The `system` theme has no OS theme to inherit there, so
 variant-scoped tokens read `unresolved` on those rows; the interactive run
 below covers them.
 
+Every capture mode, gallery modes included, runs against a throwaway working
+directory: a new database, a new interface-settings file, a new sync-settings
+file, a Steam locator and fallback scanner that find nothing, and a Google
+Drive service that is never asked to authenticate. No real save, backup,
+credential, account, or filesystem path can reach a capture.
+
+## Gallery capture
+
+Gallery mode produces the screenshots the website uses, and doubles as visual
+evidence for review. It differs from the regression modes in one way only: it
+runs against a populated, deterministic **showcase fixture** instead of the
+empty state, because a marketing page showing "no games found" says nothing
+about the product. The fixture lives entirely in the harness
+(`GameSaves.UiCapture/Gallery/GalleryShowcase.cs`); no production view model
+carries a marketing constant.
+
+```powershell
+# Deterministic renders: the archive, the text-scale sweep, and the headless
+# half of the website set.
+dotnet run --project Manager/GameSaves.UiCapture/GameSaves.UiCapture.csproj -- artifacts/ui-gallery gallery
+
+# Real Windows composition: Acrylic, Mica, floating panels, detached windows.
+dotnet run --project Manager/GameSaves.UiMaterialCapture/GameSaves.UiMaterialCapture.csproj -- artifacts/ui-gallery gallery
+
+# Check what was produced: every image described, present, and truthful.
+dotnet run --project Manager/GameSaves.UiCapture/GameSaves.UiCapture.csproj -- artifacts/ui-gallery gallery-verify
+```
+
+Narrower modes exist for iterating: `gallery-full` (archive only),
+`gallery-curated` (website set only), `gallery-accessibility` (text scales
+only) and `gallery-layout` (workspace and navigation only). The interactive
+harness takes `gallery` (a subsampled material archive plus the website set),
+`gallery-full` (every material cell the plan defines) and `gallery-curated`
+(website set only).
+
+### Two harnesses, one plan
+
+`GameSaves.UiCapture/Gallery/GalleryPlan.cs` is the single list of what exists.
+Each scenario names the engine that can render it truthfully, and each harness
+captures only its own scenarios:
+
+| Engine | Renders | Cannot render |
+| --- | --- | --- |
+| `avalonia-headless` | Everything with no window material; byte-stable per commit | Acrylic, Mica, anything with more than one window |
+| `windows-screen-readback` | The composited desktop, so real materials and real multi-window layouts | Nothing deterministically: the OS decides |
+
+The interactive harness needs an unlocked session that nobody is using. A
+locked screen refuses a read-back outright, and a read-back returns whatever is
+on the screen, so any other window in front of the capture area would be saved
+as if it were the application. The harness therefore samples the capture region
+on a grid before every read-back and refuses unless every point belongs to one
+of its own windows; it waits for the area to clear and stops with a plain
+message if it does not. Do not use the machine while it runs.
+
+Acrylic and Mica are drawn by the Windows compositor, not by the application.
+Avalonia's own render never contains the backdrop, so a headless capture that
+requested a material still reports `effectiveMaterial: none` — it is not
+evidence of that material and is never selected for the website. The
+interactive harness records the transparency level Windows actually granted
+next to the one requested; when the platform substitutes or denies a level the
+capture is kept, marked as a fallback, and dropped from the selection.
+
+High Contrast forces opaque surfaces by design, so a High Contrast capture also
+reports `effectiveMaterial: none`. There is deliberately no "High Contrast with
+Mica" image; it would be a picture of something the application never does.
+
+### Output
+
+Two sets, kept apart on purpose:
+
+| Path | What it is |
+| --- | --- |
+| `artifacts/ui-gallery/full/` | The QA archive: the page/theme/accent/material/resolution matrix, the High Contrast pass, and the 85/100/125/150% text-scale sweep. Hundreds of images. Never published. |
+| `artifacts/ui-gallery/selected/` | The website set: roughly fifty images, each with a caption and alt text. |
+| `artifacts/ui-gallery/gallery-manifest.json` | Every image, with the full scenario, the engine, the effective material, notes, the source commit, a SHA-256 and a perceptual hash. |
+| `artifacts/ui-gallery/gallery-selected.json` | The website subset in presentation order. |
+| `artifacts/ui-gallery/accessibility-layout-report.md` | Per page and text scale: PASS, MINOR, or FAIL, measured on the arranged visual tree. |
+
+Each harness writes a `manifest-<engine>.json` fragment and then rebuilds the
+two combined files from every fragment present, so running one harness gives a
+valid partial manifest and running both gives the complete one.
+
+Resolutions: the website set is captured at exactly `1280x720` and `1336x768`.
+The existing `layout` mode keeps its `1366x768` acceptance coverage; gallery
+mode does not touch it.
+
+### Adding a page, provider, or scenario
+
+1. Add rows to the showcase fixture in `GalleryShowcase` if the page needs data.
+2. Add scenarios to `GalleryPlan` — `Full()` for the archive, `Curated()` for
+   the website, with a caption and alt text.
+3. If the scenario needs a window material or more than one window, set
+   `Engine = GalleryEngines.WindowsScreenReadback`.
+4. Extend the coverage rules in `GalleryVerification` so the new dimension is
+   required rather than optional.
+5. `dotnet test --filter FullyQualifiedName~Gallery` checks the plan without a
+   display; the capture run checks the images.
+
 ## Window material matrix
 
 Validate the full cross-product before release:
@@ -93,7 +191,9 @@ It takes over the screen for a few minutes: it shows a full-screen white and
 then black window behind the application, drives the whole matrix live in one
 process (no restart), and writes one PNG per row plus
 `windows-material-report.tsv`. Its database, settings file, and Steam locator
-are throwaway, so no real user data can reach a capture.
+are throwaway, so no real user data can reach a capture, and it refuses to read
+back any region another application is covering. Leave the machine alone while
+it runs.
 
 Exit codes:
 

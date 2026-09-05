@@ -20,4 +20,15 @@
     <ProjectReference Include="..\GameSaves.App\GameSaves.App.csproj" />
   </ItemGroup>
 
+  <!-- The gallery scenario plan, the showcase fixture, the scene applier and
+       the manifest are shared with GameSaves.UiCapture: one scenario has to
+       mean the same thing in both harnesses, and a second copy of the
+       privacy isolation is a second thing to get wrong. Linked rather than
+       project-referenced, because that project is an Exe whose own entry
+       point has nothing to do with this one. -->
+  <ItemGroup>
+    <Compile Include="..\GameSaves.UiCapture\Gallery\*.cs"
+             Link="Gallery\%(Filename)%(Extension)" />
+  </ItemGroup>
+
 </Project>

@@ -67,14 +67,24 @@ namespace GameSaves.UiCapture
         // Windows blur/Mica still requires the documented interactive pass.
         private static bool _materialOnly;
 
+        // The requested mode. Everything beginning with "gallery" produces
+        // website/QA gallery output against the populated showcase fixture;
+        // every other mode keeps its original empty-state regression
+        // behaviour.
+        private static string _mode = "default";
+
+        // Read before the working directory moves into the throwaway folder,
+        // because git cannot answer from there.
+        private static string _commit = "unknown";
+
         public static int Main(string[] args)
         {
-            _layoutOnly = args.Length > 1 &&
-                string.Equals(args[1], "layout", StringComparison.OrdinalIgnoreCase);
-            _railOnly = args.Length > 1 &&
-                string.Equals(args[1], "rail", StringComparison.OrdinalIgnoreCase);
-            _materialOnly = args.Length > 1 &&
-                string.Equals(args[1], "material", StringComparison.OrdinalIgnoreCase);
+            _mode = args.Length > 1
+                ? args[1].ToLowerInvariant()
+                : "default";
+            _layoutOnly = _mode == "layout";
+            _railOnly = _mode == "rail";
+            _materialOnly = _mode == "material";
 
             string outputDirectory = args.Length > 0
                 ? args[0]
@@ -82,10 +92,31 @@ namespace GameSaves.UiCapture
             outputDirectory = Path.GetFullPath(outputDirectory);
             Directory.CreateDirectory(outputDirectory);
 
-            string tempRoot = Path.Combine(
-                Path.GetTempPath(),
-                "gamesave-ui-capture-" + Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(tempRoot);
+            _commit = Gallery.GalleryManifest.CurrentCommit();
+
+            // Verification and publishing read a gallery that already exists;
+            // neither needs a window, so both run before the headless platform
+            // is started.
+            if (_mode == "gallery-verify")
+                return Verify(outputDirectory);
+
+            if (_mode == "gallery-publish")
+            {
+                // args[2] is where the website assets go; without it they land
+                // beside the gallery under a dated folder.
+                string destination = args.Length > 2
+                    ? args[2]
+                    : Path.Combine(
+                        outputDirectory,
+                        "publish",
+                        DateTime.Now.ToString("yyyy-MM-dd",
+                            System.Globalization.CultureInfo.InvariantCulture));
+
+                return Publish(outputDirectory, Path.GetFullPath(destination));
+            }
+
+            string tempRoot = Gallery.GalleryFixtureServices
+                .CreateTemporaryRoot("ui-capture");
 
             // Work from inside the temporary directory and hand the app a
             // relative database path, so no absolute local path (which embeds
@@ -112,39 +143,52 @@ namespace GameSaves.UiCapture
                 Environment.CurrentDirectory = originalDirectory;
                 // The only local deletion permitted is a temporary directory
                 // this run itself created.
-                try
-                {
-                    Directory.Delete(tempRoot, recursive: true);
-                }
-                catch (IOException)
-                {
-                }
-                catch (UnauthorizedAccessException)
-                {
-                }
+                Gallery.GalleryFixtureServices.TryDeleteTemporaryRoot(tempRoot);
             }
+        }
+
+        // Reports every problem it finds rather than the first, so one run
+        // tells a developer everything the gallery is missing.
+        private static int Verify(string galleryRoot)
+        {
+            var problems = new List<string>();
+            problems.AddRange(Gallery.GalleryVerification.VerifyPlan());
+            problems.AddRange(Gallery.GalleryVerification.VerifyOutput(galleryRoot));
+
+            foreach (string problem in problems)
+                Console.WriteLine("PROBLEM: " + problem);
+
+            Console.WriteLine(problems.Count == 0
+                ? "Gallery verified: every image is described, present, and truthful."
+                : $"{problems.Count} problem(s) found.");
+
+            return problems.Count == 0 ? 0 : 1;
+        }
+
+        private static int Publish(string galleryRoot, string destination)
+        {
+            Gallery.GalleryPublish.Result result =
+                Gallery.GalleryPublish.Run(galleryRoot, destination);
+
+            foreach (string problem in result.Problems)
+                Console.WriteLine("PROBLEM: " + problem);
+
+            Console.WriteLine(
+                $"Published {result.Copied} image(s) to {destination}" +
+                (result.Converted > 0 ? $", {result.Converted} converted to WebP." : "."));
+
+            return result.Copied > 0 ? 0 : 1;
         }
 
         private static async Task<int> CaptureAllAsync(
             string outputDirectory)
         {
-            using ServiceProvider provider = AppServices.Build(services =>
-            {
-                services.AddSingleton<IAppDatabasePathProvider>(
-                    new GameSaves.Infrastructure.Platform
-                        .SchemaInitializingAppDatabasePathProvider(
-                            new FixedDatabasePathProvider("capture.db")));
-                services.AddSingleton<ISteamRootLocator>(
-                    new NoSteamRootLocator());
-                // The discovery service falls back to scanning well-known
-                // install directories even when the locator finds nothing,
-                // which would put this machine's real game names into the
-                // captures. The fallback must find nothing either.
-                services.AddSingleton<ISteamFallbackScanner>(
-                    new NoSteamFallbackScanner());
-                services.AddSingleton<IUiSettingsStore>(
-                    new UiSettingsStore("ui-settings.json"));
-            });
+            // Database, UI settings, sync settings, Steam discovery and its
+            // directory-scanning fallback are all replaced with throwaway
+            // equivalents, and Google Drive authentication is never consulted.
+            // See GalleryFixtureServices for what each override prevents.
+            using ServiceProvider provider = AppServices.Build(
+                services => Gallery.GalleryFixtureServices.Register(services));
 
             MainWindowViewModel viewModel =
                 provider.GetRequiredService<MainWindowViewModel>();
@@ -180,6 +224,9 @@ namespace GameSaves.UiCapture
                 .First();
 
             int written = 0;
+
+            if (_mode.StartsWith("gallery", StringComparison.Ordinal))
+                return RunGallery(window, viewModel, outputDirectory);
 
             if (_materialOnly)
             {
@@ -416,6 +463,83 @@ namespace GameSaves.UiCapture
             return written;
         }
 
+        // Gallery capture. The archive and the website set are written to two
+        // different folders on purpose: one is evidence, the other is
+        // published, and mixing them is how five hundred QA frames end up on a
+        // marketing page.
+        private static int RunGallery(
+            GameSaves.App.Views.MainWindow window,
+            MainWindowViewModel viewModel,
+            string galleryRoot)
+        {
+            // The populated fixture. Deterministic, entirely synthetic, and
+            // applied only in gallery mode: the regression sweeps keep the
+            // empty state they were built around.
+            Gallery.GalleryShowcase.Apply(viewModel);
+            Dispatcher.UIThread.RunJobs();
+
+            IReadOnlyList<Gallery.GalleryScenario> archive =
+                Gallery.GalleryPlan.FullFor(Gallery.GalleryEngines.Headless);
+            IReadOnlyList<Gallery.GalleryScenario> accessibility =
+                Gallery.GalleryPlan.Accessibility();
+            IReadOnlyList<Gallery.GalleryScenario> curated =
+                Gallery.GalleryPlan.CuratedFor(Gallery.GalleryEngines.Headless);
+
+            bool wantArchive = _mode is "gallery" or "gallery-full";
+            bool wantAccessibility = _mode is "gallery" or "gallery-accessibility";
+            bool wantCurated = _mode is "gallery" or "gallery-curated" or "gallery-layout";
+
+            if (_mode == "gallery-layout")
+            {
+                curated = curated
+                    .Where(scenario =>
+                        scenario.Category == Gallery.GalleryCategories.Workspace ||
+                        scenario.Category == Gallery.GalleryCategories.Navigation)
+                    .ToArray();
+            }
+
+            var entries = new List<Gallery.GalleryManifestEntry>();
+            var accessibilityRows = new List<string>();
+
+            if (wantArchive)
+            {
+                entries.AddRange(GallerySweep.Run(
+                    window, viewModel, galleryRoot, "full", _commit,
+                    archive, accessibilityRows));
+            }
+
+            if (wantAccessibility)
+            {
+                entries.AddRange(GallerySweep.Run(
+                    window, viewModel, galleryRoot, "full", _commit,
+                    accessibility, accessibilityRows));
+            }
+
+            if (wantCurated)
+            {
+                entries.AddRange(GallerySweep.Run(
+                    window, viewModel, galleryRoot, "selected", _commit,
+                    curated, accessibilityRows));
+            }
+
+            if (accessibilityRows.Count > 0)
+                GallerySweep.WriteAccessibilityReport(galleryRoot, accessibilityRows);
+
+            IReadOnlyList<Gallery.GalleryManifestEntry> marked =
+                Gallery.GalleryManifest.MarkDuplicates(entries);
+
+            Gallery.GalleryManifest.WriteFragment(
+                galleryRoot, "headless", "GameSaves.UiCapture", _commit, marked);
+
+            (int total, int selected) =
+                Gallery.GalleryManifest.Merge(galleryRoot, _commit);
+
+            Console.WriteLine(
+                $"Gallery manifest: {total} image(s), {selected} selected for the website.");
+
+            return entries.Count;
+        }
+
         private static int Shot(Window window, string outputDirectory, string name)
         {
             Dispatcher.UIThread.RunJobs();
@@ -488,35 +612,6 @@ namespace GameSaves.UiCapture
                 totalBytes,
                 Array.Empty<SavePathVerificationResult>(),
                 Error: null));
-        }
-
-        private sealed class FixedDatabasePathProvider : IAppDatabasePathProvider
-        {
-            private readonly string _path;
-
-            public FixedDatabasePathProvider(string path) => _path = path;
-
-            public string GetDatabasePath() => _path;
-        }
-
-        private sealed class NoSteamFallbackScanner : ISteamFallbackScanner
-        {
-            public SteamFallbackScanResult Scan(
-                SteamDiscoveryOptions options,
-                IProgress<SteamFallbackScanProgress>? progress = null,
-                CancellationToken cancellationToken = default)
-            {
-                return new SteamFallbackScanResult();
-            }
-        }
-
-        private sealed class NoSteamRootLocator : ISteamRootLocator
-        {
-            public bool TryLocate(out string steamPath)
-            {
-                steamPath = string.Empty;
-                return false;
-            }
         }
     }
 }

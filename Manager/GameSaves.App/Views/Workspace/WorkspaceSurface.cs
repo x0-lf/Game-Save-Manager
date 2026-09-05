@@ -45,6 +45,12 @@ namespace GameSaves.App.Views.Workspace
         /// </summary>
         private const double NarrowThreshold = 760;
 
+        /// <summary>
+        /// Room kept free on the right for the page scrollbar, which paints
+        /// over the content rather than beside it.
+        /// </summary>
+        private const double ScrollBarGutter = 12;
+
         public static readonly StyledProperty<IWorkspaceLayoutPage?> LayoutProperty =
             AvaloniaProperty.Register<WorkspaceSurface, IWorkspaceLayoutPage?>(nameof(Layout));
 
@@ -88,7 +94,17 @@ namespace GameSaves.App.Views.Workspace
             // One scroller for the whole page. The regions inside it do not
             // scroll themselves, which is what keeps a section from hiding
             // behind its own scrollbar three levels down.
-            _pageHost = new WorkspacePageHost(_fillPanels) { Child = _root };
+            //
+            // The page scrollbar is an overlay: it is painted over the content
+            // rather than beside it, so without this gutter it covered the
+            // right edge of every card — the card border, the last table
+            // column, and the right-most button in a header row all lost a
+            // few pixels to it on every page.
+            _pageHost = new WorkspacePageHost(_fillPanels)
+            {
+                Child = _root,
+                Margin = new Thickness(0, 0, ScrollBarGutter, 0),
+            };
             _pageScroll.Content = _pageHost;
             _pageScroll.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
             _pageScroll.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;

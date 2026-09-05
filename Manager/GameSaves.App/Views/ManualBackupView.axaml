@@ -416,19 +416,24 @@
                                     BorderBrush="{DynamicResource SubtleBorderBrush}"
                                     BorderThickness="0,0,0,1">
 
-                                <StackPanel Orientation="Horizontal"
-                                            Spacing="8">
-                                    <TextBlock Text="{Binding SeverityText}"
+                                <!-- A Grid, not a horizontal StackPanel: a stack
+                                     measures its children with unbounded width,
+                                     so TextWrapping on the message never applied
+                                     and a long warning ran off the panel edge. -->
+                                <Grid ColumnDefinitions="60,*"
+                                      ColumnSpacing="8">
+                                    <TextBlock Grid.Column="0"
+                                               Text="{Binding SeverityText}"
                                                Foreground="{DynamicResource WarningBrush}"
                                                FontSize="{DynamicResource FontSizeBody}"
-                                               FontWeight="SemiBold"
-                                               Width="60" />
+                                               FontWeight="SemiBold" />
 
-                                    <TextBlock Text="{Binding Message}"
+                                    <TextBlock Grid.Column="1"
+                                               Text="{Binding Message}"
                                                Foreground="{DynamicResource SecondaryTextBrush}"
                                                FontSize="{DynamicResource FontSizeBody}"
                                                TextWrapping="Wrap" />
-                                </StackPanel>
+                                </Grid>
                             </Border>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
