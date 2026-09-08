@@ -8,6 +8,77 @@
              x:DataType="vm:SyncViewModel"
              Background="{DynamicResource PageBackgroundBrush}">
 
+    <UserControl.Styles>
+        <!-- Sync state colouring. The accent owns direction and selection;
+             success, warning and danger keep their own meaning, so no accent
+             choice can turn an ordinary upload into an alarm or an alarm into
+             decoration. Every one of these states also carries its own words,
+             so colour is never the only indicator. -->
+        <Style Selector="TextBlock.syncState">
+            <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
+        </Style>
+        <Style Selector="TextBlock.syncState.direction">
+            <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+        </Style>
+        <Style Selector="TextBlock.syncState.success">
+            <Setter Property="Foreground" Value="{DynamicResource SuccessBrush}" />
+        </Style>
+        <Style Selector="TextBlock.syncState.warning">
+            <Setter Property="Foreground" Value="{DynamicResource WarningBrush}" />
+        </Style>
+        <Style Selector="TextBlock.syncState.danger">
+            <Setter Property="Foreground" Value="{DynamicResource DangerBrush}" />
+        </Style>
+
+        <!-- The direction control is the selection. Its look lives on a chip
+             inside the button rather than on the ToggleButton itself: the app
+             deliberately makes every ToggleButton surface transparent (the
+             rail and panel chrome depend on it), and the Fluent checked state
+             paints its own foreground over anything set here. The chip reads
+             the same IncludeInSync the button writes, so the two cannot
+             disagree.
+
+             Selected reads as the accent, because selection is an accent
+             state everywhere else in the app. Disabled stays visibly disabled
+             rather than merely quiet. -->
+        <Style Selector="ToggleButton.syncDirection">
+            <Setter Property="MinWidth" Value="96" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        </Style>
+        <Style Selector="Border.syncDirectionChip">
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Padding" Value="8,3" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}" />
+        </Style>
+        <Style Selector="Border.syncDirectionChip > TextBlock">
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource SecondaryTextBrush}" />
+        </Style>
+        <Style Selector="Border.syncDirectionChip.selected">
+            <Setter Property="Background" Value="{DynamicResource AccentSelectionTintBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+        </Style>
+        <Style Selector="Border.syncDirectionChip.selected > TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+        </Style>
+        <Style Selector="ToggleButton.syncDirection:pointerover Border.syncDirectionChip">
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentHoverBrush}" />
+        </Style>
+        <Style Selector="ToggleButton.syncDirection:disabled Border.syncDirectionChip">
+            <Setter Property="BorderBrush" Value="{DynamicResource SubtleBorderBrush}" />
+            <Setter Property="Background" Value="{DynamicResource InsetBackgroundBrush}" />
+        </Style>
+        <Style Selector="ToggleButton.syncDirection:disabled Border.syncDirectionChip > TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}" />
+        </Style>
+    </UserControl.Styles>
+
     <!-- No outer ScrollViewer: every region already scrolls itself, and a
          second one here would nest two scrollbars. -->
     <wsp:WorkspaceSurface Layout="{Binding Workspace}"
@@ -24,12 +95,32 @@
                                 CanCollapse="False"
                                 MinPanelWidth="320">
                 <wsp:WorkspacePanel.HeaderActions>
-                    <Button Content="Preview sync"
-                            ToolTip.Tip="Dry run: nothing is copied until you confirm."
-                            Classes="primary"
-                            Command="{Binding PreviewSyncCommand}"
-                            IsEnabled="{Binding CanPreviewSync}"
-                            VerticalAlignment="Center" />
+                    <!-- Three previews, one engine. Each sets the direction
+                         options below and rebuilds the plan; none of them
+                         transfers anything, because the confirmation and Sync
+                         Now still stand between a direction and a byte. -->
+                    <StackPanel Orientation="Horizontal"
+                                Spacing="8"
+                                VerticalAlignment="Center">
+                        <Button Content="Preview upload"
+                                ToolTip.Tip="Dry run of local-only runs going to the remote. Nothing is copied."
+                                Command="{Binding PreviewUploadCommand}"
+                                IsEnabled="{Binding CanPreviewSync}"
+                                VerticalAlignment="Center" />
+
+                        <Button Content="Preview download"
+                                ToolTip.Tip="Dry run of remote-only runs coming to the local backup base. Nothing is copied."
+                                Command="{Binding PreviewDownloadCommand}"
+                                IsEnabled="{Binding CanPreviewSync}"
+                                VerticalAlignment="Center" />
+
+                        <Button Content="Preview both"
+                                ToolTip.Tip="Dry run in both directions: nothing is copied until you confirm."
+                                Classes="primary"
+                                Command="{Binding PreviewBothDirectionsCommand}"
+                                IsEnabled="{Binding CanPreviewSync}"
+                                VerticalAlignment="Center" />
+                    </StackPanel>
                 </wsp:WorkspacePanel.HeaderActions>
 
                 <StackPanel Spacing="6">
@@ -37,6 +128,81 @@
                                Foreground="{DynamicResource MutedTextBrush}"
                                FontSize="{DynamicResource FontSizeBody}"
                                TextWrapping="Wrap" />
+
+                    <!-- Both endpoints named before any preview runs, so
+                         "upload" and "download" have an unmistakable
+                         direction. Read from saved configuration only: no
+                         remote call renders this, and no secret reaches it. -->
+                    <Border Background="{DynamicResource InsetBackgroundBrush}"
+                            BorderBrush="{DynamicResource SubtleBorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="10,8">
+                        <StackPanel Spacing="4">
+                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                                <TextBlock Grid.Column="0"
+                                           Text="Local"
+                                           Width="52"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                           FontSize="{DynamicResource FontSizeBody}"
+                                           FontWeight="SemiBold"
+                                           VerticalAlignment="Center" />
+
+                                <SelectableTextBlock Grid.Column="1"
+                                                     Text="{Binding LocalEndpointDisplay}"
+                                                     ToolTip.Tip="{Binding LocalEndpointDisplay}"
+                                                     Foreground="{DynamicResource PrimaryTextBrush}"
+                                                     FontSize="{DynamicResource FontSizeBody}"
+                                                     TextWrapping="Wrap"
+                                                     VerticalAlignment="Center" />
+
+                                <Button Grid.Column="2"
+                                        Content="Open"
+                                        Command="{Binding OpenLocalBackupLocationCommand}"
+                                        IsEnabled="{Binding CanOpenLocalBackupLocation}"
+                                        ToolTip.Tip="Open the local backup folder. Nothing is copied, moved, or deleted."
+                                        FontSize="{DynamicResource FontSizeBody}"
+                                        VerticalAlignment="Center" />
+                            </Grid>
+
+                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                                <TextBlock Grid.Column="0"
+                                           Text="Remote"
+                                           Width="52"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                           FontSize="{DynamicResource FontSizeBody}"
+                                           FontWeight="SemiBold"
+                                           VerticalAlignment="Center" />
+
+                                <SelectableTextBlock Grid.Column="1"
+                                                     Text="{Binding RemoteEndpointDisplay}"
+                                                     ToolTip.Tip="{Binding RemoteEndpointDisplay}"
+                                                     Foreground="{DynamicResource PrimaryTextBrush}"
+                                                     FontSize="{DynamicResource FontSizeBody}"
+                                                     TextWrapping="Wrap"
+                                                     VerticalAlignment="Center" />
+
+                                <Button Grid.Column="2"
+                                        Content="Open"
+                                        Command="{Binding OpenRemoteLocationCommand}"
+                                        IsEnabled="{Binding CanOpenRemoteLocation}"
+                                        ToolTip.Tip="Open the remote location. Nothing is copied, moved, or deleted."
+                                        FontSize="{DynamicResource FontSizeBody}"
+                                        VerticalAlignment="Center" />
+                            </Grid>
+
+                            <TextBlock Text="{Binding EndpointProfileStateDisplay}"
+                                       Foreground="{DynamicResource MutedTextBrush}"
+                                       FontSize="{DynamicResource FontSizeBody}"
+                                       TextWrapping="Wrap" />
+
+                            <TextBlock Text="{Binding EndpointIssue}"
+                                       IsVisible="{Binding HasEndpointIssue}"
+                                       Foreground="{DynamicResource WarningBrush}"
+                                       FontSize="{DynamicResource FontSizeBody}"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
 
                     <StackPanel Spacing="2"
                                 IsVisible="{Binding IsSyncRunning}">
@@ -471,6 +637,13 @@
                                        Foreground="{DynamicResource SecondaryTextBrush}"
                                        FontSize="{DynamicResource FontSizeBody}"
                                        TextWrapping="Wrap" />
+
+                            <!-- Concise, because the full comparison belongs in
+                                 the provider guide, not in a settings panel. -->
+                            <TextBlock Text="Drive transfers are paced by file count and by Google's own rate limits, so a large first sync can take a long time. Slow is not failed: progress is per file and cancelling is safe. For bulk transfers you can instead point the Local or mounted folder provider at a Google Drive for desktop folder and let Google's client move the bytes. See the provider guide, Performance choices."
+                                       Foreground="{DynamicResource MutedTextBrush}"
+                                       FontSize="{DynamicResource FontSizeBody}"
+                                       TextWrapping="Wrap" />
                         </StackPanel>
 
                         <StackPanel Orientation="Horizontal"
@@ -521,9 +694,13 @@
                                       IsChecked="{Binding ConfirmSync}"
                                       FontSize="{DynamicResource FontSizeBody}" />
                         </Border>
+                        <!-- Offered only for a runnable plan, with runs
+                             selected, and with the confirmation given. The
+                             command refuses all three cases again anyway; this
+                             just stops the button pretending otherwise. -->
                         <Button Content="Sync now"
                                 Command="{Binding ExecuteSyncCommand}"
-                                IsEnabled="{Binding CanExecuteSync}"
+                                IsEnabled="{Binding CanExecuteSyncNow}"
                                 VerticalAlignment="Center" />
                     </WrapPanel>
                 </StackPanel>
@@ -575,12 +752,12 @@
                             BorderThickness="0,0,0,1"
                             IsVisible="{Binding !!Items.Count}">
 
-                        <Grid ColumnDefinitions="34,2*,90,*,90,90,*"
+                        <Grid ColumnDefinitions="100,1.7*,165,0.9*,80,80,1.3*"
                               ColumnSpacing="10">
 
-                            <TextBlock Grid.Column="0" Text="" />
+                            <TextBlock Grid.Column="0" Text="Action" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="{DynamicResource FontSizeBody}" FontWeight="Bold" />
                             <TextBlock Grid.Column="1" Text="Run" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="{DynamicResource FontSizeBody}" FontWeight="Bold" />
-                            <TextBlock Grid.Column="2" Text="Action" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="{DynamicResource FontSizeBody}" FontWeight="Bold" />
+                            <TextBlock Grid.Column="2" Text="Where it is" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="{DynamicResource FontSizeBody}" FontWeight="Bold" />
                             <TextBlock Grid.Column="3" Text="Game" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="{DynamicResource FontSizeBody}" FontWeight="Bold" />
                             <TextBlock Grid.Column="4" Text="Files" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="{DynamicResource FontSizeBody}" FontWeight="Bold" />
                             <TextBlock Grid.Column="5" Text="Size" Foreground="{DynamicResource SecondaryTextBrush}" FontSize="{DynamicResource FontSizeBody}" FontWeight="Bold" />
@@ -596,15 +773,39 @@
                                             BorderBrush="{DynamicResource SubtleBorderBrush}"
                                             BorderThickness="0,0,0,1">
 
-                                        <Grid ColumnDefinitions="34,2*,90,*,90,90,*"
+                                        <Grid ColumnDefinitions="100,1.7*,165,0.9*,80,80,1.3*"
+                                              RowDefinitions="Auto,Auto"
                                               ColumnSpacing="10">
 
-                                            <CheckBox Grid.Column="0"
-                                                      IsChecked="{Binding IncludeInSync}"
-                                                      IsVisible="{Binding IsSelectable}"
-                                                      ToolTip.Tip="Untick to exclude this run from the sync." />
+                                            <!-- The visible action is the
+                                                 selection. It writes the same
+                                                 IncludeInSync the Select All
+                                                 and Select None actions write,
+                                                 so there is one selection
+                                                 state, not two. Conflict and
+                                                 In sync rows are disabled: the
+                                                 safety model never copies
+                                                 them. Space and Enter toggle
+                                                 it, because it is a real
+                                                 ToggleButton rather than a
+                                                 clickable label. -->
+                                            <ToggleButton Grid.Row="0" Grid.Column="0"
+                                                          Classes="syncDirection"
+                                                          IsChecked="{Binding IncludeInSync}"
+                                                          IsEnabled="{Binding IsSelectable}"
+                                                          FontSize="{DynamicResource FontSizeBody}"
+                                                          VerticalAlignment="Center"
+                                                          AutomationProperties.Name="{Binding ActionAccessibleName}"
+                                                          AutomationProperties.HelpText="{Binding ActionToolTip}"
+                                                          ToolTip.Tip="{Binding ActionToolTip}">
+                                                <Border Classes="syncDirectionChip"
+                                                        Classes.selected="{Binding IncludeInSync}">
+                                                    <TextBlock Text="{Binding ActionText}"
+                                                               FontSize="{DynamicResource FontSizeBody}" />
+                                                </Border>
+                                            </ToggleButton>
 
-                                            <TextBlock Grid.Column="1"
+                                            <TextBlock Grid.Row="0" Grid.Column="1"
                                                        Text="{Binding RunName}"
                                                        Foreground="{DynamicResource SecondaryTextBrush}"
                                                        ToolTip.Tip="{Binding RunName}"
@@ -612,38 +813,70 @@
                                                        VerticalAlignment="Center"
                                                        TextTrimming="CharacterEllipsis" />
 
-                                            <TextBlock Grid.Column="2"
-                                                       Text="{Binding ActionText}"
-                                                       Foreground="{DynamicResource AccentBrush}"
+                                            <TextBlock Grid.Row="0" Grid.Column="2"
+                                                       Classes="syncState"
+                                                       Classes.direction="{Binding IsDirectionState}"
+                                                       Classes.success="{Binding IsSuccessState}"
+                                                       Classes.warning="{Binding IsWarningState}"
+                                                       Classes.danger="{Binding IsDangerState}"
+                                                       Text="{Binding PresenceText}"
+                                                       ToolTip.Tip="{Binding PresenceText}"
                                                        FontSize="{DynamicResource FontSizeBody}"
                                                        VerticalAlignment="Center"
-                                                       FontWeight="SemiBold" />
+                                                       FontWeight="SemiBold"
+                                                       TextTrimming="CharacterEllipsis" />
 
-                                            <TextBlock Grid.Column="3"
+                                            <TextBlock Grid.Row="0" Grid.Column="3"
                                                        Text="{Binding GameName}"
                                                        Foreground="{DynamicResource SecondaryTextBrush}"
                                                        FontSize="{DynamicResource FontSizeBody}"
                                                        VerticalAlignment="Center"
                                                        TextTrimming="CharacterEllipsis" />
 
-                                            <TextBlock Grid.Column="4"
+                                            <TextBlock Grid.Row="0" Grid.Column="4"
                                                        Text="{Binding FilesDisplay}"
                                                        Foreground="{DynamicResource MutedTextBrush}"
                                                        FontSize="{DynamicResource FontSizeBody}"
                                                        VerticalAlignment="Center" />
 
-                                            <TextBlock Grid.Column="5"
+                                            <TextBlock Grid.Row="0" Grid.Column="5"
                                                        Text="{Binding SizeDisplay}"
                                                        Foreground="{DynamicResource MutedTextBrush}"
                                                        FontSize="{DynamicResource FontSizeBody}"
                                                        VerticalAlignment="Center" />
 
-                                            <TextBlock Grid.Column="6"
+                                            <TextBlock Grid.Row="0" Grid.Column="6"
                                                        Text="{Binding StatusText}"
                                                        Foreground="{DynamicResource PrimaryTextBrush}"
                                                        FontSize="{DynamicResource FontSizeBody}"
                                                        VerticalAlignment="Center"
                                                        TextWrapping="Wrap" />
+
+                                            <!-- Both display locations and the
+                                                 time both sides were last read,
+                                                 selectable so a long path can
+                                                 be copied out. -->
+                                            <StackPanel Grid.Row="1"
+                                                        Grid.Column="1"
+                                                        Grid.ColumnSpan="6"
+                                                        Margin="0,2,0,0"
+                                                        Spacing="1">
+                                                <SelectableTextBlock Text="{Binding LocalLocationDisplay}"
+                                                                     ToolTip.Tip="{Binding LocalLocationDisplay}"
+                                                                     Foreground="{DynamicResource MutedTextBrush}"
+                                                                     FontSize="{DynamicResource FontSizeCaption}"
+                                                                     TextWrapping="Wrap" />
+
+                                                <SelectableTextBlock Text="{Binding RemoteLocationDisplay}"
+                                                                     ToolTip.Tip="{Binding RemoteLocationDisplay}"
+                                                                     Foreground="{DynamicResource MutedTextBrush}"
+                                                                     FontSize="{DynamicResource FontSizeCaption}"
+                                                                     TextWrapping="Wrap" />
+
+                                                <TextBlock Text="{Binding LastVerifiedDisplay}"
+                                                           Foreground="{DynamicResource MutedTextBrush}"
+                                                           FontSize="{DynamicResource FontSizeCaption}" />
+                                            </StackPanel>
                                         </Grid>
                                     </Border>
                                 </DataTemplate>
@@ -707,6 +940,32 @@
                                FontSize="{DynamicResource FontSizeBody}"
                                TextWrapping="Wrap" />
 
+                    <!-- Transfer and verification are separate states. A run
+                         that was copied is not called verified until both
+                         sides have been read again, and that check never
+                         copies, moves, or deletes anything. -->
+                    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                        <TextBlock Grid.Column="0"
+                                   Text="{Binding VerificationStatusMessage}"
+                                   Foreground="{DynamicResource MutedTextBrush}"
+                                   FontSize="{DynamicResource FontSizeBody}"
+                                   TextWrapping="Wrap"
+                                   VerticalAlignment="Center" />
+
+                        <Button Grid.Column="1"
+                                Content="Verify"
+                                Command="{Binding VerifyLastSyncCommand}"
+                                IsEnabled="{Binding CanVerifyLastSync}"
+                                ToolTip.Tip="Re-read both sides and report what is actually there. Nothing is copied; a completed transfer is never repeated."
+                                FontSize="{DynamicResource FontSizeBody}" />
+
+                        <Button Grid.Column="2"
+                                Content="Stop check"
+                                Command="{Binding CancelVerificationCommand}"
+                                IsVisible="{Binding CanCancelVerification}"
+                                FontSize="{DynamicResource FontSizeBody}" />
+                    </Grid>
+
                     <ItemsControl ItemsSource="{Binding ExecutionResults}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="models:SyncItemResultRowViewModel">
@@ -714,31 +973,57 @@
                                         BorderBrush="{DynamicResource SubtleBorderBrush}"
                                         BorderThickness="0,0,0,1">
 
-                                    <Grid ColumnDefinitions="2*,130,90,*"
+                                    <Grid ColumnDefinitions="2*,220,160,90"
+                                          RowDefinitions="Auto,Auto"
                                           ColumnSpacing="10">
 
-                                        <TextBlock Grid.Column="0"
+                                        <TextBlock Grid.Row="0" Grid.Column="0"
                                                    Text="{Binding RunName}"
                                                    Foreground="{DynamicResource SecondaryTextBrush}"
+                                                   ToolTip.Tip="{Binding RunName}"
                                                    FontSize="{DynamicResource FontSizeBody}"
                                                    TextTrimming="CharacterEllipsis" />
 
-                                        <TextBlock Grid.Column="1"
-                                                   Text="{Binding Status}"
-                                                   Foreground="{DynamicResource PrimaryTextBrush}"
+                                        <TextBlock Grid.Row="0" Grid.Column="1"
+                                                   Classes="syncState"
+                                                   Classes.direction="{Binding IsDirectionState}"
+                                                   Classes.success="{Binding IsSuccessState}"
+                                                   Classes.warning="{Binding IsWarningState}"
+                                                   Classes.danger="{Binding IsDangerState}"
+                                                   Text="{Binding StateText}"
+                                                   ToolTip.Tip="{Binding StateDetail}"
+                                                   AutomationProperties.HelpText="{Binding StateDetail}"
                                                    FontSize="{DynamicResource FontSizeBody}"
-                                                   FontWeight="SemiBold" />
+                                                   FontWeight="SemiBold"
+                                                   TextWrapping="Wrap" />
 
-                                        <TextBlock Grid.Column="2"
+                                        <TextBlock Grid.Row="0" Grid.Column="2"
+                                                   Text="{Binding AffectedSideText}"
+                                                   Foreground="{DynamicResource MutedTextBrush}"
+                                                   FontSize="{DynamicResource FontSizeBody}"
+                                                   TextTrimming="CharacterEllipsis" />
+
+                                        <TextBlock Grid.Row="0" Grid.Column="3"
                                                    Text="{Binding SizeDisplay}"
                                                    Foreground="{DynamicResource MutedTextBrush}"
                                                    FontSize="{DynamicResource FontSizeBody}" />
 
-                                        <TextBlock Grid.Column="3"
-                                                   Text="{Binding Error}"
-                                                   Foreground="{DynamicResource WarningBrush}"
-                                                   FontSize="{DynamicResource FontSizeBody}"
-                                                   TextWrapping="Wrap" />
+                                        <StackPanel Grid.Row="1"
+                                                    Grid.Column="0"
+                                                    Grid.ColumnSpan="4"
+                                                    Margin="0,2,0,0"
+                                                    Spacing="1">
+                                            <TextBlock Text="{Binding StateDetail}"
+                                                       Foreground="{DynamicResource MutedTextBrush}"
+                                                       FontSize="{DynamicResource FontSizeCaption}"
+                                                       TextWrapping="Wrap" />
+
+                                            <TextBlock Text="{Binding Error}"
+                                                       IsVisible="{Binding Error, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                                       Foreground="{DynamicResource WarningBrush}"
+                                                       FontSize="{DynamicResource FontSizeCaption}"
+                                                       TextWrapping="Wrap" />
+                                        </StackPanel>
                                     </Grid>
                                 </Border>
                             </DataTemplate>

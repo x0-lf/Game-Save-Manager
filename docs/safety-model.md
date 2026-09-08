@@ -24,6 +24,12 @@ belong to the [security policy](../SECURITY.md).
    identities are reported and not copied.
 10. **Auditable outcomes.** Operations report copied, skipped, blocked, incomplete,
     and failed items and record executed runs in SQLite where applicable.
+11. **Copied is not verified.** A finished transfer claims only that the copy
+    ran. A run is described as verified in sync only after both sides have been
+    read again and their manifest identities agree. Revalidation reuses the
+    provider's own dry-run comparison: it copies, moves, deletes, overwrites,
+    and repairs nothing, it can be cancelled, and neither its failure nor its
+    cancellation alters or removes the transfer result already recorded.
 
 ## What can be deleted
 

@@ -211,36 +211,54 @@ public sealed class SyncProviderCapabilityTests
     [Fact]
     public void ActivatedDriveCapabilities_OfferNoControlTheCodeCannotHonour()
     {
-        // Two declared capabilities describe features Milestone V does not
-        // implement: remote quota and opening the remote location. Activation
-        // makes both properties true, so the guarantee that matters is that
-        // neither reaches a control a user can press.
+        // Remote quota is still declared and still unimplemented, so it must
+        // not reach a control a user can press. Opening the remote location is
+        // no longer in that category: DRIVE-004 implemented it for Google
+        // Drive, which is why this test now only guards quota.
         SyncViewModel viewModel = CreateViewModel();
         viewModel.SelectedProviderKind = SyncProviderKind.GoogleDrive;
 
         Assert.True(viewModel.CanShowQuota);
-        Assert.True(viewModel.CanOpenRemoteLocation);
 
-        // No quota control is bound at all, and the Open Folder button lives
-        // inside the Local folder panel, so Google Drive never shows it.
         string view = ReadSyncView();
         Assert.DoesNotContain("CanShowQuota", view, StringComparison.Ordinal);
-        Assert.Contains(
-            "IsVisible=\"{Binding CanOpenRemoteLocation}\"",
-            view,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            "IsVisible=\"{Binding IsLocalFolderSelected}\"",
-            view,
-            StringComparison.Ordinal);
+    }
 
-        // And the command refuses anyway, with a sanitized message, so the
-        // guarantee does not rest on layout alone.
+    [Fact]
+    public void OpenRemoteLocation_FollowsTheCapabilityRatherThanTheProviderName()
+    {
+        // The gate is the declared capability. SFTP declares it false and gets
+        // no target and no attempt; Google Drive declares it true and is
+        // refused only by its own root-folder state, not by being named.
+        SyncViewModel viewModel = CreateViewModel();
+        var launched = new List<string>();
+        viewModel.LocationLauncher = target =>
+        {
+            launched.Add(target);
+            return true;
+        };
+
+        viewModel.SelectedProviderKind = SyncProviderKind.Sftp;
+
+        Assert.False(viewModel.CanOpenRemoteLocation);
         viewModel.OpenRemoteLocationCommand.Execute(null);
-
         Assert.Equal(
             "Opening the selected provider location is unavailable.",
             viewModel.StatusMessage);
+
+        viewModel.SelectedProviderKind = SyncProviderKind.GoogleDrive;
+
+        Assert.True(viewModel.CanOpenRemoteLocation);
+        Assert.Null(viewModel.ResolveRemoteLocationTarget());
+
+        viewModel.OpenRemoteLocationCommand.Execute(null);
+
+        // A disconnected account is told what to do next, and nothing is
+        // handed to the shell either way.
+        Assert.Equal(
+            "Connect the Google Drive account first, then check its backup folder.",
+            viewModel.StatusMessage);
+        Assert.Empty(launched);
     }
 
     [Fact]

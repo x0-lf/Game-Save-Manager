@@ -25,9 +25,19 @@ namespace GameSaves.App.ViewModels
         private readonly ISyncRemoteProfileService _profileService;
         private readonly IGoogleDriveOAuthService _googleDriveOAuthService;
         private readonly IGoogleDriveRootFolderService _googleDriveRootFolderService;
+        private readonly IBackupHistoryService? _backupHistoryService;
         private readonly IUtcClock _clock;
         private SyncPlan? _lastPlan;
         private ISyncProvider? _lastProvider;
+
+        // The completed run, kept so revalidation can be retried and so a
+        // verification failure never erases what the transfer actually did.
+        // _verifiedProvider pins the provider instance the result came from:
+        // once the profile or provider changes, the old result must not be
+        // revalidated against a different endpoint.
+        private SyncResult? _lastResult;
+        private ISyncProvider? _verifiedProvider;
+        private CancellationTokenSource? _verificationCancellation;
         private bool _applyingProfile;
         private bool _suppressProfileSelection;
         private bool _suppressProfileOptionSelection;
@@ -145,10 +155,34 @@ namespace GameSaves.App.ViewModels
         private bool downloadEnabled = true;
 
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(CanExecuteSyncNow))]
         private bool confirmSync;
 
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(CanExecuteSyncNow))]
         private bool canExecuteSync;
+
+        // What the plan actually contains, so the direction actions can be
+        // withdrawn when there is nothing for them to do rather than offering
+        // a transfer that would move nothing.
+        [ObservableProperty]
+        private bool planHasUploads;
+
+        [ObservableProperty]
+        private bool planHasDownloads;
+
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(CanExecuteSyncNow))]
+        private bool hasSelectedRuns;
+
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(CanVerifyLastSync))]
+        [NotifyPropertyChangedFor(nameof(CanCancelVerification))]
+        private bool isVerifying;
+
+        [ObservableProperty]
+        private string verificationStatusMessage =
+            "Nothing has been verified in this session yet.";
 
         [ObservableProperty]
         private string summaryDisplay = "";
@@ -454,6 +488,91 @@ namespace GameSaves.App.ViewModels
             _ => false,
         };
 
+        // ---------------------------------------------------------------
+        // Endpoints, named before the preview runs
+        //
+        // Everything below is read from configuration already in memory. No
+        // remote call is made to render a static description, and every value
+        // is chosen so a secret cannot reach it: no password, passphrase, key
+        // file content, token, or Drive object ID appears in any of them.
+        // ---------------------------------------------------------------
+
+        /// <summary>Where backup runs are read from and written to locally.</summary>
+        public string LocalEndpointDisplay =>
+            _backupHistoryService?.GetBackupBasePath() is { Length: > 0 } path
+                ? path
+                : "The local backup base is not available in this session.";
+
+        /// <summary>
+        /// The configured far side, named the way the user configured it.
+        /// SFTP shows host, port and path and never the credentials; Google
+        /// Drive shows the account and the folder's display name and never the
+        /// folder ID.
+        /// </summary>
+        public string RemoteEndpointDisplay => SelectedProviderKind switch
+        {
+            SyncProviderKind.LocalFolder =>
+                string.IsNullOrWhiteSpace(RemoteRootPath)
+                    ? "No sync folder chosen yet."
+                    : RemoteRootPath,
+
+            SyncProviderKind.Sftp => string.IsNullOrWhiteSpace(SftpHost)
+                ? "No SFTP host configured yet."
+                : $"{SftpHost}:{(string.IsNullOrWhiteSpace(SftpPort) ? "22" : SftpPort.Trim())}" +
+                  $"{(string.IsNullOrWhiteSpace(SftpRemotePath) ? "" : " " + SftpRemotePath.Trim())}",
+
+            SyncProviderKind.GoogleDrive =>
+                $"{GoogleDriveEndpointAccount} — {GoogleDriveEndpointFolder}",
+
+            _ => "This sync provider is not available in this version."
+        };
+
+        private string GoogleDriveEndpointAccount =>
+            GoogleDriveAccountEmail ??
+            GoogleDriveAccountDisplayName ??
+            (SelectedRemoteProfile?.ProviderSettings as GoogleDriveSyncRemoteSettings)
+                ?.AccountEmail ??
+            "No Google account connected";
+
+        private string GoogleDriveEndpointFolder =>
+            GoogleDriveRootFolderDisplayName ??
+            SelectedRemoteProfile?.RemoteRootDisplayName ??
+            GoogleDriveApplicationRoot.DisplayName;
+
+        /// <summary>
+        /// True while the endpoints describe settings that exist only in this
+        /// session. Shown so unsaved settings are never mistaken for a profile.
+        /// </summary>
+        public bool IsUsingUnsavedSettings => SelectedRemoteProfile is null;
+
+        public string EndpointProfileStateDisplay => IsUsingUnsavedSettings
+            ? "Unsaved settings — not stored in any remote profile."
+            : $"Profile \"{SelectedRemoteProfile!.DisplayName}\" — {RemoteProfileState}";
+
+        /// <summary>
+        /// What is still missing before a preview can run, stated before the
+        /// user presses anything. Null when the configuration is complete.
+        /// </summary>
+        public string? EndpointIssue => ValidateProviderSelection();
+
+        public bool HasEndpointIssue => EndpointIssue is not null;
+
+        /// <summary>
+        /// Raises the endpoint descriptions after any change that could make
+        /// them stale: provider, profile, target settings, or Drive state.
+        /// </summary>
+        private void RefreshEndpoints()
+        {
+            OnPropertyChanged(nameof(LocalEndpointDisplay));
+            OnPropertyChanged(nameof(RemoteEndpointDisplay));
+            OnPropertyChanged(nameof(IsUsingUnsavedSettings));
+            OnPropertyChanged(nameof(EndpointProfileStateDisplay));
+            OnPropertyChanged(nameof(EndpointIssue));
+            OnPropertyChanged(nameof(HasEndpointIssue));
+            OnPropertyChanged(nameof(CanOpenLocalBackupLocation));
+            OnPropertyChanged(nameof(CanOpenRemoteLocation));
+        }
+
         public string ProviderCapabilitySummary
         {
             get
@@ -711,7 +830,8 @@ namespace GameSaves.App.ViewModels
             IUtcClock clock,
             IGoogleDriveOAuthService googleDriveOAuthService,
             GameSaves.App.Services.WorkspaceLayoutService workspaceLayout,
-            IGoogleDriveRootFolderService? googleDriveRootFolderService = null)
+            IGoogleDriveRootFolderService? googleDriveRootFolderService = null,
+            IBackupHistoryService? backupHistoryService = null)
         {
             Workspace = workspaceLayout.Page(
                 GameSaves.App.Services.UiRailLayoutSettings.TabSync);
@@ -730,6 +850,10 @@ namespace GameSaves.App.ViewModels
             _googleDriveRootFolderService =
                 googleDriveRootFolderService ??
                 UnavailableGoogleDriveRootFolderService.Instance;
+            // Only ever read for the local endpoint description and for opening
+            // the backup folder. Absent in view-model tests that build this
+            // type directly, which then say so rather than inventing a path.
+            _backupHistoryService = backupHistoryService;
             ProviderOptions = _providerCatalog.GetAll()
                 .Where(descriptor => descriptor.IsConfigurationAvailable)
                 .ToArray();
@@ -759,8 +883,12 @@ namespace GameSaves.App.ViewModels
 
         partial void OnDownloadEnabledChanged(bool value) => InvalidatePlan();
 
-        partial void OnIsLoadingChanged(bool value) =>
+        partial void OnIsLoadingChanged(bool value)
+        {
             OnPropertyChanged(nameof(CanPreviewSync));
+            OnPropertyChanged(nameof(CanExecuteSyncNow));
+            OnPropertyChanged(nameof(CanVerifyLastSync));
+        }
 
         partial void OnSelectedProviderKindChanged(SyncProviderKind value)
         {
@@ -821,6 +949,24 @@ namespace GameSaves.App.ViewModels
 
         partial void OnRemoteProfileDisplayNameChanged(string value) => MarkProfileDirty();
 
+        // The Google Drive endpoint is assembled from these four, and none of
+        // them route through InvalidatePlan.
+        partial void OnRemoteProfileStateChanged(string value) => RefreshEndpoints();
+
+        partial void OnGoogleDriveAccountEmailChanged(string? value) => RefreshEndpoints();
+
+        partial void OnGoogleDriveAccountDisplayNameChanged(string? value) =>
+            RefreshEndpoints();
+
+        partial void OnGoogleDriveRootFolderDisplayNameChanged(string? value) =>
+            RefreshEndpoints();
+
+        partial void OnGoogleDriveConnectionStatusChanged(
+            GoogleDriveConnectionStatus value) => RefreshEndpoints();
+
+        partial void OnGoogleDriveRootFolderStatusChanged(
+            GoogleDriveRootFolderStatus value) => RefreshEndpoints();
+
         partial void OnSelectedRemoteProfileChanged(SyncRemoteProfile? value)
         {
             ConfirmDisconnectGoogleDrive = false;
@@ -831,6 +977,8 @@ namespace GameSaves.App.ViewModels
                 SelectProfileOption(value.Id);
                 ApplyRemoteProfile(value, persistSelection: true);
             }
+
+            RefreshEndpoints();
         }
 
         partial void OnSelectedRemoteProfileOptionChanged(SyncRemoteProfileOption? value)
@@ -867,14 +1015,23 @@ namespace GameSaves.App.ViewModels
         // and a provider holding a live connection must be released.
         private void InvalidatePlan(bool force = false)
         {
+            // Endpoints are re-read even when there is no plan to drop: they
+            // describe the settings, not the plan, and a stale endpoint is
+            // exactly what makes "Upload" point the wrong way.
+            RefreshEndpoints();
+
             if (!force && _lastPlan is null && _lastProvider is null)
                 return;
 
             _lastPlan = null;
             _lastProvider?.Dispose();
             _lastProvider = null;
+            // The completed result stays on screen, but it can no longer be
+            // revalidated: the endpoint it was produced against is gone.
+            _verifiedProvider = null;
             ClearPreview();
             ConfirmSync = false;
+            OnPropertyChanged(nameof(CanVerifyLastSync));
             StatusMessage = "Sync settings changed. Build a new sync preview.";
         }
 
@@ -2388,6 +2545,9 @@ namespace GameSaves.App.ViewModels
             SelectedSummaryDisplay = "";
             ConnectionCheckMessage = "";
             CanExecuteSync = false;
+            PlanHasUploads = false;
+            PlanHasDownloads = false;
+            HasSelectedRuns = false;
         }
 
         private void UpdateSelectedSummary()
@@ -2397,10 +2557,13 @@ namespace GameSaves.App.ViewModels
             if (selectable.Count == 0)
             {
                 SelectedSummaryDisplay = "";
+                HasSelectedRuns = false;
                 return;
             }
 
             var selected = selectable.Where(row => row.IncludeInSync).ToList();
+
+            HasSelectedRuns = selected.Count > 0;
 
             SelectedSummaryDisplay =
                 $"Selected for sync: {selected.Count} of {selectable.Count} run(s) " +
@@ -2440,35 +2603,207 @@ namespace GameSaves.App.ViewModels
             }
         }
 
+        // ---------------------------------------------------------------
+        // Opening locations
+        //
+        // Both commands only ever hand a location to the shell. Neither reads,
+        // writes, copies, or deletes anything, and the provider's capability
+        // metadata - not its name - decides whether the remote one is offered.
+        // ---------------------------------------------------------------
+
+        /// <summary>
+        /// The one place a location actually reaches the operating system.
+        /// Tests replace it so they can prove which target a command resolves
+        /// without a file manager or browser opening on the test machine.
+        /// </summary>
+        internal Func<string, bool> LocationLauncher { get; set; } = LaunchWithShell;
+
+        private static bool LaunchWithShell(string target)
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = target,
+                    UseShellExecute = true
+                });
+
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public bool CanOpenLocalBackupLocation =>
+            _backupHistoryService?.GetBackupBasePath() is { Length: > 0 } path &&
+            Directory.Exists(path);
+
+        [RelayCommand]
+        private void OpenLocalBackupLocation()
+        {
+            string? path = _backupHistoryService?.GetBackupBasePath();
+
+            if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
+            {
+                StatusMessage =
+                    "The local backup folder does not exist yet. It is created by the " +
+                    "first backup or the first download.";
+                return;
+            }
+
+            if (!LocationLauncher(path))
+                StatusMessage = "The local backup folder could not be opened.";
+        }
+
+        /// <summary>
+        /// The location the remote action would hand to the shell, or null when
+        /// there is nothing safe to open. A Drive folder resolves to its own
+        /// browser URL; the folder ID inside that URL is never displayed,
+        /// logged, or put into a bound property.
+        /// </summary>
+        internal string? ResolveRemoteLocationTarget()
+        {
+            switch (SelectedProviderKind)
+            {
+                case SyncProviderKind.LocalFolder:
+                    return !string.IsNullOrWhiteSpace(RemoteRootPath) &&
+                           Directory.Exists(RemoteRootPath)
+                        ? RemoteRootPath
+                        : null;
+
+                case SyncProviderKind.GoogleDrive:
+                    string? folderId = SelectedRemoteProfile?.RemoteFolderId;
+
+                    // A root that is missing, trashed, moved out of reach, or
+                    // duplicated is not a location to send someone to.
+                    return !string.IsNullOrWhiteSpace(folderId) &&
+                           GoogleDriveRootFolderStatus is
+                               GoogleDriveRootFolderStatus.Ready or
+                               GoogleDriveRootFolderStatus.Moved
+                        ? $"https://drive.google.com/drive/folders/{folderId}"
+                        : null;
+
+                default:
+                    return null;
+            }
+        }
+
+        private string RemoteLocationUnavailableMessage() => SelectedProviderKind switch
+        {
+            SyncProviderKind.LocalFolder =>
+                "Choose an existing local or mounted sync folder first.",
+
+            SyncProviderKind.GoogleDrive => GoogleDriveConnectionStatus switch
+            {
+                GoogleDriveConnectionStatus.Connected =>
+                    "Check the Google Drive backup folder first. A folder that is " +
+                    "missing, trashed, moved, or duplicated is not opened.",
+                _ =>
+                    "Connect the Google Drive account first, then check its backup folder."
+            },
+
+            _ => "Opening the selected provider location is unavailable."
+        };
+
         [RelayCommand]
         private void OpenRemoteLocation()
         {
-            if (!CanOpenRemoteLocation || !IsLocalFolderSelected)
+            if (!CanOpenRemoteLocation)
             {
                 StatusMessage = "Opening the selected provider location is unavailable.";
                 return;
             }
 
-            if (string.IsNullOrWhiteSpace(RemoteRootPath) ||
-                !Directory.Exists(RemoteRootPath))
+            string? target = ResolveRemoteLocationTarget();
+
+            if (target is null)
             {
-                StatusMessage = "Choose an existing local or mounted sync folder first.";
+                StatusMessage = RemoteLocationUnavailableMessage();
                 return;
             }
 
-            try
-            {
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = RemoteRootPath,
-                    UseShellExecute = true
-                });
-            }
-            catch
-            {
-                StatusMessage = "The sync folder could not be opened.";
-            }
+            if (!LocationLauncher(target))
+                StatusMessage = "The sync location could not be opened.";
         }
+
+        // ---------------------------------------------------------------
+        // Direction workflows
+        //
+        // These set the existing direction options and rebuild the preview
+        // through the one engine. There is no second transfer path, and none
+        // of them execute anything: the confirmation and Sync Now still stand
+        // between a direction choice and a byte moving.
+        // ---------------------------------------------------------------
+
+        [RelayCommand]
+        private Task PreviewUploadAsync() =>
+            PreviewDirectionAsync(upload: true, download: false);
+
+        [RelayCommand]
+        private Task PreviewDownloadAsync() =>
+            PreviewDirectionAsync(upload: false, download: true);
+
+        [RelayCommand]
+        private Task PreviewBothDirectionsAsync() =>
+            PreviewDirectionAsync(upload: true, download: true);
+
+        private Task PreviewDirectionAsync(bool upload, bool download)
+        {
+            UploadEnabled = upload;
+            DownloadEnabled = download;
+            return PreviewSyncAsync();
+        }
+
+        /// <summary>
+        /// Fills the bound plan state from a plan the provider produced. Shared
+        /// by the preview and by revalidation, so the fresh read revalidation
+        /// already performed also refreshes the plan instead of costing a
+        /// second enumeration.
+        /// </summary>
+        private void ApplyPlan(SyncPlan plan)
+        {
+            _lastPlan = plan;
+
+            Items.Clear();
+            Warnings.Clear();
+            ConfirmSync = false;
+
+            DateTimeOffset checkedAt = _clock.UtcNow;
+
+            foreach (SyncItem item in plan.Items)
+            {
+                Items.Add(new SyncItemRowViewModel(
+                    item,
+                    plan.ProviderName,
+                    checkedAt,
+                    UpdateSelectedSummary));
+            }
+
+            foreach (TransferPreviewWarning warning in plan.Warnings)
+                Warnings.Add(new TransferWarningRowViewModel(warning));
+
+            SummaryDisplay =
+                $"Upload: {plan.UploadCount} run(s) ({FormatBytes(plan.BytesToUpload)})   " +
+                $"Download: {plan.DownloadCount} run(s) ({FormatBytes(plan.BytesToDownload)})   " +
+                $"In sync: {plan.InSyncCount}   Conflicts: {plan.ConflictCount}";
+
+            PlanHasUploads = plan.UploadCount > 0;
+            PlanHasDownloads = plan.DownloadCount > 0;
+
+            UpdateSelectedSummary();
+            UpdateConnectionCheckMessage(plan);
+            CanExecuteSync = plan.CanExecute;
+        }
+
+        /// <summary>
+        /// Sync Now is offered only for a plan that can run, with something
+        /// selected, and with the confirmation given. No path executes a
+        /// transfer without all three.
+        /// </summary>
+        public bool CanExecuteSyncNow =>
+            CanExecuteSync && ConfirmSync && HasSelectedRuns && !IsLoading;
 
         [RelayCommand]
         private async Task PreviewSyncAsync()
@@ -2515,28 +2850,17 @@ namespace GameSaves.App.ViewModels
                     Download = DownloadEnabled
                 });
 
-                _lastPlan = plan;
-
                 if (plan.ProviderValidationSucceeded)
                     TryUpdateLastSuccessfulConnection();
+
                 ExecutionResults.Clear();
                 ExecutionStatusMessage = "No sync executed.";
-                ConfirmSync = false;
+                _lastResult = null;
+                _verifiedProvider = null;
+                VerificationStatusMessage =
+                    "Nothing has been verified in this session yet.";
 
-                foreach (SyncItem item in plan.Items)
-                    Items.Add(new SyncItemRowViewModel(item, UpdateSelectedSummary));
-
-                foreach (TransferPreviewWarning warning in plan.Warnings)
-                    Warnings.Add(new TransferWarningRowViewModel(warning));
-
-                SummaryDisplay =
-                    $"Upload: {plan.UploadCount} run(s) ({FormatBytes(plan.BytesToUpload)})   " +
-                    $"Download: {plan.DownloadCount} run(s) ({FormatBytes(plan.BytesToDownload)})   " +
-                    $"In sync: {plan.InSyncCount}   Conflicts: {plan.ConflictCount}";
-
-                UpdateSelectedSummary();
-                UpdateConnectionCheckMessage(plan);
-                CanExecuteSync = plan.CanExecute;
+                ApplyPlan(plan);
 
                 if (plan.CanExecute && !_keepTargetSectionOpen)
                 {
@@ -2595,6 +2919,8 @@ namespace GameSaves.App.ViewModels
                 return;
             }
 
+            bool verifyAfterwards = false;
+
             try
             {
                 IsLoading = true;
@@ -2634,21 +2960,36 @@ namespace GameSaves.App.ViewModels
 
                 ExecutionResults.Clear();
 
+                string remoteLabel = _lastPlan?.ProviderName ?? "the remote";
+
                 foreach (SyncItemResult item in result.Items)
-                    ExecutionResults.Add(new SyncItemResultRowViewModel(item));
+                    ExecutionResults.Add(new SyncItemResultRowViewModel(item, remoteLabel));
+
+                // Kept before anything else can replace the plan, so the
+                // completed run survives the revalidation that follows.
+                _lastResult = result;
+                _verifiedProvider = _lastProvider;
+                OnPropertyChanged(nameof(CanVerifyLastSync));
 
                 TransferPreviewWarning? blocker = result.Warnings
                     .FirstOrDefault(w => w.Severity == TransferWarningSeverity.Error);
 
                 ExecutionStatusMessage = blocker is not null
                     ? $"Sync blocked: {blocker.Message}"
-                    : $"Sync finished. Uploaded {result.Uploaded} run(s), downloaded {result.Downloaded} run(s), skipped {result.Skipped}, copied {FormatBytes(result.BytesCopied)}. Nothing was deleted.";
+                    : $"Sync finished. Uploaded {result.Uploaded} run(s), downloaded {result.Downloaded} run(s), skipped {result.Skipped}, copied {FormatBytes(result.BytesCopied)}. Nothing was deleted. Transferred is not yet verified.";
 
                 ProgressText = blocker is null
                     ? $"Done: {FormatBytes(result.BytesCopied)} copied."
                     : "";
 
                 await RefreshSyncLogAsync(_lastProvider);
+
+                // Verification runs after the sync-running state is cleared, so
+                // Cancel Sync never appears to still be cancelling a transfer
+                // when what is running is a read-only check.
+                verifyAfterwards = blocker is null && result.Items.Any(
+                    item => item.Status is SyncItemStatus.Uploaded or
+                        SyncItemStatus.Downloaded);
             }
             catch (OperationCanceledException)
             {
@@ -2656,7 +2997,7 @@ namespace GameSaves.App.ViewModels
                 // download never overwrites, so a cancelled run leaves a partial
                 // run rather than damage, and nothing is cleaned up.
                 ExecutionStatusMessage =
-                    "Sync cancelled. Files already copied are kept, nothing was " +
+                    "Sync cancelled by you. Files already copied are kept, nothing was " +
                     "deleted or replaced, and running the sync again is safe.";
                 ProgressText = "";
             }
@@ -2673,6 +3014,158 @@ namespace GameSaves.App.ViewModels
                 _syncCancellation?.Dispose();
                 _syncCancellation = null;
             }
+
+            if (verifyAfterwards)
+                await VerifyLastSyncAsync();
+        }
+
+        // ---------------------------------------------------------------
+        // Revalidation
+        //
+        // A finished transfer is not proof that both sides now hold the run.
+        // This re-reads both sides through the provider's own preview - the
+        // same comparison the plan uses, so there is no second manifest
+        // engine - and reports what it found per run. It is read-only: a dry
+        // run copies, moves, deletes and repairs nothing.
+        // ---------------------------------------------------------------
+
+        public bool CanVerifyLastSync =>
+            !IsVerifying &&
+            !IsLoading &&
+            _lastResult is not null &&
+            _lastProvider is not null &&
+            ReferenceEquals(_verifiedProvider, _lastProvider);
+
+        public bool CanCancelVerification => IsVerifying;
+
+        [RelayCommand]
+        private void CancelVerification()
+        {
+            _verificationCancellation?.Cancel();
+            VerificationStatusMessage = "Stopping the check...";
+        }
+
+        [RelayCommand]
+        private async Task VerifyLastSyncAsync()
+        {
+            if (_lastResult is null)
+            {
+                VerificationStatusMessage =
+                    "Nothing has been synced in this session, so there is nothing to verify.";
+                return;
+            }
+
+            // A sync did run; the endpoint it ran against is simply no longer
+            // the selected one. Saying "nothing was synced" here would be the
+            // one wrong answer.
+            if (_lastProvider is null ||
+                !ReferenceEquals(_verifiedProvider, _lastProvider))
+            {
+                VerificationStatusMessage =
+                    "The provider or profile changed after that sync ran. Its result stays " +
+                    "as recorded; build a new preview to check the current endpoint.";
+                return;
+            }
+
+            var copied = ExecutionResults.Where(row => row.WasCopied).ToList();
+
+            if (copied.Count == 0)
+            {
+                VerificationStatusMessage =
+                    "No run was copied, so there is nothing to verify.";
+                return;
+            }
+
+            IsVerifying = true;
+            _verificationCancellation?.Dispose();
+            _verificationCancellation = new CancellationTokenSource();
+
+            foreach (SyncItemResultRowViewModel row in copied)
+                row.Verification = SyncVerificationState.Running;
+
+            VerificationStatusMessage =
+                $"Checking {copied.Count} transferred run(s) on both sides. Nothing is copied, moved, or deleted.";
+
+            try
+            {
+                SyncPlan plan = await _lastProvider.CreatePreviewAsync(
+                    new SyncOptions { Upload = true, Download = true },
+                    _verificationCancellation.Token);
+
+                var byName = plan.Items.ToDictionary(
+                    item => item.RunName,
+                    StringComparer.OrdinalIgnoreCase);
+
+                foreach (SyncItemResultRowViewModel row in copied)
+                    row.Verification = Classify(byName, row.RunName);
+
+                // The check already read both sides; using that same read as
+                // the next plan costs no extra enumeration, and the execution
+                // results above it are untouched by the refresh.
+                ApplyPlan(plan);
+
+                int verified = copied.Count(row => row.IsVerified);
+
+                VerificationStatusMessage = verified == copied.Count
+                    ? $"Verified in sync: all {verified} transferred run(s) exist on both sides with matching manifests."
+                    : $"Verified in sync: {verified} of {copied.Count} transferred run(s). The rest are listed with what was actually found; nothing was changed.";
+            }
+            catch (OperationCanceledException)
+            {
+                MarkUnfinished(copied, SyncVerificationState.Cancelled);
+                VerificationStatusMessage =
+                    "Verification cancelled. The transfers themselves are unchanged and " +
+                    "still recorded; verifying again copies nothing.";
+            }
+            catch (Exception ex)
+            {
+                // An endpoint that cannot be read is not a content mismatch,
+                // and it is not a failed transfer either.
+                MarkUnfinished(copied, SyncVerificationState.EndpointUnavailable);
+                VerificationStatusMessage =
+                    $"Verification could not read both sides: {ex.Message} The transfers " +
+                    "themselves are unchanged. Retry the check when the endpoint is reachable.";
+            }
+            finally
+            {
+                IsVerifying = false;
+                _verificationCancellation?.Dispose();
+                _verificationCancellation = null;
+                OnPropertyChanged(nameof(CanVerifyLastSync));
+            }
+        }
+
+        private static void MarkUnfinished(
+            IEnumerable<SyncItemResultRowViewModel> rows,
+            SyncVerificationState state)
+        {
+            foreach (SyncItemResultRowViewModel row in rows)
+            {
+                if (row.Verification == SyncVerificationState.Running)
+                    row.Verification = state;
+            }
+        }
+
+        /// <summary>
+        /// A fresh plan states where each run is now. In sync is the only
+        /// verdict that means verified; a run the plan still wants to copy is
+        /// a run that is missing on the side it would be copied to.
+        /// </summary>
+        private static SyncVerificationState Classify(
+            IReadOnlyDictionary<string, SyncItem> plan,
+            string runName)
+        {
+            if (!plan.TryGetValue(runName, out SyncItem? item))
+                return SyncVerificationState.MissingBothSides;
+
+            return item.Action switch
+            {
+                SyncItemAction.InSync => SyncVerificationState.Verified,
+                SyncItemAction.Conflict => SyncVerificationState.ContentMismatch,
+                SyncItemAction.UploadToRemote => SyncVerificationState.MissingRemotely,
+                SyncItemAction.DownloadToLocal => SyncVerificationState.MissingLocally,
+                _ => SyncVerificationState.EndpointUnavailable
+            };
         }
 
         private async Task RefreshSyncLogAsync(ISyncProvider provider)

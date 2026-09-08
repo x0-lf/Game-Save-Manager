@@ -198,16 +198,20 @@ public sealed class SyncUiProviderParityTests
                 viewModel.SelectedRemoteProfile!.ProviderSettings).AccountEmail);
 
         // The account address is deliberately shown so a user can tell which
-        // account is connected. Both fields that carry it predate this
-        // milestone: Milestone P added the observable source property and the
-        // one label the view binds, and V changed neither. Nothing else may
-        // carry it, and in particular none of the sync state that activation
-        // newly exposed.
+        // account is connected. Two of the three fields that carry it predate
+        // this milestone: Milestone P added the observable source property and
+        // the one label the view binds, and V changed neither. DRIVE-006 added
+        // the third on purpose, because naming the remote endpoint before a
+        // preview runs is what gives "Upload" and "Download" a direction, and
+        // for Google Drive the connected account is half of that endpoint.
+        // Nothing else may carry it, and in particular no other sync state
+        // that activation newly exposed.
         Assert.Equal(
             new[]
             {
                 nameof(SyncViewModel.GoogleDriveAccountEmail),
-                nameof(SyncViewModel.GoogleDriveEmailDisplayText)
+                nameof(SyncViewModel.GoogleDriveEmailDisplayText),
+                nameof(SyncViewModel.RemoteEndpointDisplay)
             },
             FindMarker(viewModel, AccountEmailMarker).OrderBy(name => name, StringComparer.Ordinal));
     }

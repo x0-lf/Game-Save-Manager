@@ -111,6 +111,89 @@ public sealed class SyncUiEndToEndTests
         Assert.Contains("downloaded 1 run(s)", viewModel.ExecutionStatusMessage);
     }
 
+    /// <summary>
+    /// DRIVE-008 against the real engine. A finished transfer is not the claim
+    /// being tested here; being present and equivalent on both sides
+    /// afterwards is, and only a second real read of both directories can say
+    /// so.
+    /// </summary>
+    [Fact]
+    public async Task Verification_ConfirmsBothSidesAfterARealTransfer()
+    {
+        using var workspace = new Workspace();
+        SyncViewModel viewModel = workspace.CreateViewModel();
+
+        await viewModel.PreviewSyncCommand.ExecuteAsync(null);
+        viewModel.ConfirmSync = true;
+        await viewModel.ExecuteSyncCommand.ExecuteAsync(null);
+
+        SyncItemResultRowViewModel uploaded = viewModel.ExecutionResults
+            .Single(row => row.RunName == LocalOnlyRun);
+        SyncItemResultRowViewModel downloaded = viewModel.ExecutionResults
+            .Single(row => row.RunName == RemoteOnlyRun);
+
+        Assert.Equal(SyncVerificationState.Verified, uploaded.Verification);
+        Assert.Equal(SyncVerificationState.Verified, downloaded.Verification);
+        Assert.Equal("Verified in sync", uploaded.StateText);
+        Assert.Contains("Verified in sync: all 2", viewModel.VerificationStatusMessage);
+    }
+
+    [Fact]
+    public async Task Verification_ReadsBothSidesAndChangesNeither()
+    {
+        using var workspace = new Workspace();
+        SyncViewModel viewModel = workspace.CreateViewModel();
+
+        await viewModel.PreviewSyncCommand.ExecuteAsync(null);
+        viewModel.ConfirmSync = true;
+        await viewModel.ExecuteSyncCommand.ExecuteAsync(null);
+
+        string[] localBefore = workspace.LocalTree();
+        string[] remoteBefore = workspace.RemoteTree();
+
+        await viewModel.VerifyLastSyncCommand.ExecuteAsync(null);
+
+        // Not one byte on either side: revalidation is a dry run, so it can
+        // never repair, overwrite, or clean up anything it disagrees with.
+        Assert.Equal(localBefore, workspace.LocalTree());
+        Assert.Equal(remoteBefore, workspace.RemoteTree());
+    }
+
+    [Fact]
+    public async Task Verification_ReportsAMissingRemoteSideWithoutErasingTheTransfer()
+    {
+        using var workspace = new Workspace();
+        SyncViewModel viewModel = workspace.CreateViewModel();
+
+        await viewModel.PreviewSyncCommand.ExecuteAsync(null);
+        viewModel.ConfirmSync = true;
+        await viewModel.ExecuteSyncCommand.ExecuteAsync(null);
+
+        SyncItemResultRowViewModel uploaded = viewModel.ExecutionResults
+            .Single(row => row.RunName == LocalOnlyRun);
+
+        Assert.Equal(SyncVerificationState.Verified, uploaded.Verification);
+
+        // Something outside the app removes the uploaded run, which is exactly
+        // the case a "Sync finished" message must not keep claiming.
+        Directory.Delete(Path.Combine(workspace.RemoteRoot, LocalOnlyRun), recursive: true);
+
+        await viewModel.VerifyLastSyncCommand.ExecuteAsync(null);
+
+        Assert.Equal(SyncVerificationState.MissingRemotely, uploaded.Verification);
+        Assert.False(uploaded.IsVerified);
+
+        // The transfer that did happen is still recorded as it happened.
+        Assert.Equal(nameof(SyncItemStatus.Uploaded), uploaded.Status);
+        Assert.Contains("Nothing was deleted by this app", uploaded.StateDetail);
+
+        // And the run the app never touched is still verified.
+        Assert.Equal(
+            SyncVerificationState.Verified,
+            viewModel.ExecutionResults.Single(row => row.RunName == RemoteOnlyRun)
+                .Verification);
+    }
+
     [Fact]
     public async Task ViewModelExecute_LeavesTheAlreadySyncedRunUntouched()
     {
@@ -850,7 +933,8 @@ public sealed class SyncUiEndToEndTests
                 new StubSyncRemoteProfileMigrationService(settings),
                 new FixedUtcClock(Clock),
                 new StubGoogleDriveOAuthService(),
-                SyncProviderSelectionTests.NewWorkspaceLayout())
+                SyncProviderSelectionTests.NewWorkspaceLayout(),
+                backupHistoryService: new WorkspaceHistoryService(LocalBase))
             {
                 RemoteRootPath = RemoteRoot
             };

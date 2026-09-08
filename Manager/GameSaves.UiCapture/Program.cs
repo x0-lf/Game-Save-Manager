@@ -67,6 +67,11 @@ namespace GameSaves.UiCapture
         // Windows blur/Mica still requires the documented interactive pass.
         private static bool _materialOnly;
 
+        // Set by the "sync-states" argument: capture the Sync page with one
+        // row per plan presence and per execution/verification state, across
+        // both themes, every accent, and High Contrast.
+        private static bool _syncStatesOnly;
+
         public static int Main(string[] args)
         {
             _layoutOnly = args.Length > 1 &&
@@ -75,6 +80,8 @@ namespace GameSaves.UiCapture
                 string.Equals(args[1], "rail", StringComparison.OrdinalIgnoreCase);
             _materialOnly = args.Length > 1 &&
                 string.Equals(args[1], "material", StringComparison.OrdinalIgnoreCase);
+            _syncStatesOnly = args.Length > 1 &&
+                string.Equals(args[1], "sync-states", StringComparison.OrdinalIgnoreCase);
 
             string outputDirectory = args.Length > 0
                 ? args[0]
@@ -184,6 +191,18 @@ namespace GameSaves.UiCapture
             if (_materialOnly)
             {
                 return MaterialSweep.Run(
+                    window,
+                    tabs,
+                    viewModel,
+                    themeService,
+                    settingsStore,
+                    outputDirectory,
+                    name => Shot(window, outputDirectory, name));
+            }
+
+            if (_syncStatesOnly)
+            {
+                return SyncStateSweep.Run(
                     window,
                     tabs,
                     viewModel,

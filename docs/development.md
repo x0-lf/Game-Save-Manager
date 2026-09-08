@@ -53,11 +53,24 @@ dotnet run --project Manager/GameSaves.UiCapture/GameSaves.UiCapture.csproj -- a
 dotnet run --project Manager/GameSaves.UiCapture/GameSaves.UiCapture.csproj -- artifacts/ui-layout layout
 dotnet run --project Manager/GameSaves.UiCapture/GameSaves.UiCapture.csproj -- artifacts/ui-rail rail
 dotnet run --project Manager/GameSaves.UiCapture/GameSaves.UiCapture.csproj -- artifacts/ui-material material
+dotnet run --project Manager/GameSaves.UiCapture/GameSaves.UiCapture.csproj -- artifacts/ui-sync-states sync-states
 ```
 
 The default mode captures tabs, themes, widths, accents, and representative
-workspace states. `layout`, `rail`, and `material` run focused acceptance
-sweeps. Material mode verifies app-owned opacity and navigation semantics and
+workspace states. `layout`, `rail`, `material`, and `sync-states` run focused
+acceptance sweeps.
+
+`sync-states` is the Sync state matrix: one plan row per presence
+(local only, remote only, identical, conflicting, incomplete or unverifiable,
+and deselected) and one execution row per transfer and verification state,
+captured in both themes, under every accent, and in High Contrast. The rows are
+literals pushed straight into the bound collections, so the sweep needs no
+provider, account, network, or disk, and no path or account name from the
+machine can reach a capture. Alongside the PNGs it writes
+`sync-state-report.tsv`, which records each row's label, severity, selection
+state, and accessible name. Two rows with identical labels in that report mean
+two states have become indistinguishable in words, which is the regression the
+sweep exists to catch: colour alone must never be what separates them. Material mode verifies app-owned opacity and navigation semantics and
 writes `material-report.tsv`. It simulates accepted composition because the
 headless renderer cannot reproduce or report the Windows Acrylic/Mica backdrop;
 its `actual` column therefore says `headless-unavailable` rather than claiming

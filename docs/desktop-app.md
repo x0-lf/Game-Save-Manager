@@ -108,10 +108,39 @@ Select a saved or unsaved remote profile, configure Local Folder, SFTP, or
 Google Drive, and run Check Connection & Sync Status. Saving or selecting a
 profile does not connect, preview, or sync.
 
-Preview identifies uploads, downloads, in-sync runs, conflicts, warnings, and
-incomplete remote folders. Each copy action can be selected independently.
+Both endpoints are named before any preview runs: the local backup base, and
+the configured remote as the user configured it. Local Folder shows its
+resolved directory, SFTP shows host, port, and remote path but never a
+credential, and Google Drive shows the connected account and the backup
+folder's display name but never its internal folder ID. Settings that belong to
+no saved profile say so rather than looking like one, and missing configuration
+is named before the preview rather than after it. Either side can be opened
+where the provider declares that capability and the location is actually
+reachable; opening a location transfers nothing.
+
+Preview upload, Preview download, and Preview both build the plan in one
+direction or both. All three are dry runs, and none of them can start a
+transfer: the confirmation and Sync Now still stand between a direction and a
+byte.
+
+Each plan row says where the run currently is - local only, remote only,
+present on both and identical, present on both and conflicting, or incomplete
+and therefore unverifiable - along with both display locations, the file count
+and size where they were actually measured, and when both sides were last read.
+The visible Upload or Download action is itself the selection: clicking it, or
+pressing Space on it, includes or excludes that run, and Select All and Select
+None write the same state. Conflicts and already-synced runs are not selectable.
+
 Execution requires confirmation, reports byte and run progress, and can be
 cancelled. Conflicts, deselected items, and existing targets remain untouched.
+
+Transfer completion and verification are separate states. After a sync, the
+completed runs are re-read through the provider's own preview and reported one
+by one: verified in sync, copied but missing on one side, copied but different,
+or copied with the check unavailable or cancelled. That check is read-only - it
+never copies, moves, deletes, or repairs either side - and it can be retried
+without repeating a transfer that already succeeded. A run that was copied is
+never described as verified until both sides have actually been read again.
 
 Provider-specific authentication, controls, and limitations belong to the
 [sync provider guide](sync-providers.md).

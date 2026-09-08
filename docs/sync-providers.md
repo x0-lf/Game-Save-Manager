@@ -14,7 +14,7 @@ the shared invariants are defined in the [safety model](safety-model.md).
 | Folder selection | Native local folder picker or typed path | Typed remote path | Creates or discovers one app folder; no arbitrary picker | Unavailable | Unavailable |
 | Connection/status check | Yes | Yes | Yes | Blocked | Blocked |
 | Quota display | No | No | No current UI | No | No |
-| Open-location control | Opens local folder | No | No current UI | No | No |
+| Open-location control | Opens local folder | No | Opens the app folder in the browser | No | No |
 | Upload backup runs | Yes | Yes | Yes | No | No |
 | Download backup runs | Yes | Yes | Yes | No | No |
 | Overwrite runs | Never | Never | Never | N/A | N/A |
@@ -22,9 +22,9 @@ the shared invariants are defined in the [safety model](safety-model.md).
 | Provider-specific tests | Shared engine and UI coverage | Shared engine coverage; provider seam gap | Extensive deterministic coverage and recorded live acceptance | Availability guards | Availability guards |
 
 The capability catalog describes intended provider potential. The live UI is
-narrower: Google Drive does not currently display quota, offer arbitrary folder
-selection, or expose an open-in-browser control, even though cloud capabilities
-are declared for future UI work.
+narrower: Google Drive does not currently display quota or offer arbitrary
+folder selection, even though cloud capabilities are declared for future UI
+work.
 
 ## Shared behavior
 
@@ -92,7 +92,31 @@ My Drive/GameSave Manager Backups
 Its Drive ID is authoritative, so a rename or move within My Drive remains
 linked. Missing, trashed, invalid, unsupported, or ambiguous roots are not
 silently replaced. Shared drives, full Drive browsing, arbitrary folder picking,
-quota UI, and open-in-browser UI are not implemented.
+and quota UI are not implemented.
+
+The Sync page can open that folder in the system browser. It is capability
+driven: the action is offered for any provider whose descriptor declares
+`SupportsOpenRemoteLocation`, and it is refused for a root that is missing,
+trashed, moved out of reach, duplicated, or behind an account that needs to
+reconnect. The folder's display name is what the UI shows; the authoritative
+folder ID is never displayed, bound, or logged, and only ever reaches the
+browser URL the command hands to the shell. Opening a location reads nothing
+and transfers nothing.
+
+The `drive.file` scope is not involved in that URL, and does not restrict it.
+`https://drive.google.com/drive/folders/<id>` is a user-facing Drive web
+address, not an API call: it is authorised by whatever Google account the
+browser is signed into, and the folder belongs to the user in their own My
+Drive. A narrow API scope therefore neither grants nor withholds it. The
+consequence worth stating is the other one: if the browser is signed into a
+different Google account than the one connected here, Drive shows that account's
+"no access" page rather than the folder.
+
+Launching is delegated to the operating system. The command starts the target
+with the platform shell (`UseShellExecute`), which means the user's default
+browser opens a Drive URL and the user's default file manager opens a local
+folder. If no handler is registered, or the shell refuses, the app reports that
+the location could not be opened and does nothing else.
 
 Google Drive uploads and downloads stream data, preserve shared engine ordering,
 report progress, support cancellation, and use bounded retries for classified
@@ -121,6 +145,71 @@ Browser movement is not application-managed synchronization: the App cannot
 preview it, enforce manifest-last ordering, record it, or report its completion.
 Provider or desktop-client slowness is a performance concern, not evidence of
 save corruption. Verify manifests and operation results before diagnosing data loss.
+
+### Why the Google Drive provider can be slow
+
+The Drive provider talks to an HTTP API, one object at a time. Two things
+dominate how long a sync takes, and neither is a fault:
+
+- **File count, not total size.** Every file in a run is its own request, and
+  every run folder must be listed before it can be compared. A run of many
+  small files takes longer than one large file of the same total size.
+- **Google's own rate limits.** The Drive API applies per-user request limits.
+  When the App is throttled it backs off and retries the classified transient
+  failures rather than failing the run, so a large sync can spend real time
+  waiting rather than transferring.
+
+A sync that is slow is still a sync that is running. Progress reporting is per
+file, cancellation is honoured, and cancelling leaves a partial run rather than
+damage, because uploads only create files and downloads never overwrite one.
+Treat a stalled-looking transfer as slow until an operation result or a warning
+says otherwise.
+
+No throughput figure is promised here. Measured behavior depends on the account,
+the network, the file count, and Google's current limits, and this project has
+no benchmark that would make a number honest.
+
+### The Local Folder alternative for bulk transfers
+
+For a first sync, or any transfer of many or large runs, the supported
+alternative is to let Google's own desktop client own the transfer:
+
+1. Install Google Drive for desktop and let it mount or mirror a local folder.
+2. In Sync, choose the **Local or mounted folder** provider.
+3. Point it at a folder inside that mounted Drive location.
+
+The App then does what it does best - preview, compare manifests, copy runs in
+manifest-last order, record the result - against what is, to it, an ordinary
+directory. Google's client moves those bytes to the cloud on its own schedule,
+with its own caching and resumption. The safety model is unchanged: create-only
+upload, no-overwrite download, nothing deleted.
+
+Two consequences are worth stating plainly. The App reports a run as copied once
+it reaches the local mounted folder; whether the desktop client has finished
+uploading it to Google is that client's business, not something the App can
+observe. And the two paths are not interchangeable for the same data: a run
+synced through the mounted folder lives wherever that folder points, not in the
+`GameSave Manager Backups` folder the Drive provider owns.
+
+### What must stay intact, whichever path is used
+
+A backup run is a directory that is self-describing, and every path above relies
+on that:
+
+- The run folder keeps its name. It is the identity both sides compare on.
+- `manifest.json` stays in the run folder root, unedited. It carries the game,
+  the file count, the total size, and the hashes that decide in sync from
+  conflicting.
+- The `files` subtree keeps its relative layout. Flattening it, re-zipping it, or
+  renaming files inside it makes the run unrecognisable.
+- The manifest is written last, on purpose. A run folder without a readable
+  manifest is reported as incomplete rather than treated as a backup, which is
+  what an interrupted upload leaves behind.
+
+Moving runs by hand in a browser can satisfy all of that, and the App will pick
+them up on the next preview if it does. It is still unmanaged: nothing previews
+it, nothing orders it, nothing records it, and a partially uploaded run looks
+exactly like an interrupted one until its manifest arrives.
 
 ## Provider Definition of Done
 
