@@ -523,6 +523,82 @@ public sealed class MainWindowTabDetachTests
     }
 
     [Fact]
+    public void ProgrammaticReattach_ClosesDetachedWindowAndEmptiesContent()
+    {
+        TabControl navigation = CreateNavigation("A", "B", "C");
+        TabItem tab = GetTab(navigation, 1);
+
+        FakeDetachedWindow window = new();
+        TabDetachCoordinator coordinator = new(() => window);
+        coordinator.Detach(navigation, tab, owner: null, ownerDataContext: null, showOwner: null);
+
+        Assert.False(window.IsClosed);
+        Assert.NotNull(window.Content);
+
+        // Act - programmatic reattach must close the floating window
+        coordinator.Reattach(navigation, tab);
+
+        Assert.True(window.IsClosed, "Programmatic reattach must close the detached window.");
+        Assert.Equal(1, window.CloseCallCount);
+        Assert.Null(window.Content);
+        Assert.False(coordinator.IsDetached(tab));
+        Assert.Contains(tab, navigation.Items.OfType<TabItem>());
+    }
+
+    [Fact]
+    public void ReattachAll_ClosesEveryDetachedWindow()
+    {
+        TabControl navigation = CreateNavigation("A", "B", "C", "D");
+        TabItem tab1 = GetTab(navigation, 0);
+        TabItem tab2 = GetTab(navigation, 2);
+
+        var windows = new List<FakeDetachedWindow>();
+        TabDetachCoordinator coordinator = new(() =>
+        {
+            var w = new FakeDetachedWindow();
+            windows.Add(w);
+            return w;
+        });
+
+        coordinator.Detach(navigation, tab1, owner: null, ownerDataContext: null, showOwner: null);
+        coordinator.Detach(navigation, tab2, owner: null, ownerDataContext: null, showOwner: null);
+
+        Assert.Equal(2, windows.Count);
+        Assert.All(windows, w => Assert.False(w.IsClosed));
+
+        // Act - ReattachAll must close all detached windows
+        coordinator.ReattachAll(navigation);
+
+        Assert.All(windows, w =>
+        {
+            Assert.True(w.IsClosed, "Every detached window must be closed on ReattachAll.");
+            Assert.Equal(1, w.CloseCallCount);
+            Assert.Null(w.Content);
+        });
+        Assert.Empty(coordinator.DetachedWindowsForTest());
+        Assert.Equal(4, navigation.Items.Count);
+    }
+
+    [Fact]
+    public void UserClose_DoesNotTriggerRedundantCloseCall()
+    {
+        TabControl navigation = CreateNavigation("A", "B");
+        TabItem tab = GetTab(navigation, 0);
+
+        FakeDetachedWindow window = new();
+        TabDetachCoordinator coordinator = new(() => window);
+        coordinator.Detach(navigation, tab, owner: null, ownerDataContext: null, showOwner: null);
+
+        // User closes the window: SimulateClose raises CloseRequested while window is already closing
+        window.SimulateClose();
+
+        Assert.True(window.IsClosed);
+        Assert.Equal(0, window.CloseCallCount);
+        Assert.False(coordinator.IsDetached(tab));
+        Assert.Contains(tab, navigation.Items.OfType<TabItem>());
+    }
+
+    [Fact]
     public void ClampToScreens_KeepsAnOnScreenPlacementInsideTheWorkingArea()
     {
         var screen = new Rect(0, 0, 1920, 1040);
@@ -769,12 +845,26 @@ public sealed class MainWindowTabDetachTests
 
         public bool WasActivated { get; private set; }
 
+        public bool IsClosed { get; private set; }
+
+        public int CloseCallCount { get; private set; }
+
         public event EventHandler? CloseRequested;
 
         public void Show(Window? owner) => Owner = owner;
 
         public void Activate() => WasActivated = true;
 
-        public void SimulateClose() => CloseRequested?.Invoke(this, EventArgs.Empty);
+        public void Close()
+        {
+            IsClosed = true;
+            CloseCallCount++;
+        }
+
+        public void SimulateClose()
+        {
+            IsClosed = true;
+            CloseRequested?.Invoke(this, EventArgs.Empty);
+        }
     }
 }

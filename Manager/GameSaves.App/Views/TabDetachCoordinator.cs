@@ -26,6 +26,8 @@ namespace GameSaves.App.Views
         void Show(Window? owner);
 
         void Activate();
+
+        void Close();
     }
 
     // Owns detach/reattach for the main navigation TabControl. The detached
@@ -231,23 +233,29 @@ namespace GameSaves.App.Views
             if (bounds is { } placement)
                 window.Bounds = placement;
 
-            _detached[tab] = new DetachedTab(index, content, window);
-
-            window.CloseRequested += (_, _) =>
+            EventHandler closeHandler = (_, _) =>
             {
                 if (_ownerClosing)
                     return;
 
-                Reattach(navigation, tab);
+                Reattach(navigation, tab, closeWindow: false);
             };
+
+            window.CloseRequested += closeHandler;
+            _detached[tab] = new DetachedTab(index, content, window, closeHandler);
 
             window.Show(showOwner!);
         }
 
-        public void Reattach(TabControl navigation, TabItem tab)
+        public void Reattach(TabControl navigation, TabItem tab) =>
+            Reattach(navigation, tab, closeWindow: true);
+
+        internal void Reattach(TabControl navigation, TabItem tab, bool closeWindow)
         {
             if (!_detached.Remove(tab, out DetachedTab? detached))
                 return;
+
+            detached.Window.CloseRequested -= detached.CloseHandler;
 
             // Release the content from the floating window before giving it
             // back to the TabItem, so the logical parent is unambiguous.
@@ -263,6 +271,18 @@ namespace GameSaves.App.Views
             // visible tab takes selection on return.
             if (tab.IsVisible)
                 navigation.SelectedItem = tab;
+
+            if (closeWindow)
+            {
+                try
+                {
+                    detached.Window.Close();
+                }
+                catch
+                {
+                    // Ignore if already closed or unattached
+                }
+            }
         }
 
         // Reattaches every detached tab in a deterministic order: the applied
@@ -295,7 +315,7 @@ namespace GameSaves.App.Views
             }
 
             foreach (TabItem tab in detached)
-                Reattach(navigation, tab);
+                Reattach(navigation, tab, closeWindow: true);
         }
 
         // The floating window's current placement for workspace snapshots.
@@ -345,6 +365,10 @@ namespace GameSaves.App.Views
             return string.Empty;
         }
 
-        private sealed record DetachedTab(int OriginalIndex, Control Content, IDetachedTabWindow Window);
+        private sealed record DetachedTab(
+            int OriginalIndex,
+            Control Content,
+            IDetachedTabWindow Window,
+            EventHandler CloseHandler);
     }
 }
