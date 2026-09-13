@@ -599,6 +599,90 @@ public sealed class MainWindowTabDetachTests
     }
 
     [Fact]
+    public void DisassociateParent_ClearsLogicalParentAcrossContainers()
+    {
+        // ContentControl (e.g. Window, DetachedWindow)
+        var control1 = new Border();
+        var contentControl = new ContentControl { Content = control1 };
+        Assert.Same(contentControl, control1.Parent);
+        TabDetachCoordinator.DisassociateParent(control1);
+        Assert.Null(control1.Parent);
+        Assert.Null(contentControl.Content);
+
+        // Panel (e.g. Grid, StackPanel, WrapPanel)
+        var control2 = new Border();
+        var panel = new StackPanel();
+        panel.Children.Add(control2);
+        Assert.Same(panel, control2.Parent);
+        TabDetachCoordinator.DisassociateParent(control2);
+        Assert.Null(control2.Parent);
+        Assert.DoesNotContain(control2, panel.Children);
+
+        // Decorator (e.g. Border, Viewbox)
+        var control3 = new TextBlock();
+        var decorator = new Border { Child = control3 };
+        Assert.Same(decorator, control3.Parent);
+        TabDetachCoordinator.DisassociateParent(control3);
+        Assert.Null(control3.Parent);
+        Assert.Null(decorator.Child);
+
+        // TabItem
+        var control4 = new Border();
+        var tabItem = new TabItem { Content = control4 };
+        Assert.Same(tabItem, control4.Parent);
+        TabDetachCoordinator.DisassociateParent(control4);
+        Assert.Null(control4.Parent);
+        Assert.Null(tabItem.Content);
+    }
+
+    [Fact]
+    public void Reattach_ClosesFloatingWindowBeforeReparentingContentToNavigation()
+    {
+        TabControl navigation = CreateNavigation("A", "B");
+        TabItem tab = GetTab(navigation, 0);
+
+        bool closedBeforeReparent = false;
+        FakeDetachedWindow window = new();
+        window.OnCloseAction = () =>
+        {
+            // Verify window content is cleared and tab content is not yet reparented
+            if (window.Content is null && tab.Content is null)
+                closedBeforeReparent = true;
+        };
+
+        TabDetachCoordinator coordinator = new(() => window);
+        coordinator.Detach(navigation, tab, owner: null, ownerDataContext: null, showOwner: null);
+
+        coordinator.Reattach(navigation, tab);
+
+        Assert.True(closedBeforeReparent, "Window must be closed before content is attached to TabItem.");
+        Assert.NotNull(tab.Content);
+        Assert.Same(tab, navigation.SelectedItem);
+    }
+
+    [Fact]
+    public void RepeatedDetachReattachCycles_MaintainCleanParentAndHierarchyState()
+    {
+        TabControl navigation = CreateNavigation("Tab1", "Tab2", "Tab3");
+        TabItem tab = GetTab(navigation, 1);
+        object initialContent = tab.Content!;
+
+        TabDetachCoordinator coordinator = new(() => new FakeDetachedWindow());
+
+        for (int cycle = 0; cycle < 5; cycle++)
+        {
+            coordinator.Detach(navigation, tab, owner: null, ownerDataContext: null, showOwner: null);
+            Assert.True(coordinator.IsDetached(tab));
+            Assert.Null(tab.Content);
+
+            coordinator.Reattach(navigation, tab);
+            Assert.False(coordinator.IsDetached(tab));
+            Assert.Same(initialContent, tab.Content);
+            Assert.Contains(tab, navigation.Items.OfType<TabItem>());
+        }
+    }
+
+    [Fact]
     public void ClampToScreens_KeepsAnOnScreenPlacementInsideTheWorkingArea()
     {
         var screen = new Rect(0, 0, 1920, 1040);
@@ -855,10 +939,13 @@ public sealed class MainWindowTabDetachTests
 
         public void Activate() => WasActivated = true;
 
+        public Action? OnCloseAction { get; set; }
+
         public void Close()
         {
             IsClosed = true;
             CloseCallCount++;
+            OnCloseAction?.Invoke();
         }
 
         public void SimulateClose()

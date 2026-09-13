@@ -35,6 +35,11 @@
 		<!-- Navigation rail: compact icon+label rows on the left edge. -->
 		<Style Selector="TabControl#MainNavigation">
 			<Setter Property="Padding" Value="16,10,16,16" />
+			<Setter Property="ItemsPanel">
+				<ItemsPanelTemplate>
+					<StackPanel Orientation="Vertical" />
+				</ItemsPanelTemplate>
+			</Setter>
 		</Style>
 		<Style Selector="TabControl#MainNavigation TabItem">
 			<!-- Stretch so each header's [glyph | label | detach] grid fills
@@ -112,11 +117,65 @@
 		<Style Selector="Window.compactNav StackPanel#RailChrome TextBlock.railChromeLabel">
 			<Setter Property="IsVisible" Value="False" />
 		</Style>
-		<!-- On a top rail the chrome sits on the same band as the tabs rather
-		     than in a strip of its own, so the row keeps the app's header
-		     rhythm instead of adding a second one. -->
+		<!-- Navigation rail border: encompasses both chrome actions and tab items,
+		     separating the rail surface from page content across all dock positions. -->
+		<Style Selector="TabControl#MainNavigation /template/ Border#PART_NavigationRail">
+			<Setter Property="BorderBrush" Value="{DynamicResource SubtleBorderBrush}" />
+			<Setter Property="BorderThickness" Value="0,0,1,0" />
+		</Style>
+		<Style Selector="TabControl#MainNavigation[TabStripPlacement=Right] /template/ Border#PART_NavigationRail">
+			<Setter Property="BorderThickness" Value="1,0,0,0" />
+		</Style>
+		<Style Selector="Window.railRight TabControl#MainNavigation /template/ Border#PART_NavigationRail">
+			<Setter Property="BorderThickness" Value="1,0,0,0" />
+		</Style>
+		<Style Selector="TabControl#MainNavigation[TabStripPlacement=Top] /template/ Border#PART_NavigationRail">
+			<Setter Property="BorderThickness" Value="0,0,0,1" />
+		</Style>
+		<Style Selector="Window.railTop TabControl#MainNavigation /template/ Border#PART_NavigationRail">
+			<Setter Property="BorderThickness" Value="0,0,0,1" />
+		</Style>
+
+		<!-- On a top rail, navigation renders as a two-line layout:
+		     Line 1: Rail chrome actions (Collapse, Scan, Layout, Reset Layout)
+		     with a divider beneath.
+		     Line 2: Tab strip arranged horizontally with dedicated spacing. -->
+		<Style Selector="Window.railTop TabControl#MainNavigation">
+			<Setter Property="ItemsPanel">
+				<ItemsPanelTemplate>
+					<WrapPanel Orientation="Horizontal" />
+				</ItemsPanelTemplate>
+			</Setter>
+		</Style>
+		<Style Selector="TabControl#MainNavigation[TabStripPlacement=Top]">
+			<Setter Property="ItemsPanel">
+				<ItemsPanelTemplate>
+					<WrapPanel Orientation="Horizontal" />
+				</ItemsPanelTemplate>
+			</Setter>
+		</Style>
 		<Style Selector="Window.railTop StackPanel#RailChrome">
-			<Setter Property="Margin" Value="16,6,16,0" />
+			<Setter Property="Margin" Value="12,6,12,6" />
+		</Style>
+		<Style Selector="Window.railTop TabControl#MainNavigation /template/ ContentPresenter#PART_RailChromeHost">
+			<Setter Property="BorderBrush" Value="{DynamicResource SubtleBorderBrush}" />
+			<Setter Property="BorderThickness" Value="0,0,0,1" />
+		</Style>
+		<Style Selector="TabControl#MainNavigation[TabStripPlacement=Top] /template/ ContentPresenter#PART_RailChromeHost">
+			<Setter Property="BorderBrush" Value="{DynamicResource SubtleBorderBrush}" />
+			<Setter Property="BorderThickness" Value="0,0,0,1" />
+		</Style>
+		<Style Selector="Window.railTop TabControl#MainNavigation TabItem">
+			<Setter Property="Margin" Value="4,3" />
+			<Setter Property="Padding" Value="10,6" />
+			<Setter Property="Height" Value="34" />
+			<Setter Property="HorizontalContentAlignment" Value="Left" />
+		</Style>
+		<Style Selector="TabControl#MainNavigation[TabStripPlacement=Top] TabItem">
+			<Setter Property="Margin" Value="4,3" />
+			<Setter Property="Padding" Value="10,6" />
+			<Setter Property="Height" Value="34" />
+			<Setter Property="HorizontalContentAlignment" Value="Left" />
 		</Style>
 		<Style Selector="TabControl#MainNavigation TabItem TextBlock.navGlyph">
 			<Setter Property="FontFamily" Value="Segoe Fluent Icons, Segoe MDL2 Assets" />
@@ -214,6 +273,8 @@
 						<DockPanel>
 							<Border x:Name="PART_NavigationRail"
 							        Background="{DynamicResource NavigationSurfaceBrush}"
+							        BorderBrush="{DynamicResource SubtleBorderBrush}"
+							        BorderThickness="0,0,1,0"
 							        DockPanel.Dock="{TemplateBinding TabStripPlacement}">
 								<StackPanel Orientation="Vertical">
 									<ContentPresenter x:Name="PART_RailChromeHost"
@@ -289,6 +350,23 @@
 					<StackPanel Orientation="Horizontal" Spacing="6">
 						<TextBlock Text="&#xE8A9;" Classes="railChromeGlyph" />
 						<TextBlock Text="Layout"
+						           Classes="railChromeLabel"
+						           Foreground="{DynamicResource SecondaryTextBrush}"
+						           VerticalAlignment="Center" />
+					</StackPanel>
+				</Button>
+
+				<!-- Direct Reset Page Layout button: restores default panel
+				     arrangement directly without opening the layout flyout. -->
+				<Button x:Name="RailResetLayoutButton"
+				        Classes="railChrome"
+				        Click="OnRailResetLayoutClicked"
+				        AutomationProperties.Name="Reset page layout"
+				        AutomationProperties.HelpText="Reset this page's layout to the default arrangement"
+				        ToolTip.Tip="Reset page layout — restore default panel arrangement">
+					<StackPanel Orientation="Horizontal" Spacing="6">
+						<TextBlock Text="&#xE777;" Classes="railChromeGlyph" />
+						<TextBlock Text="Reset"
 						           Classes="railChromeLabel"
 						           Foreground="{DynamicResource SecondaryTextBrush}"
 						           VerticalAlignment="Center" />

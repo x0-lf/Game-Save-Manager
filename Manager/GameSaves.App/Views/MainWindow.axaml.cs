@@ -292,17 +292,38 @@ namespace GameSaves.App.Views
                     ReferenceEquals(pair.Value, MainNavigation.SelectedItem))
                 .Key;
 
+        internal static bool IsPageLayoutConfigurable(string? pageKey) =>
+            pageKey is not null && WorkspaceLayoutCatalog.Pages.Contains(pageKey);
+
+        internal bool ResetActivePageLayout()
+        {
+            if (DataContext is not MainWindowViewModel viewModel ||
+                SelectedTabKey() is not { } tabKey ||
+                !IsPageLayoutConfigurable(tabKey))
+            {
+                return false;
+            }
+
+            IWorkspaceLayoutPage layout = viewModel.WorkspacePageFor(tabKey);
+            layout.ResetPage();
+            return true;
+        }
+
+        private void OnRailResetLayoutClicked(object? sender, RoutedEventArgs e) =>
+            ResetActivePageLayout();
+
         // The rail actions that depend on which page is selected. The layout
-        // button is hidden on a page with no configurable layout, so the rail
-        // never offers an action that would do nothing. The scan action needs
-        // only the page key: the view model maps that to the page's own
-        // refresh command and to the wording that describes it.
+        // and reset buttons are hidden on a page with no configurable layout,
+        // so the rail never offers an action that would do nothing. The scan
+        // action needs only the page key: the view model maps that to the page's
+        // own refresh command and to the wording that describes it.
         private void UpdateRailChrome()
         {
             string? key = SelectedTabKey();
+            bool hasConfigurableLayout = IsPageLayoutConfigurable(key);
 
-            RailLayoutButton.IsVisible =
-                key is not null && WorkspaceLayoutCatalog.Pages.Contains(key);
+            RailLayoutButton.IsVisible = hasConfigurableLayout;
+            RailResetLayoutButton.IsVisible = hasConfigurableLayout;
 
             if (key is not null && DataContext is MainWindowViewModel viewModel)
                 viewModel.ActiveTabKey = key;
@@ -442,6 +463,16 @@ namespace GameSaves.App.Views
                     Classes.Add("railTop");
                 else
                     Classes.Remove("railTop");
+            }
+
+            bool rightRail = _railSettings.RailPosition == UiRailLayoutSettings.PositionRight;
+
+            if (Classes.Contains("railRight") != rightRail)
+            {
+                if (rightRail)
+                    Classes.Add("railRight");
+                else
+                    Classes.Remove("railRight");
             }
 
             bool collapsed = _railSettings.RailCollapsed;

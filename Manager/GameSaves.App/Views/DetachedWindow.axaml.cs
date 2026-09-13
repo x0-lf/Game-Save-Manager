@@ -2,6 +2,7 @@ using System;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Layout;
 using CommunityToolkit.Mvvm.Input;
 
 namespace GameSaves.App.Views
@@ -63,10 +64,38 @@ namespace GameSaves.App.Views
             }
         }
 
+        protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+        {
+            base.OnPropertyChanged(change);
+
+            if (change.Property == ContentProperty && change.NewValue is null)
+            {
+                // When content is cleared for reattachment, flush any pending
+                // layout pass so queued controls whose visual tree attachment
+                // is severed are discarded from this window's layout pass
+                // before they are attached to another window.
+                try
+                {
+                    UpdateLayout();
+                }
+                catch
+                {
+                    // Ignore if layout pass is in progress or platform unavailable
+                }
+            }
+        }
+
         protected override void OnClosing(WindowClosingEventArgs e)
         {
             CloseRequested?.Invoke(this, EventArgs.Empty);
+            Content = null;
             base.OnClosing(e);
+        }
+
+        protected override void OnClosed(EventArgs e)
+        {
+            Content = null;
+            base.OnClosed(e);
         }
     }
 }

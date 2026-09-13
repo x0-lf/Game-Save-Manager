@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Presenters;
+using Avalonia.VisualTree;
 
 namespace GameSaves.App.Views
 {
@@ -205,6 +207,8 @@ namespace GameSaves.App.Views
             string title = GetHeaderText(tab);
             tab.Content = null;
             items.Remove(tab);
+            DisassociateParent(content);
+
             if (wasSelected && items.Count > 0)
             {
                 // Prefer the first visible attached tab in the applied
@@ -238,7 +242,7 @@ namespace GameSaves.App.Views
                 if (_ownerClosing)
                     return;
 
-                Reattach(navigation, tab, closeWindow: false);
+                Reattach(navigation, tab, closeWindow: false, selectTab: true);
             };
 
             window.CloseRequested += closeHandler;
@@ -248,30 +252,28 @@ namespace GameSaves.App.Views
         }
 
         public void Reattach(TabControl navigation, TabItem tab) =>
-            Reattach(navigation, tab, closeWindow: true);
+            Reattach(navigation, tab, closeWindow: true, selectTab: true);
 
-        internal void Reattach(TabControl navigation, TabItem tab, bool closeWindow)
+        internal void Reattach(
+            TabControl navigation,
+            TabItem tab,
+            bool closeWindow,
+            bool selectTab = true)
         {
             if (!_detached.Remove(tab, out DetachedTab? detached))
                 return;
 
             detached.Window.CloseRequested -= detached.CloseHandler;
 
-            // Release the content from the floating window before giving it
-            // back to the TabItem, so the logical parent is unambiguous.
+            // Release content from the floating window and ensure all visual
+            // and logical parent links are completely severed before reattaching.
             detached.Window.Content = null;
-            tab.Content = detached.Content;
+            DisassociateParent(detached.Content);
 
-            ItemCollection items = navigation.Items;
-            int index = ComputeReattachIndex(navigation, tab, detached.OriginalIndex);
-            items.Insert(index, tab);
-
-            // A tab that was hidden while detached reattaches invisibly
-            // (IsVisible stays false from the layout application); only a
-            // visible tab takes selection on return.
-            if (tab.IsVisible)
-                navigation.SelectedItem = tab;
-
+            // Programmatic reattach closes the floating window frame BEFORE
+            // attaching content to the main navigation tree so the floating
+            // window's layout queues and window teardown cannot arrange or
+            // invalidate the reattached control under a new layout root.
             if (closeWindow)
             {
                 try
@@ -283,6 +285,19 @@ namespace GameSaves.App.Views
                     // Ignore if already closed or unattached
                 }
             }
+
+            // Restore content to the TabItem and re-insert into navigation
+            tab.Content = detached.Content;
+
+            ItemCollection items = navigation.Items;
+            int index = ComputeReattachIndex(navigation, tab, detached.OriginalIndex);
+            items.Insert(index, tab);
+
+            // A tab that was hidden while detached reattaches invisibly
+            // (IsVisible stays false from the layout application); only a
+            // visible tab takes selection on return when selection was requested.
+            if (selectTab && tab.IsVisible)
+                navigation.SelectedItem = tab;
         }
 
         // Reattaches every detached tab in a deterministic order: the applied
@@ -315,7 +330,55 @@ namespace GameSaves.App.Views
             }
 
             foreach (TabItem tab in detached)
-                Reattach(navigation, tab, closeWindow: true);
+                Reattach(navigation, tab, closeWindow: true, selectTab: false);
+
+            if (navigation.SelectedItem is not TabItem current ||
+                !current.IsVisible ||
+                !navigation.Items.Contains(current))
+            {
+                TabItem? target = FirstVisibleAttached(navigation);
+                if (target is not null)
+                    navigation.SelectedItem = target;
+            }
+        }
+
+        internal static void DisassociateParent(Control? control)
+        {
+            if (control is null)
+                return;
+
+            switch (control.Parent)
+            {
+                case ContentControl contentControl when ReferenceEquals(contentControl.Content, control):
+                    contentControl.Content = null;
+                    break;
+                case ContentPresenter contentPresenter when ReferenceEquals(contentPresenter.Content, control):
+                    contentPresenter.Content = null;
+                    break;
+                case Panel panel:
+                    panel.Children.Remove(control);
+                    break;
+                case Decorator decorator when ReferenceEquals(decorator.Child, control):
+                    decorator.Child = null;
+                    break;
+            }
+
+            Visual? visualParent = control.GetVisualParent();
+            switch (visualParent)
+            {
+                case Panel visualPanel:
+                    visualPanel.Children.Remove(control);
+                    break;
+                case Decorator visualDecorator when ReferenceEquals(visualDecorator.Child, control):
+                    visualDecorator.Child = null;
+                    break;
+                case ContentPresenter visualPresenter when ReferenceEquals(visualPresenter.Content, control):
+                    visualPresenter.Content = null;
+                    break;
+                case ContentControl visualContentControl when ReferenceEquals(visualContentControl.Content, control):
+                    visualContentControl.Content = null;
+                    break;
+            }
         }
 
         // The floating window's current placement for workspace snapshots.
