@@ -1,4 +1,4 @@
-﻿using System.Threading.Tasks;
+using System.Threading.Tasks;
 
 using System;
 using System.Collections.Generic;
@@ -70,11 +70,39 @@ namespace GameSaves
                 case "import":
                     if (args.Length < 2)
                     {
-                        Console.WriteLine("Usage: import <savepaths.json>");
+                        Console.WriteLine("Usage: import <savepaths.json> [--approve]");
                         return;
                     }
 
-                    ImportMappings(dbPath, args[1]);
+                    bool autoApprove = args.Length >= 3 && (args[2].Equals("--approve", StringComparison.OrdinalIgnoreCase) || args[2].Equals("-a", StringComparison.OrdinalIgnoreCase));
+                    ImportMappings(dbPath, args[1], autoApprove);
+                    break;
+
+                case "approve-mapping":
+                    if (args.Length < 2 || !long.TryParse(args[1], out long mappingId))
+                    {
+                        Console.WriteLine("Usage: approve-mapping <id> [notes]");
+                        return;
+                    }
+
+                    string? mappingNotes = args.Length >= 3 ? args[2] : null;
+                    ApproveMapping(dbPath, mappingId, mappingNotes);
+                    break;
+
+                case "approve-app":
+                    if (args.Length < 2)
+                    {
+                        Console.WriteLine("Usage: approve-app <steamAppId> [notes]");
+                        return;
+                    }
+
+                    string? appNotes = args.Length >= 3 ? args[2] : null;
+                    ApproveApp(dbPath, args[1], appNotes);
+                    break;
+
+                case "migrate-legacy-mappings":
+                    bool trustLegacy = args.Length >= 2 && args[1].Equals("--approve-all", StringComparison.OrdinalIgnoreCase);
+                    MigrateLegacyMappings(dbPath, trustLegacy);
                     break;
 
                 case "discover":
@@ -155,15 +183,40 @@ namespace GameSaves
             Console.WriteLine($"Database initialized: {dbPath}");
         }
 
-        private static void ImportMappings(string dbPath, string jsonPath)
+        private static void ImportMappings(string dbPath, string jsonPath, bool autoApprove)
         {
             var database = new SavePathDatabase(dbPath);
             database.Initialize();
 
-            database.ImportMappingsFromJson(jsonPath);
+            database.ImportMappingsFromJson(jsonPath, enabled: autoApprove, reviewStatus: autoApprove ? "Approved" : "Pending");
 
             Console.WriteLine($"Imported mappings from: {jsonPath}");
+            Console.WriteLine($"Status: {(autoApprove ? "Approved and enabled" : "Pending review (disabled by default)")}");
             Console.WriteLine($"Database: {dbPath}");
+        }
+
+        private static void ApproveMapping(string dbPath, long id, string? notes)
+        {
+            var database = new SavePathDatabase(dbPath);
+            database.Initialize();
+            database.ApproveMapping(id, notes);
+            Console.WriteLine($"Mapping {id} has been marked Approved and enabled.");
+        }
+
+        private static void ApproveApp(string dbPath, string steamAppId, string? notes)
+        {
+            var database = new SavePathDatabase(dbPath);
+            database.Initialize();
+            database.ApproveMappingsForApp(steamAppId, notes);
+            Console.WriteLine($"All mappings for AppID {steamAppId} have been marked Approved and enabled.");
+        }
+
+        private static void MigrateLegacyMappings(string dbPath, bool trustLegacy)
+        {
+            var database = new SavePathDatabase(dbPath);
+            database.Initialize();
+            int migrated = database.MigrateLegacyMappings(trustLegacyEnabledAsApproved: trustLegacy);
+            Console.WriteLine($"Legacy mapping migration completed: {migrated} rows updated (TrustLegacyAsApproved: {trustLegacy}).");
         }
 
         private static void RunSteamCatalogQueueMissing(string dbPath)
@@ -671,7 +724,7 @@ namespace GameSaves
 
             foreach (SteamGame game in discovery.Games)
             {
-                List<SavePathMapping> mappings = database.GetMappingsForApp(game.AppId, "windows");
+                List<SavePathMapping> mappings = database.GetApprovedMappingsForApp(game.AppId, "windows");
 
                 if (mappings.Count == 0)
                     continue;
@@ -812,7 +865,10 @@ namespace GameSaves
             Console.WriteLine();
             Console.WriteLine("Commands:");
             Console.WriteLine("  init-db");
-            Console.WriteLine("  import <savepaths.json>");
+            Console.WriteLine("  import <savepaths.json> [--approve]");
+            Console.WriteLine("  approve-mapping <id> [notes]");
+            Console.WriteLine("  approve-app <steamAppId> [notes]");
+            Console.WriteLine("  migrate-legacy-mappings [--approve-all]");
             Console.WriteLine("  discover");
             Console.WriteLine("  discover-deep");
             Console.WriteLine("  verify");

@@ -1,4 +1,4 @@
-﻿using GameSaves.Core.Save;
+using GameSaves.Core.Save;
 using Microsoft.Data.Sqlite;
 using System.Text.Json;
 
@@ -31,9 +31,19 @@ namespace GameSaves.Infrastructure.Save
             using var command = connection.CreateCommand();
             command.CommandText = SavePathSchema.CreateSchemaSql;
             command.ExecuteNonQuery();
+
+            EnsureReviewColumns(connection);
         }
 
         public void ImportMappingsFromJson(string jsonPath)
+        {
+            ImportMappingsFromJson(jsonPath, enabled: false, reviewStatus: "Pending");
+        }
+
+        public void ImportMappingsFromJson(
+            string jsonPath,
+            bool enabled,
+            string reviewStatus = "Pending")
         {
             string json = File.ReadAllText(jsonPath);
 
@@ -47,15 +57,17 @@ namespace GameSaves.Infrastructure.Save
             if (items is null || items.Count == 0)
                 return;
 
-            ImportMappings(items, enabled: true);
+            ImportMappings(items, enabled: enabled, reviewStatus: reviewStatus);
         }
 
         public void ImportMappings(
             IEnumerable<SavePathImportItem> items,
-            bool enabled)
+            bool enabled = false,
+            string reviewStatus = "Pending")
         {
             using var connection = new SqliteConnection(_connectionString);
             connection.Open();
+            EnsureReviewColumns(connection);
 
             using var transaction = connection.BeginTransaction();
 
@@ -77,6 +89,7 @@ namespace GameSaves.Infrastructure.Save
                     notes,
                     priority,
                     enabled,
+                    review_status,
                     updated_utc
                 )
                 VALUES (
@@ -91,6 +104,7 @@ namespace GameSaves.Infrastructure.Save
                     $notes,
                     $priority,
                     $enabled,
+                    $review_status,
                     CURRENT_TIMESTAMP
                 )
                 ON CONFLICT (steam_app_id, platform, path_template)
@@ -116,6 +130,7 @@ namespace GameSaves.Infrastructure.Save
                 command.Parameters.AddWithValue("$notes", ToDbValue(item.Notes));
                 command.Parameters.AddWithValue("$priority", item.Priority);
                 command.Parameters.AddWithValue("$enabled", enabled ? 1 : 0);
+                command.Parameters.AddWithValue("$review_status", string.IsNullOrWhiteSpace(reviewStatus) ? "Pending" : reviewStatus);
 
                 command.ExecuteNonQuery();
             }
@@ -123,15 +138,29 @@ namespace GameSaves.Infrastructure.Save
             transaction.Commit();
         }
 
-        public List<SavePathMapping> GetMappingsForApp(string steamAppId, string platform)
+        public List<SavePathMapping> GetApprovedMappingsForApp(string steamAppId, string platform)
+        {
+            return GetMappingsForApp(steamAppId, platform, includeDisabled: false, onlyApproved: true);
+        }
+
+        public List<SavePathMapping> GetMappingsForApp(
+            string steamAppId,
+            string platform,
+            bool includeDisabled = false,
+            bool onlyApproved = false)
         {
             var mappings = new List<SavePathMapping>();
 
             using var connection = new SqliteConnection(_connectionString);
             connection.Open();
+            EnsureReviewColumns(connection);
 
             using var command = connection.CreateCommand();
-            command.CommandText = """
+
+            string enabledFilter = includeDisabled ? string.Empty : "AND enabled = 1";
+            string approvedFilter = onlyApproved ? "AND COALESCE(review_status, '') = 'Approved'" : string.Empty;
+
+            command.CommandText = $"""
             SELECT
                 id,
                 steam_app_id,
@@ -144,11 +173,15 @@ namespace GameSaves.Infrastructure.Save
                 source_license,
                 notes,
                 priority,
-                enabled
+                enabled,
+                COALESCE(review_status, 'Pending') AS review_status,
+                review_notes,
+                reviewed_utc
             FROM save_path_mappings
             WHERE steam_app_id = $steam_app_id
               AND platform = $platform
-              AND enabled = 1
+              {enabledFilter}
+              {approvedFilter}
             ORDER BY priority ASC, id ASC;
             """;
 
@@ -176,10 +209,96 @@ namespace GameSaves.Infrastructure.Save
                     GetNullableString(reader, "source_license"),
                     GetNullableString(reader, "notes"),
                     reader.GetInt32(reader.GetOrdinal("priority")),
-                    reader.GetInt32(reader.GetOrdinal("enabled")) == 1));
+                    reader.GetInt32(reader.GetOrdinal("enabled")) == 1,
+                    reader.GetString(reader.GetOrdinal("review_status")),
+                    GetNullableString(reader, "review_notes"),
+                    GetNullableDateTimeOffset(reader, "reviewed_utc")));
+            }
+
+            if (onlyApproved)
+            {
+                return mappings
+                    .Where(m => m.Enabled && string.Equals(m.ReviewStatus, "Approved", StringComparison.OrdinalIgnoreCase))
+                    .ToList();
             }
 
             return mappings;
+        }
+
+        public void ApproveMapping(long id, string? notes = null)
+        {
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+            EnsureReviewColumns(connection);
+
+            using var command = connection.CreateCommand();
+            command.CommandText = """
+            UPDATE save_path_mappings
+            SET enabled = 1,
+                review_status = 'Approved',
+                reviewed_utc = CURRENT_TIMESTAMP,
+                review_notes = COALESCE($notes, review_notes),
+                updated_utc = CURRENT_TIMESTAMP
+            WHERE id = $id;
+            """;
+
+            command.Parameters.AddWithValue("$id", id);
+            command.Parameters.AddWithValue("$notes", ToDbValue(notes));
+            command.ExecuteNonQuery();
+        }
+
+        public void ApproveMappingsForApp(string steamAppId, string? notes = null)
+        {
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+            EnsureReviewColumns(connection);
+
+            using var command = connection.CreateCommand();
+            command.CommandText = """
+            UPDATE save_path_mappings
+            SET enabled = 1,
+                review_status = 'Approved',
+                reviewed_utc = CURRENT_TIMESTAMP,
+                review_notes = COALESCE($notes, review_notes),
+                updated_utc = CURRENT_TIMESTAMP
+            WHERE steam_app_id = $steam_app_id;
+            """;
+
+            command.Parameters.AddWithValue("$steam_app_id", steamAppId);
+            command.Parameters.AddWithValue("$notes", ToDbValue(notes));
+            command.ExecuteNonQuery();
+        }
+
+        public int MigrateLegacyMappings(bool trustLegacyEnabledAsApproved = false)
+        {
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+            EnsureReviewColumns(connection);
+
+            using var command = connection.CreateCommand();
+            if (trustLegacyEnabledAsApproved)
+            {
+                command.CommandText = """
+                UPDATE save_path_mappings
+                SET review_status = 'Approved',
+                    reviewed_utc = CURRENT_TIMESTAMP,
+                    review_notes = 'Migrated from legacy enabled mapping.'
+                WHERE enabled = 1
+                  AND (review_status IS NULL OR review_status = 'Pending');
+                """;
+            }
+            else
+            {
+                command.CommandText = """
+                UPDATE save_path_mappings
+                SET enabled = 0,
+                    review_status = 'Pending'
+                WHERE review_status IS NULL
+                   OR (review_status = 'Pending' AND enabled = 1);
+                """;
+            }
+
+            return command.ExecuteNonQuery();
         }
 
         public void SaveVerificationResult(SavePathVerificationResult result)
@@ -356,6 +475,77 @@ namespace GameSaves.Infrastructure.Save
             return reader.IsDBNull(ordinal)
                 ? null
                 : reader.GetString(ordinal);
+        }
+
+        private static DateTimeOffset? GetNullableDateTimeOffset(SqliteDataReader reader, string columnName)
+        {
+            int ordinal = reader.GetOrdinal(columnName);
+
+            if (reader.IsDBNull(ordinal))
+                return null;
+
+            string text = reader.GetString(ordinal);
+            return DateTimeOffset.TryParse(text, out DateTimeOffset dto) ? dto : null;
+        }
+
+        public static void EnsureReviewColumns(SqliteConnection connection)
+        {
+            EnsureColumn(connection, "save_path_mappings", "review_status", "TEXT NOT NULL DEFAULT 'Pending'");
+            EnsureColumn(connection, "save_path_mappings", "reviewed_utc", "TEXT NULL");
+            EnsureColumn(connection, "save_path_mappings", "review_notes", "TEXT NULL");
+
+            using var indexCommand = connection.CreateCommand();
+            indexCommand.CommandText = """
+            CREATE INDEX IF NOT EXISTS idx_save_path_mappings_review_status
+                ON save_path_mappings (source_name, review_status, enabled);
+            """;
+            indexCommand.ExecuteNonQuery();
+
+            using var migrateCommand = connection.CreateCommand();
+            migrateCommand.CommandText = """
+            UPDATE save_path_mappings
+            SET review_status = 'Pending'
+            WHERE review_status IS NULL;
+            """;
+            migrateCommand.ExecuteNonQuery();
+        }
+
+        private static void EnsureColumn(
+            SqliteConnection connection,
+            string tableName,
+            string columnName,
+            string columnDefinition)
+        {
+            if (ColumnExists(connection, tableName, columnName))
+                return;
+
+            using var command = connection.CreateCommand();
+            command.CommandText = $"""
+            ALTER TABLE {tableName}
+            ADD COLUMN {columnName} {columnDefinition};
+            """;
+            command.ExecuteNonQuery();
+        }
+
+        private static bool ColumnExists(
+            SqliteConnection connection,
+            string tableName,
+            string columnName)
+        {
+            using var command = connection.CreateCommand();
+            command.CommandText = $"PRAGMA table_info({tableName});";
+
+            using var reader = command.ExecuteReader();
+
+            while (reader.Read())
+            {
+                string name = reader.GetString(reader.GetOrdinal("name"));
+
+                if (string.Equals(name, columnName, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+
+            return false;
         }
     }
 }

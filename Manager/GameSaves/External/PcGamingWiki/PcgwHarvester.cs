@@ -1,4 +1,4 @@
-﻿using GameSaves.Core.Save;
+using GameSaves.Core.Save;
 using GameSaves.External.Http;
 using GameSaves.Infrastructure.Save;
 using System.Security.Cryptography;
@@ -220,7 +220,8 @@ namespace GameSaves.External
             {
                 _savePathDatabase.ImportMappings(
                     extracted,
-                    enabled: !_options.ImportExtractedMappingsDisabled);
+                    enabled: !_options.ImportExtractedMappingsDisabled,
+                    reviewStatus: "Pending");
             }
 
             return extracted.Count;

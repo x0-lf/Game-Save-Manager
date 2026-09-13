@@ -1,4 +1,4 @@
-﻿using GameSaves.Core.Save;
+using GameSaves.Core.Save;
 using Microsoft.Data.Sqlite;
 
 namespace GameSaves.Infrastructure.Save
@@ -24,13 +24,49 @@ namespace GameSaves.Infrastructure.Save
             string steamAppId,
             string platform)
         {
-            var mappings = GetMappingsForApp(
-                steamAppId,
-                platform,
-                includeDisabled: false);
+            if (string.IsNullOrWhiteSpace(steamAppId) || string.IsNullOrWhiteSpace(platform))
+                return Array.Empty<SavePathMapping>();
 
-            return mappings
-                .Where(mapping => mapping.Enabled)
+            var results = new List<SavePathMapping>();
+
+            using var connection = OpenConnectionAndPrepareReviewColumns();
+            using var command = connection.CreateCommand();
+
+            command.CommandText = """
+            SELECT
+                id,
+                steam_app_id,
+                game_name,
+                platform,
+                path_template,
+                path_kind,
+                source_name,
+                source_url,
+                source_license,
+                notes,
+                priority,
+                enabled,
+                COALESCE(review_status, 'Pending') AS review_status,
+                review_notes,
+                reviewed_utc
+            FROM save_path_mappings
+            WHERE steam_app_id = $steam_app_id
+              AND platform = $platform
+              AND enabled = 1
+              AND COALESCE(review_status, '') = 'Approved'
+            ORDER BY priority ASC, id ASC;
+            """;
+
+            command.Parameters.AddWithValue("$steam_app_id", steamAppId);
+            command.Parameters.AddWithValue("$platform", platform);
+
+            using var reader = command.ExecuteReader();
+
+            while (reader.Read())
+                results.Add(ReadMapping(reader));
+
+            return results
+                .Where(mapping => mapping.Enabled && string.Equals(mapping.ReviewStatus, "Approved", StringComparison.OrdinalIgnoreCase))
                 .OrderBy(mapping => mapping.Priority)
                 .ThenBy(mapping => mapping.Id)
                 .ToList();
@@ -71,7 +107,7 @@ namespace GameSaves.Infrastructure.Save
                 notes,
                 priority,
                 enabled,
-                COALESCE(review_status, CASE WHEN enabled = 1 THEN 'Approved' ELSE 'Pending' END) AS review_status,
+                COALESCE(review_status, 'Pending') AS review_status,
                 review_notes,
                 reviewed_utc
             FROM save_path_mappings
@@ -127,7 +163,7 @@ namespace GameSaves.Infrastructure.Save
                 SELECT
                     COUNT(*) AS total_mappings,
                     SUM(CASE WHEN enabled = 1 THEN 1 ELSE 0 END) AS enabled_mappings,
-                    SUM(CASE WHEN enabled = 1 THEN 1 ELSE 0 END) AS approved_mappings,
+                    SUM(CASE WHEN enabled = 1 AND COALESCE(review_status, '') = 'Approved' THEN 1 ELSE 0 END) AS approved_mappings,
                     SUM(CASE WHEN COALESCE(review_status, 'Pending') = 'Pending' THEN 1 ELSE 0 END) AS pending_mappings,
                     SUM(CASE WHEN COALESCE(review_status, '') = 'NeedsFix' THEN 1 ELSE 0 END) AS needs_fix_mappings,
                     SUM(CASE WHEN COALESCE(review_status, '') = 'Rejected' THEN 1 ELSE 0 END) AS rejected_mappings
@@ -161,7 +197,7 @@ namespace GameSaves.Infrastructure.Save
         {
             return CountMappingsBySql(
                 platform,
-                "enabled = 1");
+                "enabled = 1 AND COALESCE(review_status, '') = 'Approved'");
         }
 
         public int CountNeedsFixMappings(string platform)
@@ -209,7 +245,7 @@ namespace GameSaves.Infrastructure.Save
 
         private static void EnsureReviewColumns(SqliteConnection connection)
         {
-            EnsureColumn(connection, "save_path_mappings", "review_status", "TEXT NULL");
+            EnsureColumn(connection, "save_path_mappings", "review_status", "TEXT NOT NULL DEFAULT 'Pending'");
             EnsureColumn(connection, "save_path_mappings", "reviewed_utc", "TEXT NULL");
             EnsureColumn(connection, "save_path_mappings", "review_notes", "TEXT NULL");
 
@@ -219,6 +255,14 @@ namespace GameSaves.Infrastructure.Save
                 ON save_path_mappings (source_name, review_status, enabled);
             """;
             command.ExecuteNonQuery();
+
+            using var migrateCommand = connection.CreateCommand();
+            migrateCommand.CommandText = """
+            UPDATE save_path_mappings
+            SET review_status = 'Pending'
+            WHERE review_status IS NULL;
+            """;
+            migrateCommand.ExecuteNonQuery();
         }
 
         private static void EnsureColumn(

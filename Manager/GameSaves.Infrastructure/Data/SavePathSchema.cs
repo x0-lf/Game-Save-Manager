@@ -1,4 +1,4 @@
-﻿namespace GameSaves.Core.Save
+namespace GameSaves.Core.Save
 {
     public static class SavePathSchema
     {
@@ -23,7 +23,10 @@
             source_license TEXT NULL,
             notes TEXT NULL,
             priority INTEGER NOT NULL DEFAULT 100,
-            enabled INTEGER NOT NULL DEFAULT 1,
+            enabled INTEGER NOT NULL DEFAULT 0,
+            review_status TEXT NOT NULL DEFAULT 'Pending',
+            review_notes TEXT NULL,
+            reviewed_utc TEXT NULL,
             created_utc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_utc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 

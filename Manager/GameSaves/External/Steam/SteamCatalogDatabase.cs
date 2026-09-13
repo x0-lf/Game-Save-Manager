@@ -1,4 +1,4 @@
-﻿using GameSaves.Core.Steam;
+using GameSaves.Core.Steam;
 using Microsoft.Data.Sqlite;
 
 namespace GameSaves.External.Steam
@@ -282,6 +282,7 @@ namespace GameSaves.External.Steam
                   FROM save_path_mappings m
                   WHERE m.steam_app_id = c.steam_app_id
                     AND m.enabled = 1
+                    AND COALESCE(m.review_status, '') = 'Approved'
               )
               {excludePcgwSql}
             ORDER BY CAST(c.steam_app_id AS INTEGER) ASC
@@ -341,6 +342,7 @@ namespace GameSaves.External.Steam
                   FROM save_path_mappings m
                   WHERE m.steam_app_id = c.steam_app_id
                     AND m.enabled = 1
+                    AND COALESCE(m.review_status, '') = 'Approved'
               )
               AND NOT EXISTS (
                   SELECT 1
