@@ -1,95 +1,181 @@
 # Roadmap
 
-This file owns active and future work. Historical milestones cannot change the
-status here. Every item states its product outcome, dependency, and evidence
-required for completion.
+This file is the authoritative roadmap for active, future, and completed work across the solution.
+Historical milestones cannot change the status here. Every item states its canonical ID (and aliases),
+title, product outcome (The What), dependency, and observable completion criteria (Definition of Done).
+
+---
 
 ## Now
 
+Current sprint focus: Foundational governance, trust boundary enforcement, and window/navigation stabilization.
+
 | ID | Title | Product outcome | Dependency | Completion criteria |
 | --- | --- | --- | --- | --- |
-| DOC-020 | Independent reader journeys | A new reader can use the documentation without relying on author knowledge | DOC-001 through DOC-019 | An independent reader completes the prospective-user, contributor, and maintainer scripts with no unanswered question |
-| UI-007 | Close emptied detached windows on programmatic reattach | Applying a workspace layout never leaves an empty floating window on screen | None | Reattaching through a layout apply or ReattachAll closes the floating window; user-initiated close keeps its current behavior; coverage proves no emptied window survives reattachment |
-| UI-008 | Fix the layout fault on programmatic reattach | Reattaching a detached page never faults the render pass | UI-007 | A detach/reattach cycle driven by a layout apply raises no "wrong LayoutManager" arrange fault; repeated cycles run clean under the interactive material harness |
+| **OBS-001** | Roadmap identity and completeness reconciliation | Every existing, planned, and requested product outcome has a canonical ID and independent tracking | None | Full 75-card backlog and all OBS extensions reconciled in `ROADMAP.md`; automated integrity tests pass; zero ID collisions |
+| **OBS-003** | Strict mapping approval rule enforcement | Imported, harvested, or AI-generated save path candidates cannot participate in backup or restore without explicit approval | Treatment of legacy enabled rows | All transfer, backup, restore, and installed-game queries enforce `review_status == 'Approved' && enabled == true`; unreviewed candidates default to `Pending` and disabled; unit tests prove boundary |
+| **UI-007** | Close emptied detached windows on programmatic reattach | Applying a workspace layout never leaves an empty floating window frame on screen | None | Reattaching through a layout apply or `ReattachAll` closes the floating window; user-initiated close preserves current behavior; regression tests verify no empty window survives |
+| **UI-008** | Fix layout arrange fault on programmatic reattach | Reattaching a detached page never faults the Avalonia render pass | UI-007 | A detach/reattach cycle driven by workspace layout apply raises no "wrong LayoutManager" arrange fault; repeated cycles run clean under the interactive material harness |
+| **OBS-020** | Navigation rail redesign and direct page layout reset | Navigation controls (Collapse, Scan, Layout, Reset Layout) reside inside rail chrome; direct reset button restores active page layout | UI-005, DOC-009 | Rail border encompasses action buttons in Left, Right, and Top docks; Top dock renders two lines (Line 1: actions, Line 2: tabs); dedicated Reset Page Layout button resets current page panels directly |
+| **OBS-021** | Acrylic material contrast shield for white backdrops | Acrylic blur content remains readable over bright white desktop backgrounds without washing out text | UI-001, UI-002 | Semantic Backdrop Contrast Shield (`#111217` at 75% opacity) absorbs background light when Acrylic is active in Dark theme; text contrast exceeds 7:1; Mica and None remain unaffected |
+| **DOC-020** | Independent reader documentation acceptance | A new reader can use the documentation without relying on author knowledge | DOC-001 through DOC-019 | Independent readers complete the prospective-user, contributor, and maintainer walkthrough scripts with no unanswered questions |
+| **GOVERNANCE-001** | Solution-wide Definition of Done contract | Every completed backlog card is supported by verifiable code, test, accessibility, security, and documentation evidence | None | Shared Definition of Done formalized in repository policies and linked from all delivery cards |
 
-DOC-020 review scripts:
+### DOC-020 Review Scripts
 
-- **Prospective user:** identify support status, requirements, first safe backup,
-  deletion boundaries, available providers, and Google Drive limitations.
-- **Contributor:** build and test all projects, locate architecture owners,
-  follow provider Definition of Done, and report an unverified platform check.
-- **Maintainer:** locate data paths, mapping trust rules, release checks, active
-  backlog, security response, dependency record, and historical acceptance.
+- **Prospective user:** Identify support status, requirements, first safe backup, deletion boundaries, available providers, and Google Drive limitations.
+- **Contributor:** Build and test all eight projects, locate architecture owners, follow provider Definition of Done, and report an unverified platform check.
+- **Maintainer:** Locate data paths, mapping trust rules, release checks, active backlog, security response, dependency record, and historical acceptance archives.
+
+---
 
 ## Next
 
+Upcoming sprint priorities: Archive sync container format, dependency modernization, provider seams, and UI pagination.
+
 | ID | Title | Product outcome | Dependency | Completion criteria |
 | --- | --- | --- | --- | --- |
-| MAINT-001 | SFTP test seam | SFTP upload and download behavior can be tested without a live SSH server | Existing remote-filesystem boundary | Provider accepts an injectable boundary and deterministic upload/download tests pass without changing behavior |
-| MAINT-002 | xUnit migration | The suite no longer depends on deprecated xUnit 2.9.3 | Stable suite baseline | Supported xUnit packages run the full suite with documented baseline changes |
-| MAINT-003 | Retry-After support | Google Drive waits according to safe server guidance while preserving retry bounds | HTTP response observation and retry delay carrier | All Drive client paths propagate bounded `Retry-After`; deterministic tests cover valid, missing, and excessive values |
-| SYNC-001 | WebDAV provider | Users can sync backup runs with a compatible WebDAV or Nextcloud server | MAINT-001 and provider DoD | Authentication, preview, upload, download, conflict, cancellation, safety, docs, and deterministic tests pass |
-| SYNC-002 | OneDrive provider | Users can sync backup runs with OneDrive | Provider DoD and release OAuth decision | OAuth, root ownership, shared engine behavior, live acceptance, and documentation pass |
+| **OBS-004** | Portable manifest schema v2 and archive compatibility | Old and new backups remain discoverable, verifiable, and restorable across storage formats and machines | DATA-001 | Versioned manifest schema (`schema_version: 2`) defines relative payload paths and root `manifest.json`; uncompressed folders, ZIPs, and 7z share identical catalog models; previews read metadata without full extraction |
+| **OBS-005** | Harden ZIP import/export before format expansion | Malformed, oversized, or path-traversing archives cannot compromise security or corrupt backup history | OBS-004 | Temporary extraction staging; directory traversal guards (`Zip Slip` prevention); bounds on entry count, manifest bytes, and payload size; cancellation respected throughout |
+| **OBS-006** | Optional 7-Zip (`.7z`) archive format (BACKUP-002) | Users can choose between standard ZIP and high-compression 7-Zip (`.7z`) formats for backup export and import | OBS-004, OBS-005 | Native managed 7-Zip LZMA2 compression implemented; Store, Fast, Optimal, and Ultra presets; round-trip export/import verified; licenses and notices updated |
+| **OBS-007** | Archive Sync: Single container cloud transfers (BACKUP-010) | Users can upload and download backup runs as single compressed `.7z` or `.zip` containers, bypassing per-file API throttling | OBS-004, OBS-005, OBS-006 | Cloud request counts drop from thousands to <= 2 per run; sync previews inspect manifest headers without full payload download; partial transfers rejected; folder runs and archive runs co-exist |
+| **OBS-008** | Explicit verification strength indicators | Users clearly understand whether a backup has been copied, matched against manifests, or verified via payload hashes | DRIVE-008, DRIVE-009 | Standardized verification levels (`Copied`, `ManifestMatch`, `PayloadVerified`); UI status chips, history records, and tooltips reflect exact evidence level; manifest-only check never claims payload verification |
+| **MAINT-001** | SFTP injectable remote boundary seam | SFTP upload and download behavior can be tested deterministically without a live SSH server | Existing remote-filesystem boundary | `SftpSyncProvider` accepts an injectable `IRemoteFileSystem` boundary; deterministic upload, download, conflict, and cancellation tests pass without changing production SSH behavior |
+| **MAINT-002** | Modernize xUnit test toolchain | The test suite is upgraded to the modern xUnit v3 runner and framework | Stable test suite baseline | Supported xUnit packages run the full suite with documented baseline changes; all 2,157+ tests pass; test execution isolated |
+| **MAINT-003** | Honour provider HTTP `Retry-After` guidance | Google Drive and cloud providers respect server-provided retry timing during rate-limiting | HTTP response observation and retry delay carrier | Cloud client paths propagate bounded `Retry-After`; deterministic tests cover seconds, HTTP date values, missing headers, excessive delays, and cancellation |
+| **OBS-009** | Throttling diagnostics and Google Drive for Desktop promotion | Users experiencing Google Drive API rate limits receive clear guidance and can utilize the official desktop client | DRIVE-005, MAINT-003 | Exponential backoff displays countdown timers; user guidance explains API limits vs desktop client sync; Local Folder provider targeting mounted Drive folder promoted in UI |
+| **OBS-010** | Complete dependency modernization sweep | The application runs on an audited, modern, and vulnerability-free dependency baseline | MAINT-002 | `dotnet list package --outdated` and `--vulnerable` audited; direct dependencies updated across all eight projects; licenses and notices reconciled |
+| **OBS-018** | UI Pagination Engine for Installed Games (UI-012) | Users with large libraries (100–1,000+ games) navigate smoothly without UI freezing | UI revamp, Issue #25 | Reusable `PaginationController<T>` supports page sizes `[1, 3, 5, 7, 9, 10, 15, 20, 25, 30, 50, 75, 100, Custom]`; filtering and sorting apply before paging; selection preserved; 60 FPS rendering |
+| **OBS-019** | Paginate transfer details, backup runs, and history | Large sync plans, file transfer previews, and backup history lists remain responsive and clear | OBS-018 | Paging applied to `SyncView`, `HistoryView`, and `BackupsView`; selection state preserved across page switches; total transfer counts reflect the complete filtered plan rather than visible page |
+| **OBS-022** | Dynamic custom accent colour system (UI-013) | Users can choose arbitrary hex accent colors while maintaining full readability and WCAG AA contrast | Theme architecture | `ThemeService` calculates dynamic HSL palette; measures contrast against white text and clamps lightness for >= 4.5:1 ratio; high-contrast mode overrides custom colors |
+
+---
 
 ## Later
 
+Planned feature sprints: Curated data distribution, catalog expansion, new cloud providers, scheduling, diffing, packaging, and mobile companion.
+
 | ID | Title | Product outcome | Dependency | Completion criteria |
 | --- | --- | --- | --- | --- |
-| DOC-021 | Sanitized screenshots | Stable user guides include useful, non-personal UI images | UI content and release material stabilization | Approved current screenshots contain no account data, paths, saves, credentials, tokens, email, or remote IDs |
-| SYNC-003 | Multi-target sync | One backup set can be synchronized to multiple explicitly selected profiles | Stable provider behavior | Preview and history identify each target; failures remain isolated; no target is implicit |
-| SYNC-004 | Quota and health UI | Users can inspect provider health or quota where the provider safely supports it | Provider-specific APIs and privacy review | UI reports only verified capability data and degrades cleanly when unavailable |
-| BACKUP-001 | Compressed backups | Users can opt into a documented compressed backup format | Format and migration design | Restore, integrity, import/export, compatibility, and failure recovery are proven |
-| BACKUP-002 | 7z support | Users can import or export an explicitly supported 7z format | BACKUP-001 and dependency/license review | Format safety, traversal guards, limits, licenses, and round-trip tests pass |
-| AUTO-001 | Scheduled backup and sync | Users can schedule safe preview-derived operations | Release host and unattended-safety model | Missed runs, locked saves, credentials, confirmation policy, cancellation, and history are defined and tested |
-| DIFF-001 | Backup diff viewer | Users can compare two backup runs without changing either | Stable manifest model | Added, removed, and changed files are reported deterministically with no extraction side effects |
-| REL-001 | Release packaging | Users receive a reproducible supported package with update and migration checks | DATA-001 and platform support decisions | Clean build, package inventory, licenses, install/update/rollback, and artifact verification pass |
+| **DOC-021** | Sanitized UI screenshots and documentation gallery | Stable user guides include useful, non-personal UI screenshots | UI stabilization | Approved screenshots contain no real account data, paths, saves, credentials, tokens, or remote IDs |
+| **DATA-002** | Project-controlled curated mapping distribution | Approved game mappings are versioned with the repository while private user state remains outside Git | DATA-001 | Versioned JSON/SQLite seed dataset of approved mappings; shipped with app; update and merge precedence rules defined |
+| **DATA-003** | Safe schema migration, backup, and rollback engine | Database schema upgrades occur automatically with safe rollback on failure | DATA-002 | Idempotent migrations; pre-migration database backup; dry-run validation report; corrupted/locked database recovery tested |
+| **OBS-014** | Add reviewed titles and mappings from JSON (CATALOG-004) | Maintainers and users can import new game titles and save paths from JSON files | DATA-002, OBS-003 | JSON schema validation; imported paths default to `Pending` review status; duplicate titles detected; import report generated |
+| **OBS-015** | Missing titles tracklist generator (CATALOG-001, CATALOG-002) | Maintainers have an actionable, prioritized tracklist of games missing save path definitions | DATA-002, OBS-014 | Steam library manifests reconciled against database mappings; `missing-titles.json` exported with AppID, title, store URL, and research status |
+| **OBS-016** | Targeted PCGamingWiki web harvesting engine (CATALOG-003) | Automated harvester queries PCGamingWiki Cargo API to fetch candidate save paths for queued titles | OBS-015, OBS-003 | Harvester processes missing AppIDs idempotently; rate limits and user-agent headers respected; parsed paths tokenized and saved as `Pending` |
+| **OBS-017** | AI-assisted save path pattern detector (CATALOG-005) | AI tooling analyzes complex directory trees and proposes tokenized save path candidates for human review | OBS-014, OBS-015, OBS-016 | Engine fingerprint heuristics (Unreal, Unity, Godot, Ren'Py); LLM generates schema-valid candidates with source rationale; AI cannot approve or enable paths |
+| **OBS-011** | Microsoft OneDrive cloud sync provider (PROVIDER-002, SYNC-002) | Users can sync backups to Microsoft OneDrive using sandboxed app-folder permissions | PROVIDER-006 | Microsoft Graph OAuth with PKCE; sandboxed to `Files.ReadWrite.AppFolder`; create-only uploads; quota display; provider parity tests pass |
+| **OBS-012** | Prove MEGA cloud provider integration boundary | Feasibility, licensing, and security architecture of MEGA cloud synchronization are proven | Safety model | Spike verifies authentication, 2FA challenges, DPAPI session storage, chunked uploads, and quota inspection using synthetic runs |
+| **OBS-013** | Deliver MEGA cloud sync provider (PROVIDER-008) | Users can select MEGA as a first-class cloud backup destination | OBS-012 | `MegaSyncProvider` registered in catalog/factory; create-only upload and safe conflict detection; quota display; parity tests pass |
+| **SYNC-001** | WebDAV and Nextcloud sync provider (PROVIDER-001) | Users can synchronize backups to private WebDAV or Nextcloud servers | PROVIDER-005, MAINT-001 | RFC 4918 methods implemented; TLS enforced; Nextcloud compatibility proven; create-only uploads and safe preview checks pass |
+| **SYNC-003** | Multi-target profile synchronization (PROVIDER-003) | One backup set can be synchronized to multiple explicitly selected profiles in one workflow | Stable providers | Preview and history identify each destination; failures remain isolated; execution order and concurrency clear |
+| **SYNC-004** | Remote quota and provider health dashboard (PROVIDER-004) | Users can inspect available cloud storage quotas and provider health status | PROVIDER-007 | Unified health widget reports verified capability data and degrades cleanly when unavailable |
+| **BACKUP-001** | Compressed-by-default backup container format | New backups default to compressed containers while remaining verifiable and restorable | OBS-004, BACKUP-006 | Compressed backup container versioned; manifest integrity preserved; restore validates content before replacement; opt-out uncompressed setting |
+| **BACKUP-003** | Scheduled backups and synchronization umbrella | Umbrella epic for background backups and unattended synchronization | Headless workflows, secret safety | Scheduling is opt-in; preview-equivalent validation before execution; results appear in History; secrets protected |
+| **BACKUP-007** | Windows Task Scheduler integration for backups | Approved backup presets run automatically via Windows Task Scheduler | BACKUP-003, CLI backup command | Safe non-interactive backup command; single-run locking; preset validated at execution; failure never deletes existing data |
+| **BACKUP-008** | Scheduled profile synchronization engine | Approved remote profiles synchronize automatically without weakening safety rules | BACKUP-003, BACKUP-007 | Opt-in per profile; conflicts reported and skipped; authentication failures fail safely without opening browser; create-only upload preserved |
+| **BACKUP-009** | Provider-neutral manifest comparison service | Difference data between backup runs is computed independently of UI presentation | Stable manifests | Pure comparison service reports added, removed, changed, and identical files; read-only; large comparisons cancellable |
+| **DIFF-001** | Backup visual difference viewer (BACKUP-004) | Users can visually compare two backup runs before restoring or synchronizing | BACKUP-009 | UI displays added, removed, and changed files using manifest paths and hashes; filters and summary counts; never modifies content |
+| **UI-015** | Virtualized DataGrid rendering optimizations | Ultra-large save file hierarchies (10,000+ files) render with low memory overhead | OBS-018, OBS-019 | UI virtualization enabled for file trees; deferred node loading; smooth scrolling at 60 FPS |
+| **RELEASE-001** | Desktop release packaging (REL-001) | Users receive self-contained, signed installer packages without requiring .NET SDK | Supported platform decisions | Repeatable Windows release pipeline (MSIX / InnoSetup); version metadata visible; user data kept outside install directory |
+| **RELEASE-002** | Application update notification and verification system | Safe update notifications and installation preserving backups and settings | RELEASE-001 | Update checking configurable; downloads integrity-verified; staged download and atomic replacement; offline use supported |
+| **RELEASE-003** | Database and settings migration automated test fixtures | Database upgrades and settings migrations are regression-tested against historical schemas | DATA-003, RELEASE-001 | Representative fixtures from supported releases; forward migration validated; unsupported newer schema refusal tested |
+| **OBS-027** | Public Google OAuth onboarding and app verification | Regular users install and connect Google Drive without developer Cloud projects or secrets | Release OAuth policy | Google Cloud App Verification completed for `drive.file`; public Desktop Client ID embedded; PKCE loopback listener; branded consent screen |
+| **OBS-028** | Reproducible CI release packaging and recovery gates | Automated build pipeline produces verified release packages with rollback recovery | RELEASE-001, RELEASE-003 | Clean GitHub runner reproduces Release build and passes all tests; signed installer tested on machine without SDK; safe rollback proven |
+| **DISCORD-002** | Unobtrusive Discord community / support link | Users seeking support can open the project's Discord community from Help/About | DISCORD-001 | Optional link opens in system browser; destination configured by project; zero telemetry sent; failure handled safely |
+| **DISCORD-003** | Optional Discord webhook notifications | Advanced users running scheduled operations receive backup/sync completion alerts | DISCORD-001 | Webhooks disabled by default; URL stored in secret store; no private paths or credentials sent; failures do not fail backups |
+| **DISCORD-006** | Discord privacy lifecycle and data documentation | Users understand transmitted fields, secret storage, and disablement | DISCORD-002, DISCORD-003 | Documentation lists all transmitted fields, opt-in defaults, secret storage rules, and failure isolation |
+| **OBS-024** | Define premium mobile companion product boundary (MOBILE-001) | Boundaries between open-source desktop app and premium mobile companion / server are defined | Architecture ADR | Specification defines separate repository ownership, outbound WebSocket desktop daemon, minimal relay broker, and E2EE protocol |
+| **OBS-025** | Paired-device status and remote job execution (MOBILE-002, MOBILE-003) | Paired mobile devices can inspect desktop backup status and trigger authorized backup/sync presets | OBS-024 | Desktop background agent with outbound connection; commands: query status, trigger backup preset, trigger sync profile; cryptographic signing |
+| **OBS-026** | Mobile companion app distribution and operation (MOBILE-004, MOBILE-005) | Mobile companion is distributed on iOS App Store and Google Play with subscription lifecycle | OBS-024, OBS-025 | Cross-platform mobile client (Flutter / .NET MAUI); store billing integration; push notifications; local backup safety preserved if subscription expires |
+
+---
 
 ## Research
 
+Architecture discovery, threat models, and capability investigations. Research is an exploratory prerequisite, not an implementation commitment.
+
 | ID | Title | Product outcome | Dependency | Completion criteria |
 | --- | --- | --- | --- | --- |
-| SEC-001 | Client-side encryption | Users can optionally encrypt backup content before remote upload | Threat model and key-recovery design | A reviewed design covers keys, recovery, manifests, streaming, migration, and failure without data-loss claims |
-| PLAT-001 | Linux discovery | Linux Steam libraries and saves can be discovered safely | Cross-platform data paths and secret store | Supported distributions, paths, permissions, packaging, and regression fixtures are defined and proven |
-| PLAT-002 | Proton and Wine | Windows-game saves inside prefixes can be mapped without unsafe path guessing | PLAT-001 and prefix model | Prefix ownership, user selection, mapping expansion, and containment are documented and tested |
-| PLAT-003 | Steam Deck | Handheld desktop and game-mode workflows are supported | PLAT-001 and PLAT-002 | Install, discovery, UI, storage, permissions, and restore workflows pass on hardware |
-| PLAT-004 | macOS discovery | macOS Steam libraries and saves can be discovered safely | Cross-platform data paths and secret store | Supported versions, paths, permissions, packaging, and regression fixtures are defined and proven |
-| SEC-002 | Cross-platform secret stores | Tokens can be protected on supported Linux and macOS systems | PLAT-001 or PLAT-004 | Secret Service and Keychain ownership, migration, deletion, corruption, and platform tests pass |
+| **DATA-001** | Storage ownership Architectural Decision Record | The boundary between curated mapping data and private runtime state is formally decided | None | ADR classifies every SQLite table as distributable curated data vs private runtime state (`gamesave.db`); evaluated against install permissions and Git |
+| **DATA-004** | Optional portable-data mode evaluation | Advanced users can opt into portable data storage with explicit security trade-offs | DATA-001 | Path selection explicit; non-portable DPAPI secret warning documented; portable data ignored by Git; threat model recorded |
+| **PROVIDER-005** | Define WebDAV and Nextcloud compatibility matrix | Supported server behaviors, methods, and create-only semantics are proven before implementation | MAINT-001 | RFC 4918 operations mapped; Nextcloud vs generic WebDAV matrix; create-only upload and safe metadata replacement verified |
+| **PROVIDER-006** | Define Microsoft OneDrive OAuth, scopes, and app folder | OneDrive authentication and permissions are limited to minimum necessary scopes | Proven sync boundary | Personal vs organizational account policy; `Files.ReadWrite.AppFolder` scope documented; token refresh and PKCE flow defined |
+| **PROVIDER-007** | Define provider health and quota contracts | Provider health and storage metrics use standardized meanings across different backends | Capability catalog | `IProviderHealthCheck` contract distinguishes Healthy, RateLimited, QuotaExhausted, CapacityKnown, and CapabilityUnsupported |
+| **BACKUP-005** | Client-side authenticated backup encryption (SEC-001) | Users can optionally encrypt backup content before cloud upload | Threat model (SECURITY-001) | Authenticated encryption (AEAD AES-256-GCM / Argon2id); streaming encryption/decryption; key derivation and recovery requirements defined |
+| **SECURITY-001** | Threat model for client encryption and key recovery | Encryption design and recovery consequences are understood before implementing backup encryption | None | Attacker and trust assumptions defined; metadata exposure documented; KDF parameters defined; offline recovery explicit; no custom crypto |
+| **SECURITY-002** | Credential and path sanitization sweep | Security-sensitive data is strictly scrubbed from all logs, captures, and diagnostic reports | None | Automated sanitization audit; regex scrubbers verify zero tokens, secrets, passwords, or personal paths in outputs |
+| **PLATFORM-001** | Linux Steam library and save discovery (PLAT-001) | Linux Steam libraries and saves can be discovered safely | Secret store (PLATFORM-005) | Native Steam (`~/.local/share/Steam`) and Flatpak sandboxes supported; path containment tested; testable without live Steam |
+| **PLATFORM-002** | Proton and Wine compatibility prefix support (PLAT-002) | Windows game saves inside Proton/Wine prefixes resolve to correct directories | PLATFORM-001 | Compatibility prefix identity modelled; `compatdata` roots discovered; Windows path tokens expanded inside prefix safely |
+| **PLATFORM-003** | Steam Deck handheld optimization (PLAT-003) | Handheld gaming and desktop modes on Steam Deck are supported | PLATFORM-001, PLATFORM-002 | 1280x800 layout scaling; controller navigation evaluated; SD-card removable storage handled safely; hardware tested |
+| **PLATFORM-004** | macOS Steam library discovery (PLAT-004) | macOS Steam libraries and supported save paths are discovered automatically | Platform discovery | `~/Library/Application Support/Steam` candidate roots; macOS path token expansion; permissions and sandbox handling defined |
+| **PLATFORM-005** | Cross-platform secret stores (SEC-002) | Cloud OAuth tokens and passwords are protected on Linux and macOS without DPAPI | PLATFORM-001, PLATFORM-004 | Linux Secret Service and macOS Keychain implementations; explicit failure on unsupported systems; zero plaintext fallback |
+| **DISCORD-001** | Discord integration product scope and threat model | Value and privacy implications of Discord integration are defined before any code is written | Product validation | Named user benefit for each feature; transmitted fields strictly listed; default-disabled policy; features stay in research without validated demand |
+| **DISCORD-004** | Optional Discord Rich Presence evaluation | Users can share generic application activity without exposing private save data | DISCORD-001 | Allowlist of generic activity states; filenames, paths, account IDs strictly excluded; prompt presence clearing on disable |
 
-Research items move to Later or Next only after their dependencies and safety
-model are concrete. Research is not an implementation commitment.
+---
 
 ## Blocked
 
+Gated work awaiting prerequisites or external validation.
+
 | ID | Title | Product outcome | Dependency | Completion criteria |
 | --- | --- | --- | --- | --- |
-| DOC-011 | Database migration and recovery guide | Users and maintainers have safe, versioned database migration, rollback, corruption, and recovery instructions | DATA-001, currently undefined | DATA-001 defines supported schemas, backup/restore ownership, failure modes, and tested recovery commands |
-| DOC-013 | Validate documented Avalonia build commands | The solution and every project-specific build command are confirmed in the target user environment | Normal user shell with writable Avalonia BuildServices data | All seven Release builds and the solution build pass; warnings and failures are recorded |
-| DOC-016 | Publish verified Wiki or article links | Repository docs can point to maintained external explanations without ambiguity | Authoritative published URLs | Maintainer verifies ownership, URL, scope, and non-authoritative status before any link is added |
-| DOC-017 | Validate App, Reviewer, and UiCapture workflows | Maintainers have current runtime and visual evidence for desktop commands | Windows display plus normal user shell; provider checks may also need credentials/network | App and Reviewer launch, UiCapture default/layout/rail modes run, and sanitized results are reviewed |
+| **DOC-011** | Database migration and recovery user guide | Users and maintainers have safe, versioned database migration, rollback, and recovery instructions | DATA-001, DATA-003 | DATA-001 and DATA-003 define supported schemas, backup/restore ownership, failure modes, and tested recovery commands |
+| **DOC-013** | Validate documented build commands for all 8 projects | Solution and project-specific build commands are confirmed in target user environment | Normal user shell with writable Avalonia BuildServices | All eight Release builds and solution build pass; warnings and failures recorded; fresh checkout validated |
+| **DOC-016** | Publish verified Wiki or article links | Repository docs point to maintained external conceptual articles without broken links | Authoritative external URLs | Maintainer verifies ownership, URL, scope, and non-authoritative status before any link is added |
+| **DOC-017** | Validate desktop and capture workflows | Maintainers have current runtime and visual evidence for desktop commands | Windows display + user shell | App and Reviewer launch cleanly; UiCapture default/layout/rail modes run; sanitized results reviewed |
+| **DATA-005** | Relocate runtime database to approved project-local directory | App, CLI, and Reviewer use the approved project-local database path | DATA-001, DATA-003, DATA-004 | Canonical project-local directory approved; `%LOCALAPPDATA%` data discovered and migrated safely; DPAPI credentials preserved; Git-ignored |
+
+---
+
+## Deferred and Cancelled
+
+Explicitly excluded, deferred, or cancelled items with documented rationale.
+
+| ID | Title | Product outcome | Dependency | Completion criteria |
+| --- | --- | --- | --- | --- |
+| **DISCORD-005** | Defer Discord bot command control | Bot-based remote control is excluded so Discord cannot become an unauthenticated remote execution surface | None | No bot dependency or command infrastructure; remote operations handled exclusively through secure Mobile Companion (`OBS-024`..`OBS-026`) |
+| **OBS-023** | Integrate `feat/ui-gallery-capture` branch | Cancelled / Obsolete: The user explicitly determined that the separate gallery branch is obsolete and will not be merged | None | `main` branch sync presence and direction workflows remain authoritative; gallery branch changes discarded without regressing main |
+
+---
 
 ## Completed
 
+Verified in code, documentation, and automated tests.
+
 | ID | Title | Product outcome | Dependency | Completion criteria |
 | --- | --- | --- | --- | --- |
-| DOC-001 | Replace root README | Readers get a concise overview, present status, quick start, safety summary, and primary links | None | Root README contains no detailed CLI, archived chronology, or developer OAuth procedure |
-| DOC-002 | Create documentation hub | Every guide and policy has a discoverable owner | DOC-001 | Ownership table, audience labels, and linking rules cover the documentation tree |
-| DOC-003 | Create getting-started guide | Users can identify runtime/source requirements and begin safely | DOC-002 | .NET 10, Windows support, source run, data path, and first-run sequence are documented |
-| DOC-004 | Create desktop guide | All nine current tabs and desktop workflows have one owner | DOC-002 | Startup loading, page refresh, layouts, detached tabs, recovery, workflows, and UI states are documented with “Transfer profiles” |
-| DOC-005 | Create safety guide | User-data invariants and every deletion category are explicit | DOC-002 | Preview, overwrite, containment, sync, cleanup, profile/preset/credential deletion, and temp cleanup are distinguished |
-| DOC-006 | Create architecture guide | Project and SDK boundaries reflect actual references | DOC-002 | All seven projects, dependency direction, Avalonia ownership, and Google SDK ownership match project files |
-| DOC-007 | Create development guide | Contributors have root-relative commands and environment requirements | DOC-002 | Solution/project builds, tests, CLI, Reviewer, App, UiCapture, cleanup, troubleshooting, and release gates are covered |
-| DOC-008 | Create database and mappings guide | Database location and mapping trust lifecycle have one owner | DOC-002 | Current path, review states, CLI overview, and project-local guide links are correct without claiming DATA-001 work |
-| DOC-009 | Replace provider guide | Current provider behavior and UI limitations are separated from history | DOC-005 and DOC-006 | Five-provider matrix, safety, performance, testing gaps, Google limits, and provider DoD are documented |
-| DOC-010 | Rewrite Google developer setup | Developers can configure minimal private OAuth safely | DOC-009 | Cloud/API/consent/client tasks, exact scope, environment values, ignore rules, incident response, and smoke test are present |
-| DOC-012 | Archive A-Z chronology | Completed Google Drive milestone sequence remains available without controlling current status | DOC-009 | A-Z outcomes and acceptance dates have a visible historical banner and link to evidence |
-| DOC-014 | Correct policies and templates | Contribution, security, license, pull-request, and feature-request guidance matches current provider and roadmap state | DOC-002 | Stale statements are removed; restrictions and provider documentation DoD remain explicit |
-| DOC-015 | Validate repository links | Every repository-relative Markdown link resolves with exact tracked-file casing | Documentation rewrite | Dependency-free link check passes over all Markdown files |
-| DOC-018 | Archive Google Drive acceptance | Detailed closed evidence remains available without controlling current status | DOC-009 | Existing acceptance record is preserved, labelled historical, and supplemented with unique setup-guide results |
-| DOC-019 | Review Markdown rendering | Tables, code fences, banners, and navigation render correctly on GitHub | DOC-001 through DOC-018 | GitHub-compatible structural preview finds no broken table or fence |
-| PRODUCT-001 | Saved remote profiles | Users can create, update, Save As, rename, select, and explicitly delete non-secret Local Folder, SFTP, and Google Drive profiles | Provider profile persistence | Implemented behavior and secret cleanup are covered; it is not listed as future work |
-| UI-004 | Windows material regression baseline | None, Acrylic, and Mica have reproducible Windows evidence | Interactive Windows display with sanitized data | Preferred-reference and current captures record requested/effective levels across themes and bright/dark backgrounds |
-| UI-001 | Restore Acrylic and Mica | Each supported material produces its distinct live Windows result without losing later features | UI-004 | None remains safely opaque by default; exact Acrylic and Mica requests work in main and detached windows; unsupported composition falls back safely |
-| UI-002 | Protect navigation over materials | Navigation and transient menus remain readable without disabling the content backdrop | UI-001 | Primary and Settings navigation plus popup surfaces are opaque and readable across themes, accents, positions, collapse states, and High Contrast |
-| UI-005 | Opaque primary rail surface | The complete primary rail remains readable over bright and dark backdrops | UI-001 and UI-004 | Rail chrome and tab strip pass expanded/collapsed left/right/top Windows captures without changing navigation behavior |
-| UI-006 | Opaque Settings category surface | Settings categories remain readable while its content can retain material | UI-001 and UI-004 | All seven categories pass live theme, accent, keyboard, focus, scrolling, and detached-layout checks |
-| UI-003 | Material visual-regression matrix | Maintainers detect material, fallback, and navigation-opacity regressions | UI-001 and UI-002 | Automated semantic sweep passes and the interactive Windows matrix records approved main/detached results for every required dimension |
+| **DOC-001** | Replace root README | Readers get a concise overview, present status, quick start, safety summary, and primary links | None | Root `README.md` refactored from 941 lines to 102 lines; contains no detailed CLI or developer OAuth setup |
+| **DOC-002** | Create documentation hub | Every guide and policy has a discoverable owner in `/docs` | DOC-001 | `docs/README.md` hub created; ownership table, audience labels, and linking rules established |
+| **DOC-003** | Create getting-started guide | Users can identify runtime/source requirements and begin safely | DOC-002 | `docs/getting-started.md` documents .NET 10, Windows support, source run, data path, and first-run sequence |
+| **DOC-004** | Create desktop guide | All nine current tabs and desktop workflows have one owner | DOC-002 | `docs/desktop-app.md` documents tabs, layouts, detached tabs, recovery, and UI states with "Transfer profiles" |
+| **DOC-005** | Create safety guide | User-data invariants and every deletion category are explicit | DOC-002 | `docs/safety-model.md` defines preview, overwrite, containment, sync, cleanup, and secret deletion |
+| **DOC-006** | Create architecture guide | Project and SDK boundaries reflect actual references | DOC-002 | `docs/architecture.md` documents eight solution projects, dependency direction, and layer boundaries |
+| **DOC-007** | Create development guide | Contributors have root-relative commands and environment requirements | DOC-002 | `docs/development.md` covers solution/project builds, tests, CLI, Reviewer, App, and UiCapture |
+| **DOC-008** | Create database and mappings guide | Database location and mapping trust lifecycle have one owner | DOC-002 | `docs/database-and-mappings.md` documents current path, review states, and CLI overview |
+| **DOC-009** | Replace provider guide | Current provider behavior and UI limitations are separated from history | DOC-005, DOC-006 | `docs/sync-providers.md` documents five-provider matrix, safety, Google limits, and provider Definition of Done |
+| **DOC-010** | Rewrite Google developer setup | Developers can configure minimal private OAuth safely | DOC-009 | `docs/google-drive-developer-setup.md` covers Cloud project, exact scope, ignore rules, and smoke test |
+| **DOC-012** | Archive A–Z milestone chronology | Completed Google Drive milestone sequence remains available without polluting active roadmap | DOC-009 | Historical banner and evidence archived in `docs/history/google-drive-roadmap.md` |
+| **DOC-014** | Correct policies and templates | Contribution, security, and license guidance matches current provider state | DOC-002 | Stale statements removed from `CONTRIBUTING.md`; provider Definition of Done explicit |
+| **DOC-015** | Validate repository links | Every repository-relative Markdown link resolves with exact tracked-file casing | Documentation rewrite | All relative Markdown links verified across `README.md` and `/docs` |
+| **DOC-018** | Archive Google Drive acceptance | Detailed closed evidence remains available without controlling current status | DOC-009 | Historical acceptance records preserved in `docs/history/google-drive-acceptance.md` |
+| **DOC-019** | Review Markdown rendering | Tables, code fences, banners, and navigation render correctly on GitHub | DOC-001..DOC-018 | GitHub-compatible Markdown preview confirms zero broken tables or code fences |
+| **PRODUCT-001** | Saved remote profiles | Users can create, update, Save As, rename, select, and delete non-secret profiles | Profile persistence | Implemented in `ProfileViewModel.cs` and SQLite for Local Folder, SFTP, and Google Drive |
+| **UI-001** | Restore functional Acrylic and Mica | Each supported material produces its distinct live Windows result without losing features | UI-004 | Implemented in `WindowMaterialService.cs`; None remains opaque; Acrylic and Mica apply live; safe fallback |
+| **UI-002** | Protect navigation over materials | Navigation and transient menus remain readable without disabling content backdrop | UI-001 | Navigation surfaces use opaque semantic brush; readable across themes, accents, and High Contrast |
+| **UI-003** | Material visual-regression matrix | Maintainers detect material, fallback, and navigation-opacity regressions | UI-001, UI-002 | `GameSaves.UiMaterialCapture` project created; Win32 compositor measurement harness |
+| **UI-004** | Windows material regression baseline | None, Acrylic, and Mica have reproducible Windows evidence | UI-003 | Baseline recorded in `docs/material-regression-baseline.md` (61-row run, rail bleed 0.005) |
+| **UI-005** | Opaque primary rail surface | The primary rail remains readable over bright and dark backdrops | UI-001, UI-004 | `NavigationSurfaceBrush` enforced across docked rail templates in `MainWindow.axaml` |
+| **UI-006** | Opaque Settings category surface | Settings categories remain readable while content retains material | UI-001, UI-004 | Category navigation strips in `SettingsView.axaml` styled with opaque background resources |
+| **DRIVE-001** | Explicit Upload and Download workflows | Users have clear, distinct Upload and Download actions with preview confirmation | UI stabilization | Implemented in `SyncViewModel.cs` (commit `00156c5`); direction selector supports Upload, Download, Both |
+| **DRIVE-002** | Local and remote presence indicators | Users see whether each backup exists locally, remotely, on both, or in conflict | DRIVE-001 | Implemented in `SyncViewModel.cs`; displays LocalOnly, RemoteOnly, InSync, Conflict, Incomplete |
+| **DRIVE-003** | Accent-aware semantic status styling | Google Drive actions and selections match user accent with semantic treatment | DRIVE-002 | Visual presence chips in `SyncView.axaml` bound to semantic brushes with accessible text |
+| **DRIVE-004** | Safe remote location verification | Users can independently verify and open the local and Google Drive destinations | DRIVE-002 | Capability-gated `OpenRemoteLocation` opens Google Drive folder in browser using system shell |
+| **DRIVE-005** | Performance guidance: API vs Desktop | Users understand API rate limits and the Google Drive for Desktop alternative | DOC-006 | Documented in `docs/sync-providers.md`; explained in UI tooltips and status messaging |
+| **DRIVE-006** | Explicit endpoints display before preview | Local backup base and remote endpoint are displayed clearly before preview | None | Header displays local path, Google Drive account email, and app folder display name |
+| **DRIVE-007** | Selectable plan row action labels | Clicking visible Upload or Download action toggles inclusion in sync plan | DRIVE-001, DRIVE-002 | Interactive action toggles in `SyncView.axaml` share `IncludeInSync` execution plan state |
+| **DRIVE-008** | Post-execution revalidation against remote state | Runs become verified in sync only after dry-run re-preview confirms remote presence | DRIVE-002, DRIVE-007 | Implemented in `SyncViewModel.cs`; completed runs re-queried before declaring "Verified in sync" |
+| **DRIVE-009** | Messaging for incomplete/unverifiable states | Interrupted, incomplete, and unverifiable transfers explain condition and safe retry | DRIVE-008 | Distinct status indicators and user guidance for cancelled, mismatched, or incomplete runs |
+
+---
