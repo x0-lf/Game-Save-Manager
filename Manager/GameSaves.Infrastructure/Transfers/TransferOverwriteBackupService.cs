@@ -85,10 +85,11 @@ namespace GameSaves.Infrastructure.Transfers
                     if (existing is not null)
                         return existing;
 
+                    string relativePayload = BuildRelativeBackupPath(targetFile);
                     string backupFile = Path.Combine(
                         BackupRootPath,
                         "files",
-                        BuildRelativeBackupPath(targetFile));
+                        relativePayload);
 
                     string? backupDirectory = Path.GetDirectoryName(backupFile);
 
@@ -100,12 +101,15 @@ namespace GameSaves.Infrastructure.Transfers
                     File.SetCreationTimeUtc(backupFile, File.GetCreationTimeUtc(targetFile));
                     File.SetLastWriteTimeUtc(backupFile, File.GetLastWriteTimeUtc(targetFile));
 
+                    string relativePath = Path.Combine("files", relativePayload).Replace('\\', '/');
+
                     var item = new TransferOverwriteBackupItem(
                         OriginalFile: targetFile,
                         BackupFile: backupFile,
                         Bytes: new FileInfo(backupFile).Length,
                         Sha256: ComputeSha256(backupFile),
-                        BackedUpUtc: DateTimeOffset.UtcNow);
+                        BackedUpUtc: DateTimeOffset.UtcNow,
+                        RelativePath: relativePath);
 
                     _items.Add(item);
                     return item;
@@ -125,7 +129,7 @@ namespace GameSaves.Infrastructure.Transfers
                         return;
 
                     var manifest = new TransferBackupManifest(
-                        SchemaVersion: 1,
+                        SchemaVersion: TransferBackupManifest.CurrentSchemaVersion,
                         Kind: _context.Kind,
                         Game: _context.Game,
                         SteamAppId: _context.SteamAppId,
@@ -135,7 +139,8 @@ namespace GameSaves.Infrastructure.Transfers
                         CompletedUtc: DateTimeOffset.UtcNow,
                         FileCount: _items.Count,
                         TotalBytes: _items.Sum(item => item.Bytes),
-                        Items: _items);
+                        Items: _items,
+                        Format: "folder");
 
                     string manifestPath = Path.Combine(
                         BackupRootPath,

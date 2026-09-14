@@ -17,6 +17,15 @@ namespace GameSaves.App.Models
             : Run.IsRestoreRun ? "Pre-restore backup"
             : "Pre-overwrite backup";
 
+        public BackupContainerFormat ContainerFormat => Run.ContainerFormat;
+
+        public string FormatDisplay => Run.ContainerFormat switch
+        {
+            BackupContainerFormat.Zip => "ZIP Archive",
+            BackupContainerFormat.SevenZip => "7-Zip Archive",
+            _ => "Folder"
+        };
+
         public string GameName => Run.Manifest.Game;
 
         public string SteamAppId => Run.Manifest.SteamAppId;

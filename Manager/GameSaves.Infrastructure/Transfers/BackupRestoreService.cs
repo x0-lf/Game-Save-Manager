@@ -257,6 +257,16 @@ namespace GameSaves.Infrastructure.Transfers
                 return BuildResult(run, options, results, warnings);
             }
 
+            if (run.IsArchive)
+            {
+                warnings.Add(new TransferPreviewWarning(
+                    "ArchiveMustBeImported",
+                    "This backup is a compressed archive. Import it before restoring.",
+                    TransferWarningSeverity.Error));
+
+                return BuildResult(run, options, results, warnings);
+            }
+
             if (run.Manifest.Items.Count == 0)
             {
                 warnings.Add(new TransferPreviewWarning(
@@ -327,6 +337,7 @@ namespace GameSaves.Infrastructure.Transfers
 
                     results.Add(RestoreOneFile(
                         backupItem,
+                        run.BackupRootPath,
                         run.Manifest.SteamAppId,
                         options,
                         mappingTargetRoot,
@@ -416,12 +427,13 @@ namespace GameSaves.Infrastructure.Transfers
 
         private static BackupRestoreItemResult RestoreOneFile(
             TransferOverwriteBackupItem backupItem,
+            string backupRootPath,
             string steamAppId,
             BackupRestoreOptions options,
             string? mappingTargetRoot,
             Func<ITransferOverwriteBackupSession> getPreRestoreSession)
         {
-            string backupFile = backupItem.BackupFile;
+            string backupFile = backupItem.ResolveBackupFile(backupRootPath);
             string targetFile = backupItem.OriginalFile;
 
             try

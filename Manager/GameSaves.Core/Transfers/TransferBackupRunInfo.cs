@@ -1,10 +1,14 @@
 namespace GameSaves.Core.Transfers
 {
-    /// <summary>One discovered backup run: its manifest plus where it lives on disk.</summary>
+    /// <summary>
+    /// One discovered backup run: its manifest plus where it lives on disk and its storage format.
+    /// Uncompressed folders, ZIPs, and 7z archives share this identical catalog model.
+    /// </summary>
     public sealed record TransferBackupRunInfo(
         string BackupRootPath,
         string ManifestPath,
-        TransferBackupManifest Manifest)
+        TransferBackupManifest Manifest,
+        BackupContainerFormat ContainerFormat = BackupContainerFormat.Folder)
     {
         public bool IsRestoreRun =>
             Manifest.Kind.Equals(
@@ -15,5 +19,10 @@ namespace GameSaves.Core.Transfers
             Manifest.Kind.Equals(
                 OverwriteBackupContext.ManualKind,
                 StringComparison.OrdinalIgnoreCase);
+
+        public bool IsFolder => ContainerFormat == BackupContainerFormat.Folder;
+        public bool IsZip => ContainerFormat == BackupContainerFormat.Zip;
+        public bool IsSevenZip => ContainerFormat == BackupContainerFormat.SevenZip;
+        public bool IsArchive => IsZip || IsSevenZip;
     }
 }

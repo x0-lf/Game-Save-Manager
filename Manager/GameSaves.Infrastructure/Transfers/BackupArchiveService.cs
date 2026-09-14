@@ -7,10 +7,14 @@ namespace GameSaves.Infrastructure.Transfers
     public sealed class BackupArchiveService : IBackupArchiveService
     {
         private readonly IBackupHistoryService _backupHistoryService;
+        private readonly IBackupMetadataReader _metadataReader;
 
-        public BackupArchiveService(IBackupHistoryService backupHistoryService)
+        public BackupArchiveService(
+            IBackupHistoryService backupHistoryService,
+            IBackupMetadataReader? metadataReader = null)
         {
             _backupHistoryService = backupHistoryService;
+            _metadataReader = metadataReader ?? new BackupMetadataReader();
         }
 
         public Task<BackupArchiveExportResult> ExportRunAsync(
@@ -113,22 +117,11 @@ namespace GameSaves.Infrastructure.Transfers
                 }
 
                 // The archive must be a backup run: manifest.json at its root.
-                TransferBackupManifest? manifest;
-
-                using (ZipArchive probe = ZipFile.OpenRead(zipPath))
+                if (!_metadataReader.TryReadManifest(zipPath, out TransferBackupManifest? manifest, out string? manifestError))
                 {
-                    ZipArchiveEntry? manifestEntry = probe.GetEntry(
-                        TransferBackupLocations.ManifestFileName);
-
-                    if (manifestEntry is null)
-                    {
-                        return new BackupArchiveImportResult(
-                            false, null, 0,
-                            "This ZIP is not a backup archive: it has no manifest.json at its root.");
-                    }
-
-                    using Stream stream = manifestEntry.Open();
-                    manifest = JsonSerializer.Deserialize<TransferBackupManifest>(stream);
+                    return new BackupArchiveImportResult(
+                        false, null, 0,
+                        $"This ZIP is not a valid backup archive: {manifestError}");
                 }
 
                 if (manifest is null || manifest.Items.Count == 0)

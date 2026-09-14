@@ -1,4 +1,4 @@
-﻿using GameSaves.Core.Platform;
+using GameSaves.Core.Platform;
 using GameSaves.Core.Profiles;
 using GameSaves.Core.Save;
 using GameSaves.Core.Secrets;
@@ -42,6 +42,7 @@ namespace GameSaves.Infrastructure.DependencyInjection
             services.AddSingleton<ITransferPreviewService, TransferPreviewService>();
             services.AddSingleton<ITransferOverwriteBackupService, TransferOverwriteBackupService>();
             services.AddSingleton<ISaveTransferService, SaveTransferService>();
+            services.AddSingleton<IBackupMetadataReader, BackupMetadataReader>();
             services.AddSingleton<IBackupHistoryService, BackupHistoryService>();
             services.AddSingleton<IBackupRestoreService, BackupRestoreService>();
             services.AddSingleton<IManualBackupService, ManualBackupService>();

@@ -146,7 +146,9 @@ namespace GameSaves.Infrastructure.Transfers
                         "The run folder is not inside the application backup base and is never deleted.");
                 }
 
-                if (!File.Exists(Path.Combine(run.BackupRootPath, TransferBackupLocations.ManifestFileName)))
+                bool isArchive = run.IsArchive || File.Exists(run.BackupRootPath);
+
+                if (!isArchive && !File.Exists(Path.Combine(run.BackupRootPath, TransferBackupLocations.ManifestFileName)))
                 {
                     return new BackupCleanupItemResult(
                         run,
@@ -156,7 +158,19 @@ namespace GameSaves.Infrastructure.Transfers
                         "The folder no longer contains a backup manifest and is never deleted.");
                 }
 
-                long bytes = MeasureDirectory(run.BackupRootPath);
+                if (isArchive && !File.Exists(run.BackupRootPath))
+                {
+                    return new BackupCleanupItemResult(
+                        run,
+                        0,
+                        Deleted: false,
+                        BackupCleanupItemStatus.SkippedInvalidRun,
+                        "The archive file no longer exists and is never deleted.");
+                }
+
+                long bytes = isArchive
+                    ? new FileInfo(run.BackupRootPath).Length
+                    : MeasureDirectory(run.BackupRootPath);
 
                 if (dryRun)
                 {
@@ -168,7 +182,14 @@ namespace GameSaves.Infrastructure.Transfers
                         "Would be deleted by this retention policy.");
                 }
 
-                Directory.Delete(run.BackupRootPath, recursive: true);
+                if (isArchive)
+                {
+                    File.Delete(run.BackupRootPath);
+                }
+                else
+                {
+                    Directory.Delete(run.BackupRootPath, recursive: true);
+                }
 
                 return new BackupCleanupItemResult(
                     run,
