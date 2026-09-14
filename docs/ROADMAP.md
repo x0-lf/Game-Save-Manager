@@ -8,21 +8,20 @@ title, product outcome (The What), dependency, and observable completion criteri
 
 ## Now
 
-Current sprint focus: Archive Sync: Single container cloud transfers (BACKUP-010) across cloud providers.
+Current sprint focus: Explicit verification strength indicators across backup sync workflows.
 
 | ID | Title | Product outcome | Dependency | Completion criteria |
 | --- | --- | --- | --- | --- |
-| **OBS-007** | Archive Sync: Single container cloud transfers (BACKUP-010) | Users can upload and download backup runs as single compressed `.7z` or `.zip` containers, bypassing per-file API throttling | OBS-004, OBS-005, OBS-006 | Cloud request counts drop from thousands to <= 2 per run; sync previews inspect manifest headers without full payload download; partial transfers rejected; folder runs and archive runs co-exist |
+| **OBS-008** | Explicit verification strength indicators | Users clearly understand whether a backup has been copied, matched against manifests, or verified via payload hashes | DRIVE-008, DRIVE-009 | Standardized verification levels (`Copied`, `ManifestMatch`, `PayloadVerified`); UI status chips, history records, and tooltips reflect exact evidence level; manifest-only check never claims payload verification |
 
 ---
 
 ## Next
 
-Upcoming sprint priorities: Explicit verification strength indicators, dependency modernization, provider seams, and UI pagination.
+Upcoming sprint priorities: Dependency modernization, provider seams, and UI pagination.
 
 | ID | Title | Product outcome | Dependency | Completion criteria |
 | --- | --- | --- | --- | --- |
-| **OBS-008** | Explicit verification strength indicators | Users clearly understand whether a backup has been copied, matched against manifests, or verified via payload hashes | DRIVE-008, DRIVE-009 | Standardized verification levels (`Copied`, `ManifestMatch`, `PayloadVerified`); UI status chips, history records, and tooltips reflect exact evidence level; manifest-only check never claims payload verification |
 | **MAINT-001** | SFTP injectable remote boundary seam | SFTP upload and download behavior can be tested deterministically without a live SSH server | Existing remote-filesystem boundary | `SftpSyncProvider` accepts an injectable `IRemoteFileSystem` boundary; deterministic upload, download, conflict, and cancellation tests pass without changing production SSH behavior |
 | **MAINT-002** | Modernize xUnit test toolchain | The test suite is upgraded to the modern xUnit v3 runner and framework | Stable test suite baseline | Supported xUnit packages run the full suite with documented baseline changes; all 2,157+ tests pass; test execution isolated |
 | **MAINT-003** | Honour provider HTTP `Retry-After` guidance | Google Drive and cloud providers respect server-provided retry timing during rate-limiting | HTTP response observation and retry delay carrier | Cloud client paths propagate bounded `Retry-After`; deterministic tests cover seconds, HTTP date values, missing headers, excessive delays, and cancellation |
@@ -129,6 +128,7 @@ Verified in code, documentation, and automated tests.
 
 | ID | Title | Product outcome | Dependency | Completion criteria |
 | --- | --- | --- | --- | --- |
+| **OBS-007** | Archive Sync: Single container cloud transfers (BACKUP-010) | Users can upload and download backup runs as single compressed `.7z` or `.zip` containers, bypassing per-file API throttling | OBS-004, OBS-005, OBS-006 | Cloud request counts drop from thousands to <= 2 per run; sync previews inspect manifest headers without full payload download; partial transfers rejected; folder runs and archive runs co-exist |
 | **OBS-006** | Optional 7-Zip (`.7z`) archive format (BACKUP-002) | Users can choose between standard ZIP and high-compression 7-Zip (`.7z`) formats for backup export and import | OBS-004, OBS-005 | Native managed 7-Zip LZMA/LZMA2 compression implemented; Store, Fast, Optimal, and Ultra presets; round-trip export/import verified; licenses and notices updated |
 | **OBS-005** | Harden ZIP import/export before format expansion | Malformed, oversized, or path-traversing archives cannot compromise security or corrupt backup history | OBS-004 | Temporary extraction staging; directory traversal guards (`Zip Slip` prevention); bounds on entry count, manifest bytes, and payload size; cancellation respected throughout |
 | **OBS-004** | Portable manifest schema v2 and archive compatibility | Old and new backups remain discoverable, verifiable, and restorable across storage formats and machines | DATA-001 | Versioned manifest schema (`schema_version: 2`) defines relative payload paths and root `manifest.json`; uncompressed folders, ZIPs, and 7z share identical catalog models; previews read metadata without full extraction |

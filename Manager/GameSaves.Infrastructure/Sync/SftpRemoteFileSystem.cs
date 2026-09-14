@@ -252,12 +252,40 @@ namespace GameSaves.Infrastructure.Sync
             }, cancellationToken);
         }
 
+        public Task<IReadOnlyList<string>> ListRunArchiveNamesAsync(
+            CancellationToken cancellationToken = default)
+        {
+            return Task.Run<IReadOnlyList<string>>(() =>
+            {
+                SftpClient client = EnsureConnected();
+
+                if (!client.Exists(_rootPath))
+                    return Array.Empty<string>();
+
+                return client.ListDirectory(_rootPath)
+                    .Where(entry => !entry.IsDirectory &&
+                                    (entry.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) ||
+                                     entry.Name.EndsWith(".7z", StringComparison.OrdinalIgnoreCase)))
+                    .Select(entry => entry.Name)
+                    .ToList();
+            }, cancellationToken);
+        }
+
         public Task<bool> FolderExistsAsync(
             string relativeFolder,
             CancellationToken cancellationToken = default)
         {
             return Task.Run(
                 () => EnsureConnected().Exists(ToRemotePath(relativeFolder)),
+                cancellationToken);
+        }
+
+        public Task<bool> FileExistsAsync(
+            string relativePath,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.Run(
+                () => EnsureConnected().Exists(ToRemotePath(relativePath)),
                 cancellationToken);
         }
 

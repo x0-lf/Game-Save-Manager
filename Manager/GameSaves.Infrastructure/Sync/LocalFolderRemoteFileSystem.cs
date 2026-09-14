@@ -73,11 +73,36 @@ namespace GameSaves.Infrastructure.Sync
             }, cancellationToken);
         }
 
+        public Task<IReadOnlyList<string>> ListRunArchiveNamesAsync(
+            CancellationToken cancellationToken = default)
+        {
+            return Task.Run<IReadOnlyList<string>>(() =>
+            {
+                if (!Directory.Exists(_normalizedRoot))
+                    return Array.Empty<string>();
+
+                return Directory.EnumerateFiles(_normalizedRoot!)
+                    .Select(Path.GetFileName)
+                    .Where(name => !string.IsNullOrEmpty(name) &&
+                                   (name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) ||
+                                    name.EndsWith(".7z", StringComparison.OrdinalIgnoreCase)))
+                    .Select(name => name!)
+                    .ToList();
+            }, cancellationToken);
+        }
+
         public Task<bool> FolderExistsAsync(
             string relativeFolder,
             CancellationToken cancellationToken = default)
         {
             return Task.FromResult(Directory.Exists(ToLocalPath(relativeFolder)));
+        }
+
+        public Task<bool> FileExistsAsync(
+            string relativePath,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(File.Exists(ToLocalPath(relativePath)));
         }
 
         public Task<string?> ReadTextFileAsync(

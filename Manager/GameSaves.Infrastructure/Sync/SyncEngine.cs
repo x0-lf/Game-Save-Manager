@@ -22,19 +22,32 @@ namespace GameSaves.Infrastructure.Sync
         private readonly string _remoteRootRaw;
         private readonly IBackupHistoryService _backupHistoryService;
         private readonly ITransferHistoryRepository _historyRepository;
+        private readonly IBackupArchiveService _archiveService;
+        private readonly IBackupMetadataReader _metadataReader;
+        private readonly Dictionary<string, RemoteRunDescriptor> _remoteRuns = new(StringComparer.OrdinalIgnoreCase);
+
+        private sealed record RemoteRunDescriptor(
+            string RunName,
+            TransferBackupManifest Manifest,
+            BackupContainerFormat Format,
+            string RemotePath);
 
         public SyncEngine(
             IRemoteFileSystem remote,
             string providerName,
             string remoteRootRaw,
             IBackupHistoryService backupHistoryService,
-            ITransferHistoryRepository historyRepository)
+            ITransferHistoryRepository historyRepository,
+            IBackupArchiveService? archiveService = null,
+            IBackupMetadataReader? metadataReader = null)
         {
             _remote = remote;
             _providerName = providerName;
             _remoteRootRaw = remoteRootRaw;
             _backupHistoryService = backupHistoryService;
             _historyRepository = historyRepository;
+            _metadataReader = metadataReader ?? new BackupMetadataReader();
+            _archiveService = archiveService ?? new BackupArchiveService(backupHistoryService, _metadataReader);
         }
 
         // ---------------------------------------------------------------
@@ -69,7 +82,7 @@ namespace GameSaves.Infrastructure.Sync
 
             Dictionary<string, TransferBackupRunInfo> local = localRuns
                 .ToDictionary(
-                    run => Path.GetFileName(run.BackupRootPath),
+                    run => GetLocalRunName(run),
                     StringComparer.OrdinalIgnoreCase);
 
             Dictionary<string, TransferBackupManifest> remoteRuns =
@@ -105,13 +118,26 @@ namespace GameSaves.Infrastructure.Sync
                         continue;
                     }
 
+                    TransferBackupRunInfo nonNullLocal = localRun!;
+                    string remotePathName = name;
+                    if (options.ArchiveSync || nonNullLocal.ContainerFormat != BackupContainerFormat.Folder)
+                    {
+                        string ext = nonNullLocal.ContainerFormat switch
+                        {
+                            BackupContainerFormat.SevenZip => ".7z",
+                            BackupContainerFormat.Zip => ".zip",
+                            _ => options.ArchiveFormat == BackupContainerFormat.SevenZip ? ".7z" : ".zip"
+                        };
+                        remotePathName = $"{name}{ext}";
+                    }
+
                     items.Add(new SyncItem(
                         RunName: name,
                         Action: SyncItemAction.UploadToRemote,
                         ExistsLocally: true,
                         ExistsRemotely: false,
                         LocalPath: localRun!.BackupRootPath,
-                        RemotePath: _remote.GetDisplayPath(name),
+                        RemotePath: _remote.GetDisplayPath(remotePathName),
                         GameName: localRun.Manifest.Game,
                         FileCount: localRun.Manifest.FileCount,
                         TotalBytes: localRun.Manifest.TotalBytes,
@@ -125,13 +151,17 @@ namespace GameSaves.Infrastructure.Sync
                         continue;
                     }
 
+                    string remotePathName = _remoteRuns.TryGetValue(name, out RemoteRunDescriptor? desc)
+                        ? desc.RemotePath
+                        : name;
+
                     items.Add(new SyncItem(
                         RunName: name,
                         Action: SyncItemAction.DownloadToLocal,
                         ExistsLocally: false,
                         ExistsRemotely: true,
                         LocalPath: Path.Combine(localBase, name),
-                        RemotePath: _remote.GetDisplayPath(name),
+                        RemotePath: _remote.GetDisplayPath(remotePathName),
                         GameName: remoteManifest!.Game,
                         FileCount: remoteManifest.FileCount,
                         TotalBytes: remoteManifest.TotalBytes,
@@ -143,11 +173,15 @@ namespace GameSaves.Infrastructure.Sync
                         localRun!.Manifest,
                         remoteManifest!);
 
+                    string remotePathName = _remoteRuns.TryGetValue(name, out RemoteRunDescriptor? desc)
+                        ? desc.RemotePath
+                        : name;
+
                     if (equivalent)
                     {
                         items.Add(new SyncItem(
                             name, SyncItemAction.InSync, true, true,
-                            localRun.BackupRootPath, _remote.GetDisplayPath(name),
+                            localRun.BackupRootPath, _remote.GetDisplayPath(remotePathName),
                             localRun.Manifest.Game,
                             localRun.Manifest.FileCount,
                             localRun.Manifest.TotalBytes,
@@ -157,7 +191,7 @@ namespace GameSaves.Infrastructure.Sync
                     {
                         items.Add(new SyncItem(
                             name, SyncItemAction.Conflict, true, true,
-                            localRun.BackupRootPath, _remote.GetDisplayPath(name),
+                            localRun.BackupRootPath, _remote.GetDisplayPath(remotePathName),
                             localRun.Manifest.Game,
                             localRun.Manifest.FileCount,
                             localRun.Manifest.TotalBytes,
@@ -202,7 +236,9 @@ namespace GameSaves.Infrastructure.Sync
             CancellationToken cancellationToken)
         {
             var runs = new Dictionary<string, TransferBackupManifest>(StringComparer.OrdinalIgnoreCase);
+            _remoteRuns.Clear();
 
+            // 1. Process folder runs
             foreach (string name in await _remote.ListRunFolderNamesAsync(cancellationToken))
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -256,12 +292,84 @@ namespace GameSaves.Infrastructure.Sync
                     }
 
                     runs[name] = manifest;
+                    _remoteRuns[name] = new RemoteRunDescriptor(name, manifest, BackupContainerFormat.Folder, name);
                 }
                 catch
                 {
                     warnings.Add(new TransferPreviewWarning(
                         "RemoteRunUnreadable",
                         $"A folder in the sync location has an unreadable manifest and was ignored: {_remote.GetDisplayPath(name)}",
+                        TransferWarningSeverity.Warning));
+                }
+            }
+
+            // 2. Process archive container runs (.7z, .zip)
+            foreach (string archiveName in await _remote.ListRunArchiveNamesAsync(cancellationToken))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (!TransferPathGuard.IsSafeRemoteRelativePath(archiveName))
+                {
+                    warnings.Add(new TransferPreviewWarning(
+                        "RemoteRunNameUnsafe",
+                        "A remote archive container was skipped because its name is not a safe backup run name.",
+                        TransferWarningSeverity.Warning));
+                    continue;
+                }
+
+                string runName = GetArchiveRunName(archiveName);
+                BackupContainerFormat format = archiveName.EndsWith(".7z", StringComparison.OrdinalIgnoreCase)
+                    ? BackupContainerFormat.SevenZip
+                    : BackupContainerFormat.Zip;
+
+                try
+                {
+                    // Inspect manifest via sidecar descriptor first (1 request, zero payload download)
+                    string sidecarPath = $"{archiveName}.manifest.json";
+                    string? manifestText = await _remote.ReadTextFileAsync(sidecarPath, cancellationToken);
+                    TransferBackupManifest? manifest = null;
+
+                    if (manifestText is not null)
+                    {
+                        manifest = JsonSerializer.Deserialize<TransferBackupManifest>(manifestText);
+                    }
+
+                    // If no sidecar text, try local/direct header inspection via metadata reader if available
+                    if (manifest is null)
+                    {
+                        string localPath = _remote.GetDisplayPath(archiveName);
+                        if (File.Exists(localPath) && _metadataReader.TryReadManifest(localPath, out TransferBackupManifest? headerManifest, out _))
+                        {
+                            manifest = headerManifest;
+                        }
+                    }
+
+                    if (manifest is null)
+                    {
+                        // An archive container without sidecar or unreadable header is not offered as a valid run
+                        continue;
+                    }
+
+                    if (!IsUsableManifest(manifest))
+                    {
+                        warnings.Add(new TransferPreviewWarning(
+                            "RemoteManifestUnreadable",
+                            $"Remote archive container \"{archiveName}\" has an incomplete or unreadable manifest, " +
+                            "so it is not treated as a backup run. This usually means an upload was " +
+                            "interrupted. Nothing is deleted automatically, and unticking runs does not " +
+                            "clear this: delete that file in the remote, then run the check again.",
+                            TransferWarningSeverity.Warning));
+                        continue;
+                    }
+
+                    runs[runName] = manifest;
+                    _remoteRuns[runName] = new RemoteRunDescriptor(runName, manifest, format, archiveName);
+                }
+                catch
+                {
+                    warnings.Add(new TransferPreviewWarning(
+                        "RemoteRunUnreadable",
+                        $"An archive container in the sync location has an unreadable manifest and was ignored: {_remote.GetDisplayPath(archiveName)}",
                         TransferWarningSeverity.Warning));
                 }
             }
@@ -407,62 +515,177 @@ namespace GameSaves.Infrastructure.Sync
 
             try
             {
-                string localRoot = item.LocalPath!;
+                string localPath = item.LocalPath!;
+                bool isLocalFolder = Directory.Exists(localPath);
+                bool isLocalFile = File.Exists(localPath);
 
-                if (!Directory.Exists(localRoot) ||
-                    !File.Exists(Path.Combine(localRoot, TransferBackupLocations.ManifestFileName)))
+                if (!isLocalFolder && !isLocalFile)
                 {
                     return new SyncItemResult(
                         item, 0, SyncItemStatus.Failed,
                         "The source run folder or its manifest no longer exists.");
                 }
 
-                if (await _remote.FolderExistsAsync(item.RunName, cancellationToken))
+                if (isLocalFolder && !File.Exists(Path.Combine(localPath, TransferBackupLocations.ManifestFileName)))
                 {
                     return new SyncItemResult(
-                        item, 0, SyncItemStatus.SkippedAlreadyExists,
-                        "The target appeared since the preview. Nothing is ever overwritten.");
+                        item, 0, SyncItemStatus.Failed,
+                        "The source run folder or its manifest no longer exists.");
                 }
 
-                if (options.DryRun)
+                bool uploadAsContainer = options.ArchiveSync || isLocalFile;
+
+                if (uploadAsContainer)
                 {
-                    return new SyncItemResult(
-                        item, item.TotalBytes, SyncItemStatus.DryRun,
-                        "Would be copied to the sync folder.");
+                    string extension = isLocalFile
+                        ? Path.GetExtension(localPath)
+                        : (options.ArchiveFormat == BackupContainerFormat.SevenZip ? ".7z" : ".zip");
+                    string remoteContainerName = $"{item.RunName}{extension}";
+                    string remoteSidecarName = $"{remoteContainerName}.manifest.json";
+
+                    if (await _remote.FolderExistsAsync(item.RunName, cancellationToken) ||
+                        await _remote.FileExistsAsync(remoteContainerName, cancellationToken))
+                    {
+                        return new SyncItemResult(
+                            item, 0, SyncItemStatus.SkippedAlreadyExists,
+                            "The target appeared since the preview. Nothing is ever overwritten.");
+                    }
+
+                    if (options.DryRun)
+                    {
+                        return new SyncItemResult(
+                            item, item.TotalBytes, SyncItemStatus.DryRun,
+                            "Would be copied to the sync folder.");
+                    }
+
+                    string? tempExportDir = null;
+                    string archiveFileToUpload;
+                    string manifestJson;
+
+                    if (isLocalFolder)
+                    {
+                        if (!_metadataReader.TryBuildRunInfo(localPath, out TransferBackupRunInfo? runInfo, out string? runInfoError) || runInfo is null)
+                        {
+                            return new SyncItemResult(
+                                item, 0, SyncItemStatus.Failed,
+                                $"Source manifest could not be read: {runInfoError}");
+                        }
+
+                        string localBase = _backupHistoryService.GetBackupBasePath();
+                        tempExportDir = Path.Combine(localBase, $".export_{Guid.NewGuid():N}");
+                        Directory.CreateDirectory(tempExportDir);
+
+                        BackupContainerFormat exportFormat = options.ArchiveFormat;
+                        BackupArchiveExportResult exportResult = await _archiveService.ExportRunAsync(
+                            runInfo,
+                            tempExportDir,
+                            exportFormat,
+                            options.CompressionPreset,
+                            cancellationToken);
+
+                        if (!exportResult.Success || string.IsNullOrEmpty(exportResult.ArchivePath))
+                        {
+                            return new SyncItemResult(
+                                item, 0, SyncItemStatus.Failed,
+                                $"Failed to package backup run container: {exportResult.Message}");
+                        }
+
+                        archiveFileToUpload = exportResult.ArchivePath;
+                        manifestJson = JsonSerializer.Serialize(
+                            runInfo.Manifest,
+                            new JsonSerializerOptions { WriteIndented = true });
+                    }
+                    else
+                    {
+                        archiveFileToUpload = localPath;
+                        if (!_metadataReader.TryReadManifest(localPath, out TransferBackupManifest? manifest, out _) || manifest is null)
+                        {
+                            return new SyncItemResult(
+                                item, 0, SyncItemStatus.Failed,
+                                "The source container manifest could not be read.");
+                        }
+
+                        manifestJson = JsonSerializer.Serialize(
+                            manifest,
+                            new JsonSerializerOptions { WriteIndented = true });
+                    }
+
+                    try
+                    {
+                        // 1. Upload container payload
+                        long fileBytes = await _remote.UploadFileAsync(
+                            archiveFileToUpload,
+                            remoteContainerName,
+                            cancellationToken);
+
+                        bytes += fileBytes;
+                        progressState.BytesDone += fileBytes;
+                        ReportProgress(options, progressState, item.RunName, remoteContainerName);
+
+                        // 2. Upload sidecar manifest
+                        await _remote.CreateTextFileIfMissingAsync(
+                            remoteSidecarName,
+                            manifestJson,
+                            cancellationToken);
+
+                        return new SyncItemResult(item, bytes, SyncItemStatus.Uploaded, null);
+                    }
+                    finally
+                    {
+                        if (tempExportDir is not null && Directory.Exists(tempExportDir))
+                        {
+                            try { Directory.Delete(tempExportDir, recursive: true); } catch { }
+                        }
+                    }
                 }
-
-                var enumeration = new EnumerationOptions
+                else
                 {
-                    RecurseSubdirectories = true,
-                    IgnoreInaccessible = true,
-                    AttributesToSkip = FileAttributes.ReparsePoint
-                };
+                    if (await _remote.FolderExistsAsync(item.RunName, cancellationToken))
+                    {
+                        return new SyncItemResult(
+                            item, 0, SyncItemStatus.SkippedAlreadyExists,
+                            "The target appeared since the preview. Nothing is ever overwritten.");
+                    }
 
-                // Upload manifest.json last: a folder without a manifest is
-                // never mistaken for a complete run if the upload is interrupted.
-                var files = Directory.EnumerateFiles(localRoot, "*", enumeration)
-                    .OrderBy(file => IsRunManifest(localRoot, file) ? 1 : 0)
-                    .ToList();
+                    if (options.DryRun)
+                    {
+                        return new SyncItemResult(
+                            item, item.TotalBytes, SyncItemStatus.DryRun,
+                            "Would be copied to the sync folder.");
+                    }
 
+                    var enumeration = new EnumerationOptions
+                    {
+                        RecurseSubdirectories = true,
+                        IgnoreInaccessible = true,
+                        AttributesToSkip = FileAttributes.ReparsePoint
+                    };
 
-                foreach (string localFile in files)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
+                    // Upload manifest.json last: a folder without a manifest is
+                    // never mistaken for a complete run if the upload is interrupted.
+                    var files = Directory.EnumerateFiles(localPath, "*", enumeration)
+                        .OrderBy(file => IsRunManifest(localPath, file) ? 1 : 0)
+                        .ToList();
 
-                    string relative = Path.GetRelativePath(localRoot, localFile)
-                        .Replace(Path.DirectorySeparatorChar, '/');
+                    foreach (string localFile in files)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
 
-                    long fileBytes = await _remote.UploadFileAsync(
-                        localFile,
-                        $"{item.RunName}/{relative}",
-                        cancellationToken);
+                        string relative = Path.GetRelativePath(localPath, localFile)
+                            .Replace(Path.DirectorySeparatorChar, '/');
 
-                    bytes += fileBytes;
-                    progressState.BytesDone += fileBytes;
-                    ReportProgress(options, progressState, item.RunName, relative);
+                        long fileBytes = await _remote.UploadFileAsync(
+                            localFile,
+                            $"{item.RunName}/{relative}",
+                            cancellationToken);
+
+                        bytes += fileBytes;
+                        progressState.BytesDone += fileBytes;
+                        ReportProgress(options, progressState, item.RunName, relative);
+                    }
+
+                    return new SyncItemResult(item, bytes, SyncItemStatus.Uploaded, null);
                 }
-
-                return new SyncItemResult(item, bytes, SyncItemStatus.Uploaded, null);
             }
             catch (OperationCanceledException)
             {
@@ -499,97 +722,167 @@ namespace GameSaves.Infrastructure.Sync
             {
                 string localTarget = item.LocalPath!;
 
-                if (Directory.Exists(localTarget))
+                if (Directory.Exists(localTarget) || File.Exists(localTarget))
                 {
                     return new SyncItemResult(
                         item, 0, SyncItemStatus.SkippedAlreadyExists,
                         "The target appeared since the preview. Nothing is ever overwritten.");
                 }
 
-                string manifestRelative = $"{item.RunName}/{TransferBackupLocations.ManifestFileName}";
+                // Detect whether the remote run is a container archive
+                bool isContainer = false;
+                string? remoteArchiveName = null;
 
-                if (await _remote.ReadTextFileAsync(manifestRelative, cancellationToken) is null)
+                if (_remoteRuns.TryGetValue(item.RunName, out RemoteRunDescriptor? descriptor))
                 {
-                    return new SyncItemResult(
-                        item, 0, SyncItemStatus.Failed,
-                        "The source run folder or its manifest no longer exists.");
+                    if (descriptor.Format != BackupContainerFormat.Folder)
+                    {
+                        isContainer = true;
+                        remoteArchiveName = descriptor.RemotePath;
+                    }
+                }
+                else if (item.RemotePath?.EndsWith(".7z", StringComparison.OrdinalIgnoreCase) == true ||
+                         item.RemotePath?.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    isContainer = true;
+                    remoteArchiveName = Path.GetFileName(item.RemotePath);
                 }
 
-                if (options.DryRun)
+                if (isContainer)
                 {
-                    return new SyncItemResult(
-                        item, item.TotalBytes, SyncItemStatus.DryRun,
-                        "Would be copied to the local backup base.");
+                    remoteArchiveName ??= $"{item.RunName}.7z";
+
+                    if (options.DryRun)
+                    {
+                        return new SyncItemResult(
+                            item, item.TotalBytes, SyncItemStatus.DryRun,
+                            "Would be copied to the local backup base.");
+                    }
+
+                    string localBase = _backupHistoryService.GetBackupBasePath();
+                    Directory.CreateDirectory(localBase);
+                    string tempDownloadDir = Path.Combine(localBase, $".download_{Guid.NewGuid():N}");
+                    Directory.CreateDirectory(tempDownloadDir);
+                    string tempDownloadFile = Path.Combine(tempDownloadDir, remoteArchiveName);
+
+                    try
+                    {
+                        long fileBytes = await _remote.DownloadFileAsync(
+                            remoteArchiveName,
+                            tempDownloadFile,
+                            cancellationToken);
+
+                        bytes += fileBytes;
+                        progressState.BytesDone += fileBytes;
+                        ReportProgress(options, progressState, item.RunName, remoteArchiveName);
+
+                        BackupArchiveImportResult importResult = await _archiveService.ImportArchiveAsync(
+                            tempDownloadFile,
+                            cancellationToken);
+
+                        if (!importResult.Success)
+                        {
+                            return new SyncItemResult(
+                                item, bytes, SyncItemStatus.Failed,
+                                $"Archive container import failed: {importResult.Message}");
+                        }
+
+                        return new SyncItemResult(item, bytes, SyncItemStatus.Downloaded, null);
+                    }
+                    finally
+                    {
+                        if (Directory.Exists(tempDownloadDir))
+                        {
+                            try { Directory.Delete(tempDownloadDir, recursive: true); } catch { }
+                        }
+                    }
                 }
-
-
-                IReadOnlyList<string> remoteFiles =
-                    await _remote.ListFilesAsync(item.RunName, cancellationToken);
-
-                // The remote controls every one of these names. Check the whole
-                // listing before writing anything, so an unsafe name late in the
-                // run cannot leave a half-copied folder that still carries a
-                // manifest and therefore passes for a complete run.
-                foreach (string relative in remoteFiles)
+                else
                 {
-                    string candidate = Path.Combine(
-                        localTarget,
-                        relative.Replace('/', Path.DirectorySeparatorChar));
+                    string manifestRelative = $"{item.RunName}/{TransferBackupLocations.ManifestFileName}";
 
-                    // The second check is belt and braces: a name that passes
-                    // the first must still resolve inside the run folder.
-                    if (!TransferPathGuard.IsSafeRemoteRelativePath(relative) ||
-                        !TransferPathGuard.IsStrictlyUnderRoot(candidate, localTarget))
+                    if (await _remote.ReadTextFileAsync(manifestRelative, cancellationToken) is null)
                     {
                         return new SyncItemResult(
                             item, 0, SyncItemStatus.Failed,
-                            "The remote run contains a file name that is not safe to write locally.");
+                            "The source run folder or its manifest no longer exists.");
                     }
-                }
 
-                foreach (string relative in remoteFiles)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
+                    if (options.DryRun)
+                    {
+                        return new SyncItemResult(
+                            item, item.TotalBytes, SyncItemStatus.DryRun,
+                            "Would be copied to the local backup base.");
+                    }
 
-                    string localFilePath = Path.Combine(
+                    IReadOnlyList<string> remoteFiles =
+                        await _remote.ListFilesAsync(item.RunName, cancellationToken);
+
+                    // The remote controls every one of these names. Check the whole
+                    // listing before writing anything, so an unsafe name late in the
+                    // run cannot leave a half-copied folder that still carries a
+                    // manifest and therefore passes for a complete run.
+                    foreach (string relative in remoteFiles)
+                    {
+                        string candidate = Path.Combine(
+                            localTarget,
+                            relative.Replace('/', Path.DirectorySeparatorChar));
+
+                        // The second check is belt and braces: a name that passes
+                        // the first must still resolve inside the run folder.
+                        if (!TransferPathGuard.IsSafeRemoteRelativePath(relative) ||
+                            !TransferPathGuard.IsStrictlyUnderRoot(candidate, localTarget))
+                        {
+                            return new SyncItemResult(
+                                item, 0, SyncItemStatus.Failed,
+                                "The remote run contains a file name that is not safe to write locally.");
+                        }
+                    }
+
+                    foreach (string relative in remoteFiles)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+
+                        string localFilePath = Path.Combine(
+                            localTarget,
+                            relative.Replace('/', Path.DirectorySeparatorChar));
+
+                        long fileBytes = await _remote.DownloadFileAsync(
+                            $"{item.RunName}/{relative}",
+                            localFilePath,
+                            cancellationToken);
+
+                        bytes += fileBytes;
+                        progressState.BytesDone += fileBytes;
+                        ReportProgress(options, progressState, item.RunName, relative);
+                    }
+
+                    // The downloaded manifest records backup-file paths from the
+                    // machine the run was created on; rewrite them to this one.
+                    string manifestPath = Path.Combine(
                         localTarget,
-                        relative.Replace('/', Path.DirectorySeparatorChar));
+                        TransferBackupLocations.ManifestFileName);
 
-                    long fileBytes = await _remote.DownloadFileAsync(
-                        $"{item.RunName}/{relative}",
-                        localFilePath,
-                        cancellationToken);
+                    TransferBackupManifest? manifest =
+                        JsonSerializer.Deserialize<TransferBackupManifest>(
+                            File.ReadAllText(manifestPath));
 
-                    bytes += fileBytes;
-                    progressState.BytesDone += fileBytes;
-                    ReportProgress(options, progressState, item.RunName, relative);
+                    if (manifest is null ||
+                        !BackupManifestPathRewriter.TryRewrite(manifest, localTarget, out TransferBackupManifest rewritten))
+                    {
+                        return new SyncItemResult(
+                            item, bytes, SyncItemStatus.Failed,
+                            "The run was copied, but its manifest paths could not be rewritten. It may not be restorable; it was left in place for inspection.");
+                    }
+
+                    File.WriteAllText(
+                        manifestPath,
+                        JsonSerializer.Serialize(
+                            rewritten,
+                            new JsonSerializerOptions { WriteIndented = true }));
+
+                    return new SyncItemResult(item, bytes, SyncItemStatus.Downloaded, null);
                 }
-
-                // The downloaded manifest records backup-file paths from the
-                // machine the run was created on; rewrite them to this one.
-                string manifestPath = Path.Combine(
-                    localTarget,
-                    TransferBackupLocations.ManifestFileName);
-
-                TransferBackupManifest? manifest =
-                    JsonSerializer.Deserialize<TransferBackupManifest>(
-                        File.ReadAllText(manifestPath));
-
-                if (manifest is null ||
-                    !BackupManifestPathRewriter.TryRewrite(manifest, localTarget, out TransferBackupManifest rewritten))
-                {
-                    return new SyncItemResult(
-                        item, bytes, SyncItemStatus.Failed,
-                        "The run was copied, but its manifest paths could not be rewritten. It may not be restorable; it was left in place for inspection.");
-                }
-
-                File.WriteAllText(
-                    manifestPath,
-                    JsonSerializer.Serialize(
-                        rewritten,
-                        new JsonSerializerOptions { WriteIndented = true }));
-
-                return new SyncItemResult(item, bytes, SyncItemStatus.Downloaded, null);
             }
             catch (OperationCanceledException)
             {
@@ -643,6 +936,27 @@ namespace GameSaves.Infrastructure.Sync
                        Path.GetDirectoryName(Path.GetFullPath(filePath)),
                        Path.GetFullPath(runRoot).TrimEnd(Path.DirectorySeparatorChar),
                        StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string GetLocalRunName(TransferBackupRunInfo run)
+        {
+            if (run.ContainerFormat is BackupContainerFormat.SevenZip or BackupContainerFormat.Zip)
+            {
+                return Path.GetFileNameWithoutExtension(run.BackupRootPath);
+            }
+
+            return Path.GetFileName(run.BackupRootPath);
+        }
+
+        private static string GetArchiveRunName(string archiveFileName)
+        {
+            if (archiveFileName.EndsWith(".7z", StringComparison.OrdinalIgnoreCase) ||
+                archiveFileName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+            {
+                return Path.GetFileNameWithoutExtension(archiveFileName);
+            }
+
+            return archiveFileName;
         }
 
         // ---------------------------------------------------------------

@@ -1,3 +1,5 @@
+using GameSaves.Core.Transfers;
+
 namespace GameSaves.Core.Sync
 {
     public sealed class SyncOptions
@@ -21,5 +23,21 @@ namespace GameSaves.Core.Sync
 
         /// <summary>Reported after every copied file during execution.</summary>
         public IProgress<SyncProgress>? Progress { get; init; }
+
+        /// <summary>
+        /// When true, uploads backup runs as single compressed container archives
+        /// (.7z or .zip) with sidecar manifests, reducing remote API requests to &lt;= 2.
+        /// </summary>
+        public bool ArchiveSync { get; init; } = false;
+
+        /// <summary>
+        /// Archive container format to use when ArchiveSync is active. Defaults to SevenZip.
+        /// </summary>
+        public BackupContainerFormat ArchiveFormat { get; init; } = BackupContainerFormat.SevenZip;
+
+        /// <summary>
+        /// Compression preset when exporting runs for archive sync. Defaults to Optimal.
+        /// </summary>
+        public BackupCompressionPreset CompressionPreset { get; init; } = BackupCompressionPreset.Optimal;
     }
 }

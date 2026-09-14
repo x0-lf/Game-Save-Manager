@@ -94,11 +94,22 @@ namespace GameSaves.Infrastructure.Sync
             CancellationToken cancellationToken = default) =>
             RunAsync(token => _inner.ListRunFolderNamesAsync(token), cancellationToken);
 
+        public Task<IReadOnlyList<string>> ListRunArchiveNamesAsync(
+            CancellationToken cancellationToken = default) =>
+            RunAsync(token => _inner.ListRunArchiveNamesAsync(token), cancellationToken);
+
         public Task<bool> FolderExistsAsync(
             string relativeFolder,
             CancellationToken cancellationToken = default) =>
             RunAsync(
                 token => _inner.FolderExistsAsync(relativeFolder, token),
+                cancellationToken);
+
+        public Task<bool> FileExistsAsync(
+            string relativePath,
+            CancellationToken cancellationToken = default) =>
+            RunAsync(
+                token => _inner.FileExistsAsync(relativePath, token),
                 cancellationToken);
 
         public Task<string?> ReadTextFileAsync(

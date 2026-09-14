@@ -155,6 +155,9 @@ namespace GameSaves.App.ViewModels
         private bool downloadEnabled = true;
 
         [ObservableProperty]
+        private bool archiveSync;
+
+        [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(CanExecuteSyncNow))]
         private bool confirmSync;
 
@@ -882,6 +885,8 @@ namespace GameSaves.App.ViewModels
         partial void OnUploadEnabledChanged(bool value) => InvalidatePlan();
 
         partial void OnDownloadEnabledChanged(bool value) => InvalidatePlan();
+
+        partial void OnArchiveSyncChanged(bool value) => InvalidatePlan();
 
         partial void OnIsLoadingChanged(bool value)
         {
@@ -2847,7 +2852,8 @@ namespace GameSaves.App.ViewModels
                 SyncPlan plan = await provider.CreatePreviewAsync(new SyncOptions
                 {
                     Upload = UploadEnabled,
-                    Download = DownloadEnabled
+                    Download = DownloadEnabled,
+                    ArchiveSync = ArchiveSync
                 });
 
                 if (plan.ProviderValidationSucceeded)
@@ -2953,6 +2959,7 @@ namespace GameSaves.App.ViewModels
                         ConfirmExecution = ConfirmSync,
                         Upload = UploadEnabled,
                         Download = DownloadEnabled,
+                        ArchiveSync = ArchiveSync,
                         OnlyRunNames = selectedRunNames,
                         Progress = progress
                     },
@@ -3089,7 +3096,7 @@ namespace GameSaves.App.ViewModels
             try
             {
                 SyncPlan plan = await _lastProvider.CreatePreviewAsync(
-                    new SyncOptions { Upload = true, Download = true },
+                    new SyncOptions { Upload = true, Download = true, ArchiveSync = ArchiveSync },
                     _verificationCancellation.Token);
 
                 var byName = plan.Items.ToDictionary(

@@ -30,9 +30,20 @@ namespace GameSaves.Infrastructure.Sync
         Task<IReadOnlyList<string>> ListRunFolderNamesAsync(
             CancellationToken cancellationToken = default);
 
+        /// <summary>Top-level archive container file names under the remote root (e.g. "run1.7z", "run2.zip").</summary>
+        Task<IReadOnlyList<string>> ListRunArchiveNamesAsync(
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
+
         Task<bool> FolderExistsAsync(
             string relativeFolder,
             CancellationToken cancellationToken = default);
+
+        /// <summary>Checks whether a file exists under the remote root.</summary>
+        Task<bool> FileExistsAsync(
+            string relativePath,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(false);
 
         /// <summary>Reads a text file; null when it does not exist.</summary>
         Task<string?> ReadTextFileAsync(

@@ -379,6 +379,11 @@
                                     <CheckBox Content="Download remote runs"
                                               IsChecked="{Binding DownloadEnabled}"
                                               FontSize="{DynamicResource FontSizeBody}" />
+
+                                    <CheckBox Content="Transfer runs as compressed archive (.7z)"
+                                              IsChecked="{Binding ArchiveSync}"
+                                              FontSize="{DynamicResource FontSizeBody}"
+                                              ToolTip.Tip="Transfers whole backup runs as a single compressed .7z archive container, reducing cloud API request overhead and transfer latency." />
                                 </WrapPanel>
                             </StackPanel>
                         </Grid>
