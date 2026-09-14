@@ -1,4 +1,4 @@
-﻿<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:GameSaves.App.ViewModels"
              xmlns:models="using:GameSaves.App.Models"
@@ -6,7 +6,7 @@
              xmlns:wsp="using:GameSaves.App.Views.Workspace"
              x:Class="GameSaves.App.Views.ProfilesView"
              x:DataType="vm:ProfilesViewModel"
-             Background="{DynamicResource PageBackgroundBrush}">
+             Background="Transparent">
 
     <wsp:WorkspaceSurface Layout="{Binding Workspace}"
                           MaxWidth="1100"

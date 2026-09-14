@@ -6,7 +6,7 @@
              xmlns:wsp="using:GameSaves.App.Views.Workspace"
              x:Class="GameSaves.App.Views.SyncView"
              x:DataType="vm:SyncViewModel"
-             Background="{DynamicResource PageBackgroundBrush}">
+             Background="Transparent">
 
     <UserControl.Styles>
         <!-- Sync state colouring. The accent owns direction and selection;

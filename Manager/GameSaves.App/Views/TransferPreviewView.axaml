@@ -6,7 +6,7 @@
              xmlns:wsp="using:GameSaves.App.Views.Workspace"
              x:Class="GameSaves.App.Views.TransferPreviewView"
              x:DataType="vm:TransferPreviewViewModel"
-             Background="{DynamicResource PageBackgroundBrush}">
+             Background="Transparent">
 
     <!-- Border.confirmGate lives in Themes/Controls.axaml: a floated panel is
          reparented into its own window, where UserControl.Styles no longer

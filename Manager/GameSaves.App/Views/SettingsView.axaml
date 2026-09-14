@@ -6,7 +6,7 @@
              xmlns:s="using:GameSaves.App.Services"
              x:Class="GameSaves.App.Views.SettingsView"
              x:DataType="vm:SettingsViewModel"
-             Background="{DynamicResource PageBackgroundBrush}">
+             Background="Transparent">
 
     <UserControl.Styles>
         <!-- Diagnostics rows. The category label carries the accent so the

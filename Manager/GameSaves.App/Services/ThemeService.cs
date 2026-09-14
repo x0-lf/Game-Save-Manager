@@ -48,6 +48,8 @@ namespace GameSaves.App.Services
 
         internal const string PageBackgroundBrushKey = "PageBackgroundBrush";
         internal const string PageBackgroundOpaqueBrushKey = "PageBackgroundOpaqueBrush";
+        internal const string BackdropContrastShieldBrushKey = "BackdropContrastShieldBrush";
+        internal const double AcrylicDarkContrastShieldOpacity = 0.75;
         internal const string NavigationSurfaceBrushKey = "NavigationSurfaceBrush";
         internal const string CardBackgroundBrushKey = "CardBackgroundBrush";
         internal const string CardBorderBrushKey = "CardBorderBrush";
@@ -626,17 +628,42 @@ namespace GameSaves.App.Services
         /// <summary>
         /// The opacity the window-level page background renders with. While a
         /// material is compositing, the OS backdrop replaces the page
-        /// background entirely, so it becomes fully transparent regardless of
-        /// the inert window-opacity setting. Readable chrome is provided by
-        /// the separate, always-opaque navigation surface. High contrast wins:
-        /// the material service never confirms a material under high contrast,
-        /// and this stays defensive about it.
+        /// background. For Mica, it becomes fully transparent (0.0). For Acrylic
+        /// in Dark theme, a contrast shield (0.75) is maintained to absorb bright
+        /// background light and prevent white desktop bleed from washing out
+        /// primary text. Readable chrome is provided by the separate, always-opaque
+        /// navigation surface. High contrast wins: the material service never
+        /// confirms a material under high contrast, and this stays defensive about it.
         /// </summary>
         internal static double EffectiveWindowSurfaceOpacity(
             double opacity, bool highContrast, bool materialActive) =>
-            materialActive && !highContrast
-                ? 0.0
-                : EffectiveSurfaceOpacity(opacity, highContrast);
+            EffectiveWindowSurfaceOpacity(
+                opacity,
+                highContrast,
+                materialActive,
+                material: null,
+                isDark: false);
+
+        internal static double EffectiveWindowSurfaceOpacity(
+            double opacity,
+            bool highContrast,
+            bool materialActive,
+            string? material,
+            bool isDark)
+        {
+            if (highContrast)
+                return UiTransparencySettings.Opaque;
+
+            if (materialActive)
+            {
+                if (material == AppUiSettings.MaterialAcrylic && isDark)
+                    return AcrylicDarkContrastShieldOpacity;
+
+                return 0.0;
+            }
+
+            return EffectiveSurfaceOpacity(opacity, highContrast: false);
+        }
 
         public void Apply(AppUiSettings settings)
         {
@@ -706,16 +733,38 @@ namespace GameSaves.App.Services
                 overrides[PageBackgroundOpaqueBrushKey] = new ImmutableSolidColorBrush(
                     GetHighContrastOverrides(isDark, highContrast: true)[
                         PageBackgroundBrushKey]);
+                overrides[BackdropContrastShieldBrushKey] = new ImmutableSolidColorBrush(
+                    Colors.Transparent);
             }
             else
             {
+                string effectiveMaterial = WindowMaterialService.EffectiveMaterial(settings);
+                bool isAcrylicDark = _windowMaterialActive &&
+                                     effectiveMaterial == AppUiSettings.MaterialAcrylic &&
+                                     isDark;
+
+                if (isAcrylicDark)
+                {
+                    if (FindVariantColor(application, variantKey, PageBackgroundBrushKey) is { } pageBaseColor)
+                    {
+                        overrides[BackdropContrastShieldBrushKey] = new ImmutableSolidColorBrush(
+                            WithOpacity(pageBaseColor, AcrylicDarkContrastShieldOpacity));
+                    }
+                }
+                else
+                {
+                    overrides[BackdropContrastShieldBrushKey] = new ImmutableSolidColorBrush(Colors.Transparent);
+                }
+
                 AddTransparencyOverride(
                     overrides, application, variantKey,
                     PageBackgroundBrushKey,
                     EffectiveWindowSurfaceOpacity(
                         settings.Transparency.Window,
                         accessibility.HighContrast,
-                        _windowMaterialActive));
+                        _windowMaterialActive,
+                        effectiveMaterial,
+                        isDark));
                 AddTransparencyOverride(
                     overrides, application, variantKey,
                     CardBackgroundBrushKey,

@@ -6,7 +6,7 @@
              xmlns:wsp="using:GameSaves.App.Views.Workspace"
              x:Class="GameSaves.App.Views.ManualBackupView"
              x:DataType="vm:ManualBackupViewModel"
-             Background="{DynamicResource PageBackgroundBrush}">
+             Background="Transparent">
 
     <!-- The surface owns the page's chrome, scrolling and the split between
          the options rail and the run column, so the page declares sections

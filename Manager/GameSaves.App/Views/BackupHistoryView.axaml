@@ -6,7 +6,7 @@
              xmlns:wsp="using:GameSaves.App.Views.Workspace"
              x:Class="GameSaves.App.Views.BackupHistoryView"
              x:DataType="vm:BackupHistoryViewModel"
-             Background="{DynamicResource PageBackgroundBrush}">
+             Background="Transparent">
 
 
     <!-- The run list docks left and everything about the selected run stacks

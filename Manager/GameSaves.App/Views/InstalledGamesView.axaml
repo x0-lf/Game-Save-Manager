@@ -6,7 +6,7 @@
              xmlns:wsp="using:GameSaves.App.Views.Workspace"
              x:Class="GameSaves.App.Views.InstalledGamesView"
              x:DataType="vm:InstalledGamesViewModel"
-             Background="{DynamicResource PageBackgroundBrush}">
+             Background="Transparent">
 
     <UserControl.Styles>
         <Style Selector="DataGrid.installedGamesTable /template/ ScrollBar:horizontal">
