@@ -12,14 +12,7 @@ Current sprint focus: Foundational governance, trust boundary enforcement, and w
 
 | ID | Title | Product outcome | Dependency | Completion criteria |
 | --- | --- | --- | --- | --- |
-| **DOC-020** | Independent reader documentation acceptance | A new reader can use the documentation without relying on author knowledge | DOC-001 through DOC-019 | Independent readers complete the prospective-user, contributor, and maintainer walkthrough scripts with no unanswered questions |
 | **GOVERNANCE-001** | Solution-wide Definition of Done contract | Every completed backlog card is supported by verifiable code, test, accessibility, security, and documentation evidence | None | Shared Definition of Done formalized in repository policies and linked from all delivery cards |
-
-### DOC-020 Review Scripts
-
-- **Prospective user:** Identify support status, requirements, first safe backup, deletion boundaries, available providers, and Google Drive limitations.
-- **Contributor:** Build and test all eight projects, locate architecture owners, follow provider Definition of Done, and report an unverified platform check.
-- **Maintainer:** Locate data paths, mapping trust rules, release checks, active backlog, security response, dependency record, and historical acceptance archives.
 
 ---
 
@@ -140,6 +133,7 @@ Verified in code, documentation, and automated tests.
 
 | ID | Title | Product outcome | Dependency | Completion criteria |
 | --- | --- | --- | --- | --- |
+| **DOC-020** | Independent reader documentation acceptance | A new reader can use the documentation without relying on author knowledge | DOC-001 through DOC-019 | Independent readers complete prospective-user, contributor, and maintainer walkthrough scripts with zero unanswered questions; verified across /docs and README.md; guarded by automated integrity tests |
 | **OBS-021** | Acrylic material contrast shield for white backdrops | Acrylic blur content remains readable over bright white desktop backgrounds without washing out text | UI-001, UI-002 | Semantic Backdrop Contrast Shield (`#111217` at 75% opacity) absorbs background light when Acrylic is active in Dark theme; text contrast exceeds 7:1; Mica and None remain unaffected |
 | **OBS-020** | Navigation rail redesign and direct page layout reset | Navigation controls (Collapse, Scan, Layout, Reset Layout) reside inside rail chrome; direct reset button restores active page layout | UI-005, DOC-009 | Rail border encompasses action buttons in Left, Right, and Top docks; Top dock renders two lines (Line 1: actions, Line 2: tabs); dedicated Reset Page Layout button resets current page panels directly |
 | **UI-008** | Fix layout arrange fault on programmatic reattach | Reattaching a detached page never faults the Avalonia render pass | UI-007 | A detach/reattach cycle driven by workspace layout apply raises no "wrong LayoutManager" arrange fault; repeated cycles run clean under the interactive material harness |
