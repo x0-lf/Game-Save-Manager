@@ -13,12 +13,15 @@ namespace GameSaves.Infrastructure.Transfers
         public static bool TryRewrite(
             TransferBackupManifest manifest,
             string targetRoot,
-            out TransferBackupManifest rewritten)
+            out TransferBackupManifest rewritten,
+            string? fileCheckDirectory = null)
         {
             rewritten = manifest;
 
             if (manifest.Items.Count == 0)
                 return true;
+
+            string effectiveCheckDir = fileCheckDirectory ?? targetRoot;
 
             // Deterministic path: Schema v2 or manifests with relative paths
             bool hasRelativePaths = manifest.Items.All(i => !string.IsNullOrWhiteSpace(i.RelativePath));
@@ -31,8 +34,9 @@ namespace GameSaves.Infrastructure.Transfers
                 {
                     string relative = item.GetRelativePayloadPath().Replace('/', Path.DirectorySeparatorChar);
                     string newBackupFile = Path.Combine(targetRoot, relative);
+                    string fileToCheck = Path.Combine(effectiveCheckDir, relative);
 
-                    if (!File.Exists(newBackupFile))
+                    if (!File.Exists(fileToCheck))
                     {
                         allValid = false;
                         break;
@@ -64,7 +68,7 @@ namespace GameSaves.Infrastructure.Transfers
                 int prefixLength = segments.Take(i)
                     .Sum(segment => segment.Length + 1);
 
-                if (TryRewriteWithPrefix(manifest, prefixLength, targetRoot, out rewritten))
+                if (TryRewriteWithPrefix(manifest, prefixLength, targetRoot, out rewritten, effectiveCheckDir))
                 {
                     rewritten = rewritten.ToSchemaV2();
                     return true;
@@ -78,9 +82,11 @@ namespace GameSaves.Infrastructure.Transfers
             TransferBackupManifest manifest,
             int prefixLength,
             string targetRoot,
-            out TransferBackupManifest rewritten)
+            out TransferBackupManifest rewritten,
+            string? fileCheckDirectory = null)
         {
             rewritten = manifest;
+            string effectiveCheckDir = fileCheckDirectory ?? targetRoot;
 
             var newItems = new List<TransferOverwriteBackupItem>(manifest.Items.Count);
 
@@ -98,8 +104,9 @@ namespace GameSaves.Infrastructure.Transfers
                 }
 
                 string newBackupFile = Path.Combine(targetRoot, relative);
+                string fileToCheck = Path.Combine(effectiveCheckDir, relative);
 
-                if (!File.Exists(newBackupFile))
+                if (!File.Exists(fileToCheck))
                     return false;
 
                 newItems.Add(item with

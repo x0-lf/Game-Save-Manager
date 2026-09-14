@@ -11,6 +11,12 @@ namespace GameSaves.Infrastructure.Transfers
     public sealed class BackupMetadataReader : IBackupMetadataReader
     {
         private static readonly byte[] SevenZipSignature = [0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C];
+        private readonly BackupArchiveSafetyBounds _safetyBounds;
+
+        public BackupMetadataReader(BackupArchiveSafetyBounds? safetyBounds = null)
+        {
+            _safetyBounds = safetyBounds ?? BackupArchiveSafetyBounds.Default;
+        }
 
         public BackupContainerFormat DetectContainerFormat(string path)
         {
@@ -93,6 +99,13 @@ namespace GameSaves.Infrastructure.Transfers
                             return false;
                         }
 
+                        var fi = new FileInfo(manifestPath);
+                        if (fi.Length > _safetyBounds.MaxManifestBytes)
+                        {
+                            error = $"Manifest file exceeds maximum allowed size ({_safetyBounds.MaxManifestBytes:N0} bytes).";
+                            return false;
+                        }
+
                         string json = File.ReadAllText(manifestPath);
                         manifest = JsonSerializer.Deserialize<TransferBackupManifest>(json);
 
@@ -114,6 +127,12 @@ namespace GameSaves.Infrastructure.Transfers
                         }
 
                         using ZipArchive archive = ZipFile.OpenRead(path);
+                        if (archive.Entries.Count > _safetyBounds.MaxFileEntries)
+                        {
+                            error = $"Archive exceeds maximum allowed entries limit ({_safetyBounds.MaxFileEntries:N0}).";
+                            return false;
+                        }
+
                         ZipArchiveEntry? entry = archive.GetEntry(TransferBackupLocations.ManifestFileName)
                             ?? archive.Entries.FirstOrDefault(e =>
                                 e.FullName.Equals(TransferBackupLocations.ManifestFileName, StringComparison.OrdinalIgnoreCase) ||
@@ -125,8 +144,30 @@ namespace GameSaves.Infrastructure.Transfers
                             return false;
                         }
 
+                        if (entry.Length > _safetyBounds.MaxManifestBytes)
+                        {
+                            error = $"Archive manifest exceeds maximum allowed size ({_safetyBounds.MaxManifestBytes:N0} bytes).";
+                            return false;
+                        }
+
                         using Stream stream = entry.Open();
-                        manifest = JsonSerializer.Deserialize<TransferBackupManifest>(stream);
+                        using var memoryStream = new MemoryStream();
+                        byte[] buffer = new byte[81920];
+                        long totalRead = 0;
+                        int bytesRead;
+                        while ((bytesRead = stream.Read(buffer, 0, buffer.Length)) > 0)
+                        {
+                            totalRead += bytesRead;
+                            if (totalRead > _safetyBounds.MaxManifestBytes)
+                            {
+                                error = $"Archive manifest exceeds maximum allowed size ({_safetyBounds.MaxManifestBytes:N0} bytes).";
+                                return false;
+                            }
+                            memoryStream.Write(buffer, 0, bytesRead);
+                        }
+
+                        memoryStream.Position = 0;
+                        manifest = JsonSerializer.Deserialize<TransferBackupManifest>(memoryStream);
 
                         if (manifest is null)
                         {
@@ -149,6 +190,13 @@ namespace GameSaves.Infrastructure.Transfers
                         string sidecarManifest = path + ".manifest.json";
                         if (File.Exists(sidecarManifest))
                         {
+                            var sidecarFi = new FileInfo(sidecarManifest);
+                            if (sidecarFi.Length > _safetyBounds.MaxManifestBytes)
+                            {
+                                error = $"Manifest file exceeds maximum allowed size ({_safetyBounds.MaxManifestBytes:N0} bytes).";
+                                return false;
+                            }
+
                             string json = File.ReadAllText(sidecarManifest);
                             manifest = JsonSerializer.Deserialize<TransferBackupManifest>(json);
                             if (manifest is not null && manifest.TryValidate(out error))
