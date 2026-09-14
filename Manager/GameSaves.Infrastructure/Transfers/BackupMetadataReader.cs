@@ -1,4 +1,6 @@
 using GameSaves.Core.Transfers;
+using SharpCompress.Archives;
+using SharpCompress.Archives.SevenZip;
 using System.IO.Compression;
 using System.Text.Json;
 
@@ -18,7 +20,9 @@ namespace GameSaves.Infrastructure.Transfers
             _safetyBounds = safetyBounds ?? BackupArchiveSafetyBounds.Default;
         }
 
-        public BackupContainerFormat DetectContainerFormat(string path)
+        public BackupContainerFormat DetectContainerFormat(string path) => DetectFormat(path);
+
+        public static BackupContainerFormat DetectFormat(string path)
         {
             if (string.IsNullOrWhiteSpace(path))
                 return BackupContainerFormat.Folder;
@@ -52,14 +56,14 @@ namespace GameSaves.Infrastructure.Transfers
                 {
                     // Fallback to extension check
                 }
-
-                string ext = Path.GetExtension(path);
-                if (ext.Equals(".zip", StringComparison.OrdinalIgnoreCase))
-                    return BackupContainerFormat.Zip;
-
-                if (ext.Equals(".7z", StringComparison.OrdinalIgnoreCase))
-                    return BackupContainerFormat.SevenZip;
             }
+
+            string ext = Path.GetExtension(path);
+            if (ext.Equals(".zip", StringComparison.OrdinalIgnoreCase))
+                return BackupContainerFormat.Zip;
+
+            if (ext.Equals(".7z", StringComparison.OrdinalIgnoreCase))
+                return BackupContainerFormat.SevenZip;
 
             return BackupContainerFormat.Folder;
         }
@@ -203,8 +207,69 @@ namespace GameSaves.Infrastructure.Transfers
                                 return true;
                         }
 
-                        error = "7-Zip direct manifest extraction requires 7-Zip decompression engine (OBS-006).";
-                        return false;
+                        using var archiveStream = File.OpenRead(path);
+                        using IArchive archive = SevenZipArchive.OpenArchive(archiveStream);
+                        int entryCount = 0;
+                        IArchiveEntry? manifestEntry = null;
+
+                        foreach (IArchiveEntry entry in archive.Entries)
+                        {
+                            entryCount++;
+                            if (entryCount > _safetyBounds.MaxFileEntries)
+                            {
+                                error = $"Archive exceeds maximum allowed entries limit ({_safetyBounds.MaxFileEntries:N0}).";
+                                return false;
+                            }
+
+                            if (manifestEntry is null && entry.Key is not null)
+                            {
+                                string key = entry.Key.Replace('\\', '/').Trim('/');
+                                if (key.Equals(TransferBackupLocations.ManifestFileName, StringComparison.OrdinalIgnoreCase) ||
+                                    Path.GetFileName(key).Equals(TransferBackupLocations.ManifestFileName, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    manifestEntry = entry;
+                                }
+                            }
+                        }
+
+                        if (manifestEntry is null)
+                        {
+                            error = $"7-Zip archive does not contain a root {TransferBackupLocations.ManifestFileName}.";
+                            return false;
+                        }
+
+                        if (manifestEntry.Size > _safetyBounds.MaxManifestBytes)
+                        {
+                            error = $"Archive manifest exceeds maximum allowed size ({_safetyBounds.MaxManifestBytes:N0} bytes).";
+                            return false;
+                        }
+
+                        using Stream stream = manifestEntry.OpenEntryStream();
+                        using var memoryStream = new MemoryStream();
+                        byte[] buffer = new byte[81920];
+                        long totalRead = 0;
+                        int bytesRead;
+                        while ((bytesRead = stream.Read(buffer, 0, buffer.Length)) > 0)
+                        {
+                            totalRead += bytesRead;
+                            if (totalRead > _safetyBounds.MaxManifestBytes)
+                            {
+                                error = $"Archive manifest exceeds maximum allowed size ({_safetyBounds.MaxManifestBytes:N0} bytes).";
+                                return false;
+                            }
+                            memoryStream.Write(buffer, 0, bytesRead);
+                        }
+
+                        memoryStream.Position = 0;
+                        manifest = JsonSerializer.Deserialize<TransferBackupManifest>(memoryStream);
+
+                        if (manifest is null)
+                        {
+                            error = "Failed to deserialize archive manifest.json (content was null or invalid JSON).";
+                            return false;
+                        }
+
+                        return manifest.TryValidate(out error);
                     }
 
                     default:

@@ -32,6 +32,7 @@ dependencies are added, removed, or upgraded.
 | System.Security.Cryptography.ProtectedData | 10.0.0 | MIT | Windows DPAPI access for current-user secret protection. |
 | ValveKeyValue | 0.20.0.417 | MIT | KeyValues1 parser used for Steam VDF files; referenced only by Infrastructure. |
 | SSH.NET | 2026.0.0 | MIT | SFTP/SSH client used by the SFTP sync provider. |
+| SharpCompress | 0.50.4 | MIT | Pure managed archive library used for 7-Zip (.7z) LZMA/LZMA2 export, import, and zero-extraction inspection; referenced only by Infrastructure. |
 | Microsoft.NET.Test.Sdk | 17.14.1 | MIT | .NET test host and discovery support; test project only. |
 | xunit | 2.9.3 | Apache-2.0 | Regression test framework; test project only. |
 | xunit.runner.visualstudio | 3.1.5 | Apache-2.0 | VSTest adapter for xUnit; test project only. |
@@ -127,6 +128,14 @@ chain.
 ### SSH.NET
 
 SSH.NET is used by the SFTP sync provider for SSH authentication and remote file operations.
+
+### SharpCompress
+
+`SharpCompress` 0.50.4 is a pure managed C# compression and archive library.
+It is licensed under the MIT license and referenced only by
+`GameSaves.Infrastructure`. It provides reading, writing, and zero-extraction
+metadata inspection for 7-Zip (`.7z`) archives using LZMA and LZMA2 compression
+without requiring native C++ or Win32 `7z.dll` dependencies.
 
 ### Test packages
 

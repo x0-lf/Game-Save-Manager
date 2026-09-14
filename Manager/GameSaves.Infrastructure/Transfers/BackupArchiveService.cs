@@ -1,4 +1,8 @@
 using GameSaves.Core.Transfers;
+using SharpCompress.Archives;
+using SharpCompress.Archives.SevenZip;
+using SharpCompress.Common;
+using SharpCompress.Writers.SevenZip;
 using System.IO.Compression;
 using System.Text.Json;
 
@@ -23,16 +27,24 @@ namespace GameSaves.Infrastructure.Transfers
         public Task<BackupArchiveExportResult> ExportRunAsync(
             TransferBackupRunInfo run,
             string destinationFolder,
+            CancellationToken cancellationToken)
+            => ExportRunAsync(run, destinationFolder, BackupContainerFormat.Zip, BackupCompressionPreset.Optimal, cancellationToken);
+
+        public Task<BackupArchiveExportResult> ExportRunAsync(
+            TransferBackupRunInfo run,
+            string destinationFolder,
+            BackupContainerFormat format = BackupContainerFormat.Zip,
+            BackupCompressionPreset preset = BackupCompressionPreset.Optimal,
             CancellationToken cancellationToken = default)
         {
-            return Task.Run(() => ExportRun(run, destinationFolder, cancellationToken), cancellationToken);
+            return Task.Run(() => ExportRun(run, destinationFolder, format, preset, cancellationToken), cancellationToken);
         }
 
         public Task<BackupArchiveImportResult> ImportArchiveAsync(
-            string zipPath,
+            string archivePath,
             CancellationToken cancellationToken = default)
         {
-            return Task.Run(() => ImportArchive(zipPath, cancellationToken), cancellationToken);
+            return Task.Run(() => ImportArchive(archivePath, cancellationToken), cancellationToken);
         }
 
         // ---------------------------------------------------------------
@@ -42,6 +54,8 @@ namespace GameSaves.Infrastructure.Transfers
         private static BackupArchiveExportResult ExportRun(
             TransferBackupRunInfo run,
             string destinationFolder,
+            BackupContainerFormat format,
+            BackupCompressionPreset preset,
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -68,7 +82,7 @@ namespace GameSaves.Infrastructure.Transfers
                         "The export destination is empty or not a valid folder path.");
                 }
 
-                // Zipping a folder into itself would try to include the
+                // Zipping/compressing a folder into itself would try to include the
                 // partially written archive.
                 if (TransferPathGuard.IsUnderRoot(normalizedDestination, run.BackupRootPath))
                 {
@@ -77,9 +91,10 @@ namespace GameSaves.Infrastructure.Transfers
                         "The export destination is inside the backup run folder. Choose a destination outside it.");
                 }
 
+                string extension = format == BackupContainerFormat.SevenZip ? ".7z" : ".zip";
                 string archivePath = Path.Combine(
                     normalizedDestination,
-                    Path.GetFileName(run.BackupRootPath) + ".zip");
+                    Path.GetFileName(run.BackupRootPath) + extension);
 
                 if (File.Exists(archivePath))
                 {
@@ -96,22 +111,54 @@ namespace GameSaves.Infrastructure.Transfers
 
                 cancellationToken.ThrowIfCancellationRequested();
 
-                using (var fs = new FileStream(tempArchivePath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-                using (var archive = new ZipArchive(fs, ZipArchiveMode.Create, leaveOpen: false))
+                var rootDir = new DirectoryInfo(run.BackupRootPath);
+
+                if (format == BackupContainerFormat.SevenZip)
                 {
-                    var rootDir = new DirectoryInfo(run.BackupRootPath);
-                    byte[] buffer = new byte[81920];
-
-                    foreach (FileInfo file in rootDir.EnumerateFiles("*", SearchOption.AllDirectories))
+                    (CompressionType compressionType, int level) = preset switch
                     {
-                        cancellationToken.ThrowIfCancellationRequested();
+                        BackupCompressionPreset.Store => (CompressionType.LZMA, 1),
+                        BackupCompressionPreset.Fast => (CompressionType.LZMA, 3),
+                        BackupCompressionPreset.Optimal => (CompressionType.LZMA2, 6),
+                        BackupCompressionPreset.Ultra => (CompressionType.LZMA2, 9),
+                        _ => (CompressionType.LZMA2, 6)
+                    };
 
-                        string relativePath = Path.GetRelativePath(run.BackupRootPath, file.FullName).Replace('\\', '/');
-                        ZipArchiveEntry entry = archive.CreateEntry(relativePath, CompressionLevel.Optimal);
+                    var options = new SevenZipWriterOptions(compressionType)
+                    {
+                        CompressionLevel = level,
+                        CompressHeader = true
+                    };
 
-                        using (FileStream sourceStream = file.OpenRead())
-                        using (Stream entryStream = entry.Open())
+                    using (var fs = new FileStream(tempArchivePath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None))
+                    using (var writer = new SevenZipWriter(fs, options))
+                    {
+                        foreach (FileInfo file in rootDir.EnumerateFiles("*", SearchOption.AllDirectories))
                         {
+                            cancellationToken.ThrowIfCancellationRequested();
+
+                            string relativePath = Path.GetRelativePath(run.BackupRootPath, file.FullName).Replace('\\', '/');
+                            using FileStream sourceStream = file.OpenRead();
+                            writer.Write(relativePath, sourceStream, file.LastWriteTimeUtc);
+                        }
+                    }
+                }
+                else
+                {
+                    using (var fs = new FileStream(tempArchivePath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                    using (var archive = new ZipArchive(fs, ZipArchiveMode.Create, leaveOpen: false))
+                    {
+                        byte[] buffer = new byte[81920];
+
+                        foreach (FileInfo file in rootDir.EnumerateFiles("*", SearchOption.AllDirectories))
+                        {
+                            cancellationToken.ThrowIfCancellationRequested();
+
+                            string relativePath = Path.GetRelativePath(run.BackupRootPath, file.FullName).Replace('\\', '/');
+                            ZipArchiveEntry entry = archive.CreateEntry(relativePath, CompressionLevel.Optimal);
+
+                            using FileStream sourceStream = file.OpenRead();
+                            using Stream entryStream = entry.Open();
                             int bytesRead;
                             while ((bytesRead = sourceStream.Read(buffer, 0, buffer.Length)) > 0)
                             {
@@ -163,7 +210,7 @@ namespace GameSaves.Infrastructure.Transfers
         // Import
         // ---------------------------------------------------------------
 
-        private BackupArchiveImportResult ImportArchive(string zipPath, CancellationToken cancellationToken)
+        private BackupArchiveImportResult ImportArchive(string archivePath, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -172,19 +219,27 @@ namespace GameSaves.Infrastructure.Transfers
 
             try
             {
-                if (string.IsNullOrWhiteSpace(zipPath) || !File.Exists(zipPath))
+                if (string.IsNullOrWhiteSpace(archivePath) || !File.Exists(archivePath))
                 {
                     return new BackupArchiveImportResult(
                         false, null, 0,
                         "The selected archive file does not exist.");
                 }
 
-                // The archive must be a backup run: manifest.json at its root.
-                if (!_metadataReader.TryReadManifest(zipPath, out TransferBackupManifest? manifest, out string? manifestError))
+                BackupContainerFormat format = _metadataReader.DetectContainerFormat(archivePath);
+                if (format != BackupContainerFormat.Zip && format != BackupContainerFormat.SevenZip)
                 {
                     return new BackupArchiveImportResult(
                         false, null, 0,
-                        $"This ZIP is not a valid backup archive: {manifestError}");
+                        $"Unsupported archive format: {format}");
+                }
+
+                // The archive must be a backup run: manifest.json at its root.
+                if (!_metadataReader.TryReadManifest(archivePath, out TransferBackupManifest? manifest, out string? manifestError))
+                {
+                    return new BackupArchiveImportResult(
+                        false, null, 0,
+                        $"This archive is not a valid backup archive: {manifestError}");
                 }
 
                 if (manifest is null || manifest.Items.Count == 0)
@@ -197,7 +252,7 @@ namespace GameSaves.Infrastructure.Transfers
                 string basePath = _backupHistoryService.GetBackupBasePath();
 
                 string runFolderName = TransferBackupLocations.MakeSafeName(
-                    Path.GetFileNameWithoutExtension(zipPath));
+                    Path.GetFileNameWithoutExtension(archivePath));
 
                 string targetRoot = Path.Combine(basePath, runFolderName);
 
@@ -218,17 +273,87 @@ namespace GameSaves.Infrastructure.Transfers
                 stagingDirectory = Path.Combine(basePath, ".staging_" + Guid.NewGuid().ToString("N"));
                 Directory.CreateDirectory(stagingDirectory);
 
-                using (ZipArchive archive = ZipFile.OpenRead(zipPath))
+                byte[] buffer = new byte[81920];
+                long totalUncompressedBytes = 0;
+
+                if (format == BackupContainerFormat.SevenZip)
                 {
+                    using var archiveStream = File.OpenRead(archivePath);
+                    using IArchive archive = SevenZipArchive.OpenArchive(archiveStream);
+                    int entryCount = 0;
+
+                    foreach (IArchiveEntry entry in archive.Entries)
+                    {
+                        entryCount++;
+                        if (entryCount > _safetyBounds.MaxFileEntries)
+                        {
+                            return new BackupArchiveImportResult(
+                                false, null, 0,
+                                $"Archive exceeds maximum allowed entries limit ({_safetyBounds.MaxFileEntries:N0}).");
+                        }
+
+                        cancellationToken.ThrowIfCancellationRequested();
+
+                        if (entry.Key is null)
+                            continue;
+
+                        if (!ValidateArchiveEntryPath(entry.Key, stagingDirectory, out string destinationPath, out string? entryError))
+                        {
+                            return new BackupArchiveImportResult(
+                                false, null, 0,
+                                $"Archive extraction rejected due to security policy: {entryError}");
+                        }
+
+                        if (entry.IsDirectory || entry.Key.EndsWith('/') || entry.Key.EndsWith('\\'))
+                        {
+                            Directory.CreateDirectory(destinationPath);
+                            continue;
+                        }
+
+                        string? parentDir = Path.GetDirectoryName(destinationPath);
+                        if (!string.IsNullOrEmpty(parentDir))
+                        {
+                            Directory.CreateDirectory(parentDir);
+                        }
+
+                        long entryBytes = 0;
+                        using Stream entryStream = entry.OpenEntryStream();
+                        using var destStream = new FileStream(destinationPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+
+                        int bytesRead;
+                        while ((bytesRead = entryStream.Read(buffer, 0, buffer.Length)) > 0)
+                        {
+                            cancellationToken.ThrowIfCancellationRequested();
+                            entryBytes += bytesRead;
+                            totalUncompressedBytes += bytesRead;
+
+                            if (entryBytes > _safetyBounds.MaxSingleFileBytes)
+                            {
+                                return new BackupArchiveImportResult(
+                                    false, null, 0,
+                                    $"Archive entry '{entry.Key}' exceeds maximum allowed single file size ({_safetyBounds.MaxSingleFileBytes:N0} bytes).");
+                            }
+
+                            if (totalUncompressedBytes > _safetyBounds.MaxTotalUncompressedBytes)
+                            {
+                                return new BackupArchiveImportResult(
+                                    false, null, 0,
+                                    $"Archive uncompressed payload exceeds maximum allowed size ({_safetyBounds.MaxTotalUncompressedBytes:N0} bytes).");
+                            }
+
+                            destStream.Write(buffer, 0, bytesRead);
+                        }
+                    }
+                }
+                else
+                {
+                    using ZipArchive archive = ZipFile.OpenRead(archivePath);
                     if (archive.Entries.Count > _safetyBounds.MaxFileEntries)
                     {
                         return new BackupArchiveImportResult(
                             false, null, 0,
                             $"Archive exceeds maximum allowed entries limit ({_safetyBounds.MaxFileEntries:N0}).");
                     }
-
-                    long totalUncompressedBytes = 0;
-                    byte[] buffer = new byte[81920];
 
                     foreach (ZipArchiveEntry entry in archive.Entries)
                     {
@@ -255,32 +380,31 @@ namespace GameSaves.Infrastructure.Transfers
                         }
 
                         long entryBytes = 0;
-                        using (Stream entryStream = entry.Open())
-                        using (var destStream = new FileStream(destinationPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                        using Stream entryStream = entry.Open();
+                        using var destStream = new FileStream(destinationPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+
+                        int bytesRead;
+                        while ((bytesRead = entryStream.Read(buffer, 0, buffer.Length)) > 0)
                         {
-                            int bytesRead;
-                            while ((bytesRead = entryStream.Read(buffer, 0, buffer.Length)) > 0)
+                            cancellationToken.ThrowIfCancellationRequested();
+                            entryBytes += bytesRead;
+                            totalUncompressedBytes += bytesRead;
+
+                            if (entryBytes > _safetyBounds.MaxSingleFileBytes)
                             {
-                                cancellationToken.ThrowIfCancellationRequested();
-                                entryBytes += bytesRead;
-                                totalUncompressedBytes += bytesRead;
-
-                                if (entryBytes > _safetyBounds.MaxSingleFileBytes)
-                                {
-                                    return new BackupArchiveImportResult(
-                                        false, null, 0,
-                                        $"Archive entry '{entry.FullName}' exceeds maximum allowed single file size ({_safetyBounds.MaxSingleFileBytes:N0} bytes).");
-                                }
-
-                                if (totalUncompressedBytes > _safetyBounds.MaxTotalUncompressedBytes)
-                                {
-                                    return new BackupArchiveImportResult(
-                                        false, null, 0,
-                                        $"Archive uncompressed payload exceeds maximum allowed size ({_safetyBounds.MaxTotalUncompressedBytes:N0} bytes).");
-                                }
-
-                                destStream.Write(buffer, 0, bytesRead);
+                                return new BackupArchiveImportResult(
+                                    false, null, 0,
+                                    $"Archive entry '{entry.FullName}' exceeds maximum allowed single file size ({_safetyBounds.MaxSingleFileBytes:N0} bytes).");
                             }
+
+                            if (totalUncompressedBytes > _safetyBounds.MaxTotalUncompressedBytes)
+                            {
+                                return new BackupArchiveImportResult(
+                                    false, null, 0,
+                                    $"Archive uncompressed payload exceeds maximum allowed size ({_safetyBounds.MaxTotalUncompressedBytes:N0} bytes).");
+                            }
+
+                            destStream.Write(buffer, 0, bytesRead);
                         }
                     }
                 }

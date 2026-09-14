@@ -484,11 +484,19 @@ public sealed class RailScanActionTests
         public Task<BackupArchiveExportResult> ExportRunAsync(
             TransferBackupRunInfo run,
             string destinationFolder,
+            CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("A refresh must not export.");
+
+        public Task<BackupArchiveExportResult> ExportRunAsync(
+            TransferBackupRunInfo run,
+            string destinationFolder,
+            BackupContainerFormat format = BackupContainerFormat.Zip,
+            BackupCompressionPreset preset = BackupCompressionPreset.Optimal,
             CancellationToken cancellationToken = default) =>
             throw new InvalidOperationException("A refresh must not export.");
 
         public Task<BackupArchiveImportResult> ImportArchiveAsync(
-            string zipPath,
+            string archivePath,
             CancellationToken cancellationToken = default) =>
             throw new InvalidOperationException("A refresh must not import.");
     }

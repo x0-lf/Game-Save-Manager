@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using GameSaves.App.Models;
 using GameSaves.Core.Transfers;
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
@@ -224,7 +225,34 @@ namespace GameSaves.App.ViewModels
         }
 
         [ObservableProperty]
-        private string archiveStatusMessage = "Export a run as a single ZIP file, or import a previously exported backup ZIP.";
+        private string archiveStatusMessage = "Export a run as a single ZIP or 7-Zip file, or import a previously exported backup archive.";
+
+        [ObservableProperty]
+        private BackupContainerFormat selectedExportFormat = BackupContainerFormat.Zip;
+
+        [ObservableProperty]
+        private BackupCompressionPreset selectedCompressionPreset = BackupCompressionPreset.Optimal;
+
+        public IReadOnlyList<BackupContainerFormat> AvailableFormats { get; } =
+        [
+            BackupContainerFormat.Zip,
+            BackupContainerFormat.SevenZip
+        ];
+
+        public IReadOnlyList<BackupCompressionPreset> AvailablePresets { get; } =
+        [
+            BackupCompressionPreset.Store,
+            BackupCompressionPreset.Fast,
+            BackupCompressionPreset.Optimal,
+            BackupCompressionPreset.Ultra
+        ];
+
+        public bool IsSevenZipSelected => SelectedExportFormat == BackupContainerFormat.SevenZip;
+
+        partial void OnSelectedExportFormatChanged(BackupContainerFormat value)
+        {
+            OnPropertyChanged(nameof(IsSevenZipSelected));
+        }
 
         [RelayCommand]
         private async Task ExportSelectedRunAsync()
@@ -240,18 +268,23 @@ namespace GameSaves.App.ViewModels
 
             try
             {
+                string formatName = SelectedExportFormat == BackupContainerFormat.SevenZip ? "7-Zip" : "ZIP";
                 string? destination = await _folderPickerService.PickFolderAsync(
-                    "Select where the backup ZIP should be created.");
+                    $"Select where the backup {formatName} should be created.");
 
                 // Cancel changes nothing.
                 if (string.IsNullOrWhiteSpace(destination))
                     return;
 
                 IsLoading = true;
-                ArchiveStatusMessage = "Creating the backup ZIP...";
+                ArchiveStatusMessage = $"Creating the backup {formatName}...";
 
                 BackupArchiveExportResult result =
-                    await _backupArchiveService.ExportRunAsync(SelectedRun.Run, destination);
+                    await _backupArchiveService.ExportRunAsync(
+                        SelectedRun.Run,
+                        destination,
+                        SelectedExportFormat,
+                        SelectedCompressionPreset);
 
                 ArchiveStatusMessage = result.Message;
             }
@@ -275,20 +308,20 @@ namespace GameSaves.App.ViewModels
 
             try
             {
-                string? zipPath = await _folderPickerService.PickFileAsync(
-                    "Select a backup ZIP to import.",
-                    "Backup ZIP archives",
-                    new[] { "*.zip" });
+                string? archivePath = await _folderPickerService.PickFileAsync(
+                    "Select a backup archive to import.",
+                    "Backup archives",
+                    new[] { "*.zip", "*.7z" });
 
                 // Cancel changes nothing.
-                if (string.IsNullOrWhiteSpace(zipPath))
+                if (string.IsNullOrWhiteSpace(archivePath))
                     return;
 
                 IsLoading = true;
-                ArchiveStatusMessage = "Importing the backup ZIP...";
+                ArchiveStatusMessage = "Importing the backup archive...";
 
                 BackupArchiveImportResult result =
-                    await _backupArchiveService.ImportArchiveAsync(zipPath);
+                    await _backupArchiveService.ImportArchiveAsync(archivePath);
 
                 ArchiveStatusMessage = result.Message;
                 refreshRuns = result.Success;

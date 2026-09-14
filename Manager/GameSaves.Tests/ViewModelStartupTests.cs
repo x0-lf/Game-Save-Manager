@@ -436,6 +436,17 @@ public sealed class ViewModelStartupTests
         public Task<BackupArchiveExportResult> ExportRunAsync(
             TransferBackupRunInfo run,
             string destinationFolder,
+            CancellationToken cancellationToken)
+        {
+            ExportWasCalled = true;
+            throw new InvalidOperationException("Export must not run during startup.");
+        }
+
+        public Task<BackupArchiveExportResult> ExportRunAsync(
+            TransferBackupRunInfo run,
+            string destinationFolder,
+            BackupContainerFormat format = BackupContainerFormat.Zip,
+            BackupCompressionPreset preset = BackupCompressionPreset.Optimal,
             CancellationToken cancellationToken = default)
         {
             ExportWasCalled = true;
