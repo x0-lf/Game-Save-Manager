@@ -2,17 +2,17 @@
 
 This file is the authoritative roadmap for active, future, and completed work across the solution.
 Historical milestones cannot change the status here. Every item states its canonical ID (and aliases),
-title, product outcome (The What), dependency, and observable completion criteria (Definition of Done).
+title, product outcome (The What), dependency, and observable completion criteria ([Definition of Done](definition-of-done.md)).
 
 ---
 
 ## Now
 
-Current sprint focus: Foundational governance, trust boundary enforcement, and window/navigation stabilization.
+Current sprint focus: Archive sync container format, portable manifest schema v2, and dependency modernization.
 
 | ID | Title | Product outcome | Dependency | Completion criteria |
 | --- | --- | --- | --- | --- |
-| **GOVERNANCE-001** | Solution-wide Definition of Done contract | Every completed backlog card is supported by verifiable code, test, accessibility, security, and documentation evidence | None | Shared Definition of Done formalized in repository policies and linked from all delivery cards |
+| **OBS-004** | Portable manifest schema v2 and archive compatibility | Old and new backups remain discoverable, verifiable, and restorable across storage formats and machines | DATA-001 | Versioned manifest schema (`schema_version: 2`) defines relative payload paths and root `manifest.json`; uncompressed folders, ZIPs, and 7z share identical catalog models; previews read metadata without full extraction |
 
 ---
 
@@ -22,7 +22,6 @@ Upcoming sprint priorities: Archive sync container format, dependency modernizat
 
 | ID | Title | Product outcome | Dependency | Completion criteria |
 | --- | --- | --- | --- | --- |
-| **OBS-004** | Portable manifest schema v2 and archive compatibility | Old and new backups remain discoverable, verifiable, and restorable across storage formats and machines | DATA-001 | Versioned manifest schema (`schema_version: 2`) defines relative payload paths and root `manifest.json`; uncompressed folders, ZIPs, and 7z share identical catalog models; previews read metadata without full extraction |
 | **OBS-005** | Harden ZIP import/export before format expansion | Malformed, oversized, or path-traversing archives cannot compromise security or corrupt backup history | OBS-004 | Temporary extraction staging; directory traversal guards (`Zip Slip` prevention); bounds on entry count, manifest bytes, and payload size; cancellation respected throughout |
 | **OBS-006** | Optional 7-Zip (`.7z`) archive format (BACKUP-002) | Users can choose between standard ZIP and high-compression 7-Zip (`.7z`) formats for backup export and import | OBS-004, OBS-005 | Native managed 7-Zip LZMA2 compression implemented; Store, Fast, Optimal, and Ultra presets; round-trip export/import verified; licenses and notices updated |
 | **OBS-007** | Archive Sync: Single container cloud transfers (BACKUP-010) | Users can upload and download backup runs as single compressed `.7z` or `.zip` containers, bypassing per-file API throttling | OBS-004, OBS-005, OBS-006 | Cloud request counts drop from thousands to <= 2 per run; sync previews inspect manifest headers without full payload download; partial transfers rejected; folder runs and archive runs co-exist |
@@ -133,6 +132,7 @@ Verified in code, documentation, and automated tests.
 
 | ID | Title | Product outcome | Dependency | Completion criteria |
 | --- | --- | --- | --- | --- |
+| **GOVERNANCE-001** | Solution-wide Definition of Done contract | Every completed backlog card is supported by verifiable code, test, accessibility, security, and documentation evidence | None | Shared Definition of Done formalized in docs/definition-of-done.md, integrated into CONTRIBUTING.md, and linked from roadmap cards; enforced via automated integrity tests |
 | **DOC-020** | Independent reader documentation acceptance | A new reader can use the documentation without relying on author knowledge | DOC-001 through DOC-019 | Independent readers complete prospective-user, contributor, and maintainer walkthrough scripts with zero unanswered questions; verified across /docs and README.md; guarded by automated integrity tests |
 | **OBS-021** | Acrylic material contrast shield for white backdrops | Acrylic blur content remains readable over bright white desktop backgrounds without washing out text | UI-001, UI-002 | Semantic Backdrop Contrast Shield (`#111217` at 75% opacity) absorbs background light when Acrylic is active in Dark theme; text contrast exceeds 7:1; Mica and None remain unaffected |
 | **OBS-020** | Navigation rail redesign and direct page layout reset | Navigation controls (Collapse, Scan, Layout, Reset Layout) reside inside rail chrome; direct reset button restores active page layout | UI-005, DOC-009 | Rail border encompasses action buttons in Left, Right, and Top docks; Top dock renders two lines (Line 1: actions, Line 2: tabs); dedicated Reset Page Layout button resets current page panels directly |

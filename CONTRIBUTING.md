@@ -18,6 +18,7 @@ Before submitting a change:
 
 - read the [Code of Conduct](CODE_OF_CONDUCT.md), the
   [documentation hub](docs/README.md), and the authoritative guide for the change;
+- satisfy the [Definition of Done contract](docs/definition-of-done.md) before declaring any change complete;
 - keep the change focused on one problem or roadmap milestone;
 - preserve the repository's architectural and data-safety boundaries;
 - add deterministic regression tests for changed behavior;
@@ -202,6 +203,19 @@ The following rules are part of the product design, not optional implementation 
 12. **Auditable outcomes.** Return and display specific copied, skipped, blocked, warning, and failed results without leaking sensitive information.
 
 Any proposal to change these rules requires explicit maintainer discussion, dedicated regression coverage, and corresponding documentation. Do not weaken a safeguard as an incidental part of another feature.
+
+## Definition of Done
+
+All work across this repository is governed by the solution-wide
+[Definition of Done contract](docs/definition-of-done.md).
+Every delivery must satisfy its six core pillars:
+
+1. **Code Quality:** Zero compiler warnings and errors across all 8 projects in Release non-incremental builds; strict nullability; unidirectional architectural layering.
+2. **Automated Testing:** 100% deterministic, offline regression tests for all functional changes; 100% passing test suite across `Manager.sln`.
+3. **Accessibility & UX:** WCAG 2.x AA contrast compliance; semantic text for all statuses; High Contrast support; keyboard accessibility.
+4. **Data Safety & Security:** Strict compliance with the 11 safety invariants; protected secret storage; strict mapping approval boundary.
+5. **Truth in Claims:** Never claim unverified platform support; explicitly disclose skipped or unverified checks.
+6. **Documentation & Traceability:** Authoritative owner updated; `ROADMAP.md` reconciled; implementation report authored in `docs/raports/`; clean commit notes.
 
 ## Roadmap and scope discipline
 

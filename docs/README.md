@@ -16,6 +16,7 @@ should link to it instead of maintaining a second explanation.
 
 - [Architecture](architecture.md)
 - [Development and verification](development.md)
+- [Solution-wide Definition of Done](definition-of-done.md)
 - [Windows material regression baseline](material-regression-baseline.md) **Developer-only**
 - [Database and save-path mappings](database-and-mappings.md)
 - [Sync providers](sync-providers.md)
@@ -50,6 +51,7 @@ and review procedures remain beside the executables that own them:
 | User-data safety invariants | [Safety model](safety-model.md) |
 | Project boundaries and dependencies | [Architecture](architecture.md) |
 | Build, run, test, troubleshooting, release checks | [Development](development.md) |
+| Solution-wide Definition of Done contract | [Definition of Done](definition-of-done.md) |
 | Windows material regression evidence | [Material regression baseline](material-regression-baseline.md) |
 | Mapping lifecycle and CLI overview | [Database and mappings](database-and-mappings.md) |
 | Provider behavior, capabilities, limits, and performance | [Sync providers](sync-providers.md) |

@@ -209,6 +209,58 @@ public sealed class DocumentationIntegrityTests
         Assert.Contains("history/google-drive-acceptance.md", docsReadme, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void DefinitionOfDoneContract_VerifiesAllRequiredPillars()
+    {
+        string repoRoot = FindRepoRoot();
+        string dodPath = Path.Combine(repoRoot, "docs", "definition-of-done.md");
+        Assert.True(File.Exists(dodPath), "docs/definition-of-done.md must exist.");
+
+        string dod = NormalizeWhitespace(File.ReadAllText(dodPath));
+        string contributing = NormalizeWhitespace(File.ReadAllText(Path.Combine(repoRoot, "CONTRIBUTING.md")));
+        string docsReadme = NormalizeWhitespace(File.ReadAllText(Path.Combine(repoRoot, "docs", "README.md")));
+        string roadmap = NormalizeWhitespace(File.ReadAllText(Path.Combine(repoRoot, "docs", "ROADMAP.md")));
+
+        // 1. Pillar 1: Code Quality
+        Assert.Contains("Pillar 1: Code Quality", dod, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Zero Warnings and Zero Errors", dod, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Strict Nullability", dod, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Architectural Boundary Enforcement", dod, StringComparison.OrdinalIgnoreCase);
+
+        // 2. Pillar 2: Automated Testing
+        Assert.Contains("Pillar 2: Automated Testing", dod, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("100% Deterministic and Offline", dod, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Zero Test Failures or Skips", dod, StringComparison.OrdinalIgnoreCase);
+
+        // 3. Pillar 3: Accessibility & UX
+        Assert.Contains("Pillar 3: Accessibility", dod, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("WCAG Contrast Compliance", dod, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Information Never Conveyed by Color Alone", dod, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("High Contrast Mode Support", dod, StringComparison.OrdinalIgnoreCase);
+
+        // 4. Pillar 4: Data Safety
+        Assert.Contains("Pillar 4: Data Safety", dod, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Preview Before Execution", dod, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Strict Mapping Approval Trust Boundary", dod, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Protected Secrets", dod, StringComparison.OrdinalIgnoreCase);
+
+        // 5. Pillar 5: Platform Verification
+        Assert.Contains("Pillar 5: Platform Verification", dod, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Truth in Status", dod, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Explicit Disclosure of Unverified Checks", dod, StringComparison.OrdinalIgnoreCase);
+
+        // 6. Pillar 6: Documentation & Traceability
+        Assert.Contains("Pillar 6: Documentation", dod, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Authoritative Documentation Synchronization", dod, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Implementation Report", dod, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Commit Log Recording", dod, StringComparison.OrdinalIgnoreCase);
+
+        // Cross-repository formalization
+        Assert.Contains("definition-of-done.md", contributing, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("definition-of-done.md", docsReadme, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("definition-of-done.md", roadmap, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static string NormalizeWhitespace(string input) =>
         Regex.Replace(input, @"\s+", " ");
 
