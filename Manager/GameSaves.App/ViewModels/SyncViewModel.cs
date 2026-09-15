@@ -181,6 +181,7 @@ namespace GameSaves.App.ViewModels
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(CanVerifyLastSync))]
         [NotifyPropertyChangedFor(nameof(CanCancelVerification))]
+        [NotifyPropertyChangedFor(nameof(CanPreviewSync))]
         private bool isVerifying;
 
         [ObservableProperty]
@@ -472,9 +473,12 @@ namespace GameSaves.App.ViewModels
         public bool CanShowQuota =>
             SelectedProviderDescriptor.IsImplemented && SupportsRemoteQuota;
 
+        // Not while a verification is running: preview disposes the provider that
+        // the verification is still reading through.
         public bool CanPreviewSync =>
             SelectedProviderDescriptor.IsImplemented &&
             !IsLoading &&
+            !IsVerifying &&
             HasPlausibleSyncTarget;
 
         // Preview is safe, but a preview against a target the user has not
@@ -2813,7 +2817,9 @@ namespace GameSaves.App.ViewModels
         [RelayCommand]
         private async Task PreviewSyncAsync()
         {
-            if (IsLoading)
+            // A verification in flight is holding _lastProvider. Disposing it here
+            // tears the connection out from under an operation that is still reading.
+            if (IsLoading || IsVerifying)
                 return;
 
             _lastPlan = null;

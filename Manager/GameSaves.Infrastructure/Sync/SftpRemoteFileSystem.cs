@@ -252,6 +252,8 @@ namespace GameSaves.Infrastructure.Sync
             }, cancellationToken);
         }
 
+        public bool SupportsArchiveContainers => true;
+
         public Task<IReadOnlyList<string>> ListRunArchiveNamesAsync(
             CancellationToken cancellationToken = default)
         {

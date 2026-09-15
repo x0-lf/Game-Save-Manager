@@ -7,7 +7,15 @@ namespace GameSaves.Core.Transfers
     public sealed class BackupArchiveSafetyBounds
     {
         public const int DefaultMaxFileEntries = 100_000;
-        public const long DefaultMaxManifestBytes = 16L * 1024 * 1024; // 16 MB
+
+        /// <summary>
+        /// Must stay above what this application's own writer can produce, or a large
+        /// but legitimate run becomes unreadable and disappears from history. A manifest
+        /// item serialises to roughly 500 bytes of indented JSON (two absolute paths, a
+        /// SHA-256, a timestamp), so <see cref="DefaultMaxFileEntries"/> entries reach
+        /// about 50 MB.
+        /// </summary>
+        public const long DefaultMaxManifestBytes = 64L * 1024 * 1024; // 64 MB
         public const long DefaultMaxTotalUncompressedBytes = 100L * 1024 * 1024 * 1024; // 100 GB
         public const long DefaultMaxSingleFileBytes = 50L * 1024 * 1024 * 1024; // 50 GB
 

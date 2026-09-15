@@ -21,6 +21,19 @@ namespace GameSaves.Infrastructure.Transfers
             if (manifest.Items.Count == 0)
                 return true;
 
+            // A manifest that declares an escaping payload path is hostile or
+            // corrupt. Falling through to the legacy prefix fallback would
+            // silently reinterpret it into a safe path and accept an archive
+            // that lies about where its payload belongs, so refuse outright.
+            foreach (TransferOverwriteBackupItem declared in manifest.Items)
+            {
+                if (!string.IsNullOrWhiteSpace(declared.RelativePath) &&
+                    !TransferOverwriteBackupItem.IsSafeRelativePayloadPath(declared.RelativePath))
+                {
+                    return false;
+                }
+            }
+
             string effectiveCheckDir = fileCheckDirectory ?? targetRoot;
 
             // Deterministic path: Schema v2 or manifests with relative paths
@@ -32,9 +45,26 @@ namespace GameSaves.Infrastructure.Transfers
 
                 foreach (TransferOverwriteBackupItem item in manifest.Items)
                 {
+                    // The manifest travels inside the archive or container, so its
+                    // paths are untrusted. An unchecked value here would reach
+                    // Path.Combine, which discards the root for a rooted second
+                    // argument, and the rewritten path is what restore later reads.
+                    if (!item.HasSafeRelativePayloadPath())
+                    {
+                        allValid = false;
+                        break;
+                    }
+
                     string relative = item.GetRelativePayloadPath().Replace('/', Path.DirectorySeparatorChar);
                     string newBackupFile = Path.Combine(targetRoot, relative);
                     string fileToCheck = Path.Combine(effectiveCheckDir, relative);
+
+                    if (!TransferPathGuard.IsStrictlyUnderRoot(newBackupFile, targetRoot) ||
+                        !TransferPathGuard.IsStrictlyUnderRoot(fileToCheck, effectiveCheckDir))
+                    {
+                        allValid = false;
+                        break;
+                    }
 
                     if (!File.Exists(fileToCheck))
                     {
@@ -103,8 +133,18 @@ namespace GameSaves.Infrastructure.Transfers
                     return false;
                 }
 
+                // Same untrusted-manifest rule as the schema v2 path above.
+                if (!TransferOverwriteBackupItem.IsSafeRelativePayloadPath(relative))
+                    return false;
+
                 string newBackupFile = Path.Combine(targetRoot, relative);
                 string fileToCheck = Path.Combine(effectiveCheckDir, relative);
+
+                if (!TransferPathGuard.IsStrictlyUnderRoot(newBackupFile, targetRoot) ||
+                    !TransferPathGuard.IsStrictlyUnderRoot(fileToCheck, effectiveCheckDir))
+                {
+                    return false;
+                }
 
                 if (!File.Exists(fileToCheck))
                     return false;

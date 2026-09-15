@@ -39,10 +39,16 @@ namespace GameSaves.Infrastructure.Transfers
             if (!Directory.Exists(basePath))
                 return runs;
 
-            // Enumerate folder runs
+            // Enumerate folder runs. The import, export and download paths stage work
+            // in dot-prefixed siblings inside this base; a staged run carries a real
+            // manifest for the moment before it is committed, so cataloguing it would
+            // publish a half-built run to history, restore and cleanup.
             foreach (string runFolder in Directory.EnumerateDirectories(basePath))
             {
                 cancellationToken.ThrowIfCancellationRequested();
+
+                if (Path.GetFileName(runFolder).StartsWith('.'))
+                    continue;
 
                 try
                 {
@@ -61,6 +67,9 @@ namespace GameSaves.Infrastructure.Transfers
             foreach (string archiveFile in Directory.EnumerateFiles(basePath))
             {
                 cancellationToken.ThrowIfCancellationRequested();
+
+                if (Path.GetFileName(archiveFile).StartsWith('.'))
+                    continue;
 
                 string ext = Path.GetExtension(archiveFile);
                 if (!ext.Equals(".zip", StringComparison.OrdinalIgnoreCase) &&

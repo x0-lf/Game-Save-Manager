@@ -626,6 +626,113 @@ public sealed class ContainerSyncTests
         Assert.Equal(2, restoredManifest.FileCount);
     }
 
+    [Fact]
+    public async Task Upload_WithArchiveSync_OnRemoteThatCannotListContainers_FallsBackToFolderAndWarns()
+    {
+        using var temp = new TemporaryDirectory();
+        var pathProvider = new TestDatabasePathProvider(temp.GetPath("app", "gamesave.db"));
+        var backupHistory = new BackupHistoryService(pathProvider);
+        string runRoot = Path.Combine(backupHistory.GetBackupBasePath(), "run-nocontainers");
+        TestData.CreateBackupRun(runRoot, temp.GetPath("orig.sav"), "fallback payload");
+
+        // Google Drive is exactly this backend: it implements neither
+        // ListRunArchiveNamesAsync nor FileExistsAsync, so a container uploaded
+        // there would be invisible to every later preview.
+        var remote = new ArchiveRecordingRemoteFileSystem { SupportsArchiveContainers = false };
+        var engine = new SyncEngine(
+            remote,
+            "Remote",
+            "test://remote",
+            backupHistory,
+            new RecordingHistoryRepository());
+
+        var options = new SyncOptions
+        {
+            Upload = true,
+            ArchiveSync = true,
+            ArchiveFormat = BackupContainerFormat.SevenZip
+        };
+
+        SyncPlan plan = await engine.CreatePreviewAsync(options);
+
+        Assert.Contains(plan.Warnings, w => w.Code == "ArchiveSyncUnsupported");
+        Assert.EndsWith("run-nocontainers", Assert.Single(plan.Items).RemotePath);
+
+        SyncResult result = await engine.ExecuteAsync(
+            plan,
+            new SyncOptions
+            {
+                DryRun = false,
+                ConfirmExecution = true,
+                Upload = true,
+                ArchiveSync = true,
+                ArchiveFormat = BackupContainerFormat.SevenZip
+            });
+
+        Assert.Equal(1, result.Uploaded);
+        Assert.All(remote.UploadedFiles, name => Assert.StartsWith("run-nocontainers/", name));
+        Assert.DoesNotContain(remote.UploadedFiles, name => name.EndsWith(".7z", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task Preview_WhenAFolderRunAndASameStemContainerBothExistLocally_WarnsInsteadOfThrowing()
+    {
+        using var temp = new TemporaryDirectory();
+        var pathProvider = new TestDatabasePathProvider(temp.GetPath("app", "gamesave.db"));
+        var backupHistory = new BackupHistoryService(pathProvider);
+        string basePath = backupHistory.GetBackupBasePath();
+        string runRoot = Path.Combine(basePath, "collide");
+        TransferBackupRunInfo run = TestData.CreateBackupRun(
+            runRoot, temp.GetPath("orig.sav"), "collision payload");
+
+        // Exporting the run beside itself produces "collide.zip" next to "collide".
+        var archiveService = new BackupArchiveService(backupHistory);
+        BackupArchiveExportResult export = await archiveService.ExportRunAsync(run, basePath);
+        Assert.True(export.Success, export.Message);
+
+        var engine = new SyncEngine(
+            new ArchiveRecordingRemoteFileSystem(),
+            "Remote",
+            "test://remote",
+            backupHistory,
+            new RecordingHistoryRepository());
+
+        SyncPlan plan = await engine.CreatePreviewAsync(new SyncOptions { Upload = true });
+
+        Assert.Contains(plan.Warnings, w => w.Code == "LocalRunNameCollision");
+        Assert.Equal("collide", Assert.Single(plan.Items).RunName);
+    }
+
+    [Fact]
+    public async Task Preview_WhenARemoteContainerHasNoSidecarManifest_ReportsItInsteadOfSkippingSilently()
+    {
+        using var temp = new TemporaryDirectory();
+        var pathProvider = new TestDatabasePathProvider(temp.GetPath("app", "gamesave.db"));
+        var backupHistory = new BackupHistoryService(pathProvider);
+
+        // An upload interrupted between the container and its manifest leaves
+        // exactly this: a payload nothing can identify.
+        var remote = new ArchiveRecordingRemoteFileSystem();
+        remote.ArchiveNames.Add("interrupted-run.7z");
+
+        var engine = new SyncEngine(
+            remote,
+            "Remote",
+            "test://remote",
+            backupHistory,
+            new RecordingHistoryRepository());
+
+        SyncPlan plan = await engine.CreatePreviewAsync(
+            new SyncOptions { Upload = true, Download = true });
+
+        TransferPreviewWarning warning = Assert.Single(
+            plan.Warnings,
+            w => w.Code == "RemoteContainerIncomplete");
+
+        Assert.Contains("interrupted-run.7z", warning.Message, StringComparison.Ordinal);
+        Assert.Empty(plan.Items);
+    }
+
     private sealed class ArchiveRecordingRemoteFileSystem : IRemoteFileSystem
     {
         public Dictionary<string, string> TextFiles { get; } = new(StringComparer.OrdinalIgnoreCase);
@@ -638,6 +745,10 @@ public sealed class ContainerSyncTests
         public Action? OnDownload { get; set; }
 
         public string DisplayRoot => "test://remote";
+
+        // A backend only receives containers once it declares that it can list them
+        // back. Google Drive does not implement either member and must stay false.
+        public bool SupportsArchiveContainers { get; set; } = true;
 
         public string GetDisplayPath(string relativePath) => $"{DisplayRoot}/{relativePath}";
 

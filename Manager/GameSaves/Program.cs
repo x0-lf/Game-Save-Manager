@@ -70,7 +70,7 @@ namespace GameSaves
                 case "import":
                     if (args.Length < 2)
                     {
-                        Console.WriteLine("Usage: import <savepaths.json> [--approve]");
+                        UsageError("Usage: import <savepaths.json> [--approve]");
                         return;
                     }
 
@@ -81,7 +81,7 @@ namespace GameSaves
                 case "approve-mapping":
                     if (args.Length < 2 || !long.TryParse(args[1], out long mappingId))
                     {
-                        Console.WriteLine("Usage: approve-mapping <id> [notes]");
+                        UsageError("Usage: approve-mapping <id> [notes]");
                         return;
                     }
 
@@ -92,7 +92,7 @@ namespace GameSaves
                 case "approve-app":
                     if (args.Length < 2)
                     {
-                        Console.WriteLine("Usage: approve-app <steamAppId> [notes]");
+                        UsageError("Usage: approve-app <steamAppId> [notes]");
                         return;
                     }
 
@@ -120,7 +120,7 @@ namespace GameSaves
                 case "backup-dry-run":
                     if (args.Length < 2)
                     {
-                        Console.WriteLine("Usage: backup-dry-run <destination>");
+                        UsageError("Usage: backup-dry-run <destination>");
                         return;
                     }
 
@@ -130,7 +130,7 @@ namespace GameSaves
                 case "backup":
                     if (args.Length < 2)
                     {
-                        Console.WriteLine("Usage: backup <destination>");
+                        UsageError("Usage: backup <destination>");
                         return;
                     }
 
@@ -171,6 +171,7 @@ namespace GameSaves
                     Console.WriteLine($"Unknown command: {command}");
                     Console.WriteLine();
                     PrintHelp(dbPath);
+                    Environment.ExitCode = ExitCodeUsage;
                     break;
             }
         }
@@ -207,9 +208,42 @@ namespace GameSaves
         {
             var database = new SavePathDatabase(dbPath);
             database.Initialize();
-            database.ApproveMappingsForApp(steamAppId, notes);
-            Console.WriteLine($"All mappings for AppID {steamAppId} have been marked Approved and enabled.");
+
+            int approved = database.ApproveMappingsForApp(steamAppId, notes);
+
+            if (approved == 0)
+            {
+                Console.WriteLine($"No mappings were approved for AppID {steamAppId}.");
+                Console.WriteLine("Either the game has no mappings, they are already approved, or every one of them was rejected during review.");
+                return;
+            }
+
+            Console.WriteLine($"{approved} mapping(s) for AppID {steamAppId} are now Approved and enabled.");
+            Console.WriteLine("Mappings that a reviewer rejected were left untouched.");
         }
+
+        // A CLI that returns success after doing nothing cannot be scripted against.
+        private static void UsageError(params string[] lines)
+        {
+            foreach (string line in lines)
+                Console.WriteLine(line);
+
+            Environment.ExitCode = ExitCodeUsage;
+        }
+
+        private static bool TryReadCountArgument(string value, string name, out int parsed)
+        {
+            if (int.TryParse(value, out parsed) && parsed >= 0)
+                return true;
+
+            // Falling back to the default here would silently run with a limit the
+            // caller never asked for: int.TryParse leaves 0 behind on failure, and
+            // 0 means "no limit".
+            UsageError($"Invalid {name} \"{value}\": expected a whole number of 0 or more.");
+            return false;
+        }
+
+        private const int ExitCodeUsage = 2;
 
         private static void MigrateLegacyMappings(string dbPath, bool trustLegacy)
         {
@@ -237,6 +271,7 @@ namespace GameSaves
                 Console.WriteLine();
                 Console.WriteLine("Example:");
                 Console.WriteLine("  dotnet run -- steam-catalog-export-next External/SteamCatalog/batch-001.txt 1000");
+                Environment.ExitCode = ExitCodeUsage;
                 return;
             }
 
@@ -244,8 +279,8 @@ namespace GameSaves
 
             int limit = 1000;
 
-            if (args.Length >= 3)
-                int.TryParse(args[2], out limit);
+            if (args.Length >= 3 && !TryReadCountArgument(args[2], "limit", out limit))
+                return;
 
             SteamCatalogMissingExportResult result =
                 await SteamCatalogService.ExportNextQueuedGameAppIdsAsync(
@@ -274,6 +309,7 @@ namespace GameSaves
                 Console.WriteLine("Examples:");
                 Console.WriteLine("  dotnet run -- steam-catalog-fetch External/SteamCatalog games 1000");
                 Console.WriteLine("  dotnet run -- steam-catalog-fetch External/SteamCatalog games 0 YOUR_STEAM_WEB_API_KEY");
+                Environment.ExitCode = ExitCodeUsage;
                 return;
             }
 
@@ -282,8 +318,8 @@ namespace GameSaves
 
             int maxApps = 0;
 
-            if (args.Length >= 4)
-                int.TryParse(args[3], out maxApps);
+            if (args.Length >= 4 && !TryReadCountArgument(args[3], "max apps", out maxApps))
+                return;
 
             string? apiKey = args.Length >= 5
                 ? args[4]
@@ -352,6 +388,7 @@ namespace GameSaves
                 Console.WriteLine("Examples:");
                 Console.WriteLine("  dotnet run -- steam-catalog-missing External/SteamCatalog/missing-appids.txt 1000 false");
                 Console.WriteLine("  dotnet run -- steam-catalog-missing External/SteamCatalog/missing-new-only.txt 1000 true");
+                Environment.ExitCode = ExitCodeUsage;
                 return;
             }
 
@@ -359,13 +396,16 @@ namespace GameSaves
 
             int limit = 1000;
 
-            if (args.Length >= 3)
-                int.TryParse(args[2], out limit);
+            if (args.Length >= 3 && !TryReadCountArgument(args[2], "limit", out limit))
+                return;
 
             bool excludeAlreadyPcgwLinked = false;
 
-            if (args.Length >= 4)
-                bool.TryParse(args[3], out excludeAlreadyPcgwLinked);
+            if (args.Length >= 4 && !bool.TryParse(args[3], out excludeAlreadyPcgwLinked))
+            {
+                UsageError($"Invalid exclude-pcgw-linked value \"{args[3]}\": expected true or false.");
+                return;
+            }
 
             SteamCatalogMissingExportResult result =
                 await SteamCatalogService.ExportMissingGameAppIdsAsync(
@@ -395,6 +435,7 @@ namespace GameSaves
                 Console.WriteLine();
                 Console.WriteLine("Example with file:");
                 Console.WriteLine("  dotnet run -- pcgw-harvest-appids External/Titles \"SaveGameManager/0.1 (https://github.com/mynickname; myemail@email.com) .NET/10\" appids.txt");
+                Environment.ExitCode = ExitCodeUsage;
                 return;
             }
 
@@ -438,6 +479,7 @@ namespace GameSaves
                 Console.WriteLine();
                 Console.WriteLine("Example:");
                 Console.WriteLine("  dotnet run -- pcgw-harvest-installed External/Titles \"SaveGameManager/0.1 (https://github.com/mynickname; myemail@email.com) .NET/10\" 10");
+                Environment.ExitCode = ExitCodeUsage;
                 return;
             }
 

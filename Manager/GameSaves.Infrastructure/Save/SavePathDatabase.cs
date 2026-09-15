@@ -1,5 +1,6 @@
 using GameSaves.Core.Save;
 using Microsoft.Data.Sqlite;
+using System.Collections.Concurrent;
 using System.Text.Json;
 
 namespace GameSaves.Infrastructure.Save
@@ -116,6 +117,21 @@ namespace GameSaves.Infrastructure.Save
                     source_license = excluded.source_license,
                     notes = excluded.notes,
                     priority = excluded.priority,
+                    -- An import that explicitly approves must reach rows that already
+                    -- exist, or the caller is told the mapping was approved when it
+                    -- was not. Otherwise the previous review stands, except when the
+                    -- import changes how the path is used: that invalidates the
+                    -- review it was granted under, so it returns to Pending.
+                    review_status = CASE
+                        WHEN $force_review = 1 THEN excluded.review_status
+                        WHEN save_path_mappings.path_kind <> excluded.path_kind THEN 'Pending'
+                        ELSE save_path_mappings.review_status
+                    END,
+                    enabled = CASE
+                        WHEN $force_review = 1 THEN excluded.enabled
+                        WHEN save_path_mappings.path_kind <> excluded.path_kind THEN 0
+                        ELSE save_path_mappings.enabled
+                    END,
                     updated_utc = CURRENT_TIMESTAMP;
                 """;
 
@@ -130,7 +146,11 @@ namespace GameSaves.Infrastructure.Save
                 command.Parameters.AddWithValue("$notes", ToDbValue(item.Notes));
                 command.Parameters.AddWithValue("$priority", item.Priority);
                 command.Parameters.AddWithValue("$enabled", enabled ? 1 : 0);
-                command.Parameters.AddWithValue("$review_status", string.IsNullOrWhiteSpace(reviewStatus) ? "Pending" : reviewStatus);
+                string effectiveReviewStatus = string.IsNullOrWhiteSpace(reviewStatus) ? "Pending" : reviewStatus;
+                command.Parameters.AddWithValue("$review_status", effectiveReviewStatus);
+                command.Parameters.AddWithValue(
+                    "$force_review",
+                    effectiveReviewStatus.Equals("Pending", StringComparison.OrdinalIgnoreCase) ? 0 : 1);
 
                 command.ExecuteNonQuery();
             }
@@ -247,7 +267,17 @@ namespace GameSaves.Infrastructure.Save
             command.ExecuteNonQuery();
         }
 
-        public void ApproveMappingsForApp(string steamAppId, string? notes = null)
+        /// <summary>
+        /// Approves the mappings of one game. A mapping a reviewer explicitly rejected
+        /// is left alone unless <paramref name="includeRejected"/> says otherwise:
+        /// bulk approval must not quietly undo an individual decision. Returns the
+        /// number of mappings actually approved, so a caller can report the truth.
+        /// </summary>
+        public int ApproveMappingsForApp(
+            string steamAppId,
+            string? notes = null,
+            string? platform = null,
+            bool includeRejected = false)
         {
             using var connection = new SqliteConnection(_connectionString);
             connection.Open();
@@ -261,12 +291,17 @@ namespace GameSaves.Infrastructure.Save
                 reviewed_utc = CURRENT_TIMESTAMP,
                 review_notes = COALESCE($notes, review_notes),
                 updated_utc = CURRENT_TIMESTAMP
-            WHERE steam_app_id = $steam_app_id;
+            WHERE steam_app_id = $steam_app_id
+              AND ($platform IS NULL OR platform = $platform)
+              AND ($include_rejected = 1 OR COALESCE(review_status, '') <> 'Rejected');
             """;
 
             command.Parameters.AddWithValue("$steam_app_id", steamAppId);
             command.Parameters.AddWithValue("$notes", ToDbValue(notes));
-            command.ExecuteNonQuery();
+            command.Parameters.AddWithValue("$platform", ToDbValue(platform));
+            command.Parameters.AddWithValue("$include_rejected", includeRejected ? 1 : 0);
+
+            return command.ExecuteNonQuery();
         }
 
         public int MigrateLegacyMappings(bool trustLegacyEnabledAsApproved = false)
@@ -488,7 +523,26 @@ namespace GameSaves.Infrastructure.Save
             return DateTimeOffset.TryParse(text, out DateTimeOffset dto) ? dto : null;
         }
 
+        // The review columns are added once per database file. This used to run on
+        // every call that opened a connection - three PRAGMA queries, a DDL statement
+        // and a full-table UPDATE that takes a write lock - which meant a read of one
+        // game's mappings wrote to the database, once per installed game.
+        private static readonly ConcurrentDictionary<string, bool> MigratedDatabases =
+            new(StringComparer.OrdinalIgnoreCase);
+
         public static void EnsureReviewColumns(SqliteConnection connection)
+        {
+            string databaseKey = connection.DataSource ?? string.Empty;
+
+            if (MigratedDatabases.ContainsKey(databaseKey))
+                return;
+
+            EnsureReviewColumnsCore(connection);
+
+            MigratedDatabases[databaseKey] = true;
+        }
+
+        private static void EnsureReviewColumnsCore(SqliteConnection connection)
         {
             EnsureColumn(connection, "save_path_mappings", "review_status", "TEXT NOT NULL DEFAULT 'Pending'");
             EnsureColumn(connection, "save_path_mappings", "reviewed_utc", "TEXT NULL");

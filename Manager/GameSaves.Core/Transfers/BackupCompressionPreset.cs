@@ -6,7 +6,11 @@ namespace GameSaves.Core.Transfers
     /// </summary>
     public enum BackupCompressionPreset
     {
-        /// <summary>No compression (Store). Fastest execution, zero CPU overhead.</summary>
+        /// <summary>
+        /// Fastest execution, least CPU. ZIP stores entries uncompressed; 7-Zip has
+        /// no stored mode through the managed writer and uses its lowest LZMA level,
+        /// so a .7z written with this preset is still compressed.
+        /// </summary>
         Store = 0,
 
         /// <summary>Fast compression. Balanced speed with moderate space savings.</summary>

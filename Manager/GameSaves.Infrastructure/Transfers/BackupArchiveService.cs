@@ -113,6 +113,16 @@ namespace GameSaves.Infrastructure.Transfers
 
                 var rootDir = new DirectoryInfo(run.BackupRootPath);
 
+                // Following a junction or symlink planted in the run folder would pull
+                // files from outside the run into the archive, and a directory cycle
+                // would never terminate. The folder-upload path already skips these.
+                var enumeration = new EnumerationOptions
+                {
+                    RecurseSubdirectories = true,
+                    IgnoreInaccessible = true,
+                    AttributesToSkip = FileAttributes.ReparsePoint
+                };
+
                 if (format == BackupContainerFormat.SevenZip)
                 {
                     (CompressionType compressionType, int level) = preset switch
@@ -133,7 +143,7 @@ namespace GameSaves.Infrastructure.Transfers
                     using (var fs = new FileStream(tempArchivePath, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None))
                     using (var writer = new SevenZipWriter(fs, options))
                     {
-                        foreach (FileInfo file in rootDir.EnumerateFiles("*", SearchOption.AllDirectories))
+                        foreach (FileInfo file in rootDir.EnumerateFiles("*", enumeration))
                         {
                             cancellationToken.ThrowIfCancellationRequested();
 
@@ -145,17 +155,26 @@ namespace GameSaves.Infrastructure.Transfers
                 }
                 else
                 {
+                    CompressionLevel zipLevel = preset switch
+                    {
+                        BackupCompressionPreset.Store => CompressionLevel.NoCompression,
+                        BackupCompressionPreset.Fast => CompressionLevel.Fastest,
+                        BackupCompressionPreset.Optimal => CompressionLevel.Optimal,
+                        BackupCompressionPreset.Ultra => CompressionLevel.SmallestSize,
+                        _ => CompressionLevel.Optimal
+                    };
+
                     using (var fs = new FileStream(tempArchivePath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
                     using (var archive = new ZipArchive(fs, ZipArchiveMode.Create, leaveOpen: false))
                     {
                         byte[] buffer = new byte[81920];
 
-                        foreach (FileInfo file in rootDir.EnumerateFiles("*", SearchOption.AllDirectories))
+                        foreach (FileInfo file in rootDir.EnumerateFiles("*", enumeration))
                         {
                             cancellationToken.ThrowIfCancellationRequested();
 
                             string relativePath = Path.GetRelativePath(run.BackupRootPath, file.FullName).Replace('\\', '/');
-                            ZipArchiveEntry entry = archive.CreateEntry(relativePath, CompressionLevel.Optimal);
+                            ZipArchiveEntry entry = archive.CreateEntry(relativePath, zipLevel);
 
                             using FileStream sourceStream = file.OpenRead();
                             using Stream entryStream = entry.Open();
@@ -234,8 +253,15 @@ namespace GameSaves.Infrastructure.Transfers
                         $"Unsupported archive format: {format}");
                 }
 
-                // The archive must be a backup run: manifest.json at its root.
-                if (!_metadataReader.TryReadManifest(archivePath, out TransferBackupManifest? manifest, out string? manifestError))
+                // The archive must be a backup run: manifest.json at its root. The
+                // description has to come from the same file as the payload, so a
+                // manifest sitting beside the archive does not count here.
+                if (!_metadataReader.TryReadManifest(
+                        archivePath,
+                        out TransferBackupManifest? manifest,
+                        out string? manifestError,
+                        allowSidecar: false,
+                        cancellationToken))
                 {
                     return new BackupArchiveImportResult(
                         false, null, 0,
@@ -280,18 +306,21 @@ namespace GameSaves.Infrastructure.Transfers
                 {
                     using var archiveStream = File.OpenRead(archivePath);
                     using IArchive archive = SevenZipArchive.OpenArchive(archiveStream);
-                    int entryCount = 0;
+
+                    // Judge the whole archive before writing any of it. Counting inside
+                    // the extraction loop let an over-sized archive land MaxFileEntries
+                    // files on disk before the bound fired, and the ZIP path already
+                    // checks its count up front.
+                    if (!TryValidateDeclaredBounds(
+                            archive.Entries.Select(e => (e.IsDirectory, e.Size)),
+                            cancellationToken,
+                            out string? boundsError))
+                    {
+                        return new BackupArchiveImportResult(false, null, 0, boundsError!);
+                    }
 
                     foreach (IArchiveEntry entry in archive.Entries)
                     {
-                        entryCount++;
-                        if (entryCount > _safetyBounds.MaxFileEntries)
-                        {
-                            return new BackupArchiveImportResult(
-                                false, null, 0,
-                                $"Archive exceeds maximum allowed entries limit ({_safetyBounds.MaxFileEntries:N0}).");
-                        }
-
                         cancellationToken.ThrowIfCancellationRequested();
 
                         if (entry.Key is null)
@@ -348,11 +377,15 @@ namespace GameSaves.Infrastructure.Transfers
                 else
                 {
                     using ZipArchive archive = ZipFile.OpenRead(archivePath);
-                    if (archive.Entries.Count > _safetyBounds.MaxFileEntries)
+
+                    if (!TryValidateDeclaredBounds(
+                            archive.Entries.Select(e => (
+                                e.FullName.EndsWith('/') || e.FullName.EndsWith('\\'),
+                                e.Length)),
+                            cancellationToken,
+                            out string? boundsError))
                     {
-                        return new BackupArchiveImportResult(
-                            false, null, 0,
-                            $"Archive exceeds maximum allowed entries limit ({_safetyBounds.MaxFileEntries:N0}).");
+                        return new BackupArchiveImportResult(false, null, 0, boundsError!);
                     }
 
                     foreach (ZipArchiveEntry entry in archive.Entries)
@@ -463,6 +496,57 @@ namespace GameSaves.Infrastructure.Transfers
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// Checks the entry count and the sizes the archive declares for itself before
+        /// a single byte is written. The per-chunk accounting during extraction still
+        /// catches an archive that lies about its sizes; this stops the honest bomb
+        /// from ever touching the disk, and stops a huge entry list from being written
+        /// out one file at a time before the count is judged.
+        /// </summary>
+        private bool TryValidateDeclaredBounds(
+            IEnumerable<(bool IsDirectory, long Size)> entries,
+            CancellationToken cancellationToken,
+            out string? error)
+        {
+            error = null;
+
+            int count = 0;
+            long declaredTotal = 0;
+
+            foreach ((bool isDirectory, long size) in entries)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                count++;
+                if (count > _safetyBounds.MaxFileEntries)
+                {
+                    error = $"Archive exceeds maximum allowed entries limit ({_safetyBounds.MaxFileEntries:N0}).";
+                    return false;
+                }
+
+                if (isDirectory || size <= 0)
+                    continue;
+
+                // Same wording as the streaming guard below: which of the two caught
+                // it is an implementation detail the user should not have to read.
+                if (size > _safetyBounds.MaxSingleFileBytes)
+                {
+                    error = $"An archive entry exceeds maximum allowed single file size ({_safetyBounds.MaxSingleFileBytes:N0} bytes).";
+                    return false;
+                }
+
+                declaredTotal += size;
+
+                if (declaredTotal > _safetyBounds.MaxTotalUncompressedBytes)
+                {
+                    error = $"Archive uncompressed payload exceeds maximum allowed size ({_safetyBounds.MaxTotalUncompressedBytes:N0} bytes).";
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private static bool ValidateArchiveEntryPath(

@@ -17,7 +17,10 @@ public sealed class ZipImportHardeningTests
         Directory.CreateDirectory(basePath);
 
         string zipPath = temp.GetPath("malicious_slip.zip");
-        string escapedTarget = temp.GetPath("escaped_file.txt");
+
+        // Staging lives at <temp>/app/TransferBackups/.staging_<guid>, so "../../"
+        // lands in <temp>/app. Asserting anywhere else proves nothing about the escape.
+        string escapedTarget = temp.GetPath("app", "escaped_file.txt");
 
         CreateMaliciousZip(zipPath, new Dictionary<string, string>
         {

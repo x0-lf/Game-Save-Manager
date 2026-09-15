@@ -80,10 +80,36 @@ namespace GameSaves.Infrastructure.Sync
             IReadOnlyList<TransferBackupRunInfo> localRuns =
                 await _backupHistoryService.GetRunsAsync(cancellationToken);
 
-            Dictionary<string, TransferBackupRunInfo> local = localRuns
-                .ToDictionary(
-                    run => GetLocalRunName(run),
-                    StringComparer.OrdinalIgnoreCase);
+            // A folder run and a same-stem container both resolve to one run name.
+            // ToDictionary threw on that, which broke every preview until the user
+            // found and removed one of them by hand with no idea which.
+            var local = new Dictionary<string, TransferBackupRunInfo>(
+                StringComparer.OrdinalIgnoreCase);
+
+            foreach (TransferBackupRunInfo run in localRuns)
+            {
+                string runName = GetLocalRunName(run);
+
+                if (!local.TryGetValue(runName, out TransferBackupRunInfo? existing))
+                {
+                    local[runName] = run;
+                    continue;
+                }
+
+                // The folder form wins: it restores directly, while a container has
+                // to be imported first.
+                bool keepExisting = existing.ContainerFormat == BackupContainerFormat.Folder;
+                TransferBackupRunInfo hidden = keepExisting ? run : existing;
+
+                local[runName] = keepExisting ? existing : run;
+
+                warnings.Add(new TransferPreviewWarning(
+                    "LocalRunNameCollision",
+                    $"Two local backups share the run name \"{runName}\", so only one of them " +
+                    $"can be synced under that name. This one is left out of the plan and is " +
+                    $"neither uploaded nor changed: {hidden.BackupRootPath}",
+                    TransferWarningSeverity.Warning));
+            }
 
             Dictionary<string, TransferBackupManifest> remoteRuns =
                 await ReadRemoteRunsAsync(warnings, cancellationToken);
@@ -94,6 +120,18 @@ namespace GameSaves.Infrastructure.Sync
                     "RemoteRootMissing",
                     "The sync folder does not exist yet. It will be created when the sync runs.",
                     TransferWarningSeverity.Info));
+            }
+
+            // A backend that cannot list containers would accept the upload and then
+            // never show the run again, so say so instead of quietly losing it.
+            if (options.ArchiveSync && !_remote.SupportsArchiveContainers)
+            {
+                warnings.Add(new TransferPreviewWarning(
+                    "ArchiveSyncUnsupported",
+                    "This sync location cannot list compressed containers, so runs are copied " +
+                    "as folders instead. Nothing is lost: folder runs upload, download and " +
+                    "verify exactly as before.",
+                    TransferWarningSeverity.Warning));
             }
 
             var names = local.Keys
@@ -120,7 +158,7 @@ namespace GameSaves.Infrastructure.Sync
 
                     TransferBackupRunInfo nonNullLocal = localRun!;
                     string remotePathName = name;
-                    if (options.ArchiveSync || nonNullLocal.ContainerFormat != BackupContainerFormat.Folder)
+                    if (SendsAsContainer(options, nonNullLocal.ContainerFormat))
                     {
                         string ext = nonNullLocal.ContainerFormat switch
                         {
@@ -264,8 +302,7 @@ namespace GameSaves.Infrastructure.Sync
                     if (manifestText is null)
                         continue;
 
-                    TransferBackupManifest? manifest =
-                        JsonSerializer.Deserialize<TransferBackupManifest>(manifestText);
+                    TransferBackupManifest? manifest = ParseRemoteManifest(manifestText);
 
                     // A remote manifest is untrusted JSON. Deserialization does
                     // not enforce the record's non-nullable members, so an
@@ -331,7 +368,7 @@ namespace GameSaves.Infrastructure.Sync
 
                     if (manifestText is not null)
                     {
-                        manifest = JsonSerializer.Deserialize<TransferBackupManifest>(manifestText);
+                        manifest = ParseRemoteManifest(manifestText);
                     }
 
                     // If no sidecar text, try local/direct header inspection via metadata reader if available
@@ -346,7 +383,19 @@ namespace GameSaves.Infrastructure.Sync
 
                     if (manifest is null)
                     {
-                        // An archive container without sidecar or unreadable header is not offered as a valid run
+                        // A container whose sidecar manifest never arrived has no
+                        // identity, so it cannot be offered as a run. Staying silent
+                        // about it strands the run forever: the create-only check sees
+                        // the payload and skips every retry, while nothing tells the
+                        // operator which file to remove. Folder runs already warn here.
+                        warnings.Add(new TransferPreviewWarning(
+                            "RemoteContainerIncomplete",
+                            $"Remote archive container \"{archiveName}\" has no manifest beside it, " +
+                            "so it is not treated as a backup run. This usually means an upload was " +
+                            "interrupted between the container and its manifest. Nothing is deleted " +
+                            "automatically: delete that file in the remote, then run the check again " +
+                            "to upload the run cleanly.",
+                            TransferWarningSeverity.Warning));
                         continue;
                     }
 
@@ -533,7 +582,19 @@ namespace GameSaves.Infrastructure.Sync
                         "The source run folder or its manifest no longer exists.");
                 }
 
-                bool uploadAsContainer = options.ArchiveSync || isLocalFile;
+                // A run that is already a container cannot be sent as a folder, so a
+                // backend without container support has to refuse it outright rather
+                // than fall through to the folder path and fail obscurely.
+                if (isLocalFile && !_remote.SupportsArchiveContainers)
+                {
+                    return new SyncItemResult(
+                        item, 0, SyncItemStatus.Failed,
+                        "This backup run is a compressed container and this sync location " +
+                        "cannot store containers. Import the run locally first, then sync it.");
+                }
+
+                bool uploadAsContainer =
+                    isLocalFile || (options.ArchiveSync && _remote.SupportsArchiveContainers);
 
                 if (uploadAsContainer)
                 {
@@ -559,6 +620,12 @@ namespace GameSaves.Infrastructure.Sync
                     }
 
                     string? tempExportDir = null;
+
+                    // The packaging step writes a full copy of the run into the backup
+                    // base, so its cleanup has to cover every exit from here on, not
+                    // just the upload itself.
+                    try
+                    {
                     string archiveFileToUpload;
                     string manifestJson;
 
@@ -610,8 +677,6 @@ namespace GameSaves.Infrastructure.Sync
                             new JsonSerializerOptions { WriteIndented = true });
                     }
 
-                    try
-                    {
                         // 1. Upload container payload
                         long fileBytes = await _remote.UploadFileAsync(
                             archiveFileToUpload,
@@ -622,7 +687,9 @@ namespace GameSaves.Infrastructure.Sync
                         progressState.BytesDone += fileBytes;
                         ReportProgress(options, progressState, item.RunName, remoteContainerName);
 
-                        // 2. Upload sidecar manifest
+                        // 2. Upload sidecar manifest. Until this lands the container
+                        // carries no identity, so preview reports it as an incomplete
+                        // upload rather than passing over it in silence.
                         await _remote.CreateTextFileIfMissingAsync(
                             remoteSidecarName,
                             manifestJson,
@@ -864,8 +931,7 @@ namespace GameSaves.Infrastructure.Sync
                         TransferBackupLocations.ManifestFileName);
 
                     TransferBackupManifest? manifest =
-                        JsonSerializer.Deserialize<TransferBackupManifest>(
-                            File.ReadAllText(manifestPath));
+                        ParseRemoteManifest(File.ReadAllText(manifestPath));
 
                     if (manifest is null ||
                         !BackupManifestPathRewriter.TryRewrite(manifest, localTarget, out TransferBackupManifest rewritten))
@@ -936,6 +1002,38 @@ namespace GameSaves.Infrastructure.Sync
                        Path.GetDirectoryName(Path.GetFullPath(filePath)),
                        Path.GetFullPath(runRoot).TrimEnd(Path.DirectorySeparatorChar),
                        StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// A backend that cannot enumerate containers must never be sent one. The
+        /// payload would upload successfully and then be invisible to every later
+        /// preview, so the run could never be downloaded back and every later sync
+        /// would upload it again.
+        /// </summary>
+        private bool SendsAsContainer(SyncOptions options, BackupContainerFormat localFormat) =>
+            _remote.SupportsArchiveContainers &&
+            (options.ArchiveSync || localFormat != BackupContainerFormat.Folder);
+
+        /// <summary>
+        /// Every manifest reaching the engine comes from a remote listing or a file
+        /// that was just downloaded, so it is untrusted text. The archive readers have
+        /// bounded their manifest reads since OBS-004; these three call sites were
+        /// parsing whatever arrived. An oversized document is rejected before the
+        /// parser allocates for it, and the failure travels as an exception so it
+        /// surfaces through the same "unreadable manifest" warning as any other.
+        /// </summary>
+        private static TransferBackupManifest? ParseRemoteManifest(string? json)
+        {
+            if (string.IsNullOrWhiteSpace(json))
+                return null;
+
+            if (json.Length > BackupArchiveSafetyBounds.DefaultMaxManifestBytes)
+            {
+                throw new InvalidDataException(
+                    "The manifest exceeds the maximum size a backup manifest is allowed to have.");
+            }
+
+            return JsonSerializer.Deserialize<TransferBackupManifest>(json);
         }
 
         private static string GetLocalRunName(TransferBackupRunInfo run)

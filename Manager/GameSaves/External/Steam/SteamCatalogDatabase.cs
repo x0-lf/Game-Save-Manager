@@ -354,6 +354,69 @@ namespace GameSaves.External.Steam
             return command.ExecuteNonQuery();
         }
 
+        /// <summary>
+        /// Reads the next queued AppIDs without changing their queue status, so a
+        /// caller can persist them before committing to the fact that they were
+        /// handed out. Marking first and writing afterwards loses the AppIDs for good
+        /// when the write fails: they are never queued again and never reach a file.
+        /// </summary>
+        public List<string> PeekNextQueuedAppIdsForHarvest(int limit)
+        {
+            var appIds = new List<string>();
+
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+
+            using var selectCommand = connection.CreateCommand();
+            selectCommand.CommandText = """"
+            SELECT steam_app_id
+            FROM steam_catalog_harvest_queue
+            WHERE queue_status = 'Pending'
+            ORDER BY CAST(steam_app_id AS INTEGER)
+            LIMIT $limit;
+            """";
+
+            selectCommand.Parameters.AddWithValue("$limit", limit <= 0 ? 1000 : limit);
+
+            using var reader = selectCommand.ExecuteReader();
+
+            while (reader.Read())
+                appIds.Add(reader.GetString(0));
+
+            return appIds;
+        }
+
+        /// <summary>Marks AppIDs handed out by <see cref="PeekNextQueuedAppIdsForHarvest"/> as exported.</summary>
+        public int MarkQueuedAppIdsExported(IReadOnlyCollection<string> appIds)
+        {
+            if (appIds.Count == 0)
+                return 0;
+
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+
+            using var transaction = connection.BeginTransaction();
+
+            foreach (string appId in appIds)
+            {
+                using var updateCommand = connection.CreateCommand();
+                updateCommand.Transaction = transaction;
+                updateCommand.CommandText = """"
+                UPDATE steam_catalog_harvest_queue
+                SET queue_status = 'Exported',
+                    exported_utc = CURRENT_TIMESTAMP
+                WHERE steam_app_id = $steam_app_id;
+                """";
+
+                updateCommand.Parameters.AddWithValue("$steam_app_id", appId);
+                updateCommand.ExecuteNonQuery();
+            }
+
+            transaction.Commit();
+
+            return appIds.Count;
+        }
+
         public List<string> ExportNextQueuedAppIdsForHarvest(int limit)
         {
             var appIds = new List<string>();

@@ -71,7 +71,9 @@ namespace GameSaves.Infrastructure.Transfers
         public bool TryReadManifest(
             string path,
             out TransferBackupManifest? manifest,
-            out string? error)
+            out string? error,
+            bool allowSidecar = true,
+            CancellationToken cancellationToken = default)
         {
             manifest = null;
             error = null;
@@ -137,10 +139,12 @@ namespace GameSaves.Infrastructure.Transfers
                             return false;
                         }
 
+                        // Root only. Matching on the file name alone accepted a manifest
+                        // at any depth on a first-match-wins basis, so an archive could
+                        // carry one description at the root and have a different one chosen.
                         ZipArchiveEntry? entry = archive.GetEntry(TransferBackupLocations.ManifestFileName)
                             ?? archive.Entries.FirstOrDefault(e =>
-                                e.FullName.Equals(TransferBackupLocations.ManifestFileName, StringComparison.OrdinalIgnoreCase) ||
-                                e.Name.Equals(TransferBackupLocations.ManifestFileName, StringComparison.OrdinalIgnoreCase));
+                                e.FullName.Equals(TransferBackupLocations.ManifestFileName, StringComparison.OrdinalIgnoreCase));
 
                         if (entry is null)
                         {
@@ -190,9 +194,12 @@ namespace GameSaves.Infrastructure.Transfers
                             return false;
                         }
 
-                        // Check for adjacent/sidecar manifest descriptor if available
+                        // A sidecar is a convenience for inspecting a container without
+                        // opening it. It is not authenticated and it is not part of the
+                        // archive, so a caller that is about to trust the payload asks
+                        // for the archive's own manifest instead.
                         string sidecarManifest = path + ".manifest.json";
-                        if (File.Exists(sidecarManifest))
+                        if (allowSidecar && File.Exists(sidecarManifest))
                         {
                             var sidecarFi = new FileInfo(sidecarManifest);
                             if (sidecarFi.Length > _safetyBounds.MaxManifestBytes)
@@ -214,6 +221,8 @@ namespace GameSaves.Infrastructure.Transfers
 
                         foreach (IArchiveEntry entry in archive.Entries)
                         {
+                            cancellationToken.ThrowIfCancellationRequested();
+
                             entryCount++;
                             if (entryCount > _safetyBounds.MaxFileEntries)
                             {
@@ -224,8 +233,8 @@ namespace GameSaves.Infrastructure.Transfers
                             if (manifestEntry is null && entry.Key is not null)
                             {
                                 string key = entry.Key.Replace('\\', '/').Trim('/');
-                                if (key.Equals(TransferBackupLocations.ManifestFileName, StringComparison.OrdinalIgnoreCase) ||
-                                    Path.GetFileName(key).Equals(TransferBackupLocations.ManifestFileName, StringComparison.OrdinalIgnoreCase))
+                                // Root only, for the same reason as the ZIP path above.
+                                if (key.Equals(TransferBackupLocations.ManifestFileName, StringComparison.OrdinalIgnoreCase))
                                 {
                                     manifestEntry = entry;
                                 }
@@ -288,13 +297,14 @@ namespace GameSaves.Infrastructure.Transfers
         public bool TryBuildRunInfo(
             string path,
             out TransferBackupRunInfo? runInfo,
-            out string? error)
+            out string? error,
+            CancellationToken cancellationToken = default)
         {
             runInfo = null;
 
             BackupContainerFormat format = DetectContainerFormat(path);
 
-            if (!TryReadManifest(path, out TransferBackupManifest? manifest, out error))
+            if (!TryReadManifest(path, out TransferBackupManifest? manifest, out error, allowSidecar: true, cancellationToken))
             {
                 return false;
             }

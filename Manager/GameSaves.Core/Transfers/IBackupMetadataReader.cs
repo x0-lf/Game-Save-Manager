@@ -15,10 +15,23 @@ namespace GameSaves.Core.Transfers
         /// Attempts to read the root manifest.json from an uncompressed folder, ZIP, or 7z archive
         /// without extracting full payloads.
         /// </summary>
+        /// <param name="allowSidecar">
+        /// When true a manifest written beside a 7-Zip archive is preferred, which is how a
+        /// remote container is inspected without downloading it. Pass false where the archive
+        /// itself is the thing being trusted - during import the payload and its description
+        /// have to come from the same file, or an unauthenticated sidecar decides the identity
+        /// of a run whose contents came from somewhere else.
+        /// </param>
+        /// <param name="cancellationToken">
+        /// Reading a 7-Zip header parses the whole entry table, which is unbounded work on a
+        /// large archive and runs inside operations the user can cancel.
+        /// </param>
         bool TryReadManifest(
             string path,
             out TransferBackupManifest? manifest,
-            out string? error);
+            out string? error,
+            bool allowSidecar = true,
+            CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Probes and builds a TransferBackupRunInfo catalog entry for a folder or archive file.
@@ -26,6 +39,7 @@ namespace GameSaves.Core.Transfers
         bool TryBuildRunInfo(
             string path,
             out TransferBackupRunInfo? runInfo,
-            out string? error);
+            out string? error,
+            CancellationToken cancellationToken = default);
     }
 }

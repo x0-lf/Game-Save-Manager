@@ -238,69 +238,9 @@ namespace GameSaves.Infrastructure.Save
             var connection = new SqliteConnection(_connectionString);
             connection.Open();
 
-            EnsureReviewColumns(connection);
+            SavePathDatabase.EnsureReviewColumns(connection);
 
             return connection;
-        }
-
-        private static void EnsureReviewColumns(SqliteConnection connection)
-        {
-            EnsureColumn(connection, "save_path_mappings", "review_status", "TEXT NOT NULL DEFAULT 'Pending'");
-            EnsureColumn(connection, "save_path_mappings", "reviewed_utc", "TEXT NULL");
-            EnsureColumn(connection, "save_path_mappings", "review_notes", "TEXT NULL");
-
-            using var command = connection.CreateCommand();
-            command.CommandText = """
-            CREATE INDEX IF NOT EXISTS idx_save_path_mappings_review_status
-                ON save_path_mappings (source_name, review_status, enabled);
-            """;
-            command.ExecuteNonQuery();
-
-            using var migrateCommand = connection.CreateCommand();
-            migrateCommand.CommandText = """
-            UPDATE save_path_mappings
-            SET review_status = 'Pending'
-            WHERE review_status IS NULL;
-            """;
-            migrateCommand.ExecuteNonQuery();
-        }
-
-        private static void EnsureColumn(
-            SqliteConnection connection,
-            string tableName,
-            string columnName,
-            string columnDefinition)
-        {
-            if (ColumnExists(connection, tableName, columnName))
-                return;
-
-            using var command = connection.CreateCommand();
-            command.CommandText = $"""
-            ALTER TABLE {tableName}
-            ADD COLUMN {columnName} {columnDefinition};
-            """;
-            command.ExecuteNonQuery();
-        }
-
-        private static bool ColumnExists(
-            SqliteConnection connection,
-            string tableName,
-            string columnName)
-        {
-            using var command = connection.CreateCommand();
-            command.CommandText = $"PRAGMA table_info({tableName});";
-
-            using var reader = command.ExecuteReader();
-
-            while (reader.Read())
-            {
-                string existingColumnName = reader.GetString(1);
-
-                if (existingColumnName.Equals(columnName, StringComparison.OrdinalIgnoreCase))
-                    return true;
-            }
-
-            return false;
         }
 
         private static SavePathMapping ReadMapping(SqliteDataReader reader)

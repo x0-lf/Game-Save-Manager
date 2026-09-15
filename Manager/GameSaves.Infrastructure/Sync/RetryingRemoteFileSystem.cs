@@ -79,6 +79,8 @@ namespace GameSaves.Infrastructure.Sync
 
         public string DisplayRoot => _inner.DisplayRoot;
 
+        public bool SupportsArchiveContainers => _inner.SupportsArchiveContainers;
+
         public string GetDisplayPath(string relativePath) =>
             _inner.GetDisplayPath(relativePath);
 

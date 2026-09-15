@@ -505,6 +505,21 @@ namespace GameSaves.Infrastructure.Transfers
                     targetFile = remapped;
                 }
 
+                // The manifest can have travelled here inside an archive or a
+                // remote container, so the write target is untrusted input even
+                // when it looks absolute. The redirected modes above are already
+                // contained; this is the last gate for the original-path mode.
+                if (!IsAcceptableRestoreTarget(targetFile, out string? targetRejection))
+                {
+                    return new BackupRestoreItemResult(
+                        backupItem,
+                        targetFile,
+                        0,
+                        Restored: false,
+                        BackupRestoreItemStatus.Failed,
+                        $"The recorded target path is not a valid restore destination and was skipped for safety: {targetRejection}");
+                }
+
                 if (!File.Exists(backupFile))
                 {
                     return new BackupRestoreItemResult(
@@ -719,6 +734,71 @@ namespace GameSaves.Infrastructure.Transfers
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// A restore destination recorded in a manifest must already be a canonical,
+        /// fully qualified local path. A manifest that arrived inside an imported
+        /// archive or a downloaded container is untrusted, and Windows resolves
+        /// traversal, trailing dots and device namespaces silently, so a value that
+        /// is not already canonical can address a file the recorded path does not name.
+        /// </summary>
+        internal static bool IsAcceptableRestoreTarget(string? targetFile, out string? rejection)
+        {
+            rejection = null;
+
+            if (string.IsNullOrWhiteSpace(targetFile))
+            {
+                rejection = "the path is empty";
+                return false;
+            }
+
+            if (!Path.IsPathFullyQualified(targetFile))
+            {
+                rejection = "the path is not fully qualified";
+                return false;
+            }
+
+            // \\.\PhysicalDrive0 and \\?\ bypass normal path resolution entirely.
+            if (targetFile.StartsWith(@"\\.\", StringComparison.Ordinal) ||
+                targetFile.StartsWith(@"\\?\", StringComparison.Ordinal))
+            {
+                rejection = "the path addresses a device namespace";
+                return false;
+            }
+
+            foreach (string segment in targetFile.Split('/', '\\'))
+            {
+                if (segment is "." or "..")
+                {
+                    rejection = "the path contains a traversal segment";
+                    return false;
+                }
+            }
+
+            string canonical;
+
+            try
+            {
+                canonical = Path.GetFullPath(targetFile);
+            }
+            catch (Exception ex)
+            {
+                rejection = $"the path cannot be resolved ({ex.GetType().Name})";
+                return false;
+            }
+
+            // Windows trims trailing dots and spaces, and collapses separators, so a
+            // path that changes under resolution does not name what it appears to name.
+            if (!canonical.Equals(
+                    targetFile.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                rejection = "the path is not in canonical form";
+                return false;
+            }
+
+            return true;
         }
 
         private static string ComputeSha256(string filePath)

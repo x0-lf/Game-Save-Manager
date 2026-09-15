@@ -127,9 +127,14 @@ namespace GameSaves.External.Steam
             var database = new SteamCatalogDatabase(databasePath);
             database.Initialize();
 
-            List<string> appIds = database.ExportNextQueuedAppIdsForHarvest(limit);
+            // Write first, mark second. The other order commits "Exported" before the
+            // file exists, so a failed write loses those AppIDs permanently: they are
+            // never queued again and never reach a file.
+            List<string> appIds = database.PeekNextQueuedAppIdsForHarvest(limit);
 
             await WriteAppIdsAsync(outputPath, appIds, cancellationToken);
+
+            database.MarkQueuedAppIdsExported(appIds);
 
             return new SteamCatalogMissingExportResult(
                 appIds.Count,

@@ -30,6 +30,16 @@ namespace GameSaves.Infrastructure.Sync
         Task<IReadOnlyList<string>> ListRunFolderNamesAsync(
             CancellationToken cancellationToken = default);
 
+        /// <summary>
+        /// True when this backend can enumerate and address single-file archive
+        /// containers at the remote root. A backend that cannot do this must not be
+        /// sent containers: the payload would upload successfully and then be
+        /// invisible to every later preview, so the run could never be downloaded
+        /// back and every subsequent sync would upload it again.
+        /// The two members below are only called when this is true.
+        /// </summary>
+        bool SupportsArchiveContainers => false;
+
         /// <summary>Top-level archive container file names under the remote root (e.g. "run1.7z", "run2.zip").</summary>
         Task<IReadOnlyList<string>> ListRunArchiveNamesAsync(
             CancellationToken cancellationToken = default) =>
