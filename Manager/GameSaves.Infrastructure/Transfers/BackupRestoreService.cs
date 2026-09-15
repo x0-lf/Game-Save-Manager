@@ -798,7 +798,129 @@ namespace GameSaves.Infrastructure.Transfers
                 return false;
             }
 
+            // Refuse writing directly to a drive or filesystem root (e.g. C:\save.sav, /save.sav)
+            string? parentDir = Path.GetDirectoryName(canonical);
+            string? root = Path.GetPathRoot(canonical);
+            if (string.IsNullOrEmpty(parentDir) ||
+                parentDir.Equals(root, StringComparison.OrdinalIgnoreCase) ||
+                parentDir.Equals(root?.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
+            {
+                rejection = "the path is placed directly in a root directory";
+                return false;
+            }
+
+            // Refuse Windows system directories (Windows, System32, SysWOW64)
+            if (IsUnderSpecialFolder(canonical, Environment.SpecialFolder.Windows) ||
+                IsUnderSpecialFolder(canonical, Environment.SpecialFolder.System) ||
+                IsUnderSpecialFolder(canonical, Environment.SpecialFolder.SystemX86))
+            {
+                rejection = "the path addresses a Windows system directory";
+                return false;
+            }
+
+            // Refuse Startup and Start Menu directories
+            if (IsUnderSpecialFolder(canonical, Environment.SpecialFolder.Startup) ||
+                IsUnderSpecialFolder(canonical, Environment.SpecialFolder.CommonStartup) ||
+                IsUnderSpecialFolder(canonical, Environment.SpecialFolder.StartMenu) ||
+                IsUnderSpecialFolder(canonical, Environment.SpecialFolder.CommonStartMenu) ||
+                IsUnderSpecialFolder(canonical, Environment.SpecialFolder.Programs) ||
+                IsUnderSpecialFolder(canonical, Environment.SpecialFolder.CommonPrograms))
+            {
+                rejection = "the path addresses a Startup or Start Menu directory";
+                return false;
+            }
+
+            // Refuse sensitive Program Files locations:
+            // Direct children of Program Files, sensitive system subdirectories (Common Files, WindowsApps, etc.),
+            // or arbitrary non-gaming applications in Program Files.
+            if (IsSensitiveProgramFilesPath(canonical))
+            {
+                rejection = "the path addresses a sensitive Program Files directory";
+                return false;
+            }
+
             return true;
+        }
+
+        private static bool IsUnderSpecialFolder(string path, Environment.SpecialFolder folder)
+        {
+            string folderPath;
+            try
+            {
+                folderPath = Environment.GetFolderPath(folder);
+            }
+            catch
+            {
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(folderPath))
+                return false;
+
+            return IsChildOfDirectory(path, folderPath);
+        }
+
+        private static bool IsChildOfDirectory(string candidatePath, string parentDirectory)
+        {
+            try
+            {
+                string normalizedParent = Path.GetFullPath(parentDirectory)
+                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                    + Path.DirectorySeparatorChar;
+
+                string normalizedCandidate = Path.GetFullPath(candidatePath);
+
+                return normalizedCandidate.StartsWith(normalizedParent, StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static bool IsSensitiveProgramFilesPath(string canonical)
+        {
+            if (!IsUnderSpecialFolder(canonical, Environment.SpecialFolder.ProgramFiles) &&
+                !IsUnderSpecialFolder(canonical, Environment.SpecialFolder.ProgramFilesX86))
+            {
+                return false;
+            }
+
+            string programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+            string programFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+
+            string? parent = Path.GetDirectoryName(canonical);
+            if (string.Equals(parent, programFiles, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(parent, programFilesX86, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            string[] sensitiveSubdirs = [
+                "Common Files", "Windows Defender", "Windows Defender Advanced Threat Protection",
+                "Windows NT", "WindowsApps", "Windows Mail", "Windows Media Player",
+                "WindowsPowerShell", "Internet Explorer", "Microsoft.NET"
+            ];
+
+            foreach (string sensitive in sensitiveSubdirs)
+            {
+                if ((!string.IsNullOrWhiteSpace(programFiles) && IsChildOfDirectory(canonical, Path.Combine(programFiles, sensitive))) ||
+                    (!string.IsNullOrWhiteSpace(programFilesX86) && IsChildOfDirectory(canonical, Path.Combine(programFilesX86, sensitive))))
+                {
+                    return true;
+                }
+            }
+
+            // Legitimate game saves in Program Files are inside Steam, Epic Games, GOG, or dedicated game folders.
+            string lower = canonical.ToLowerInvariant();
+            bool isGamingPath = lower.Contains(@"\steam\") ||
+                                lower.Contains(@"\steamapps\") ||
+                                lower.Contains(@"\userdata\") ||
+                                lower.Contains(@"\gog galaxy\") ||
+                                lower.Contains(@"\epic games\") ||
+                                lower.Contains(@"\games\");
+
+            return !isGamingPath;
         }
 
         private static string ComputeSha256(string filePath)

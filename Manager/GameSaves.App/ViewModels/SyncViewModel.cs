@@ -87,6 +87,10 @@ namespace GameSaves.App.ViewModels
         [NotifyPropertyChangedFor(nameof(IsLocalFolderSelected))]
         [NotifyPropertyChangedFor(nameof(IsSftpSelected))]
         [NotifyPropertyChangedFor(nameof(IsGoogleDriveSelected))]
+        [NotifyPropertyChangedFor(nameof(SelectedProviderSupportsArchiveContainers))]
+        [NotifyPropertyChangedFor(nameof(ArchiveSyncNotice))]
+        [NotifyPropertyChangedFor(nameof(ShowArchiveSyncNotice))]
+        [NotifyPropertyChangedFor(nameof(ArchiveSyncTooltip))]
         [NotifyPropertyChangedFor(nameof(SelectedProviderDescriptor))]
         [NotifyPropertyChangedFor(nameof(RequiresInteractiveLogin))]
         [NotifyPropertyChangedFor(nameof(RequiresServerCredentials))]
@@ -641,6 +645,22 @@ namespace GameSaves.App.ViewModels
             SelectedProviderDescriptor.ConfigurationSurface ==
             SyncProviderConfigurationSurface.InteractiveOAuth;
 
+        public bool SelectedProviderSupportsArchiveContainers =>
+            SelectedProviderKind != SyncProviderKind.GoogleDrive;
+
+        public string ArchiveSyncTooltip =>
+            SelectedProviderSupportsArchiveContainers
+                ? "Transfers whole backup runs as a single compressed .7z archive container, reducing cloud API request overhead and transfer latency."
+                : "Google Drive operates on loose-file folder sync. Runs are transferred as folders and verified safely.";
+
+        public string? ArchiveSyncNotice =>
+            !SelectedProviderSupportsArchiveContainers && ArchiveSync
+                ? "Note: Google Drive operates on loose-file sync. Archive container transfer is automatically converted to folder sync."
+                : null;
+
+        public bool ShowArchiveSyncNotice =>
+            !SelectedProviderSupportsArchiveContainers && ArchiveSync;
+
         public bool IsGoogleOAuthClientConfigurationAvailable =>
             _googleDriveOAuthService.GetClientConfigurationState().IsAvailable;
 
@@ -890,7 +910,12 @@ namespace GameSaves.App.ViewModels
 
         partial void OnDownloadEnabledChanged(bool value) => InvalidatePlan();
 
-        partial void OnArchiveSyncChanged(bool value) => InvalidatePlan();
+        partial void OnArchiveSyncChanged(bool value)
+        {
+            OnPropertyChanged(nameof(ArchiveSyncNotice));
+            OnPropertyChanged(nameof(ShowArchiveSyncNotice));
+            InvalidatePlan();
+        }
 
         partial void OnIsLoadingChanged(bool value)
         {

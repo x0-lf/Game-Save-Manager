@@ -383,7 +383,14 @@
                                     <CheckBox Content="Transfer runs as compressed archive (.7z)"
                                               IsChecked="{Binding ArchiveSync}"
                                               FontSize="{DynamicResource FontSizeBody}"
-                                              ToolTip.Tip="Transfers whole backup runs as a single compressed .7z archive container, reducing cloud API request overhead and transfer latency." />
+                                              ToolTip.Tip="{Binding ArchiveSyncTooltip}" />
+
+                                    <TextBlock Text="{Binding ArchiveSyncNotice}"
+                                               IsVisible="{Binding ShowArchiveSyncNotice}"
+                                               Foreground="{DynamicResource WarningBrush}"
+                                               FontSize="{DynamicResource FontSizeCaption}"
+                                               Margin="4,2,0,0"
+                                               VerticalAlignment="Center" />
                                 </WrapPanel>
                             </StackPanel>
                         </Grid>

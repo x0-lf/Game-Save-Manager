@@ -158,6 +158,7 @@ namespace GameSaves.Infrastructure.Sync
                     }
 
                     TransferBackupRunInfo nonNullLocal = localRun!;
+                    bool localIsContainer = nonNullLocal.ContainerFormat != BackupContainerFormat.Folder;
                     string remotePathName = name;
                     if (SendsAsContainer(options, nonNullLocal.ContainerFormat))
                     {
@@ -170,6 +171,17 @@ namespace GameSaves.Infrastructure.Sync
                         remotePathName = $"{name}{ext}";
                     }
 
+                    string statusText = "Copy to the sync folder";
+                    if (localIsContainer && !_remote.SupportsArchiveContainers)
+                    {
+                        statusText = "Cannot upload: remote location does not support archive containers";
+                        warnings.Add(new TransferPreviewWarning(
+                            "LocalContainerUnsupported",
+                            $"Backup run \"{name}\" is a compressed container, but this sync location cannot store containers. " +
+                            "It cannot be uploaded to this location. Import the run locally first to sync it as a folder.",
+                            TransferWarningSeverity.Warning));
+                    }
+
                     items.Add(new SyncItem(
                         RunName: name,
                         Action: SyncItemAction.UploadToRemote,
@@ -180,7 +192,7 @@ namespace GameSaves.Infrastructure.Sync
                         GameName: localRun.Manifest.Game,
                         FileCount: localRun.Manifest.FileCount,
                         TotalBytes: localRun.Manifest.TotalBytes,
-                        StatusText: "Copy to the sync folder"));
+                        StatusText: statusText));
                 }
                 else if (!hasLocal && hasRemote)
                 {
@@ -831,6 +843,13 @@ namespace GameSaves.Infrastructure.Sync
 
                 if (isContainer)
                 {
+                    if (!_remote.SupportsArchiveContainers)
+                    {
+                        return new SyncItemResult(
+                            item, 0, SyncItemStatus.Failed,
+                            "This remote run is an archive container, but this sync location does not support container downloads. Download or copy the container file directly.");
+                    }
+
                     remoteArchiveName ??= $"{item.RunName}.7z";
 
                     if (options.DryRun)

@@ -268,6 +268,50 @@ public sealed class ManifestPathContainmentTests
         Assert.Null(rejection);
     }
 
+    [Theory]
+    [InlineData(@"C:\save.sav")]
+    [InlineData(@"C:\Windows\win.ini")]
+    [InlineData(@"C:\Windows\System32\cmd.exe")]
+    [InlineData(@"C:\Program Files\evil.dll")]
+    [InlineData(@"C:\Program Files\Common Files\payload.dll")]
+    [InlineData(@"C:\Program Files (x86)\Windows Defender\trojan.dll")]
+    public void IsAcceptableRestoreTarget_RejectsSensitiveOrRootDestinations(string target)
+    {
+        Assert.False(BackupRestoreService.IsAcceptableRestoreTarget(target, out string? rejection));
+        Assert.False(string.IsNullOrWhiteSpace(rejection));
+    }
+
+    [Fact]
+    public void IsAcceptableRestoreTarget_RejectsStartupFolderDestinations()
+    {
+        string startup = Environment.GetFolderPath(Environment.SpecialFolder.Startup);
+        if (!string.IsNullOrWhiteSpace(startup))
+        {
+            string target = Path.Combine(startup, "payload.bat");
+            Assert.False(BackupRestoreService.IsAcceptableRestoreTarget(target, out string? rejection));
+            Assert.Contains("Startup", rejection);
+        }
+
+        string commonStartup = Environment.GetFolderPath(Environment.SpecialFolder.CommonStartup);
+        if (!string.IsNullOrWhiteSpace(commonStartup))
+        {
+            string target = Path.Combine(commonStartup, "payload.bat");
+            Assert.False(BackupRestoreService.IsAcceptableRestoreTarget(target, out string? rejection));
+            Assert.Contains("Startup", rejection);
+        }
+    }
+
+    [Theory]
+    [InlineData(@"C:\Program Files (x86)\Steam\steamapps\common\Half-Life\save.dat")]
+    [InlineData(@"C:\Program Files (x86)\Steam\userdata\12345\remote\save.dat")]
+    [InlineData(@"C:\Program Files\GOG Galaxy\Games\Witcher\saves\slot1.sav")]
+    [InlineData(@"C:\Program Files\Epic Games\GameTitle\saves\game.sav")]
+    public void IsAcceptableRestoreTarget_AcceptsGamingPathsUnderProgramFiles(string target)
+    {
+        Assert.True(BackupRestoreService.IsAcceptableRestoreTarget(target, out string? rejection));
+        Assert.Null(rejection);
+    }
+
     // -------------------------------------------------------------------
     // Test Helpers
     // -------------------------------------------------------------------

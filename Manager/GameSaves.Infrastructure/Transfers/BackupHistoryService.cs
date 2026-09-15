@@ -37,6 +37,68 @@ namespace GameSaves.Infrastructure.Transfers
                 cancellationToken);
         }
 
+        public void PurgeStaleWorkingDirectories(TimeSpan? olderThan = null)
+        {
+            string basePath = TransferBackupLocations.GetBackupBasePath(_databasePathProvider);
+            if (!Directory.Exists(basePath))
+                return;
+
+            TimeSpan age = olderThan ?? TimeSpan.FromHours(1);
+            DateTimeOffset cutoff = DateTimeOffset.UtcNow - age;
+
+            // Delete orphaned temporary directories: .staging_*, .export_*, .download_*
+            try
+            {
+                foreach (string dir in Directory.EnumerateDirectories(basePath, ".*"))
+                {
+                    string name = Path.GetFileName(dir);
+                    if (name.StartsWith(".staging_", StringComparison.OrdinalIgnoreCase) ||
+                        name.StartsWith(".export_", StringComparison.OrdinalIgnoreCase) ||
+                        name.StartsWith(".download_", StringComparison.OrdinalIgnoreCase))
+                    {
+                        try
+                        {
+                            if (Directory.GetLastWriteTimeUtc(dir) < cutoff.UtcDateTime)
+                            {
+                                Directory.Delete(dir, recursive: true);
+                            }
+                        }
+                        catch
+                        {
+                            // Best effort
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // Best effort
+            }
+
+            // Delete orphaned temporary export files: .export_*.tmp
+            try
+            {
+                foreach (string file in Directory.EnumerateFiles(basePath, ".export_*.tmp"))
+                {
+                    try
+                    {
+                        if (File.GetLastWriteTimeUtc(file) < cutoff.UtcDateTime)
+                        {
+                            File.Delete(file);
+                        }
+                    }
+                    catch
+                    {
+                        // Best effort
+                    }
+                }
+            }
+            catch
+            {
+                // Best effort
+            }
+        }
+
         private List<TransferBackupRunInfo> GetRuns(CancellationToken cancellationToken)
         {
             var runs = new List<TransferBackupRunInfo>();
@@ -45,6 +107,8 @@ namespace GameSaves.Infrastructure.Transfers
 
             if (!Directory.Exists(basePath))
                 return runs;
+
+            PurgeStaleWorkingDirectories();
 
             // Enumerate folder runs. The import, export and download paths stage work
             // in dot-prefixed siblings inside this base; a staged run carries a real
