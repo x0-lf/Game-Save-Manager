@@ -47,6 +47,24 @@ namespace GameSaves.App.Models
 
         public string? BlockedReason => Run.BlockedReason;
 
+        public string VerificationDisplay =>
+            Run.DryRun ? "Dry run"
+            : Run.WasBlocked ? "Blocked"
+            : Run.FilesFailed > 0 ? "Transfer failed"
+            : "Copied (unverified)";
+
+        public string VerificationGlyph =>
+            Run.DryRun ? "◷"
+            : Run.WasBlocked ? "⚠"
+            : Run.FilesFailed > 0 ? "✕"
+            : "✓";
+
+        public string VerificationTooltip =>
+            Run.DryRun ? "Simulated dry run; no files were written."
+            : Run.WasBlocked ? $"Run was blocked: {Run.BlockedReason}"
+            : Run.FilesFailed > 0 ? $"{Run.FilesFailed} file(s) failed during transfer."
+            : "Files were copied. Cryptographic payload bytes were not re-read post-transfer.";
+
         public string FlagsDisplay
         {
             get

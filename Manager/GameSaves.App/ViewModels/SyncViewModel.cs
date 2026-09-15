@@ -3118,10 +3118,16 @@ namespace GameSaves.App.ViewModels
                 ApplyPlan(plan);
 
                 int verified = copied.Count(row => row.IsVerified);
+                bool allSidecars = copied.Count > 0 && copied.All(row => row.Verification == SyncVerificationState.SidecarManifestMatch);
+                bool anySidecars = copied.Any(row => row.Verification == SyncVerificationState.SidecarManifestMatch);
 
                 VerificationStatusMessage = verified == copied.Count
-                    ? $"Verified in sync: all {verified} transferred run(s) exist on both sides with matching manifests."
-                    : $"Verified in sync: {verified} of {copied.Count} transferred run(s). The rest are listed with what was actually found; nothing was changed.";
+                    ? (allSidecars
+                        ? $"Sidecar manifest match: all {verified} transferred run(s) matched remote sidecar manifests (payload bytes not re-read)."
+                        : anySidecars
+                            ? $"Manifest match: all {verified} transferred run(s) matched manifests, with some using sidecar descriptors (payload bytes not re-read)."
+                            : $"Manifest match: all {verified} transferred run(s) exist on both sides with matching manifests (payload bytes not re-read).")
+                    : $"Manifest match: {verified} of {copied.Count} transferred run(s). The rest are listed with what was actually found; nothing was changed.";
             }
             catch (OperationCanceledException)
             {
@@ -3160,8 +3166,8 @@ namespace GameSaves.App.ViewModels
         }
 
         /// <summary>
-        /// A fresh plan states where each run is now. In sync is the only
-        /// verdict that means verified; a run the plan still wants to copy is
+        /// A fresh plan states where each run is now. A matching manifest is the
+        /// verdict that means manifest-matched; a run the plan still wants to copy is
         /// a run that is missing on the side it would be copied to.
         /// </summary>
         private static SyncVerificationState Classify(
@@ -3173,7 +3179,12 @@ namespace GameSaves.App.ViewModels
 
             return item.Action switch
             {
-                SyncItemAction.InSync => SyncVerificationState.Verified,
+                SyncItemAction.InSync => item.Verification switch
+                {
+                    VerificationStrength.SidecarManifestMatch => SyncVerificationState.SidecarManifestMatch,
+                    VerificationStrength.PayloadVerified => SyncVerificationState.PayloadVerified,
+                    _ => SyncVerificationState.ManifestMatch
+                },
                 SyncItemAction.Conflict => SyncVerificationState.ContentMismatch,
                 SyncItemAction.UploadToRemote => SyncVerificationState.MissingRemotely,
                 SyncItemAction.DownloadToLocal => SyncVerificationState.MissingLocally,

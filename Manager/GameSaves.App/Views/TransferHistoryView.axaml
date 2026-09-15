@@ -84,9 +84,30 @@
                                                    FontSize="{DynamicResource FontSizeBody}" />
                                     </StackPanel>
 
-                                    <TextBlock Text="{Binding FlagsDisplay}"
-                                               Foreground="{DynamicResource WarningBrush}"
-                                               FontSize="{DynamicResource FontSizeBody}" />
+                                    <StackPanel Orientation="Horizontal"
+                                                Spacing="8">
+                                        <Border Background="{DynamicResource CardBackgroundBrush}"
+                                                BorderBrush="{DynamicResource SubtleBorderBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="4"
+                                                Padding="6,2"
+                                                ToolTip.Tip="{Binding VerificationTooltip}">
+                                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                                <TextBlock Text="{Binding VerificationGlyph}"
+                                                           FontWeight="Bold"
+                                                           Foreground="{DynamicResource PrimaryTextBrush}"
+                                                           FontSize="{DynamicResource FontSizeMicro}" />
+                                                <TextBlock Text="{Binding VerificationDisplay}"
+                                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                                           FontSize="{DynamicResource FontSizeMicro}" />
+                                            </StackPanel>
+                                        </Border>
+
+                                        <TextBlock Text="{Binding FlagsDisplay}"
+                                                   Foreground="{DynamicResource WarningBrush}"
+                                                   FontSize="{DynamicResource FontSizeBody}"
+                                                   VerticalAlignment="Center" />
+                                    </StackPanel>
                                 </StackPanel>
                             </DataTemplate>
                         </ListBox.ItemTemplate>

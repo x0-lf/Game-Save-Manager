@@ -989,18 +989,31 @@
                                                    FontSize="{DynamicResource FontSizeBody}"
                                                    TextTrimming="CharacterEllipsis" />
 
-                                        <TextBlock Grid.Row="0" Grid.Column="1"
-                                                   Classes="syncState"
-                                                   Classes.direction="{Binding IsDirectionState}"
-                                                   Classes.success="{Binding IsSuccessState}"
-                                                   Classes.warning="{Binding IsWarningState}"
-                                                   Classes.danger="{Binding IsDangerState}"
-                                                   Text="{Binding StateText}"
-                                                   ToolTip.Tip="{Binding StateDetail}"
-                                                   AutomationProperties.HelpText="{Binding StateDetail}"
-                                                   FontSize="{DynamicResource FontSizeBody}"
-                                                   FontWeight="SemiBold"
-                                                   TextWrapping="Wrap" />
+                                        <StackPanel Grid.Row="0" Grid.Column="1"
+                                                    Orientation="Horizontal"
+                                                    Spacing="6">
+                                            <TextBlock Classes="syncState"
+                                                       Classes.direction="{Binding IsDirectionState}"
+                                                       Classes.success="{Binding IsSuccessState}"
+                                                       Classes.warning="{Binding IsWarningState}"
+                                                       Classes.danger="{Binding IsDangerState}"
+                                                       Text="{Binding StateGlyph}"
+                                                       FontSize="{DynamicResource FontSizeBody}"
+                                                       FontWeight="Bold"
+                                                       VerticalAlignment="Top" />
+
+                                            <TextBlock Classes="syncState"
+                                                       Classes.direction="{Binding IsDirectionState}"
+                                                       Classes.success="{Binding IsSuccessState}"
+                                                       Classes.warning="{Binding IsWarningState}"
+                                                       Classes.danger="{Binding IsDangerState}"
+                                                       Text="{Binding StateText}"
+                                                       ToolTip.Tip="{Binding StateDetail}"
+                                                       AutomationProperties.HelpText="{Binding StateDetail}"
+                                                       FontSize="{DynamicResource FontSizeBody}"
+                                                       FontWeight="SemiBold"
+                                                       TextWrapping="Wrap" />
+                                        </StackPanel>
 
                                         <TextBlock Grid.Row="0" Grid.Column="2"
                                                    Text="{Binding AffectedSideText}"

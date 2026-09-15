@@ -276,8 +276,14 @@ namespace GameSaves.UiCapture
                 SyncVerificationState.NotRequested);
             Result("copied-unverified", SyncItemStatus.Uploaded, 8192,
                 SyncVerificationState.NotRequested);
-            Result("verified", SyncItemStatus.Uploaded, 8192,
-                SyncVerificationState.Verified);
+            Result("manifest-match", SyncItemStatus.Uploaded, 8192,
+                SyncVerificationState.ManifestMatch);
+            Result("sidecar-manifest-match", SyncItemStatus.Uploaded, 8192,
+                SyncVerificationState.SidecarManifestMatch);
+            Result("payload-verified", SyncItemStatus.Uploaded, 8192,
+                SyncVerificationState.PayloadVerified);
+            Result("payload-mismatch", SyncItemStatus.Uploaded, 8192,
+                SyncVerificationState.PayloadMismatch);
             Result("verification-unavailable", SyncItemStatus.Uploaded, 8192,
                 SyncVerificationState.EndpointUnavailable);
             Result("verification-mismatch", SyncItemStatus.Uploaded, 8192,

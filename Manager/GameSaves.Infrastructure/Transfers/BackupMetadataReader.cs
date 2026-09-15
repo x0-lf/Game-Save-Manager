@@ -2,6 +2,7 @@ using GameSaves.Core.Transfers;
 using SharpCompress.Archives;
 using SharpCompress.Archives.SevenZip;
 using System.IO.Compression;
+using System.Security.Cryptography;
 using System.Text.Json;
 
 namespace GameSaves.Infrastructure.Transfers
@@ -75,8 +76,20 @@ namespace GameSaves.Infrastructure.Transfers
             bool allowSidecar = true,
             CancellationToken cancellationToken = default)
         {
+            return TryReadManifest(path, out manifest, out error, out _, allowSidecar, cancellationToken);
+        }
+
+        public bool TryReadManifest(
+            string path,
+            out TransferBackupManifest? manifest,
+            out string? error,
+            out bool isSidecar,
+            bool allowSidecar = true,
+            CancellationToken cancellationToken = default)
+        {
             manifest = null;
             error = null;
+            isSidecar = false;
 
             if (string.IsNullOrWhiteSpace(path))
             {
@@ -130,6 +143,25 @@ namespace GameSaves.Infrastructure.Transfers
                         {
                             error = $"ZIP archive file does not exist: {path}";
                             return false;
+                        }
+
+                        string sidecarManifest = path + ".manifest.json";
+                        if (allowSidecar && File.Exists(sidecarManifest))
+                        {
+                            var sidecarFi = new FileInfo(sidecarManifest);
+                            if (sidecarFi.Length > _safetyBounds.MaxManifestBytes)
+                            {
+                                error = $"Manifest file exceeds maximum allowed size ({_safetyBounds.MaxManifestBytes:N0} bytes).";
+                                return false;
+                            }
+
+                            string json = File.ReadAllText(sidecarManifest);
+                            manifest = JsonSerializer.Deserialize<TransferBackupManifest>(json);
+                            if (manifest is not null && manifest.TryValidate(out error))
+                            {
+                                isSidecar = true;
+                                return true;
+                            }
                         }
 
                         using ZipArchive archive = ZipFile.OpenRead(path);
@@ -211,7 +243,10 @@ namespace GameSaves.Infrastructure.Transfers
                             string json = File.ReadAllText(sidecarManifest);
                             manifest = JsonSerializer.Deserialize<TransferBackupManifest>(json);
                             if (manifest is not null && manifest.TryValidate(out error))
+                            {
+                                isSidecar = true;
                                 return true;
+                            }
                         }
 
                         using var archiveStream = File.OpenRead(path);
@@ -304,7 +339,7 @@ namespace GameSaves.Infrastructure.Transfers
 
             BackupContainerFormat format = DetectContainerFormat(path);
 
-            if (!TryReadManifest(path, out TransferBackupManifest? manifest, out error, allowSidecar: true, cancellationToken))
+            if (!TryReadManifest(path, out TransferBackupManifest? manifest, out error, out bool isSidecar, allowSidecar: true, cancellationToken))
             {
                 return false;
             }
@@ -313,13 +348,324 @@ namespace GameSaves.Infrastructure.Transfers
                 ? Path.Combine(path, TransferBackupLocations.ManifestFileName)
                 : path + "#" + TransferBackupLocations.ManifestFileName;
 
+            VerificationStrength strength = isSidecar
+                ? VerificationStrength.SidecarManifestMatch
+                : VerificationStrength.ManifestMatch;
+
             runInfo = new TransferBackupRunInfo(
                 BackupRootPath: path,
                 ManifestPath: manifestPath,
                 Manifest: manifest!,
-                ContainerFormat: format);
+                ContainerFormat: format,
+                Verification: strength);
 
             return true;
+        }
+
+        public VerificationStrengthResult VerifyPayloadIntegrity(
+            TransferBackupRunInfo runInfo,
+            CancellationToken cancellationToken = default)
+        {
+            if (runInfo is null)
+            {
+                return VerificationStrengthResult.Failure(
+                    VerificationStrength.ManifestMismatch,
+                    "Run info is null.");
+            }
+
+            if (runInfo.Manifest is null || runInfo.Manifest.Items is null)
+            {
+                return VerificationStrengthResult.Failure(
+                    VerificationStrength.ManifestMismatch,
+                    "Run manifest or manifest items collection is null.");
+            }
+
+            if (runInfo.Manifest.Items.Count == 0)
+            {
+                return VerificationStrengthResult.Success(
+                    VerificationStrength.PayloadVerified,
+                    0,
+                    0);
+            }
+
+            try
+            {
+                switch (runInfo.ContainerFormat)
+                {
+                    case BackupContainerFormat.Folder:
+                        return VerifyFolderPayload(runInfo, cancellationToken);
+
+                    case BackupContainerFormat.Zip:
+                        return VerifyZipPayload(runInfo, cancellationToken);
+
+                    case BackupContainerFormat.SevenZip:
+                        return VerifySevenZipPayload(runInfo, cancellationToken);
+
+                    default:
+                        return VerificationStrengthResult.Failure(
+                            VerificationStrength.ManifestMismatch,
+                            $"Unsupported container format: {runInfo.ContainerFormat}");
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                return VerificationStrengthResult.Failure(
+                    VerificationStrength.Cancelled,
+                    "Payload verification was cancelled.",
+                    0,
+                    runInfo.Manifest.Items.Count);
+            }
+            catch (Exception ex)
+            {
+                return VerificationStrengthResult.Failure(
+                    VerificationStrength.PayloadMismatch,
+                    $"Payload verification failed: {ex.Message}",
+                    0,
+                    runInfo.Manifest.Items.Count);
+            }
+        }
+
+        public Task<VerificationStrengthResult> VerifyPayloadIntegrityAsync(
+            TransferBackupRunInfo runInfo,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.Run(() => VerifyPayloadIntegrity(runInfo, cancellationToken), cancellationToken);
+        }
+
+        private static VerificationStrengthResult VerifyFolderPayload(
+            TransferBackupRunInfo runInfo,
+            CancellationToken cancellationToken)
+        {
+            if (!Directory.Exists(runInfo.BackupRootPath))
+            {
+                return VerificationStrengthResult.Failure(
+                    VerificationStrength.MissingLocally,
+                    $"Backup folder does not exist: {runInfo.BackupRootPath}",
+                    0,
+                    runInfo.Manifest.Items.Count);
+            }
+
+            var fileResults = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+            int verified = 0;
+
+            foreach (TransferOverwriteBackupItem item in runInfo.Manifest.Items)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                string path = item.ResolveBackupFile(runInfo.BackupRootPath);
+                if (!File.Exists(path))
+                {
+                    fileResults[item.OriginalFile] = false;
+                    return VerificationStrengthResult.Failure(
+                        VerificationStrength.MissingLocally,
+                        $"Backup payload file is missing: {path}",
+                        verified,
+                        runInfo.Manifest.Items.Count,
+                        fileResults);
+                }
+
+                using var stream = File.OpenRead(path);
+                byte[] hash = SHA256.HashData(stream);
+                string computedHash = Convert.ToHexString(hash);
+
+                if (!string.Equals(computedHash, item.Sha256, StringComparison.OrdinalIgnoreCase))
+                {
+                    fileResults[item.OriginalFile] = false;
+                    return VerificationStrengthResult.Failure(
+                        VerificationStrength.PayloadMismatch,
+                        $"Payload hash mismatch for {Path.GetFileName(path)} (expected {item.Sha256}, got {computedHash}).",
+                        verified,
+                        runInfo.Manifest.Items.Count,
+                        fileResults);
+                }
+
+                fileResults[item.OriginalFile] = true;
+                verified++;
+            }
+
+            return VerificationStrengthResult.Success(
+                VerificationStrength.PayloadVerified,
+                verified,
+                runInfo.Manifest.Items.Count,
+                fileResults);
+        }
+
+        private VerificationStrengthResult VerifyZipPayload(
+            TransferBackupRunInfo runInfo,
+            CancellationToken cancellationToken)
+        {
+            if (!File.Exists(runInfo.BackupRootPath))
+            {
+                return VerificationStrengthResult.Failure(
+                    VerificationStrength.MissingLocally,
+                    $"ZIP archive does not exist: {runInfo.BackupRootPath}",
+                    0,
+                    runInfo.Manifest.Items.Count);
+            }
+
+            using ZipArchive archive = ZipFile.OpenRead(runInfo.BackupRootPath);
+            if (archive.Entries.Count > _safetyBounds.MaxFileEntries)
+            {
+                return VerificationStrengthResult.Failure(
+                    VerificationStrength.PayloadMismatch,
+                    $"Archive exceeds maximum allowed entries limit ({_safetyBounds.MaxFileEntries:N0}).",
+                    0,
+                    runInfo.Manifest.Items.Count);
+            }
+
+            var fileResults = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+            int verified = 0;
+
+            foreach (TransferOverwriteBackupItem item in runInfo.Manifest.Items)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                string relPath = item.GetRelativePayloadPath();
+                ZipArchiveEntry? entry = archive.GetEntry(relPath)
+                    ?? archive.Entries.FirstOrDefault(e =>
+                        e.FullName.Replace('\\', '/').Trim('/').Equals(relPath, StringComparison.OrdinalIgnoreCase));
+
+                if (entry is null)
+                {
+                    fileResults[item.OriginalFile] = false;
+                    return VerificationStrengthResult.Failure(
+                        VerificationStrength.PayloadMismatch,
+                        $"Archive payload entry missing: {relPath}",
+                        verified,
+                        runInfo.Manifest.Items.Count,
+                        fileResults);
+                }
+
+                if (entry.Length > _safetyBounds.MaxSingleFileBytes)
+                {
+                    fileResults[item.OriginalFile] = false;
+                    return VerificationStrengthResult.Failure(
+                        VerificationStrength.PayloadMismatch,
+                        $"Archive payload entry exceeds max file size limit: {relPath}",
+                        verified,
+                        runInfo.Manifest.Items.Count,
+                        fileResults);
+                }
+
+                using Stream stream = entry.Open();
+                byte[] hash = SHA256.HashData(stream);
+                string computedHash = Convert.ToHexString(hash);
+
+                if (!string.Equals(computedHash, item.Sha256, StringComparison.OrdinalIgnoreCase))
+                {
+                    fileResults[item.OriginalFile] = false;
+                    return VerificationStrengthResult.Failure(
+                        VerificationStrength.PayloadMismatch,
+                        $"Payload hash mismatch for {relPath} (expected {item.Sha256}, got {computedHash}).",
+                        verified,
+                        runInfo.Manifest.Items.Count,
+                        fileResults);
+                }
+
+                fileResults[item.OriginalFile] = true;
+                verified++;
+            }
+
+            return VerificationStrengthResult.Success(
+                VerificationStrength.PayloadVerified,
+                verified,
+                runInfo.Manifest.Items.Count,
+                fileResults);
+        }
+
+        private VerificationStrengthResult VerifySevenZipPayload(
+            TransferBackupRunInfo runInfo,
+            CancellationToken cancellationToken)
+        {
+            if (!File.Exists(runInfo.BackupRootPath))
+            {
+                return VerificationStrengthResult.Failure(
+                    VerificationStrength.MissingLocally,
+                    $"7-Zip archive does not exist: {runInfo.BackupRootPath}",
+                    0,
+                    runInfo.Manifest.Items.Count);
+            }
+
+            using var archiveStream = File.OpenRead(runInfo.BackupRootPath);
+            using IArchive archive = SevenZipArchive.OpenArchive(archiveStream);
+
+            var entriesByKey = new Dictionary<string, IArchiveEntry>(StringComparer.OrdinalIgnoreCase);
+            int entryCount = 0;
+
+            foreach (IArchiveEntry entry in archive.Entries)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                entryCount++;
+                if (entryCount > _safetyBounds.MaxFileEntries)
+                {
+                    return VerificationStrengthResult.Failure(
+                        VerificationStrength.PayloadMismatch,
+                        $"Archive exceeds maximum allowed entries limit ({_safetyBounds.MaxFileEntries:N0}).",
+                        0,
+                        runInfo.Manifest.Items.Count);
+                }
+
+                if (entry.Key is not null)
+                {
+                    string key = entry.Key.Replace('\\', '/').Trim('/');
+                    entriesByKey[key] = entry;
+                }
+            }
+
+            var fileResults = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+            int verified = 0;
+
+            foreach (TransferOverwriteBackupItem item in runInfo.Manifest.Items)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                string relPath = item.GetRelativePayloadPath();
+                if (!entriesByKey.TryGetValue(relPath, out IArchiveEntry? entry))
+                {
+                    fileResults[item.OriginalFile] = false;
+                    return VerificationStrengthResult.Failure(
+                        VerificationStrength.PayloadMismatch,
+                        $"7-Zip payload entry missing: {relPath}",
+                        verified,
+                        runInfo.Manifest.Items.Count,
+                        fileResults);
+                }
+
+                if (entry.Size > _safetyBounds.MaxSingleFileBytes)
+                {
+                    fileResults[item.OriginalFile] = false;
+                    return VerificationStrengthResult.Failure(
+                        VerificationStrength.PayloadMismatch,
+                        $"Archive payload entry exceeds max file size limit: {relPath}",
+                        verified,
+                        runInfo.Manifest.Items.Count,
+                        fileResults);
+                }
+
+                using Stream entryStream = entry.OpenEntryStream();
+                byte[] hash = SHA256.HashData(entryStream);
+                string computedHash = Convert.ToHexString(hash);
+
+                if (!string.Equals(computedHash, item.Sha256, StringComparison.OrdinalIgnoreCase))
+                {
+                    fileResults[item.OriginalFile] = false;
+                    return VerificationStrengthResult.Failure(
+                        VerificationStrength.PayloadMismatch,
+                        $"Payload hash mismatch for {relPath} (expected {item.Sha256}, got {computedHash}).",
+                        verified,
+                        runInfo.Manifest.Items.Count,
+                        fileResults);
+                }
+
+                fileResults[item.OriginalFile] = true;
+                verified++;
+            }
+
+            return VerificationStrengthResult.Success(
+                VerificationStrength.PayloadVerified,
+                verified,
+                runInfo.Manifest.Items.Count,
+                fileResults);
         }
     }
 }

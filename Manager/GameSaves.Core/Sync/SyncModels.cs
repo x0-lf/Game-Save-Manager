@@ -13,7 +13,8 @@ namespace GameSaves.Core.Sync
         string GameName,
         int FileCount,
         long TotalBytes,
-        string StatusText);
+        string StatusText,
+        VerificationStrength Verification = VerificationStrength.None);
 
     public sealed record SyncPlan(
         string ProviderName,
@@ -42,7 +43,8 @@ namespace GameSaves.Core.Sync
         SyncItem Item,
         long Bytes,
         SyncItemStatus Status,
-        string? Error);
+        string? Error,
+        VerificationStrength Verification = VerificationStrength.None);
 
     public sealed record SyncResult(
         SyncPlan Plan,

@@ -8,11 +8,11 @@ title, product outcome (The What), dependency, and observable completion criteri
 
 ## Now
 
-Current sprint focus: Explicit verification strength indicators across backup sync workflows.
+Current sprint focus: Independent verification and hardening of security audit remediations.
 
 | ID | Title | Product outcome | Dependency | Completion criteria |
 | --- | --- | --- | --- | --- |
-| **OBS-008** | Explicit verification strength indicators | Users clearly understand whether a backup has been copied, matched against manifests, or verified via payload hashes | DRIVE-008, DRIVE-009 | Standardized verification levels (`Copied`, `ManifestMatch`, `PayloadVerified`); UI status chips, history records, and tooltips reflect exact evidence level; manifest-only check never claims payload verification |
+| **AUDIT-001** | Verify and harden security audit remediations | Remediations from security audit `e17b300` are independently verified, hardened, and proven regression-free | OBS-007, e17b300 | Google Drive archive container capability or explicit downgrade verified; restore destination confinement enforced against sensitive paths; manifest path containment and Zip Slip tested adversarially; all 2,297+ tests pass |
 
 ---
 
@@ -128,6 +128,7 @@ Verified in code, documentation, and automated tests.
 
 | ID | Title | Product outcome | Dependency | Completion criteria |
 | --- | --- | --- | --- | --- |
+| **OBS-008** | Explicit verification strength indicators (DRIVE-008, DRIVE-009) | Users clearly understand whether a backup has been copied, matched against manifests, or verified via payload hashes | DRIVE-008, DRIVE-009 | Standardized verification levels (`Copied`, `ManifestMatch`, `SidecarManifestMatch`, `PayloadVerified`); UI status chips, history records, and tooltips reflect exact evidence level; manifest-only check never claims payload verification; cryptographic hash verification in backup history; automated tests in `VerificationStrengthTests` pass |
 | **OBS-007** | Archive Sync: Single container cloud transfers (BACKUP-010) | Users can upload and download backup runs as single compressed `.7z` or `.zip` containers, bypassing per-file API throttling | OBS-004, OBS-005, OBS-006 | Cloud request counts drop from thousands to <= 2 per run; sync previews inspect manifest headers without full payload download; partial transfers rejected; folder runs and archive runs co-exist |
 | **OBS-006** | Optional 7-Zip (`.7z`) archive format (BACKUP-002) | Users can choose between standard ZIP and high-compression 7-Zip (`.7z`) formats for backup export and import | OBS-004, OBS-005 | Native managed 7-Zip LZMA/LZMA2 compression implemented; Store, Fast, Optimal, and Ultra presets; round-trip export/import verified; licenses and notices updated |
 | **OBS-005** | Harden ZIP import/export before format expansion | Malformed, oversized, or path-traversing archives cannot compromise security or corrupt backup history | OBS-004 | Temporary extraction staging; directory traversal guards (`Zip Slip` prevention); bounds on entry count, manifest bytes, and payload size; cancellation respected throughout |

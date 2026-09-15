@@ -93,6 +93,36 @@
                                                FontSize="{DynamicResource FontSizeBody}" />
                                 </StackPanel>
 
+                                <StackPanel Orientation="Horizontal"
+                                            Spacing="8">
+                                    <Border Background="{DynamicResource CardBackgroundBrush}"
+                                            BorderBrush="{DynamicResource SubtleBorderBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="4"
+                                            Padding="6,2">
+                                        <TextBlock Text="{Binding FormatDisplay}"
+                                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                                   FontSize="{DynamicResource FontSizeMicro}" />
+                                    </Border>
+
+                                    <Border Background="{DynamicResource CardBackgroundBrush}"
+                                            BorderBrush="{DynamicResource SubtleBorderBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="4"
+                                            Padding="6,2"
+                                            ToolTip.Tip="{Binding VerificationDetail}">
+                                        <StackPanel Orientation="Horizontal" Spacing="4">
+                                            <TextBlock Text="{Binding VerificationGlyph}"
+                                                       FontWeight="Bold"
+                                                       Foreground="{DynamicResource PrimaryTextBrush}"
+                                                       FontSize="{DynamicResource FontSizeMicro}" />
+                                            <TextBlock Text="{Binding VerificationDisplay}"
+                                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                                       FontSize="{DynamicResource FontSizeMicro}" />
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+
                                 <TextBlock Text="{Binding ProfilesDisplay}"
                                            Foreground="{DynamicResource MutedTextBrush}"
                                            FontSize="{DynamicResource FontSizeBody}" />
@@ -223,15 +253,30 @@
                                 IsVisible="{Binding !!Runs.Count}"
                                 Title="Files in this backup run"
                                 MinPanelHeight="160">
-                <Grid RowDefinitions="Auto,*">
+                <wsp:WorkspacePanel.HeaderActions>
+                    <Button Content="Verify payload integrity"
+                            Command="{Binding VerifySelectedRunCommand}"
+                            IsEnabled="{Binding CanVerifySelectedRun}"
+                            VerticalAlignment="Center"
+                            ToolTip.Tip="Reads all payload files in this backup run and verifies them byte-for-byte against their SHA-256 hashes." />
+                </wsp:WorkspacePanel.HeaderActions>
+                <Grid RowDefinitions="Auto,Auto,*">
 
-                    <Border Grid.Row="0"
+                    <TextBlock Grid.Row="0"
+                               Text="{Binding FileListStatusMessage}"
+                               IsVisible="{Binding !!FileListStatusMessage.Length}"
+                               Foreground="{DynamicResource AccentBrush}"
+                               FontSize="{DynamicResource FontSizeBody}"
+                               Margin="10,4,10,6"
+                               TextWrapping="Wrap" />
+
+                    <Border Grid.Row="1"
                             Padding="10,6"
                             BorderBrush="{DynamicResource CardBorderBrush}"
                             BorderThickness="0,0,0,1"
                             IsVisible="{Binding !!RunItems.Count}">
 
-                        <Grid ColumnDefinitions="2*,90,120"
+                        <Grid ColumnDefinitions="2*,90,120,90"
                               ColumnSpacing="12">
 
                             <TextBlock Grid.Column="0"
@@ -248,16 +293,21 @@
                                        Text="SHA-256"
                                        Foreground="{DynamicResource SecondaryTextBrush}"
                                        FontWeight="Bold" />
+
+                            <TextBlock Grid.Column="3"
+                                       Text="Status"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                       FontWeight="Bold" />
                         </Grid>
                     </Border>
 
-                    <views:EmptyState Grid.Row="1"
+                    <views:EmptyState Grid.Row="2"
                                       Glyph="&#xE7C3;"
                                       Title="No files to show"
                                       Message="Select a backup run to see the files it contains."
                                       IsVisible="{Binding !RunItems.Count}" />
 
-                    <ScrollViewer Grid.Row="1"
+                    <ScrollViewer Grid.Row="2"
                                   VerticalScrollBarVisibility="Auto">
                         <ItemsControl ItemsSource="{Binding RunItems}">
                             <ItemsControl.ItemTemplate>
@@ -266,7 +316,7 @@
                                             BorderBrush="{DynamicResource SubtleBorderBrush}"
                                             BorderThickness="0,0,0,1">
 
-                                        <Grid ColumnDefinitions="2*,90,120"
+                                        <Grid ColumnDefinitions="2*,90,120,90"
                                               ColumnSpacing="12">
 
                                             <TextBlock Grid.Column="0"
@@ -284,6 +334,16 @@
                                                        Foreground="{DynamicResource MutedTextBrush}"
                                                        ToolTip.Tip="{Binding Sha256}"
                                                        FontFamily="Consolas,monospace" />
+
+                                            <StackPanel Grid.Column="3"
+                                                        Orientation="Horizontal"
+                                                        Spacing="4">
+                                                <TextBlock Text="{Binding StatusGlyph}"
+                                                           FontWeight="Bold"
+                                                           Foreground="{DynamicResource PrimaryTextBrush}" />
+                                                <TextBlock Text="{Binding StatusDisplay}"
+                                                           Foreground="{DynamicResource SecondaryTextBrush}" />
+                                            </StackPanel>
                                         </Grid>
                                     </Border>
                                 </DataTemplate>

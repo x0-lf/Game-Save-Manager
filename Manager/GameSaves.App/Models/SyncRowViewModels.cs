@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using GameSaves.Core.Sync;
+using GameSaves.Core.Transfers;
 using System;
 using System.Linq;
 
@@ -187,6 +188,7 @@ namespace GameSaves.App.Models
     {
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(StateText))]
+        [NotifyPropertyChangedFor(nameof(StateGlyph))]
         [NotifyPropertyChangedFor(nameof(StateDetail))]
         [NotifyPropertyChangedFor(nameof(AffectedSideText))]
         [NotifyPropertyChangedFor(nameof(Severity))]
@@ -195,6 +197,8 @@ namespace GameSaves.App.Models
         [NotifyPropertyChangedFor(nameof(IsWarningState))]
         [NotifyPropertyChangedFor(nameof(IsDangerState))]
         [NotifyPropertyChangedFor(nameof(IsVerified))]
+        [NotifyPropertyChangedFor(nameof(IsSidecarMatch))]
+        [NotifyPropertyChangedFor(nameof(IsPayloadVerified))]
         private SyncVerificationState verification = SyncVerificationState.NotRequested;
 
         public SyncItemResultRowViewModel(
@@ -205,6 +209,21 @@ namespace GameSaves.App.Models
             RemoteLabel = string.IsNullOrWhiteSpace(remoteLabel)
                 ? "the remote"
                 : remoteLabel;
+
+            verification = result.Verification switch
+            {
+                VerificationStrength.SidecarManifestMatch => SyncVerificationState.SidecarManifestMatch,
+                VerificationStrength.ManifestMatch => SyncVerificationState.ManifestMatch,
+                VerificationStrength.PayloadVerified => SyncVerificationState.PayloadVerified,
+                VerificationStrength.ManifestMismatch => SyncVerificationState.ContentMismatch,
+                VerificationStrength.PayloadMismatch => SyncVerificationState.PayloadMismatch,
+                VerificationStrength.EndpointUnavailable => SyncVerificationState.EndpointUnavailable,
+                VerificationStrength.MissingLocally => SyncVerificationState.MissingLocally,
+                VerificationStrength.MissingRemotely => SyncVerificationState.MissingRemotely,
+                VerificationStrength.MissingBothSides => SyncVerificationState.MissingBothSides,
+                VerificationStrength.Cancelled => SyncVerificationState.Cancelled,
+                _ => SyncVerificationState.NotRequested
+            };
         }
 
         public SyncItemResult Result { get; }
@@ -223,7 +242,41 @@ namespace GameSaves.App.Models
         public bool WasCopied =>
             Result.Status is SyncItemStatus.Uploaded or SyncItemStatus.Downloaded;
 
-        public bool IsVerified => Verification == SyncVerificationState.Verified;
+        public bool IsVerified => Verification is SyncVerificationState.ManifestMatch or
+                                                 SyncVerificationState.SidecarManifestMatch or
+                                                 SyncVerificationState.PayloadVerified;
+
+        public bool IsSidecarMatch => Verification == SyncVerificationState.SidecarManifestMatch;
+
+        public bool IsPayloadVerified => Verification == SyncVerificationState.PayloadVerified;
+
+        /// <summary>
+        /// Accessible non-color glyph for WCAG 2.x AA compliance.
+        /// </summary>
+        public string StateGlyph => Result.Status switch
+        {
+            SyncItemStatus.Failed => "✕",
+            SyncItemStatus.Incomplete => "⚠",
+            SyncItemStatus.SkippedConflict => "⚠",
+            SyncItemStatus.SkippedDeselected or SyncItemStatus.SkippedAlreadyExists or
+                SyncItemStatus.DryRun => "ℹ",
+            SyncItemStatus.Uploaded or SyncItemStatus.Downloaded => Verification switch
+            {
+                SyncVerificationState.PayloadVerified => "✓✓",
+                SyncVerificationState.ManifestMatch => "✓",
+                SyncVerificationState.SidecarManifestMatch => "⚠",
+                SyncVerificationState.ContentMismatch or
+                    SyncVerificationState.PayloadMismatch or
+                    SyncVerificationState.MissingLocally or
+                    SyncVerificationState.MissingRemotely or
+                    SyncVerificationState.MissingBothSides => "✕",
+                SyncVerificationState.EndpointUnavailable => "⚠",
+                SyncVerificationState.Cancelled => "⊘",
+                SyncVerificationState.Running => "⟳",
+                _ => "◷"
+            },
+            _ => "ℹ"
+        };
 
         /// <summary>
         /// Short user-facing label. Every distinct outcome gets its own words:
@@ -241,11 +294,15 @@ namespace GameSaves.App.Models
             SyncItemStatus.DryRun => "Preview only, nothing copied",
             SyncItemStatus.Uploaded or SyncItemStatus.Downloaded => Verification switch
             {
-                SyncVerificationState.NotRequested => "Copied, not verified yet",
+                SyncVerificationState.NotRequested => "Copied (unverified)",
                 SyncVerificationState.Running => "Copied, verifying...",
-                SyncVerificationState.Verified => "Verified in sync",
+                SyncVerificationState.SidecarManifestMatch => "Sidecar manifest match",
+                SyncVerificationState.ManifestMatch => "Manifest match",
+                SyncVerificationState.PayloadVerified => "Payload verified",
                 SyncVerificationState.ContentMismatch =>
-                    "Copied, verification found different content",
+                    "Copied, manifest mismatch",
+                SyncVerificationState.PayloadMismatch =>
+                    "Copied, payload hash mismatch",
                 SyncVerificationState.MissingLocally =>
                     "Copied, verification found it missing locally",
                 SyncVerificationState.MissingRemotely =>
@@ -292,16 +349,25 @@ namespace GameSaves.App.Models
             SyncItemStatus.Uploaded or SyncItemStatus.Downloaded => Verification switch
             {
                 SyncVerificationState.NotRequested =>
-                    "The transfer finished. Both sides have not been re-read yet, so this " +
-                    "run is not confirmed to be in sync. Use Verify to check it.",
+                    "The transfer finished. Neither side has been re-read yet, so this " +
+                    "run is not confirmed to be in sync. Use Verify to check manifests.",
                 SyncVerificationState.Running =>
                     "Re-reading both sides. Nothing is copied, moved, or deleted while " +
                     "verification runs.",
-                SyncVerificationState.Verified =>
-                    "The run exists on both sides and their manifests match.",
+                SyncVerificationState.SidecarManifestMatch =>
+                    "Matched remote sidecar descriptor (.manifest.json). The destination manifest " +
+                    "agrees with the local manifest, but container payload bytes and embedded manifest have not been verified.",
+                SyncVerificationState.ManifestMatch =>
+                    "The run exists on both sides and their manifests match. File counts, " +
+                    "sizes, timestamps, and recorded hashes match; payload bytes were not re-read.",
+                SyncVerificationState.PayloadVerified =>
+                    "Every payload file has been read and verified byte-for-byte against " +
+                    "its recorded SHA-256 cryptographic hash.",
                 SyncVerificationState.ContentMismatch =>
                     "Both sides hold this run but their manifests differ. Nothing was " +
                     "changed. Resolve the difference manually before syncing it again.",
+                SyncVerificationState.PayloadMismatch =>
+                    "Payload hash check failed: one or more files differ from their recorded SHA-256 hashes.",
                 SyncVerificationState.MissingLocally =>
                     "The local backup base no longer reports this run. Nothing was deleted " +
                     "by this app. Download it again; downloads never overwrite.",
@@ -347,8 +413,11 @@ namespace GameSaves.App.Models
                 SyncItemStatus.DryRun => SyncStateSeverity.Neutral,
             SyncItemStatus.Uploaded or SyncItemStatus.Downloaded => Verification switch
             {
-                SyncVerificationState.Verified => SyncStateSeverity.Success,
+                SyncVerificationState.PayloadVerified => SyncStateSeverity.Success,
+                SyncVerificationState.ManifestMatch => SyncStateSeverity.Success,
+                SyncVerificationState.SidecarManifestMatch => SyncStateSeverity.Warning,
                 SyncVerificationState.ContentMismatch or
+                    SyncVerificationState.PayloadMismatch or
                     SyncVerificationState.MissingLocally or
                     SyncVerificationState.MissingRemotely or
                     SyncVerificationState.MissingBothSides => SyncStateSeverity.Danger,

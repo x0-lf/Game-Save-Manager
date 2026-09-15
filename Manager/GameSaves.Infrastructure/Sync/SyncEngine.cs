@@ -30,7 +30,8 @@ namespace GameSaves.Infrastructure.Sync
             string RunName,
             TransferBackupManifest Manifest,
             BackupContainerFormat Format,
-            string RemotePath);
+            string RemotePath,
+            bool IsSidecar = false);
 
         public SyncEngine(
             IRemoteFileSystem remote,
@@ -217,13 +218,19 @@ namespace GameSaves.Infrastructure.Sync
 
                     if (equivalent)
                     {
+                        bool isSidecar = desc?.IsSidecar ?? false;
+                        VerificationStrength strength = isSidecar
+                            ? VerificationStrength.SidecarManifestMatch
+                            : VerificationStrength.ManifestMatch;
+
                         items.Add(new SyncItem(
                             name, SyncItemAction.InSync, true, true,
                             localRun.BackupRootPath, _remote.GetDisplayPath(remotePathName),
                             localRun.Manifest.Game,
                             localRun.Manifest.FileCount,
                             localRun.Manifest.TotalBytes,
-                            "In sync"));
+                            isSidecar ? "In sync (sidecar manifest match)" : "In sync (manifest match)",
+                            Verification: strength));
                     }
                     else
                     {
@@ -233,7 +240,8 @@ namespace GameSaves.Infrastructure.Sync
                             localRun.Manifest.Game,
                             localRun.Manifest.FileCount,
                             localRun.Manifest.TotalBytes,
-                            "Conflict: same name, different content. Never copied automatically."));
+                            "Conflict: same name, different content. Never copied automatically.",
+                            Verification: VerificationStrength.ManifestMismatch));
 
                         warnings.Add(new TransferPreviewWarning(
                             "SyncConflict",
@@ -365,19 +373,25 @@ namespace GameSaves.Infrastructure.Sync
                     string sidecarPath = $"{archiveName}.manifest.json";
                     string? manifestText = await _remote.ReadTextFileAsync(sidecarPath, cancellationToken);
                     TransferBackupManifest? manifest = null;
+                    bool isSidecar = false;
 
                     if (manifestText is not null)
                     {
                         manifest = ParseRemoteManifest(manifestText);
+                        if (manifest is not null)
+                        {
+                            isSidecar = true;
+                        }
                     }
 
                     // If no sidecar text, try local/direct header inspection via metadata reader if available
                     if (manifest is null)
                     {
                         string localPath = _remote.GetDisplayPath(archiveName);
-                        if (File.Exists(localPath) && _metadataReader.TryReadManifest(localPath, out TransferBackupManifest? headerManifest, out _))
+                        if (File.Exists(localPath) && _metadataReader.TryReadManifest(localPath, out TransferBackupManifest? headerManifest, out _, allowSidecar: false))
                         {
                             manifest = headerManifest;
+                            isSidecar = false;
                         }
                     }
 
@@ -412,7 +426,7 @@ namespace GameSaves.Infrastructure.Sync
                     }
 
                     runs[runName] = manifest;
-                    _remoteRuns[runName] = new RemoteRunDescriptor(runName, manifest, format, archiveName);
+                    _remoteRuns[runName] = new RemoteRunDescriptor(runName, manifest, format, archiveName, isSidecar);
                 }
                 catch
                 {
@@ -695,7 +709,7 @@ namespace GameSaves.Infrastructure.Sync
                             manifestJson,
                             cancellationToken);
 
-                        return new SyncItemResult(item, bytes, SyncItemStatus.Uploaded, null);
+                        return new SyncItemResult(item, bytes, SyncItemStatus.Uploaded, null, Verification: VerificationStrength.Copied);
                     }
                     finally
                     {
@@ -751,7 +765,7 @@ namespace GameSaves.Infrastructure.Sync
                         ReportProgress(options, progressState, item.RunName, relative);
                     }
 
-                    return new SyncItemResult(item, bytes, SyncItemStatus.Uploaded, null);
+                    return new SyncItemResult(item, bytes, SyncItemStatus.Uploaded, null, Verification: VerificationStrength.Copied);
                 }
             }
             catch (OperationCanceledException)
@@ -854,7 +868,7 @@ namespace GameSaves.Infrastructure.Sync
                                 $"Archive container import failed: {importResult.Message}");
                         }
 
-                        return new SyncItemResult(item, bytes, SyncItemStatus.Downloaded, null);
+                        return new SyncItemResult(item, bytes, SyncItemStatus.Downloaded, null, Verification: VerificationStrength.Copied);
                     }
                     finally
                     {
@@ -947,7 +961,7 @@ namespace GameSaves.Infrastructure.Sync
                             rewritten,
                             new JsonSerializerOptions { WriteIndented = true }));
 
-                    return new SyncItemResult(item, bytes, SyncItemStatus.Downloaded, null);
+                    return new SyncItemResult(item, bytes, SyncItemStatus.Downloaded, null, Verification: VerificationStrength.Copied);
                 }
             }
             catch (OperationCanceledException)

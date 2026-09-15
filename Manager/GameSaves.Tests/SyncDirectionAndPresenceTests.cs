@@ -598,8 +598,8 @@ public sealed class SyncDirectionAndPresenceTests
 
         SyncItemResultRowViewModel row = Assert.Single(viewModel.ExecutionResults);
 
-        Assert.Equal(SyncVerificationState.Verified, row.Verification);
-        Assert.Equal("Verified in sync", row.StateText);
+        Assert.Equal(SyncVerificationState.ManifestMatch, row.Verification);
+        Assert.Equal("Manifest match", row.StateText);
         Assert.Equal(SyncStateSeverity.Success, row.Severity);
 
         // The transfer status itself is never rewritten by the check.
@@ -695,7 +695,7 @@ public sealed class SyncDirectionAndPresenceTests
 
         await viewModel.VerifyLastSyncCommand.ExecuteAsync(null);
 
-        Assert.Equal(SyncVerificationState.Verified, row.Verification);
+        Assert.Equal(SyncVerificationState.ManifestMatch, row.Verification);
         Assert.Single(provider.ExecuteOptions);
     }
 
@@ -723,7 +723,7 @@ public sealed class SyncDirectionAndPresenceTests
         // The result of the run that did happen stays exactly as recorded.
         SyncItemResultRowViewModel row = Assert.Single(viewModel.ExecutionResults);
         Assert.Equal(nameof(SyncItemStatus.Uploaded), row.Status);
-        Assert.Equal(SyncVerificationState.Verified, row.Verification);
+        Assert.Equal(SyncVerificationState.ManifestMatch, row.Verification);
 
         await viewModel.VerifyLastSyncCommand.ExecuteAsync(null);
 
@@ -801,7 +801,7 @@ public sealed class SyncDirectionAndPresenceTests
         SyncItemResultRowViewModel skipped = viewModel.ExecutionResults
             .Single(row => row.RunName == "skipped");
 
-        Assert.Equal(SyncVerificationState.Verified, copied.Verification);
+        Assert.Equal(SyncVerificationState.ManifestMatch, copied.Verification);
         Assert.Equal(SyncVerificationState.NotRequested, skipped.Verification);
         Assert.Equal("Conflict skipped", skipped.StateText);
         Assert.Equal("Both sides", skipped.AffectedSideText);
@@ -848,10 +848,10 @@ public sealed class SyncDirectionAndPresenceTests
             labels.Add(row.StateText);
             Assert.NotEqual("", row.StateDetail);
 
-            // Only one of them may claim the run is verified.
+            // Only ManifestMatch and PayloadVerified represent a verified state.
             Assert.Equal(
-                state == SyncVerificationState.Verified,
-                row.StateText.Contains("Verified in sync", StringComparison.Ordinal));
+                state == SyncVerificationState.ManifestMatch,
+                row.StateText.Contains("Manifest match", StringComparison.Ordinal));
         }
 
         Assert.Equal(labels.Count, labels.Distinct(StringComparer.Ordinal).Count());

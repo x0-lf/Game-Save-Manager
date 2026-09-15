@@ -132,10 +132,10 @@ public sealed class SyncUiEndToEndTests
         SyncItemResultRowViewModel downloaded = viewModel.ExecutionResults
             .Single(row => row.RunName == RemoteOnlyRun);
 
-        Assert.Equal(SyncVerificationState.Verified, uploaded.Verification);
-        Assert.Equal(SyncVerificationState.Verified, downloaded.Verification);
-        Assert.Equal("Verified in sync", uploaded.StateText);
-        Assert.Contains("Verified in sync: all 2", viewModel.VerificationStatusMessage);
+        Assert.Equal(SyncVerificationState.ManifestMatch, uploaded.Verification);
+        Assert.Equal(SyncVerificationState.ManifestMatch, downloaded.Verification);
+        Assert.Equal("Manifest match", uploaded.StateText);
+        Assert.Contains("Manifest match: all 2", viewModel.VerificationStatusMessage);
     }
 
     [Fact]
@@ -172,7 +172,7 @@ public sealed class SyncUiEndToEndTests
         SyncItemResultRowViewModel uploaded = viewModel.ExecutionResults
             .Single(row => row.RunName == LocalOnlyRun);
 
-        Assert.Equal(SyncVerificationState.Verified, uploaded.Verification);
+        Assert.Equal(SyncVerificationState.ManifestMatch, uploaded.Verification);
 
         // Something outside the app removes the uploaded run, which is exactly
         // the case a "Sync finished" message must not keep claiming.
@@ -189,7 +189,7 @@ public sealed class SyncUiEndToEndTests
 
         // And the run the app never touched is still verified.
         Assert.Equal(
-            SyncVerificationState.Verified,
+            SyncVerificationState.ManifestMatch,
             viewModel.ExecutionResults.Single(row => row.RunName == RemoteOnlyRun)
                 .Verification);
     }

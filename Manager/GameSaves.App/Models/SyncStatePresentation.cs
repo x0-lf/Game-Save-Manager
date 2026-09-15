@@ -34,17 +34,19 @@ namespace GameSaves.App.Models
     /// separate from <see cref="SyncItemStatus"/> on purpose: a run can be
     /// copied and unverified at the same time, and one enum that had to say
     /// both would have to lie about one of them.
+    /// Distinguishes between unverified copies, manifest-only checks (sidecar vs embedded),
+    /// and full cryptographic payload hash verification.
     /// </summary>
     public enum SyncVerificationState
     {
-        /// <summary>No revalidation has been attempted for this run yet.</summary>
+        /// <summary>No revalidation has been attempted for this run yet (copied, unverified).</summary>
         NotRequested = 0,
 
         /// <summary>Revalidation is running.</summary>
         Running = 1,
 
-        /// <summary>Present on both sides with matching manifests.</summary>
-        Verified = 2,
+        /// <summary>Present on both sides with matching manifests (payload bytes not re-read).</summary>
+        ManifestMatch = 2,
 
         /// <summary>Present on both sides, manifests differ.</summary>
         ContentMismatch = 3,
@@ -66,7 +68,23 @@ namespace GameSaves.App.Models
         EndpointUnavailable = 7,
 
         /// <summary>The user stopped the revalidation.</summary>
-        Cancelled = 8
+        Cancelled = 8,
+
+        /// <summary>
+        /// Present on both sides matched using an unauthenticated sidecar descriptor (.manifest.json).
+        /// Internal archive payload and embedded manifest have not been verified.
+        /// </summary>
+        SidecarManifestMatch = 9,
+
+        /// <summary>
+        /// All payload files were read and verified byte-for-byte against their recorded SHA-256 hashes.
+        /// </summary>
+        PayloadVerified = 10,
+
+        /// <summary>
+        /// A payload file failed cryptographic hash verification (corrupted or tampered).
+        /// </summary>
+        PayloadMismatch = 11
     }
 
     /// <summary>

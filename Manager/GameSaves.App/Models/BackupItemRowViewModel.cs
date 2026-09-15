@@ -1,9 +1,17 @@
+using CommunityToolkit.Mvvm.ComponentModel;
 using GameSaves.Core.Transfers;
 
 namespace GameSaves.App.Models
 {
-    public sealed class BackupItemRowViewModel
+    public sealed partial class BackupItemRowViewModel : ObservableObject
     {
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(StatusDisplay))]
+        [NotifyPropertyChangedFor(nameof(StatusGlyph))]
+        [NotifyPropertyChangedFor(nameof(IsVerifiedSuccess))]
+        [NotifyPropertyChangedFor(nameof(IsVerifiedFailed))]
+        private bool? isVerified;
+
         public BackupItemRowViewModel(TransferOverwriteBackupItem item)
         {
             Item = item;
@@ -22,6 +30,23 @@ namespace GameSaves.App.Models
         public string Sha256Short => Item.Sha256.Length > 12
             ? Item.Sha256[..12]
             : Item.Sha256;
+
+        public string StatusDisplay => IsVerified switch
+        {
+            true => "Verified",
+            false => "Mismatch",
+            null => "Recorded"
+        };
+
+        public string StatusGlyph => IsVerified switch
+        {
+            true => "✓",
+            false => "✕",
+            null => "•"
+        };
+
+        public bool IsVerifiedSuccess => IsVerified == true;
+        public bool IsVerifiedFailed => IsVerified == false;
 
         private static string FormatBytes(long bytes)
         {

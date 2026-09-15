@@ -34,12 +34,39 @@ namespace GameSaves.Core.Transfers
             CancellationToken cancellationToken = default);
 
         /// <summary>
+        /// Attempts to read the root manifest.json and indicates whether it was read from an
+        /// external unauthenticated sidecar file rather than from the container itself.
+        /// </summary>
+        bool TryReadManifest(
+            string path,
+            out TransferBackupManifest? manifest,
+            out string? error,
+            out bool isSidecar,
+            bool allowSidecar = true,
+            CancellationToken cancellationToken = default);
+
+        /// <summary>
         /// Probes and builds a TransferBackupRunInfo catalog entry for a folder or archive file.
         /// </summary>
         bool TryBuildRunInfo(
             string path,
             out TransferBackupRunInfo? runInfo,
             out string? error,
+            CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Reads every file in the backup container (folder or archive) and verifies its SHA-256
+        /// cryptographic hash byte-for-byte against the manifest.
+        /// </summary>
+        VerificationStrengthResult VerifyPayloadIntegrity(
+            TransferBackupRunInfo runInfo,
+            CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Asynchronously verifies every file in the backup container against its recorded SHA-256 hash.
+        /// </summary>
+        Task<VerificationStrengthResult> VerifyPayloadIntegrityAsync(
+            TransferBackupRunInfo runInfo,
             CancellationToken cancellationToken = default);
     }
 }

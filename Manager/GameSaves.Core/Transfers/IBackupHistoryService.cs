@@ -15,5 +15,15 @@ namespace GameSaves.Core.Transfers
         /// are not listed.
         /// </summary>
         string GetBackupBasePath();
+
+        /// <summary>
+        /// Verifies the cryptographic payload integrity of a backup run.
+        /// </summary>
+        Task<VerificationStrengthResult> VerifyRunIntegrityAsync(
+            TransferBackupRunInfo run,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new VerificationStrengthResult(
+                run.Verification,
+                "Integrity verification not supported by this history provider."));
     }
 }

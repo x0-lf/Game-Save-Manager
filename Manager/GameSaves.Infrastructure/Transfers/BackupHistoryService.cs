@@ -22,6 +22,13 @@ namespace GameSaves.Infrastructure.Transfers
             return TransferBackupLocations.GetBackupBasePath(_databasePathProvider);
         }
 
+        public Task<VerificationStrengthResult> VerifyRunIntegrityAsync(
+            TransferBackupRunInfo run,
+            CancellationToken cancellationToken = default)
+        {
+            return _metadataReader.VerifyPayloadIntegrityAsync(run, cancellationToken);
+        }
+
         public Task<IReadOnlyList<TransferBackupRunInfo>> GetRunsAsync(
             CancellationToken cancellationToken = default)
         {

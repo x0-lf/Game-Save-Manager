@@ -23,13 +23,27 @@ namespace GameSaves.App.ViewModels
         private bool _initialized;
 
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(CanVerifySelectedRun))]
+        [NotifyCanExecuteChangedFor(nameof(VerifySelectedRunCommand))]
         private bool isLoading;
 
         [ObservableProperty]
         private string statusMessage = "Refresh to list backup runs.";
 
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(CanVerifySelectedRun))]
+        [NotifyCanExecuteChangedFor(nameof(VerifySelectedRunCommand))]
         private BackupRunRowViewModel? selectedRun;
+
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(CanVerifySelectedRun))]
+        [NotifyCanExecuteChangedFor(nameof(VerifySelectedRunCommand))]
+        private bool isVerifying;
+
+        [ObservableProperty]
+        private string fileListStatusMessage = "";
+
+        public bool CanVerifySelectedRun => SelectedRun is not null && !IsVerifying && !IsLoading;
 
         [ObservableProperty]
         private bool confirmRestore;
@@ -515,6 +529,7 @@ namespace GameSaves.App.ViewModels
             RestoreResults.Clear();
             ConfirmRestore = false;
             RestoreStatusMessage = "No restore has run yet.";
+            FileListStatusMessage = "";
             FilesRestored = 0;
             FilesSkipped = 0;
             BytesRestoredDisplay = "0 B";
@@ -711,6 +726,57 @@ namespace GameSaves.App.ViewModels
             double gb = mb / 1024.0;
 
             return $"{gb:0.##} GB";
+        }
+
+        [RelayCommand(CanExecute = nameof(CanVerifySelectedRun))]
+        private async Task VerifySelectedRunAsync()
+        {
+            if (SelectedRun is null || IsVerifying || IsLoading)
+                return;
+
+            var runVm = SelectedRun;
+            try
+            {
+                IsVerifying = true;
+                FileListStatusMessage = "Verifying cryptographic SHA-256 payload integrity...";
+
+                var result = await _backupHistoryService.VerifyRunIntegrityAsync(runVm.Run);
+
+                if (SelectedRun != runVm)
+                    return;
+
+                runVm.Verification = result.Strength;
+
+                if (result.FileResults is not null)
+                {
+                    foreach (var itemRow in RunItems)
+                    {
+                        if (result.FileResults.TryGetValue(itemRow.Item.BackupFile, out bool matched) ||
+                            result.FileResults.TryGetValue(itemRow.Item.OriginalFile, out matched))
+                        {
+                            itemRow.IsVerified = matched;
+                        }
+                    }
+                }
+
+                FileListStatusMessage = result.Strength switch
+                {
+                    VerificationStrength.PayloadVerified =>
+                        $"Payload verified: all {result.VerifiedFiles} file(s) matched SHA-256 hashes.",
+                    VerificationStrength.PayloadMismatch =>
+                        $"Payload verification failed: {result.Error ?? "Hash mismatch detected."}",
+                    _ =>
+                        $"Verification status: {result.Strength}. {result.Error ?? ""}".Trim()
+                };
+            }
+            catch (Exception ex)
+            {
+                FileListStatusMessage = $"Verification error: {ex.Message}";
+            }
+            finally
+            {
+                IsVerifying = false;
+            }
         }
     }
 }

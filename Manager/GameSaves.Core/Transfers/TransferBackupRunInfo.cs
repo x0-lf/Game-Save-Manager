@@ -8,7 +8,8 @@ namespace GameSaves.Core.Transfers
         string BackupRootPath,
         string ManifestPath,
         TransferBackupManifest Manifest,
-        BackupContainerFormat ContainerFormat = BackupContainerFormat.Folder)
+        BackupContainerFormat ContainerFormat = BackupContainerFormat.Folder,
+        VerificationStrength Verification = VerificationStrength.ManifestMatch)
     {
         public bool IsRestoreRun =>
             Manifest.Kind.Equals(
@@ -24,5 +25,8 @@ namespace GameSaves.Core.Transfers
         public bool IsZip => ContainerFormat == BackupContainerFormat.Zip;
         public bool IsSevenZip => ContainerFormat == BackupContainerFormat.SevenZip;
         public bool IsArchive => IsZip || IsSevenZip;
+
+        public bool IsPayloadVerified => Verification == VerificationStrength.PayloadVerified;
+        public bool IsSidecarMatch => Verification == VerificationStrength.SidecarManifestMatch;
     }
 }
