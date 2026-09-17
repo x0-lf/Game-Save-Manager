@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using GameSaves.App.Common;
 using GameSaves.App.Models;
 using GameSaves.Core.Transfers;
 using System;
@@ -15,6 +16,8 @@ namespace GameSaves.App.ViewModels
 
         private readonly ITransferHistoryRepository _historyRepository;
         private bool _initialized;
+        private bool _isBulkLoading;
+        private TransferRunRowViewModel? _selectedRun;
 
         [ObservableProperty]
         private bool isLoading;
@@ -22,10 +25,33 @@ namespace GameSaves.App.ViewModels
         [ObservableProperty]
         private string statusMessage = "Refresh to list executed runs.";
 
-        [ObservableProperty]
-        private TransferRunRowViewModel? selectedRun;
+        public TransferRunRowViewModel? SelectedRun
+        {
+            get => _selectedRun;
+            set
+            {
+                if (value is null && !_isBulkLoading && _selectedRun is not null && Runs.Contains(_selectedRun))
+                {
+                    if (Pagination.IsPaging || !Pagination.CurrentPageItems.Contains(_selectedRun))
+                    {
+                        return; // Ignore null assignment during page switch
+                    }
+                }
+
+                if (SetProperty(ref _selectedRun, value))
+                {
+                    OnSelectedRunChanged(value);
+                }
+            }
+        }
 
         public ObservableCollection<TransferRunRowViewModel> Runs { get; } = new();
+
+        public PaginationController<TransferRunRowViewModel> Pagination { get; } = new()
+        {
+            ItemName = "run",
+            PluralItemName = "runs",
+        };
 
         public ObservableCollection<TransferRunItemRowViewModel> RunItems { get; } = new();
 
@@ -40,6 +66,19 @@ namespace GameSaves.App.ViewModels
 
             Workspace = workspaceLayout.Page(
                 GameSaves.App.Services.UiRailLayoutSettings.TabHistory);
+
+            Pagination.PageChanged += (_, _) =>
+            {
+                OnPropertyChanged(nameof(SelectedRun));
+            };
+
+            Runs.CollectionChanged += (_, _) =>
+            {
+                if (!_isBulkLoading)
+                {
+                    Pagination.SetSource(Runs);
+                }
+            };
         }
 
         // Automatic startup load of the operation history. Reuses the manual
@@ -55,7 +94,7 @@ namespace GameSaves.App.ViewModels
             await RefreshRunsAsync();
         }
 
-        partial void OnSelectedRunChanged(TransferRunRowViewModel? value)
+        private void OnSelectedRunChanged(TransferRunRowViewModel? value)
         {
             RunItems.Clear();
 
@@ -97,13 +136,23 @@ namespace GameSaves.App.ViewModels
                 IsLoading = true;
                 StatusMessage = "Reading run history...";
 
-                Runs.Clear();
-                SelectedRun = null;
+                _isBulkLoading = true;
+                try
+                {
+                    Runs.Clear();
+                    SelectedRun = null;
 
-                var runs = await Task.Run(() => _historyRepository.GetRecentRuns(MaxRuns));
+                    var runs = await Task.Run(() => _historyRepository.GetRecentRuns(MaxRuns));
 
-                foreach (TransferRunInfo run in runs)
-                    Runs.Add(new TransferRunRowViewModel(run));
+                    foreach (TransferRunInfo run in runs)
+                        Runs.Add(new TransferRunRowViewModel(run));
+                }
+                finally
+                {
+                    _isBulkLoading = false;
+                }
+
+                Pagination.SetSource(Runs);
 
                 StatusMessage = Runs.Count == 0
                     ? "No executed runs recorded yet."

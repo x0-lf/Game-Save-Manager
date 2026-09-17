@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using GameSaves.App.Common;
 using GameSaves.App.Models;
 using GameSaves.App.Services;
 using GameSaves.Core.Sync;
@@ -47,6 +48,7 @@ namespace GameSaves.App.ViewModels
         private CancellationTokenSource? _googleAuthenticationCancellation;
         private long _googleAuthenticationGeneration;
         private bool _googleDriveInteractiveOperation;
+        private bool _isBulkLoadingItems;
         private CancellationTokenSource? _googleRootFolderCancellation;
 
         // Owned by ExecuteSyncAsync for the lifetime of one run. Until
@@ -434,6 +436,12 @@ namespace GameSaves.App.ViewModels
         }
 
         public ObservableCollection<SyncItemRowViewModel> Items { get; } = new();
+
+        public PaginationController<SyncItemRowViewModel> Pagination { get; } = new()
+        {
+            ItemName = "run",
+            PluralItemName = "runs",
+        };
 
         public ObservableCollection<TransferWarningRowViewModel> Warnings { get; } = new();
 
@@ -1062,6 +1070,14 @@ namespace GameSaves.App.ViewModels
 
             if (unavailable is not null)
                 statusMessage = unavailable;
+
+            Items.CollectionChanged += (_, _) =>
+            {
+                if (!_isBulkLoadingItems)
+                {
+                    Pagination.SetSource(Items);
+                }
+            };
         }
 
         partial void OnRemoteRootPathChanged(string value)
@@ -2746,7 +2762,17 @@ namespace GameSaves.App.ViewModels
 
         private void ClearPreview()
         {
-            Items.Clear();
+            _isBulkLoadingItems = true;
+            try
+            {
+                Items.Clear();
+            }
+            finally
+            {
+                _isBulkLoadingItems = false;
+            }
+
+            Pagination.SetSource(Items);
             Warnings.Clear();
             SummaryDisplay = "";
             SelectedSummaryDisplay = "";
@@ -2973,20 +2999,30 @@ namespace GameSaves.App.ViewModels
         {
             _lastPlan = plan;
 
-            Items.Clear();
-            Warnings.Clear();
-            ConfirmSync = false;
-
-            DateTimeOffset checkedAt = _clock.UtcNow;
-
-            foreach (SyncItem item in plan.Items)
+            _isBulkLoadingItems = true;
+            try
             {
-                Items.Add(new SyncItemRowViewModel(
-                    item,
-                    plan.ProviderName,
-                    checkedAt,
-                    UpdateSelectedSummary));
+                Items.Clear();
+                Warnings.Clear();
+                ConfirmSync = false;
+
+                DateTimeOffset checkedAt = _clock.UtcNow;
+
+                foreach (SyncItem item in plan.Items)
+                {
+                    Items.Add(new SyncItemRowViewModel(
+                        item,
+                        plan.ProviderName,
+                        checkedAt,
+                        UpdateSelectedSummary));
+                }
             }
+            finally
+            {
+                _isBulkLoadingItems = false;
+            }
+
+            Pagination.SetSource(Items);
 
             foreach (TransferPreviewWarning warning in plan.Warnings)
                 Warnings.Add(new TransferWarningRowViewModel(warning));

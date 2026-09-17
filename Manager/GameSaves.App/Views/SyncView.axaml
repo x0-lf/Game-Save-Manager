@@ -810,7 +810,7 @@
                                 IsCollapsed="{Binding !PlanSectionExpanded, Mode=TwoWay}">
                 <!-- The plan grows with its row count and the region scrolls as
                      one, so there is no inner scroller to trap the list in. -->
-                <Grid RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="4">
+                <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto" RowSpacing="4">
 
                     <TextBlock Grid.Row="0"
                                Text="{Binding SummaryDisplay}"
@@ -859,7 +859,7 @@
                     </Border>
 
                     <StackPanel Grid.Row="3" Spacing="4">
-                        <ItemsControl ItemsSource="{Binding Items}">
+                        <ItemsControl ItemsSource="{Binding Pagination.CurrentPageItems}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="models:SyncItemRowViewModel">
                                     <Border Padding="0,6"
@@ -981,6 +981,92 @@
                                           Message="Run Preview Sync (Dry Run) to see which backup runs would be copied."
                                           IsVisible="{Binding !Items.Count}" />
                     </StackPanel>
+
+                    <!-- Bottom pagination bar -->
+                    <Border Grid.Row="4"
+                            BorderThickness="0,1,0,0"
+                            BorderBrush="{DynamicResource SubtleBorderBrush}"
+                            Background="{DynamicResource InsetBackgroundBrush}"
+                            Padding="16,8"
+                            IsVisible="{Binding !!Items.Count}">
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <!-- Left: Page summary text -->
+                            <TextBlock Grid.Column="0"
+                                       Text="{Binding Pagination.PageSummaryText}"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                       FontSize="{DynamicResource FontSizeBody}"
+                                       VerticalAlignment="Center" />
+
+                            <!-- Right: Page size selector and page navigation -->
+                            <StackPanel Grid.Column="2"
+                                        Orientation="Horizontal"
+                                        VerticalAlignment="Center"
+                                        Spacing="16">
+                                <!-- Page size selector -->
+                                <StackPanel Orientation="Horizontal"
+                                            VerticalAlignment="Center"
+                                            Spacing="6">
+                                    <TextBlock Text="Page size:"
+                                               Foreground="{DynamicResource SecondaryTextBrush}"
+                                               FontSize="{DynamicResource FontSizeBody}"
+                                               VerticalAlignment="Center" />
+                                    <ComboBox ItemsSource="{Binding Pagination.PageSizeOptions}"
+                                              SelectedItem="{Binding Pagination.SelectedPageSizeOption}"
+                                              ToolTip.Tip="Select page size"
+                                              AutomationProperties.Name="Page size selector"
+                                              MinWidth="72"
+                                              VerticalAlignment="Center" />
+                                    <TextBox Text="{Binding Pagination.CustomPageSizeText}"
+                                             IsVisible="{Binding Pagination.IsCustomPageSize}"
+                                             PlaceholderText="Size"
+                                             ToolTip.Tip="Enter custom page size (positive integer)"
+                                             AutomationProperties.Name="Custom page size input"
+                                             Width="60"
+                                             VerticalAlignment="Center" />
+                                </StackPanel>
+
+                                <!-- Navigation buttons -->
+                                <StackPanel Orientation="Horizontal"
+                                            VerticalAlignment="Center"
+                                            Spacing="4">
+                                    <Button Command="{Binding Pagination.FirstPageCommand}"
+                                            ToolTip.Tip="First page"
+                                            AutomationProperties.Name="First page"
+                                            Content="«"
+                                            Width="32"
+                                            HorizontalContentAlignment="Center"
+                                            VerticalContentAlignment="Center" />
+                                    <Button Command="{Binding Pagination.PreviousPageCommand}"
+                                            ToolTip.Tip="Previous page"
+                                            AutomationProperties.Name="Previous page"
+                                            Content="‹"
+                                            Width="32"
+                                            HorizontalContentAlignment="Center"
+                                            VerticalContentAlignment="Center" />
+                                    <TextBlock Text="{Binding Pagination.PageNumberText}"
+                                               Foreground="{DynamicResource PrimaryTextBrush}"
+                                               FontSize="{DynamicResource FontSizeBody}"
+                                               FontWeight="Medium"
+                                               VerticalAlignment="Center"
+                                               Margin="8,0" />
+                                    <Button Command="{Binding Pagination.NextPageCommand}"
+                                            ToolTip.Tip="Next page"
+                                            AutomationProperties.Name="Next page"
+                                            Content="›"
+                                            Width="32"
+                                            HorizontalContentAlignment="Center"
+                                            VerticalContentAlignment="Center" />
+                                    <Button Command="{Binding Pagination.LastPageCommand}"
+                                            ToolTip.Tip="Last page"
+                                            AutomationProperties.Name="Last page"
+                                            Content="»"
+                                            Width="32"
+                                            HorizontalContentAlignment="Center"
+                                            VerticalContentAlignment="Center" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
                 </Grid>
             </wsp:WorkspacePanel>
 

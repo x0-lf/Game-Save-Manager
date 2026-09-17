@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using GameSaves.App.Common;
 using GameSaves.App.Models;
 using GameSaves.Core.Transfers;
 using System;
@@ -21,6 +22,8 @@ namespace GameSaves.App.ViewModels
         private readonly Services.IFolderPickerService _folderPickerService;
         private readonly ProfilesViewModel _profilesViewModel;
         private bool _initialized;
+        private bool _isBulkLoading;
+        private BackupRunRowViewModel? _selectedRun;
 
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(CanVerifySelectedRun))]
@@ -30,10 +33,27 @@ namespace GameSaves.App.ViewModels
         [ObservableProperty]
         private string statusMessage = "Refresh to list backup runs.";
 
-        [ObservableProperty]
-        [NotifyPropertyChangedFor(nameof(CanVerifySelectedRun))]
-        [NotifyCanExecuteChangedFor(nameof(VerifySelectedRunCommand))]
-        private BackupRunRowViewModel? selectedRun;
+        public BackupRunRowViewModel? SelectedRun
+        {
+            get => _selectedRun;
+            set
+            {
+                if (value is null && !_isBulkLoading && _selectedRun is not null && Runs.Contains(_selectedRun))
+                {
+                    if (Pagination.IsPaging || !Pagination.CurrentPageItems.Contains(_selectedRun))
+                    {
+                        return; // Ignore null assignment during page switch
+                    }
+                }
+
+                if (SetProperty(ref _selectedRun, value))
+                {
+                    OnSelectedRunChanged(value);
+                    OnPropertyChanged(nameof(CanVerifySelectedRun));
+                    VerifySelectedRunCommand.NotifyCanExecuteChanged();
+                }
+            }
+        }
 
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(CanVerifySelectedRun))]
@@ -211,6 +231,12 @@ namespace GameSaves.App.ViewModels
 
         public ObservableCollection<BackupRunRowViewModel> Runs { get; } = new();
 
+        public PaginationController<BackupRunRowViewModel> Pagination { get; } = new()
+        {
+            ItemName = "backup",
+            PluralItemName = "backups",
+        };
+
         public ObservableCollection<BackupItemRowViewModel> RunItems { get; } = new();
 
         public ObservableCollection<BackupRestoreItemResultRowViewModel> RestoreResults { get; } = new();
@@ -236,6 +262,19 @@ namespace GameSaves.App.ViewModels
 
             Workspace = workspaceLayout.Page(
                 GameSaves.App.Services.UiRailLayoutSettings.TabBackups);
+
+            Pagination.PageChanged += (_, _) =>
+            {
+                OnPropertyChanged(nameof(SelectedRun));
+            };
+
+            Runs.CollectionChanged += (_, _) =>
+            {
+                if (!_isBulkLoading)
+                {
+                    Pagination.SetSource(Runs);
+                }
+            };
         }
 
         [ObservableProperty]
@@ -523,7 +562,7 @@ namespace GameSaves.App.ViewModels
                 await RefreshRunsAsync();
         }
 
-        partial void OnSelectedRunChanged(BackupRunRowViewModel? value)
+        private void OnSelectedRunChanged(BackupRunRowViewModel? value)
         {
             RunItems.Clear();
             RestoreResults.Clear();
@@ -577,16 +616,26 @@ namespace GameSaves.App.ViewModels
                 IsLoading = true;
                 StatusMessage = "Reading backup history...";
 
-                Runs.Clear();
-                SelectedRun = null;
+                _isBulkLoading = true;
+                try
+                {
+                    Runs.Clear();
+                    SelectedRun = null;
 
-                if (Profiles.Count == 0)
-                    await _profilesViewModel.RefreshProfilesCommand.ExecuteAsync(null);
+                    if (Profiles.Count == 0)
+                        await _profilesViewModel.RefreshProfilesCommand.ExecuteAsync(null);
 
-                var runs = await _backupHistoryService.GetRunsAsync();
+                    var runs = await _backupHistoryService.GetRunsAsync();
 
-                foreach (TransferBackupRunInfo run in runs)
-                    Runs.Add(new BackupRunRowViewModel(run));
+                    foreach (TransferBackupRunInfo run in runs)
+                        Runs.Add(new BackupRunRowViewModel(run));
+                }
+                finally
+                {
+                    _isBulkLoading = false;
+                }
+
+                Pagination.SetSource(Runs);
 
                 StatusMessage = Runs.Count == 0
                     ? "No backup runs found."

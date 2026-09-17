@@ -61,10 +61,12 @@
                                 IsVisible="{Binding !!Runs.Count}"
                                 MinPanelWidth="240"
                                 MaxPanelWidth="620">
-                <ListBox ItemsSource="{Binding Runs}"
-                         SelectedItem="{Binding SelectedRun}"
-                         ScrollViewer.VerticalScrollBarVisibility="Auto"
-                         Background="Transparent">
+                <Grid RowDefinitions="*,Auto">
+                    <ListBox Grid.Row="0"
+                             ItemsSource="{Binding Pagination.CurrentPageItems}"
+                             SelectedItem="{Binding SelectedRun}"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto"
+                             Background="Transparent">
                     <ListBox.ItemTemplate>
                         <DataTemplate x:DataType="models:BackupRunRowViewModel">
                             <StackPanel Spacing="3"
@@ -129,7 +131,93 @@
                             </StackPanel>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
-                </ListBox>
+                    </ListBox>
+
+                    <!-- Bottom pagination bar -->
+                    <Border Grid.Row="1"
+                            BorderThickness="0,1,0,0"
+                            BorderBrush="{DynamicResource SubtleBorderBrush}"
+                            Background="{DynamicResource InsetBackgroundBrush}"
+                            Padding="12,8">
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <!-- Left: Page summary text -->
+                            <TextBlock Grid.Column="0"
+                                       Text="{Binding Pagination.PageSummaryText}"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                       FontSize="{DynamicResource FontSizeBody}"
+                                       VerticalAlignment="Center" />
+
+                            <!-- Right: Page size selector and page navigation -->
+                            <StackPanel Grid.Column="2"
+                                        Orientation="Horizontal"
+                                        VerticalAlignment="Center"
+                                        Spacing="12">
+                                <!-- Page size selector -->
+                                <StackPanel Orientation="Horizontal"
+                                            VerticalAlignment="Center"
+                                            Spacing="6">
+                                    <TextBlock Text="Page size:"
+                                               Foreground="{DynamicResource SecondaryTextBrush}"
+                                               FontSize="{DynamicResource FontSizeBody}"
+                                               VerticalAlignment="Center" />
+                                    <ComboBox ItemsSource="{Binding Pagination.PageSizeOptions}"
+                                              SelectedItem="{Binding Pagination.SelectedPageSizeOption}"
+                                              ToolTip.Tip="Select page size"
+                                              AutomationProperties.Name="Page size selector"
+                                              MinWidth="72"
+                                              VerticalAlignment="Center" />
+                                    <TextBox Text="{Binding Pagination.CustomPageSizeText}"
+                                             IsVisible="{Binding Pagination.IsCustomPageSize}"
+                                             PlaceholderText="Size"
+                                             ToolTip.Tip="Enter custom page size (positive integer)"
+                                             AutomationProperties.Name="Custom page size input"
+                                             Width="60"
+                                             VerticalAlignment="Center" />
+                                </StackPanel>
+
+                                <!-- Navigation buttons -->
+                                <StackPanel Orientation="Horizontal"
+                                            VerticalAlignment="Center"
+                                            Spacing="4">
+                                    <Button Command="{Binding Pagination.FirstPageCommand}"
+                                            ToolTip.Tip="First page"
+                                            AutomationProperties.Name="First page"
+                                            Content="«"
+                                            Width="32"
+                                            HorizontalContentAlignment="Center"
+                                            VerticalContentAlignment="Center" />
+                                    <Button Command="{Binding Pagination.PreviousPageCommand}"
+                                            ToolTip.Tip="Previous page"
+                                            AutomationProperties.Name="Previous page"
+                                            Content="‹"
+                                            Width="32"
+                                            HorizontalContentAlignment="Center"
+                                            VerticalContentAlignment="Center" />
+                                    <TextBlock Text="{Binding Pagination.PageNumberText}"
+                                               Foreground="{DynamicResource PrimaryTextBrush}"
+                                               FontSize="{DynamicResource FontSizeBody}"
+                                               FontWeight="Medium"
+                                               VerticalAlignment="Center"
+                                               Margin="8,0" />
+                                    <Button Command="{Binding Pagination.NextPageCommand}"
+                                            ToolTip.Tip="Next page"
+                                            AutomationProperties.Name="Next page"
+                                            Content="›"
+                                            Width="32"
+                                            HorizontalContentAlignment="Center"
+                                            VerticalContentAlignment="Center" />
+                                    <Button Command="{Binding Pagination.LastPageCommand}"
+                                            ToolTip.Tip="Last page"
+                                            AutomationProperties.Name="Last page"
+                                            Content="»"
+                                            Width="32"
+                                            HorizontalContentAlignment="Center"
+                                            VerticalContentAlignment="Center" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </Grid>
             </wsp:WorkspacePanel>
 
             <wsp:WorkspacePanel PanelKey="backups.restore"

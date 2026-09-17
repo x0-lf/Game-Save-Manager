@@ -8,21 +8,21 @@ title, product outcome (The What), dependency, and observable completion criteri
 
 ## Now
 
-Current sprint focus: Paginate transfer details, backup runs, and history (OBS-019).
+Current sprint focus: Dynamic custom accent colour system (UI-013) (OBS-022).
 
 | ID | Title | Product outcome | Dependency | Completion criteria |
 | --- | --- | --- | --- | --- |
-| **OBS-019** | Paginate transfer details, backup runs, and history | Large sync plans, file transfer previews, and backup history lists remain responsive and clear | OBS-018 | Paging applied to `SyncView`, `HistoryView`, and `BackupsView`; selection state preserved across page switches; total transfer counts reflect the complete filtered plan rather than visible page |
+| **OBS-022** | Dynamic custom accent colour system (UI-013) | Users can choose arbitrary hex accent colors while maintaining full readability and WCAG AA contrast | Theme architecture | `ThemeService` calculates dynamic HSL palette; measures contrast against white text and clamps lightness for >= 4.5:1 ratio; high-contrast mode overrides custom colors |
 
 ---
 
 ## Next
 
-Upcoming sprint priorities: Provider seams, UI pagination, and accent colors.
+Upcoming sprint priorities: Virtualized DataGrid rendering, curated data distribution, and catalog expansion.
 
 | ID | Title | Product outcome | Dependency | Completion criteria |
 | --- | --- | --- | --- | --- |
-| **OBS-022** | Dynamic custom accent colour system (UI-013) | Users can choose arbitrary hex accent colors while maintaining full readability and WCAG AA contrast | Theme architecture | `ThemeService` calculates dynamic HSL palette; measures contrast against white text and clamps lightness for >= 4.5:1 ratio; high-contrast mode overrides custom colors |
+| **UI-015** | Virtualized DataGrid rendering optimizations | Ultra-large save file hierarchies (10,000+ files) render with low memory overhead | OBS-018, OBS-019 | UI virtualization enabled for file trees; deferred node loading; smooth scrolling at 60 FPS |
 
 ---
 
@@ -51,7 +51,6 @@ Planned feature sprints: Curated data distribution, catalog expansion, new cloud
 | **BACKUP-008** | Scheduled profile synchronization engine | Approved remote profiles synchronize automatically without weakening safety rules | BACKUP-003, BACKUP-007 | Opt-in per profile; conflicts reported and skipped; authentication failures fail safely without opening browser; create-only upload preserved |
 | **BACKUP-009** | Provider-neutral manifest comparison service | Difference data between backup runs is computed independently of UI presentation | Stable manifests | Pure comparison service reports added, removed, changed, and identical files; read-only; large comparisons cancellable |
 | **DIFF-001** | Backup visual difference viewer (BACKUP-004) | Users can visually compare two backup runs before restoring or synchronizing | BACKUP-009 | UI displays added, removed, and changed files using manifest paths and hashes; filters and summary counts; never modifies content |
-| **UI-015** | Virtualized DataGrid rendering optimizations | Ultra-large save file hierarchies (10,000+ files) render with low memory overhead | OBS-018, OBS-019 | UI virtualization enabled for file trees; deferred node loading; smooth scrolling at 60 FPS |
 | **RELEASE-001** | Desktop release packaging (REL-001) | Users receive self-contained, signed installer packages without requiring .NET SDK | Supported platform decisions | Repeatable Windows release pipeline (MSIX / InnoSetup); version metadata visible; user data kept outside install directory |
 | **RELEASE-002** | Application update notification and verification system | Safe update notifications and installation preserving backups and settings | RELEASE-001 | Update checking configurable; downloads integrity-verified; staged download and atomic replacement; offline use supported |
 | **RELEASE-003** | Database and settings migration automated test fixtures | Database upgrades and settings migrations are regression-tested against historical schemas | DATA-003, RELEASE-001 | Representative fixtures from supported releases; forward migration validated; unsupported newer schema refusal tested |
@@ -121,6 +120,7 @@ Verified in code, documentation, and automated tests.
 
 | ID | Title | Product outcome | Dependency | Completion criteria |
 | --- | --- | --- | --- | --- |
+| **OBS-019** | Paginate transfer details, backup runs, and history | Large sync plans, file transfer previews, and backup history lists remain responsive and clear | OBS-018 | Paging applied to `SyncView` (Sync plan), `HistoryView` (Executed runs), and `BackupsView` (Backup runs) using reusable `PaginationController<T>` with standard presets and custom page sizes; selection state preserved across page switches; total transfer counts and summaries reflect complete filtered plan rather than visible page; automated unit tests in `TransferAndHistoryPaginationTests` pass; all 2,424 tests pass with 0 warnings and 0 errors in Release |
 | **OBS-018** | UI Pagination Engine for Installed Games (UI-012) | Users with large libraries (100–1,000+ games) navigate smoothly without UI freezing | UI revamp, Issue #25 | Reusable `PaginationController<T>` supports page sizes `[1, 3, 5, 7, 9, 10, 15, 20, 25, 30, 50, 75, 100, Custom]`; filtering and sorting apply before paging; selection preserved; 60 FPS rendering; automated tests in `PaginationControllerTests` pass |
 | **OBS-010** | Complete dependency modernization sweep | The application runs on an audited, modern, and vulnerability-free dependency baseline | MAINT-002 | `dotnet list package --outdated` and `--vulnerable` audited; direct dependencies updated across all eight projects (.NET 10.0.12 servicing, Avalonia 12.1.2, Google.Apis 1.76.0, Test.Sdk 18.10.1, xUnit runner 4.0.0); licenses and notices reconciled; all 2,383 automated tests pass |
 | **OBS-009** | Throttling diagnostics and Google Drive for Desktop promotion | Users experiencing Google Drive API rate limits receive clear guidance and can utilize the official desktop client | DRIVE-005, MAINT-003 | Exponential backoff displays countdown timers via `IRetryBackoffNotifier`; actionable rate-limiting diagnostics detect 429 and `rateLimitExceeded`; `GoogleDriveDesktopDetector` discovers mounted desktop roots and promotes Local Folder sync; local copy success is distinguished from cloud upload confirmation; all 2,383 automated tests pass |
