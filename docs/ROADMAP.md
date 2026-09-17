@@ -8,11 +8,11 @@ title, product outcome (The What), dependency, and observable completion criteri
 
 ## Now
 
-Current sprint focus: UI Pagination Engine for Installed Games (UI-012).
+Current sprint focus: Paginate transfer details, backup runs, and history (OBS-019).
 
 | ID | Title | Product outcome | Dependency | Completion criteria |
 | --- | --- | --- | --- | --- |
-| **OBS-018** | UI Pagination Engine for Installed Games (UI-012) | Users with large libraries (100–1,000+ games) navigate smoothly without UI freezing | UI revamp, Issue #25 | Reusable `PaginationController<T>` supports page sizes `[1, 3, 5, 7, 9, 10, 15, 20, 25, 30, 50, 75, 100, Custom]`; filtering and sorting apply before paging; selection preserved; 60 FPS rendering |
+| **OBS-019** | Paginate transfer details, backup runs, and history | Large sync plans, file transfer previews, and backup history lists remain responsive and clear | OBS-018 | Paging applied to `SyncView`, `HistoryView`, and `BackupsView`; selection state preserved across page switches; total transfer counts reflect the complete filtered plan rather than visible page |
 
 ---
 
@@ -22,7 +22,6 @@ Upcoming sprint priorities: Provider seams, UI pagination, and accent colors.
 
 | ID | Title | Product outcome | Dependency | Completion criteria |
 | --- | --- | --- | --- | --- |
-| **OBS-019** | Paginate transfer details, backup runs, and history | Large sync plans, file transfer previews, and backup history lists remain responsive and clear | OBS-018 | Paging applied to `SyncView`, `HistoryView`, and `BackupsView`; selection state preserved across page switches; total transfer counts reflect the complete filtered plan rather than visible page |
 | **OBS-022** | Dynamic custom accent colour system (UI-013) | Users can choose arbitrary hex accent colors while maintaining full readability and WCAG AA contrast | Theme architecture | `ThemeService` calculates dynamic HSL palette; measures contrast against white text and clamps lightness for >= 4.5:1 ratio; high-contrast mode overrides custom colors |
 
 ---
@@ -122,6 +121,7 @@ Verified in code, documentation, and automated tests.
 
 | ID | Title | Product outcome | Dependency | Completion criteria |
 | --- | --- | --- | --- | --- |
+| **OBS-018** | UI Pagination Engine for Installed Games (UI-012) | Users with large libraries (100–1,000+ games) navigate smoothly without UI freezing | UI revamp, Issue #25 | Reusable `PaginationController<T>` supports page sizes `[1, 3, 5, 7, 9, 10, 15, 20, 25, 30, 50, 75, 100, Custom]`; filtering and sorting apply before paging; selection preserved; 60 FPS rendering; automated tests in `PaginationControllerTests` pass |
 | **OBS-010** | Complete dependency modernization sweep | The application runs on an audited, modern, and vulnerability-free dependency baseline | MAINT-002 | `dotnet list package --outdated` and `--vulnerable` audited; direct dependencies updated across all eight projects (.NET 10.0.12 servicing, Avalonia 12.1.2, Google.Apis 1.76.0, Test.Sdk 18.10.1, xUnit runner 4.0.0); licenses and notices reconciled; all 2,383 automated tests pass |
 | **OBS-009** | Throttling diagnostics and Google Drive for Desktop promotion | Users experiencing Google Drive API rate limits receive clear guidance and can utilize the official desktop client | DRIVE-005, MAINT-003 | Exponential backoff displays countdown timers via `IRetryBackoffNotifier`; actionable rate-limiting diagnostics detect 429 and `rateLimitExceeded`; `GoogleDriveDesktopDetector` discovers mounted desktop roots and promotes Local Folder sync; local copy success is distinguished from cloud upload confirmation; all 2,383 automated tests pass |
 | **MAINT-003** | Honour provider HTTP `Retry-After` guidance | Google Drive and cloud providers respect server-provided retry timing during rate-limiting | HTTP response observation and retry delay carrier | Cloud client paths propagate bounded `Retry-After`; `RetryingRemoteFileSystem` honours server delays via `IRetryDelayCarrier` clamped to 30s budget; deterministic tests in `HttpRetryAfterParserTests` cover seconds, HTTP dates, missing/malformed headers, past dates, and excessive delays; all 2,363 automated tests pass |

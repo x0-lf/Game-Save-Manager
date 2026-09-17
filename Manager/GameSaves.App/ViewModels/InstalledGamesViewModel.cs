@@ -1,5 +1,6 @@
-﻿using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using GameSaves.App.Common;
 using GameSaves.App.Models;
 using GameSaves.App.Services;
 using GameSaves.Core.Save;
@@ -18,6 +19,8 @@ namespace GameSaves.App.ViewModels
         private readonly IInstalledGameSaveStatusService _statusService;
         private readonly IUiSettingsStore? _uiSettingsStore;
         private bool _initialized;
+        private bool _isBulkLoading;
+        private InstalledGameRowViewModel? _selectedGame;
 
         [ObservableProperty]
         private bool isLoading;
@@ -25,10 +28,30 @@ namespace GameSaves.App.ViewModels
         [ObservableProperty]
         private string statusMessage = "Ready.";
 
-        [ObservableProperty]
-        private InstalledGameRowViewModel? selectedGame;
+        public InstalledGameRowViewModel? SelectedGame
+        {
+            get => _selectedGame;
+            set
+            {
+                if (value is null && _selectedGame is not null && Games.Contains(_selectedGame))
+                {
+                    if (Pagination.IsPaging || !Pagination.CurrentPageItems.Contains(_selectedGame))
+                    {
+                        return;
+                    }
+                }
+
+                SetProperty(ref _selectedGame, value);
+            }
+        }
 
         public ObservableCollection<InstalledGameRowViewModel> Games { get; } = new();
+
+        public PaginationController<InstalledGameRowViewModel> Pagination { get; } = new()
+        {
+            ItemName = "game",
+            PluralItemName = "games",
+        };
 
         public ObservableCollection<InstalledGameColumnOption> ColumnOptions { get; }
 
@@ -45,6 +68,19 @@ namespace GameSaves.App.ViewModels
 
             Workspace = workspaceLayout.Page(
                 GameSaves.App.Services.UiRailLayoutSettings.TabInstalledGames);
+
+            Pagination.PageChanged += (_, _) =>
+            {
+                OnPropertyChanged(nameof(SelectedGame));
+            };
+
+            Games.CollectionChanged += (_, _) =>
+            {
+                if (!_isBulkLoading)
+                {
+                    Pagination.SetSource(Games);
+                }
+            };
 
             AppUiSettings settings = uiSettingsStore?.Load() ?? AppUiSettings.Default;
             var hidden = new HashSet<string>(
@@ -106,10 +142,20 @@ namespace GameSaves.App.ViewModels
                 IReadOnlyList<InstalledGameSaveStatus> statuses =
                     await _statusService.GetInstalledGameStatusesAsync();
 
-                Games.Clear();
+                _isBulkLoading = true;
+                try
+                {
+                    Games.Clear();
 
-                foreach (InstalledGameSaveStatus status in statuses)
-                    Games.Add(new InstalledGameRowViewModel(status));
+                    foreach (InstalledGameSaveStatus status in statuses)
+                        Games.Add(new InstalledGameRowViewModel(status));
+                }
+                finally
+                {
+                    _isBulkLoading = false;
+                }
+
+                Pagination.SetSource(Games);
 
                 SelectedGame =
                     Games.FirstOrDefault(game => game.StatusKind == GameSaveStatusKind.Ready)
@@ -129,6 +175,39 @@ namespace GameSaves.App.ViewModels
             finally
             {
                 IsLoading = false;
+            }
+        }
+
+        public void SortBy(string? sortMemberPath, bool? ascending)
+        {
+            if (string.IsNullOrWhiteSpace(sortMemberPath) || ascending is null)
+            {
+                Pagination.ApplySort(null);
+                return;
+            }
+
+            Func<InstalledGameRowViewModel, object> keySelector = sortMemberPath switch
+            {
+                "GameName" => game => game.GameName,
+                "AppId" => game => game.AppId,
+                "InstallPath" => game => game.InstallPath,
+                "LibraryPath" => game => game.LibraryPath,
+                "ApprovedMappings" => game => game.ApprovedMappings,
+                "PendingMappings" => game => game.PendingMappings,
+                "NeedsFixMappings" => game => game.NeedsFixMappings,
+                "SavePathExists" => game => game.SavePathExists,
+                "FileCount" => game => game.FileCount,
+                "Status" => game => game.Status,
+                _ => game => game.GameName,
+            };
+
+            if (ascending.Value)
+            {
+                Pagination.ApplySort(items => items.OrderBy(keySelector));
+            }
+            else
+            {
+                Pagination.ApplySort(items => items.OrderByDescending(keySelector));
             }
         }
 
