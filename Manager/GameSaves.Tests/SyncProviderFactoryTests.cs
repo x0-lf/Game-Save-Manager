@@ -290,7 +290,7 @@ public sealed class SyncProviderFactoryTests
         ISyncProviderFactory factory = Factory(backups.Path);
 
         using ISyncProvider sftp = factory.CreateSftpProvider(SftpSettings());
-        Exception failure = Record.Exception(
+        Exception? failure = Record.Exception(
             () => factory.CreateLocalFolderProvider("   "));
 
         Assert.NotNull(failure);

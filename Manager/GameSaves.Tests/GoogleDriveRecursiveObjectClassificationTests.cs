@@ -9,7 +9,7 @@ public sealed class GoogleDriveRecursiveObjectClassificationTests
 {
     public static TheoryData<string?> MalformedMimeTypes => new()
     {
-        null,
+        null!,
         string.Empty,
         " ",
         "application",

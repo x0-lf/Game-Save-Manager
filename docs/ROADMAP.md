@@ -8,11 +8,11 @@ title, product outcome (The What), dependency, and observable completion criteri
 
 ## Now
 
-Current sprint focus: Modernize xUnit test toolchain.
+Current sprint focus: Honour provider HTTP `Retry-After` guidance.
 
 | ID | Title | Product outcome | Dependency | Completion criteria |
 | --- | --- | --- | --- | --- |
-| **MAINT-002** | Modernize xUnit test toolchain | The test suite is upgraded to the modern xUnit v3 runner and framework | Stable test suite baseline | Supported xUnit packages run the full suite with documented baseline changes; all 2,157+ tests pass; test execution isolated |
+| **MAINT-003** | Honour provider HTTP `Retry-After` guidance | Google Drive and cloud providers respect server-provided retry timing during rate-limiting | HTTP response observation and retry delay carrier | Cloud client paths propagate bounded `Retry-After`; deterministic tests cover seconds, HTTP date values, missing headers, excessive delays, and cancellation |
 
 ---
 
@@ -22,7 +22,6 @@ Upcoming sprint priorities: Dependency modernization, provider seams, and UI pag
 
 | ID | Title | Product outcome | Dependency | Completion criteria |
 | --- | --- | --- | --- | --- |
-| **MAINT-003** | Honour provider HTTP `Retry-After` guidance | Google Drive and cloud providers respect server-provided retry timing during rate-limiting | HTTP response observation and retry delay carrier | Cloud client paths propagate bounded `Retry-After`; deterministic tests cover seconds, HTTP date values, missing headers, excessive delays, and cancellation |
 | **OBS-009** | Throttling diagnostics and Google Drive for Desktop promotion | Users experiencing Google Drive API rate limits receive clear guidance and can utilize the official desktop client | DRIVE-005, MAINT-003 | Exponential backoff displays countdown timers; user guidance explains API limits vs desktop client sync; Local Folder provider targeting mounted Drive folder promoted in UI |
 | **OBS-010** | Complete dependency modernization sweep | The application runs on an audited, modern, and vulnerability-free dependency baseline | MAINT-002 | `dotnet list package --outdated` and `--vulnerable` audited; direct dependencies updated across all eight projects; licenses and notices reconciled |
 | **OBS-018** | UI Pagination Engine for Installed Games (UI-012) | Users with large libraries (100–1,000+ games) navigate smoothly without UI freezing | UI revamp, Issue #25 | Reusable `PaginationController<T>` supports page sizes `[1, 3, 5, 7, 9, 10, 15, 20, 25, 30, 50, 75, 100, Custom]`; filtering and sorting apply before paging; selection preserved; 60 FPS rendering |
@@ -126,6 +125,7 @@ Verified in code, documentation, and automated tests.
 
 | ID | Title | Product outcome | Dependency | Completion criteria |
 | --- | --- | --- | --- | --- |
+| **MAINT-002** | Modernize xUnit test toolchain | The test suite is upgraded to the modern xUnit v3 runner and framework | Stable test suite baseline | Supported xUnit packages run the full suite with documented baseline changes; all 2,330 automated tests pass; test execution isolated |
 | **MAINT-001** | SFTP injectable remote boundary seam | SFTP upload and download behavior can be tested deterministically without a live SSH server | Existing remote-filesystem boundary | `SftpSyncProvider` accepts an injectable `IRemoteFileSystem` boundary; deterministic upload, download, conflict, and cancellation tests pass without changing production SSH behavior; verified with 16 automated tests in `SftpSyncProviderTests` |
 | **AUDIT-001** | Verify and harden security audit remediations | Remediations from security audit `e17b300` are independently verified, hardened, and proven regression-free | OBS-007, e17b300 | Google Drive archive container capability alignment and explicit downgrade UX verified; restore destination confinement enforced against sensitive system, startup, root, and Program Files directories; manifest path containment and Zip Slip tested adversarially; stale temporary working directories purged reliably; all 2,314+ automated tests pass |
 | **OBS-008** | Explicit verification strength indicators (DRIVE-008, DRIVE-009) | Users clearly understand whether a backup has been copied, matched against manifests, or verified via payload hashes | DRIVE-008, DRIVE-009 | Standardized verification levels (`Copied`, `ManifestMatch`, `SidecarManifestMatch`, `PayloadVerified`); UI status chips, history records, and tooltips reflect exact evidence level; manifest-only check never claims payload verification; cryptographic hash verification in backup history; automated tests in `VerificationStrengthTests` pass |
