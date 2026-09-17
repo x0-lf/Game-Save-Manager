@@ -27,6 +27,9 @@ namespace GameSaves.App.ViewModels
         private readonly IGoogleDriveRootFolderService _googleDriveRootFolderService;
         private readonly IBackupHistoryService? _backupHistoryService;
         private readonly IUtcClock _clock;
+        private readonly IRetryBackoffNotifier? _retryBackoffNotifier;
+        private readonly IGoogleDriveDesktopDetector? _googleDriveDesktopDetector;
+        private CancellationTokenSource? _countdownCancellation;
         private SyncPlan? _lastPlan;
         private ISyncProvider? _lastProvider;
 
@@ -74,6 +77,7 @@ namespace GameSaves.App.ViewModels
             bool HasStoredAuthentication);
 
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(CanSwitchToGoogleDriveDesktop))]
         private bool isLoading;
 
         [ObservableProperty]
@@ -81,6 +85,7 @@ namespace GameSaves.App.ViewModels
 
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(CanPreviewSync))]
+        [NotifyPropertyChangedFor(nameof(IsTargetingGoogleDriveDesktop))]
         private string remoteRootPath = "";
 
         [ObservableProperty]
@@ -119,6 +124,8 @@ namespace GameSaves.App.ViewModels
         [NotifyPropertyChangedFor(nameof(CanCheckGoogleDriveRootFolder))]
         [NotifyPropertyChangedFor(nameof(CanShowRecreateGoogleDriveRootFolder))]
         [NotifyPropertyChangedFor(nameof(CanRecreateGoogleDriveRootFolder))]
+        [NotifyPropertyChangedFor(nameof(IsTargetingGoogleDriveDesktop))]
+        [NotifyPropertyChangedFor(nameof(ShowGoogleDriveDesktopPromotion))]
         private SyncProviderKind selectedProviderKind = SyncProviderKind.LocalFolder;
 
         [ObservableProperty]
@@ -218,7 +225,21 @@ namespace GameSaves.App.ViewModels
 
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(CanCancelSync))]
+        [NotifyPropertyChangedFor(nameof(CanSwitchToGoogleDriveDesktop))]
         private bool isSyncRunning;
+
+        [ObservableProperty]
+        private bool isRetrying;
+
+        [ObservableProperty]
+        private string retryCountdownText = "";
+
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(ShowGoogleDriveDesktopPromotion))]
+        private bool isRateLimited;
+
+        [ObservableProperty]
+        private string rateLimitDiagnosticMessage = "";
 
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(CanCancelSync))]
@@ -843,6 +864,134 @@ namespace GameSaves.App.ViewModels
                 GoogleDriveRootFolderStatus.Ready or
                 GoogleDriveRootFolderStatus.Moved;
 
+        public bool IsGoogleDriveDesktopInstalled =>
+            _googleDriveDesktopDetector?.IsInstalled ?? false;
+
+        public string? GoogleDriveDesktopMountedPath =>
+            _googleDriveDesktopDetector?.MountedDrivePath;
+
+        public string GoogleDriveDesktopSuggestedFolder =>
+            _googleDriveDesktopDetector?.DefaultSyncFolderPath ??
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Google Drive", "GameSaves");
+
+        public bool ShowGoogleDriveDesktopPromotion =>
+            IsGoogleDriveSelected || IsRateLimited || SelectedRemoteProfile?.ProviderKind == SyncProviderKind.GoogleDrive;
+
+        public bool CanSwitchToGoogleDriveDesktop => !IsLoading && !IsSyncRunning;
+
+        public bool IsTargetingGoogleDriveDesktop
+        {
+            get
+            {
+                if (!IsLocalFolderSelected || string.IsNullOrWhiteSpace(RemoteRootPath))
+                    return false;
+
+                string path = RemoteRootPath.Trim();
+
+                if (_googleDriveDesktopDetector?.MountedDrivePath is { } mounted &&
+                    path.StartsWith(mounted, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+
+                return path.StartsWith(@"G:\", StringComparison.OrdinalIgnoreCase) ||
+                       path.Contains("Google Drive", StringComparison.OrdinalIgnoreCase) ||
+                       path.Contains("DriveFS", StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
+        [RelayCommand]
+        public void SwitchToGoogleDriveDesktop()
+        {
+            SelectedProviderKind = SyncProviderKind.LocalFolder;
+            string targetFolder = GoogleDriveDesktopSuggestedFolder;
+            RemoteRootPath = targetFolder;
+            StatusMessage = $"Switched to Google Drive for Desktop ({targetFolder}). Local files copy directly to the mounted Drive and sync in the background.";
+            IsRateLimited = false;
+            RateLimitDiagnosticMessage = "";
+        }
+
+        private void OnRetryBackoffStarted(object? sender, RetryBackoffEventArgs e)
+        {
+            IsRetrying = true;
+            if (e.IsRateLimited)
+            {
+                IsRateLimited = true;
+                RateLimitDiagnosticMessage = FormatRateLimitDiagnostic(e.Exception);
+            }
+
+            _countdownCancellation?.Cancel();
+            _countdownCancellation?.Dispose();
+            _countdownCancellation = new CancellationTokenSource();
+            CancellationToken token = _countdownCancellation.Token;
+
+            _ = RunCountdownTimerAsync(e, token);
+        }
+
+        private void OnRetryBackoffEnded(object? sender, RetryBackoffEventArgs e)
+        {
+            _countdownCancellation?.Cancel();
+            IsRetrying = false;
+            RetryCountdownText = "";
+        }
+
+        private async Task RunCountdownTimerAsync(RetryBackoffEventArgs e, CancellationToken token)
+        {
+            int remainingSeconds = Math.Max(1, (int)Math.Ceiling(e.Delay.TotalSeconds));
+            string reason = e.IsRateLimited
+                ? "Rate limited by provider"
+                : (e.IsServerInstructed ? "Server requested backoff" : "Temporary transfer error");
+
+            while (remainingSeconds > 0 && !token.IsCancellationRequested)
+            {
+                string text = $"{reason}. Retrying attempt {e.Attempt}/{e.MaxAttempts} in {remainingSeconds}s...";
+                RetryCountdownText = text;
+                if (IsSyncRunning)
+                {
+                    ProgressText = text;
+                }
+
+                try
+                {
+                    await Task.Delay(1000, token);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+
+                remainingSeconds--;
+            }
+        }
+
+        public static string FormatRateLimitDiagnostic(Exception? exception = null)
+        {
+            return "Google Drive API rate limit reached (HTTP 429 Too Many Requests / rateLimitExceeded). " +
+                   "Direct Google Drive API usage is subject to per-minute request limits. " +
+                   "For fast, unrestricted bulk transfers, use Google Drive for Desktop with the Local Folder provider. " +
+                   "Local copy success confirms files are written to the mounted drive; Google Drive for Desktop manages cloud upload and synchronization.";
+        }
+
+        public static bool IsRateLimitException(Exception? exception)
+        {
+            for (Exception? current = exception; current is not null; current = current.InnerException)
+            {
+                if (current is IRetryDelayCarrier { RetryAfterDelay: not null })
+                    return true;
+
+                string message = current.Message;
+                if (message.Contains("429", StringComparison.OrdinalIgnoreCase) ||
+                    message.Contains("TooManyRequests", StringComparison.OrdinalIgnoreCase) ||
+                    message.Contains("rateLimitExceeded", StringComparison.OrdinalIgnoreCase) ||
+                    message.Contains("userRateLimitExceeded", StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         /// <summary>This page's panel arrangement.</summary>
         public GameSaves.App.Services.IWorkspaceLayoutPage Workspace { get; }
 
@@ -858,7 +1007,9 @@ namespace GameSaves.App.ViewModels
             IGoogleDriveOAuthService googleDriveOAuthService,
             GameSaves.App.Services.WorkspaceLayoutService workspaceLayout,
             IGoogleDriveRootFolderService? googleDriveRootFolderService = null,
-            IBackupHistoryService? backupHistoryService = null)
+            IBackupHistoryService? backupHistoryService = null,
+            IRetryBackoffNotifier? retryBackoffNotifier = null,
+            IGoogleDriveDesktopDetector? googleDriveDesktopDetector = null)
         {
             Workspace = workspaceLayout.Page(
                 GameSaves.App.Services.UiRailLayoutSettings.TabSync);
@@ -881,6 +1032,15 @@ namespace GameSaves.App.ViewModels
             // the backup folder. Absent in view-model tests that build this
             // type directly, which then say so rather than inventing a path.
             _backupHistoryService = backupHistoryService;
+            _retryBackoffNotifier = retryBackoffNotifier;
+            _googleDriveDesktopDetector = googleDriveDesktopDetector;
+
+            if (_retryBackoffNotifier is not null)
+            {
+                _retryBackoffNotifier.BackoffStarted += OnRetryBackoffStarted;
+                _retryBackoffNotifier.BackoffEnded += OnRetryBackoffEnded;
+            }
+
             ProviderOptions = _providerCatalog.GetAll()
                 .Where(descriptor => descriptor.IsConfigurationAvailable)
                 .ToArray();
@@ -904,7 +1064,11 @@ namespace GameSaves.App.ViewModels
                 statusMessage = unavailable;
         }
 
-        partial void OnRemoteRootPathChanged(string value) => OnPersistentSettingChanged();
+        partial void OnRemoteRootPathChanged(string value)
+        {
+            OnPropertyChanged(nameof(IsTargetingGoogleDriveDesktop));
+            OnPersistentSettingChanged();
+        }
 
         partial void OnUploadEnabledChanged(bool value) => InvalidatePlan();
 
@@ -922,6 +1086,12 @@ namespace GameSaves.App.ViewModels
             OnPropertyChanged(nameof(CanPreviewSync));
             OnPropertyChanged(nameof(CanExecuteSyncNow));
             OnPropertyChanged(nameof(CanVerifyLastSync));
+            OnPropertyChanged(nameof(CanSwitchToGoogleDriveDesktop));
+        }
+
+        partial void OnIsRateLimitedChanged(bool value)
+        {
+            OnPropertyChanged(nameof(ShowGoogleDriveDesktopPromotion));
         }
 
         partial void OnSelectedProviderKindChanged(SyncProviderKind value)
@@ -935,6 +1105,9 @@ namespace GameSaves.App.ViewModels
 
             InvalidatePlan();
             MarkProfileDirty();
+
+            OnPropertyChanged(nameof(IsTargetingGoogleDriveDesktop));
+            OnPropertyChanged(nameof(ShowGoogleDriveDesktopPromotion));
 
             StatusMessage = GetUnavailableProviderMessage(value)
                 ?? "Sync provider changed. Configure it and build a new sync preview.";
@@ -2963,6 +3136,8 @@ namespace GameSaves.App.ViewModels
                 IsLoading = true;
                 IsSyncRunning = true;
                 IsCancellingSync = false;
+                IsRateLimited = false;
+                RateLimitDiagnosticMessage = "";
                 _syncCancellation?.Dispose();
                 _syncCancellation = new CancellationTokenSource();
                 TryUpdateLastUsed();
@@ -3052,11 +3227,23 @@ namespace GameSaves.App.ViewModels
             }
             catch (Exception ex)
             {
-                ExecutionStatusMessage = $"Sync failed: {ex.Message}";
+                if (IsRateLimitException(ex))
+                {
+                    IsRateLimited = true;
+                    RateLimitDiagnosticMessage = FormatRateLimitDiagnostic(ex);
+                    ExecutionStatusMessage = $"Sync rate limited by provider: {ex.Message}";
+                }
+                else
+                {
+                    ExecutionStatusMessage = $"Sync failed: {ex.Message}";
+                }
                 ProgressText = "";
             }
             finally
             {
+                _countdownCancellation?.Cancel();
+                IsRetrying = false;
+                RetryCountdownText = "";
                 IsLoading = false;
                 IsSyncRunning = false;
                 IsCancellingSync = false;

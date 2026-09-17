@@ -333,12 +333,12 @@ public sealed class RetryingRemoteFileSystemTests
             baseDelay: baseDelay,
             retryDelayExtractor: retryDelayExtractor);
 
-    private sealed class ScriptedFailureException(bool retryable) : Exception("scripted")
+    internal sealed class ScriptedFailureException(bool retryable) : Exception("scripted")
     {
         public bool Retryable { get; } = retryable;
     }
 
-    private sealed class ScriptedCarrierFailureException(
+    internal sealed class ScriptedCarrierFailureException(
         bool retryable,
         TimeSpan? retryAfterDelay,
         Exception? innerException = null)
@@ -353,7 +353,7 @@ public sealed class RetryingRemoteFileSystemTests
     /// Only the members these tests exercise do anything; the rest are present
     /// because the interface requires them.
     /// </summary>
-    private sealed class ScriptedRemoteFileSystem : IRemoteFileSystem
+    internal sealed class ScriptedRemoteFileSystem : IRemoteFileSystem
     {
         public int FailuresBeforeSuccess { get; set; }
 

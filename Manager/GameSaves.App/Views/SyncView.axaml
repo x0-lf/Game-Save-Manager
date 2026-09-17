@@ -204,6 +204,29 @@
                         </StackPanel>
                     </Border>
 
+                    <!-- Throttling diagnostic alert banner -->
+                    <Border Background="{DynamicResource InsetBackgroundBrush}"
+                            BorderBrush="{DynamicResource WarningBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            Padding="10,8"
+                            IsVisible="{Binding IsRateLimited}">
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="Google Drive API rate limit reached"
+                                       Foreground="{DynamicResource WarningBrush}"
+                                       FontSize="{DynamicResource FontSizeBody}"
+                                       FontWeight="SemiBold" />
+                            <TextBlock Text="{Binding RateLimitDiagnosticMessage}"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                       FontSize="{DynamicResource FontSizeBody}"
+                                       TextWrapping="Wrap" />
+                            <Button Content="Switch to Google Drive for Desktop"
+                                    Command="{Binding SwitchToGoogleDriveDesktopCommand}"
+                                    IsEnabled="{Binding CanSwitchToGoogleDriveDesktop}"
+                                    HorizontalAlignment="Left" />
+                        </StackPanel>
+                    </Border>
+
                     <StackPanel Spacing="2"
                                 IsVisible="{Binding IsSyncRunning}">
                         <!-- Work in progress reads as the accent, like every
@@ -219,6 +242,21 @@
                                    FontSize="{DynamicResource FontSizeBody}"
                                    TextTrimming="CharacterEllipsis"
                                    ToolTip.Tip="{Binding ProgressText}" />
+
+                        <!-- Backoff retry countdown banner -->
+                        <Border Background="{DynamicResource InsetBackgroundBrush}"
+                                BorderBrush="{DynamicResource WarningBrush}"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Padding="8,6"
+                                Margin="0,2,0,4"
+                                IsVisible="{Binding IsRetrying}">
+                            <TextBlock Text="{Binding RetryCountdownText}"
+                                       Foreground="{DynamicResource WarningBrush}"
+                                       FontSize="{DynamicResource FontSizeBody}"
+                                       FontWeight="SemiBold"
+                                       TextWrapping="Wrap" />
+                        </Border>
 
                         <!-- Inside the running-sync panel, so it exists only while
                              there is something to cancel. -->
@@ -425,6 +463,25 @@
                                         IsVisible="{Binding CanOpenRemoteLocation}"
                                         VerticalAlignment="Top" />
                             </Grid>
+
+                            <!-- Targeting Google Drive for Desktop notice -->
+                            <Border Background="{DynamicResource InsetBackgroundBrush}"
+                                    BorderBrush="{DynamicResource SubtleBorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="6"
+                                    Padding="8,6"
+                                    IsVisible="{Binding IsTargetingGoogleDriveDesktop}">
+                                <StackPanel Spacing="2">
+                                    <TextBlock Text="Google Drive for Desktop target detected"
+                                               Foreground="{DynamicResource AccentBrush}"
+                                               FontSize="{DynamicResource FontSizeBody}"
+                                               FontWeight="SemiBold" />
+                                    <TextBlock Text="Backups are written locally to your mounted Drive. Local copy success confirms the file was saved to disk; Google Drive for Desktop streams files to cloud storage in the background."
+                                               Foreground="{DynamicResource SecondaryTextBrush}"
+                                               FontSize="{DynamicResource FontSizeCaption}"
+                                               TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Border>
                         </StackPanel>
 
                         <!-- SFTP target -->
@@ -656,6 +713,30 @@
                                        Foreground="{DynamicResource MutedTextBrush}"
                                        FontSize="{DynamicResource FontSizeBody}"
                                        TextWrapping="Wrap" />
+
+                            <!-- Google Drive for Desktop promotion card -->
+                            <Border Background="{DynamicResource InsetBackgroundBrush}"
+                                    BorderBrush="{DynamicResource AccentBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="6"
+                                    Padding="10,8"
+                                    Margin="0,4,0,0">
+                                <StackPanel Spacing="4">
+                                    <TextBlock Text="Recommended for large libraries: Google Drive for Desktop"
+                                               Foreground="{DynamicResource AccentBrush}"
+                                               FontSize="{DynamicResource FontSizeBody}"
+                                               FontWeight="SemiBold" />
+                                    <TextBlock Text="Google Drive API calls are subject to per-minute rate limits. For faster bulk transfers without rate limits, use the official desktop client. Local copy success confirms files are saved to the mounted drive; Google Drive for Desktop streams them to the cloud in the background."
+                                               Foreground="{DynamicResource SecondaryTextBrush}"
+                                               FontSize="{DynamicResource FontSizeCaption}"
+                                               TextWrapping="Wrap" />
+                                    <Button Content="Switch to Google Drive for Desktop"
+                                            Command="{Binding SwitchToGoogleDriveDesktopCommand}"
+                                            IsEnabled="{Binding CanSwitchToGoogleDriveDesktop}"
+                                            HorizontalAlignment="Left"
+                                            Margin="0,4,0,0" />
+                                </StackPanel>
+                            </Border>
                         </StackPanel>
 
                         <StackPanel Orientation="Horizontal"

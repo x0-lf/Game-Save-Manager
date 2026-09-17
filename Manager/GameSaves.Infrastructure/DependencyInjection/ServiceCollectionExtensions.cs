@@ -63,6 +63,8 @@ namespace GameSaves.Infrastructure.DependencyInjection
             // Registered beside the clock and for the same reason: so a test
             // can substitute time rather than spend it. See Milestone X.
             services.AddSingleton<IDelayProvider, SystemDelayProvider>();
+            services.AddSingleton<IRetryBackoffNotifier, RetryBackoffNotifier>();
+            services.AddSingleton<IGoogleDriveDesktopDetector, GoogleDriveDesktopDetector>();
             services.AddSingleton<SyncRemoteProfileSettingsSerializer>();
 
             services.AddSingleton<ISavePathMappingRepository>(provider =>

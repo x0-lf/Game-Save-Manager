@@ -45,6 +45,8 @@ namespace GameSaves.Infrastructure.Sync
         private readonly IDelayProvider _delay;
         private readonly Func<Exception, bool> _isRetryable;
         private readonly Func<Exception, TimeSpan?>? _customRetryDelayExtractor;
+        private readonly IRetryBackoffNotifier? _backoffNotifier;
+        private readonly Func<Exception, bool>? _isRateLimited;
         private readonly int _maxAttempts;
         private readonly TimeSpan _baseDelay;
 
@@ -54,13 +56,17 @@ namespace GameSaves.Infrastructure.Sync
             Func<Exception, bool> isRetryable,
             int maxAttempts = DefaultMaxAttempts,
             TimeSpan? baseDelay = null,
-            Func<Exception, TimeSpan?>? retryDelayExtractor = null)
+            Func<Exception, TimeSpan?>? retryDelayExtractor = null,
+            IRetryBackoffNotifier? backoffNotifier = null,
+            Func<Exception, bool>? isRateLimited = null)
         {
             _inner = inner ?? throw new ArgumentNullException(nameof(inner));
             _delay = delay ?? throw new ArgumentNullException(nameof(delay));
             _isRetryable = isRetryable ??
                 throw new ArgumentNullException(nameof(isRetryable));
             _customRetryDelayExtractor = retryDelayExtractor;
+            _backoffNotifier = backoffNotifier;
+            _isRateLimited = isRateLimited;
 
             if (maxAttempts < 1)
             {
@@ -213,11 +219,48 @@ namespace GameSaves.Infrastructure.Sync
 
                     spent += wait;
 
-                    // The token is passed so a user cancelling during a backoff
-                    // is not made to wait it out.
-                    await _delay.DelayAsync(wait, cancellationToken);
+                    bool rateLimited = _isRateLimited?.Invoke(exception) ?? IsRateLimitException(exception);
+                    var eventArgs = new RetryBackoffEventArgs(
+                        Attempt: attempt,
+                        MaxAttempts: _maxAttempts,
+                        Delay: wait,
+                        IsServerInstructed: serverDelay.HasValue,
+                        Exception: exception,
+                        IsRateLimited: rateLimited);
+
+                    _backoffNotifier?.NotifyBackoffStarted(eventArgs);
+                    try
+                    {
+                        // The token is passed so a user cancelling during a backoff
+                        // is not made to wait it out.
+                        await _delay.DelayAsync(wait, cancellationToken);
+                    }
+                    finally
+                    {
+                        _backoffNotifier?.NotifyBackoffEnded(eventArgs);
+                    }
                 }
             }
+        }
+
+        private static bool IsRateLimitException(Exception exception)
+        {
+            for (Exception? current = exception; current is not null; current = current.InnerException)
+            {
+                if (current is IRetryDelayCarrier { RetryAfterDelay: not null })
+                    return true;
+
+                string message = current.Message;
+                if (message.Contains("429", StringComparison.OrdinalIgnoreCase) ||
+                    message.Contains("TooManyRequests", StringComparison.OrdinalIgnoreCase) ||
+                    message.Contains("rateLimitExceeded", StringComparison.OrdinalIgnoreCase) ||
+                    message.Contains("userRateLimitExceeded", StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private TimeSpan? ExtractRetryDelay(Exception exception)

@@ -50,7 +50,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
             IGoogleDriveRecursiveFileListingService recursiveFileListingService,
             IGoogleDriveBinaryUploadService binaryUploadService,
             IGoogleDriveBinaryDownloadService binaryDownloadService,
-            IDelayProvider delay)
+            IDelayProvider delay,
+            IRetryBackoffNotifier? backoffNotifier = null)
         {
             _profileRepository = profileRepository ??
                 throw new ArgumentNullException(nameof(profileRepository));
@@ -79,7 +80,10 @@ namespace GameSaves.Infrastructure.GoogleDrive
             _binaryDownloadService = binaryDownloadService ??
                 throw new ArgumentNullException(nameof(binaryDownloadService));
             _delay = delay ?? throw new ArgumentNullException(nameof(delay));
+            _backoffNotifier = backoffNotifier;
         }
+
+        private readonly IRetryBackoffNotifier? _backoffNotifier;
 
         public IRemoteFileSystem Create(Guid remoteProfileId)
         {
@@ -113,11 +117,17 @@ namespace GameSaves.Infrastructure.GoogleDrive
                     _binaryUploadService,
                     _binaryDownloadService),
                 _delay,
-                IsRetryableDriveFailure);
+                IsRetryableDriveFailure,
+                backoffNotifier: _backoffNotifier,
+                isRateLimited: IsRateLimitedDriveFailure);
         }
 
         private static bool IsRetryableDriveFailure(Exception exception) =>
             exception is GoogleDriveRemoteOperationException { Result.Retryable: true };
+
+        private static bool IsRateLimitedDriveFailure(Exception exception) =>
+            exception is GoogleDriveRemoteOperationException { Result.Status: GoogleDriveRemoteValidationStatus.RateLimited } ||
+            (exception is IRetryDelayCarrier { RetryAfterDelay: not null });
 
         private static string GetSafeDisplayRoot(SyncRemoteProfile? profile)
         {
