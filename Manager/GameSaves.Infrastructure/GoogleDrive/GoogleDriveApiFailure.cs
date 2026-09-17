@@ -1,3 +1,4 @@
+using GameSaves.Core.Sync;
 using Google;
 using System.Diagnostics;
 using System.Net;
@@ -50,14 +51,16 @@ namespace GameSaves.Infrastructure.GoogleDrive
         string? Reason,
         GoogleDriveApiFailure Failure,
         string SafeErrorCode,
-        bool Retryable)
+        bool Retryable,
+        TimeSpan? RetryAfterDelay = null)
     {
         public override string ToString() =>
             $"{Operation} / {(HttpStatus is null ? "none" : ((int)HttpStatus).ToString())} / " +
-            $"{Reason ?? "none"} / {SafeErrorCode} / retryable={Retryable}";
+            $"{Reason ?? "none"} / {SafeErrorCode} / retryable={Retryable}" +
+            (RetryAfterDelay.HasValue ? $" / retryAfter={RetryAfterDelay.Value.TotalSeconds}s" : string.Empty);
     }
 
-    internal sealed class GoogleDriveApiException : Exception
+    internal sealed class GoogleDriveApiException : Exception, IRetryDelayCarrier
     {
         public GoogleDriveApiException(GoogleDriveApiFailureDetails details)
             : base("The Google Drive API request did not complete.") =>
@@ -66,6 +69,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
         public GoogleDriveApiFailureDetails Details { get; }
 
         public GoogleDriveApiFailure Failure => Details.Failure;
+
+        public TimeSpan? RetryAfterDelay => Details.RetryAfterDelay;
     }
 
     /// <summary>
@@ -98,13 +103,17 @@ namespace GameSaves.Infrastructure.GoogleDrive
         public static GoogleDriveApiException Map(
             Exception exception,
             GoogleDriveApiOperation operation,
-            Func<GoogleDriveApiFailure, string> safeErrorCode)
+            Func<GoogleDriveApiFailure, string> safeErrorCode,
+            TimeSpan? retryAfter = null)
         {
             if (exception is OperationCanceledException)
                 throw exception;
 
             if (exception is GoogleDriveApiException known)
                 return known;
+
+            retryAfter ??= (exception as IRetryDelayCarrier)?.RetryAfterDelay
+                ?? GoogleDriveRetryAfterAmbientScope.Consume();
 
             GoogleDriveApiFailureDetails details;
 
@@ -119,7 +128,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
                     reason,
                     failure,
                     safeErrorCode(failure),
-                    IsRetryable(failure));
+                    IsRetryable(failure),
+                    retryAfter);
             }
             else
             {
@@ -133,7 +143,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
                     null,
                     failure,
                     safeErrorCode(failure),
-                    IsRetryable(failure));
+                    IsRetryable(failure),
+                    retryAfter);
             }
 
             Trace.TraceWarning("Google Drive API request failed: {0}", details);
@@ -144,14 +155,16 @@ namespace GameSaves.Infrastructure.GoogleDrive
             GoogleDriveApiOperation operation,
             GoogleDriveApiFailure failure,
             string safeErrorCode,
-            bool? retryable = null) =>
+            bool? retryable = null,
+            TimeSpan? retryAfter = null) =>
             new(new GoogleDriveApiFailureDetails(
                 operation,
                 null,
                 null,
                 failure,
                 safeErrorCode,
-                retryable ?? IsRetryable(failure)));
+                retryable ?? IsRetryable(failure),
+                retryAfter));
 
         private static GoogleDriveApiFailure Classify(
             HttpStatusCode? status,

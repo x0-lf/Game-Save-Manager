@@ -2972,9 +2972,13 @@ namespace GameSaves.App.ViewModels
                 ProgressText = "Starting...";
                 ExecutionStatusMessage = "Syncing backup runs...";
 
+                bool syncExecuting = true;
                 // Progress<T> marshals reports back to the UI thread.
                 var progress = new Progress<SyncProgress>(p =>
                 {
+                    if (!syncExecuting)
+                        return;
+
                     ProgressMax = Math.Max(1, p.BytesTotal);
                     ProgressValue = p.BytesDone;
                     ProgressText =
@@ -2995,6 +2999,13 @@ namespace GameSaves.App.ViewModels
                         Progress = progress
                     },
                     _syncCancellation.Token);
+
+                syncExecuting = false;
+                if (result.BytesCopied > 0)
+                {
+                    ProgressMax = Math.Max(ProgressMax, result.BytesCopied);
+                    ProgressValue = ProgressMax;
+                }
 
                 ExecutionResults.Clear();
 

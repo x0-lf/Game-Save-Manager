@@ -44,6 +44,7 @@ namespace GameSaves.Infrastructure.Sync
         private readonly IRemoteFileSystem _inner;
         private readonly IDelayProvider _delay;
         private readonly Func<Exception, bool> _isRetryable;
+        private readonly Func<Exception, TimeSpan?>? _customRetryDelayExtractor;
         private readonly int _maxAttempts;
         private readonly TimeSpan _baseDelay;
 
@@ -52,12 +53,14 @@ namespace GameSaves.Infrastructure.Sync
             IDelayProvider delay,
             Func<Exception, bool> isRetryable,
             int maxAttempts = DefaultMaxAttempts,
-            TimeSpan? baseDelay = null)
+            TimeSpan? baseDelay = null,
+            Func<Exception, TimeSpan?>? retryDelayExtractor = null)
         {
             _inner = inner ?? throw new ArgumentNullException(nameof(inner));
             _delay = delay ?? throw new ArgumentNullException(nameof(delay));
             _isRetryable = isRetryable ??
                 throw new ArgumentNullException(nameof(isRetryable));
+            _customRetryDelayExtractor = retryDelayExtractor;
 
             if (maxAttempts < 1)
             {
@@ -202,7 +205,8 @@ namespace GameSaves.Infrastructure.Sync
                 catch (Exception exception) when (
                     attempt < _maxAttempts && _isRetryable(exception))
                 {
-                    TimeSpan wait = NextDelay(attempt, spent);
+                    TimeSpan? serverDelay = ExtractRetryDelay(exception);
+                    TimeSpan wait = NextDelay(attempt, spent, serverDelay);
 
                     if (wait <= TimeSpan.Zero)
                         throw;
@@ -216,21 +220,46 @@ namespace GameSaves.Infrastructure.Sync
             }
         }
 
+        private TimeSpan? ExtractRetryDelay(Exception exception)
+        {
+            if (_customRetryDelayExtractor is not null)
+            {
+                TimeSpan? custom = _customRetryDelayExtractor(exception);
+                if (custom.HasValue)
+                    return custom;
+            }
+
+            if (exception is IRetryDelayCarrier { RetryAfterDelay: { } directDelay })
+                return directDelay;
+
+            if (exception.InnerException is IRetryDelayCarrier { RetryAfterDelay: { } innerDelay })
+                return innerDelay;
+
+            return null;
+        }
+
         /// <summary>
-        /// Exponential backoff from the base delay, clamped so the total spent
-        /// waiting never exceeds <see cref="MaximumTotalDelay"/>. Returns zero
-        /// when the budget is exhausted, which the caller treats as "stop
-        /// retrying" rather than as "wait for no time".
+        /// Calculates the next delay before retrying. If the failing exception
+        /// carries an explicit, bounded server delay (such as an HTTP Retry-After
+        /// header), that delay is honoured; otherwise exponential backoff from the
+        /// base delay is used. The delay is clamped so the total spent waiting
+        /// never exceeds <see cref="MaximumTotalDelay"/>. Returns zero when the
+        /// budget is exhausted, which the caller treats as "stop retrying" rather
+        /// than as "wait for no time".
         /// </summary>
-        private TimeSpan NextDelay(int attempt, TimeSpan alreadySpent)
+        internal TimeSpan NextDelay(
+            int attempt,
+            TimeSpan alreadySpent,
+            TimeSpan? serverDelay = null)
         {
             TimeSpan remaining = MaximumTotalDelay - alreadySpent;
 
             if (remaining <= TimeSpan.Zero)
                 return TimeSpan.Zero;
 
-            double seconds = _baseDelay.TotalSeconds * Math.Pow(2, attempt - 1);
-            TimeSpan wait = TimeSpan.FromSeconds(seconds);
+            TimeSpan wait = serverDelay is { } instructed && instructed > TimeSpan.Zero
+                ? instructed
+                : TimeSpan.FromSeconds(_baseDelay.TotalSeconds * Math.Pow(2, attempt - 1));
 
             return wait > remaining ? remaining : wait;
         }

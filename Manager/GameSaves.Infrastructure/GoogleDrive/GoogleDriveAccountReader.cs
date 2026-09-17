@@ -42,7 +42,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
         {
             using var drive = new DriveService(new BaseClientService.Initializer
             {
-                HttpClientInitializer = credential.Credential,
+                HttpClientInitializer = credential.CreateHttpClientInitializer(),
                 ApplicationName = GoogleDriveRequestContract.ApplicationName,
 
                 // Retry lives in exactly one place, RetryingRemoteFileSystem. The

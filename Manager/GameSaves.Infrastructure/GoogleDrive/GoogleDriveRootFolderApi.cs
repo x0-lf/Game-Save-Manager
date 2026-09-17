@@ -226,7 +226,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
             GoogleAuthorizedCredential credential) =>
             new(new BaseClientService.Initializer
             {
-                HttpClientInitializer = credential.Credential,
+                HttpClientInitializer = credential.CreateHttpClientInitializer(),
                 ApplicationName = GoogleDriveRequestContract.ApplicationName,
 
                 // Retry lives in exactly one place, RetryingRemoteFileSystem. The

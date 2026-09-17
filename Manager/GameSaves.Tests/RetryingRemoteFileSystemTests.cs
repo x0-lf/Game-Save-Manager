@@ -187,19 +187,165 @@ public sealed class RetryingRemoteFileSystemTests
             () => new RetryingRemoteFileSystem(inner, delay, null!));
     }
 
+    [Fact]
+    public async Task ServerSuppliedRetryDelay_IsHonouredWhenPresent()
+    {
+        var inner = new ScriptedRemoteFileSystem
+        {
+            FailuresBeforeSuccess = 1,
+            ExceptionFactory = _ => new ScriptedCarrierFailureException(
+                retryable: true,
+                retryAfterDelay: TimeSpan.FromSeconds(5))
+        };
+        var delay = new RecordingDelayProvider();
+        IRemoteFileSystem remote = Wrap(inner, delay);
+
+        IReadOnlyList<string> names = await remote.ListRunFolderNamesAsync();
+
+        Assert.Equal(new[] { "run-one" }, names);
+        Assert.Equal(2, inner.Attempts);
+        Assert.Equal(new[] { TimeSpan.FromSeconds(5) }, delay.Requested);
+    }
+
+    [Fact]
+    public async Task ServerSuppliedRetryDelay_ExcessiveDelayIsClampedToMaximumTotalDelay()
+    {
+        var inner = new ScriptedRemoteFileSystem
+        {
+            FailuresBeforeSuccess = int.MaxValue,
+            ExceptionFactory = _ => new ScriptedCarrierFailureException(
+                retryable: true,
+                retryAfterDelay: TimeSpan.FromMinutes(10))
+        };
+        var delay = new RecordingDelayProvider();
+        IRemoteFileSystem remote = Wrap(inner, delay);
+
+        await Assert.ThrowsAsync<ScriptedCarrierFailureException>(
+            () => remote.ListRunFolderNamesAsync());
+
+        // The first wait is clamped to MaximumTotalDelay (30 seconds), consuming
+        // the entire budget so no second wait can occur.
+        Assert.Equal(
+            RetryingRemoteFileSystem.MaximumTotalDelay,
+            Assert.Single(delay.Requested));
+        Assert.Equal(2, inner.Attempts);
+    }
+
+    [Fact]
+    public async Task ServerSuppliedRetryDelay_ZeroOrPastDelay_FallsBackToExponentialBackoff()
+    {
+        var inner = new ScriptedRemoteFileSystem
+        {
+            FailuresBeforeSuccess = 2,
+            ExceptionFactory = _ => new ScriptedCarrierFailureException(
+                retryable: true,
+                retryAfterDelay: TimeSpan.Zero)
+        };
+        var delay = new RecordingDelayProvider();
+        IRemoteFileSystem remote = Wrap(inner, delay);
+
+        IReadOnlyList<string> names = await remote.ListRunFolderNamesAsync();
+
+        Assert.Equal(new[] { "run-one" }, names);
+        Assert.Equal(3, inner.Attempts);
+        // Falls back to exponential backoff (1s, 2s)
+        Assert.Equal(
+            new[] { TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2) },
+            delay.Requested);
+    }
+
+    [Fact]
+    public async Task ServerSuppliedRetryDelay_InnerExceptionCarrier_IsExtractedAndHonoured()
+    {
+        var inner = new ScriptedRemoteFileSystem
+        {
+            FailuresBeforeSuccess = 1,
+            ExceptionFactory = _ => new ScriptedCarrierFailureException(
+                retryable: true,
+                retryAfterDelay: null,
+                innerException: new ScriptedCarrierFailureException(
+                    retryable: true,
+                    retryAfterDelay: TimeSpan.FromSeconds(7)))
+        };
+        var delay = new RecordingDelayProvider();
+        IRemoteFileSystem remote = Wrap(inner, delay);
+
+        IReadOnlyList<string> names = await remote.ListRunFolderNamesAsync();
+
+        Assert.Equal(new[] { "run-one" }, names);
+        Assert.Equal(2, inner.Attempts);
+        Assert.Equal(new[] { TimeSpan.FromSeconds(7) }, delay.Requested);
+    }
+
+    [Fact]
+    public async Task CustomRetryDelayExtractor_CanOverrideDelay()
+    {
+        var inner = new ScriptedRemoteFileSystem { FailuresBeforeSuccess = 1 };
+        var delay = new RecordingDelayProvider();
+        IRemoteFileSystem remote = Wrap(
+            inner,
+            delay,
+            retryDelayExtractor: _ => TimeSpan.FromSeconds(3));
+
+        IReadOnlyList<string> names = await remote.ListRunFolderNamesAsync();
+
+        Assert.Equal(new[] { "run-one" }, names);
+        Assert.Equal(2, inner.Attempts);
+        Assert.Equal(new[] { TimeSpan.FromSeconds(3) }, delay.Requested);
+    }
+
+    [Fact]
+    public async Task ServerSuppliedRetryDelay_BudgetExhaustion_AbortsRemainingAttempts()
+    {
+        var inner = new ScriptedRemoteFileSystem
+        {
+            FailuresBeforeSuccess = int.MaxValue,
+            ExceptionFactory = attempt => new ScriptedCarrierFailureException(
+                retryable: true,
+                retryAfterDelay: attempt == 1 ? TimeSpan.FromSeconds(28) : TimeSpan.FromSeconds(5))
+        };
+        var delay = new RecordingDelayProvider();
+        IRemoteFileSystem remote = Wrap(inner, delay);
+
+        await Assert.ThrowsAsync<ScriptedCarrierFailureException>(
+            () => remote.ListRunFolderNamesAsync());
+
+        // First attempt waits 28s (remaining budget = 2s).
+        // Second attempt asks for 5s, which exceeds remaining 2s -> clamped to 2s (total spent = 30s).
+        // Third attempt has 0s remaining -> rethrows without waiting.
+        Assert.Equal(2, delay.Requested.Count);
+        Assert.Equal(TimeSpan.FromSeconds(28), delay.Requested[0]);
+        Assert.Equal(TimeSpan.FromSeconds(2), delay.Requested[1]);
+        Assert.Equal(RetryingRemoteFileSystem.MaximumTotalDelay, delay.Total);
+        Assert.Equal(3, inner.Attempts);
+    }
+
     private static IRemoteFileSystem Wrap(
         IRemoteFileSystem inner,
         IDelayProvider delay,
-        TimeSpan? baseDelay = null) =>
+        TimeSpan? baseDelay = null,
+        Func<Exception, TimeSpan?>? retryDelayExtractor = null) =>
         new RetryingRemoteFileSystem(
             inner,
             delay,
-            exception => exception is ScriptedFailureException { Retryable: true },
-            baseDelay: baseDelay);
+            exception => exception is ScriptedFailureException { Retryable: true }
+                || exception is ScriptedCarrierFailureException { Retryable: true },
+            baseDelay: baseDelay,
+            retryDelayExtractor: retryDelayExtractor);
 
     private sealed class ScriptedFailureException(bool retryable) : Exception("scripted")
     {
         public bool Retryable { get; } = retryable;
+    }
+
+    private sealed class ScriptedCarrierFailureException(
+        bool retryable,
+        TimeSpan? retryAfterDelay,
+        Exception? innerException = null)
+        : Exception("scripted carrier", innerException), IRetryDelayCarrier
+    {
+        public bool Retryable { get; } = retryable;
+        public TimeSpan? RetryAfterDelay { get; } = retryAfterDelay;
     }
 
     /// <summary>
@@ -216,6 +362,8 @@ public sealed class RetryingRemoteFileSystemTests
         public bool ThrowCancellation { get; set; }
 
         public bool CreateSucceedsThenReportsExisting { get; set; }
+
+        public Func<int, Exception>? ExceptionFactory { get; set; }
 
         public int Attempts { get; private set; }
 
@@ -238,7 +386,12 @@ public sealed class RetryingRemoteFileSystemTests
                 throw new OperationCanceledException();
 
             if (Attempts <= FailuresBeforeSuccess)
+            {
+                if (ExceptionFactory is not null)
+                    throw ExceptionFactory(Attempts);
+
                 throw new ScriptedFailureException(Retryable);
+            }
         }
 
         public Task<IReadOnlyList<string>> ListRunFolderNamesAsync(
