@@ -81,12 +81,15 @@ namespace GameSaves.App.Services
 
         public static string DefaultAccentTheme => AccentIndigo;
 
-        public static bool IsAccentTheme(string value) => value is
+        public static bool IsPresetAccent(string? value) => value is
             AccentIndigo or
             AccentTeal or
             AccentRose or
             AccentAmber or
             AccentViolet;
+
+        public static bool IsAccentTheme(string? value) =>
+            IsPresetAccent(value) || ThemeService.TryParseHexColor(value, out _);
 
         // Window materials replace the window surface with an OS-composited
         // backdrop (Avalonia transparency levels). "none" is the shipped

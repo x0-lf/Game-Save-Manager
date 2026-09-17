@@ -94,6 +94,24 @@ namespace GameSaves.Tests
         }
 
         [Fact]
+        public void CustomHexAccentTheme_PersistsAndInvalidValuesFallBackToIndigo()
+        {
+            string path = _temp.GetPath("custom-accent.json");
+            new UiSettingsStore(path).Save(
+                AppUiSettings.Default with { AccentTheme = "#3B82F6" });
+
+            Assert.Equal(
+                "#3B82F6",
+                new UiSettingsStore(path).Load().AccentTheme);
+
+            string invalidHex = _temp.GetPath("invalid-hex-accent.json");
+            File.WriteAllText(invalidHex, "{\"AccentTheme\":\"#GGGGGG\"}");
+            Assert.Equal(
+                AppUiSettings.AccentIndigo,
+                new UiSettingsStore(invalidHex).Load().AccentTheme);
+        }
+
+        [Fact]
         public void Transparency_PersistsAClampedRoundTrip()
         {
             string path = _temp.GetPath("transparency.json");

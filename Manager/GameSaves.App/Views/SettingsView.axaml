@@ -121,7 +121,7 @@
                                            Foreground="{DynamicResource PrimaryTextBrush}"
                                            FontSize="{DynamicResource FontSizeBodyLarge}"
                                            FontWeight="SemiBold" />
-                                <StackPanel Spacing="4" Orientation="Horizontal">
+                                <WrapPanel Orientation="Horizontal">
                                     <RadioButton GroupName="SettingsAccent"
                                                  Content="Indigo"
                                                  Margin="0,0,16,0"
@@ -144,8 +144,43 @@
                                                  AutomationProperties.Name="Amber accent" />
                                     <RadioButton GroupName="SettingsAccent"
                                                  Content="Violet"
+                                                 Margin="0,0,16,0"
                                                  IsChecked="{Binding AccentTheme, Mode=TwoWay, Converter={x:Static conv:StringEqualityConverter.Instance}, ConverterParameter={x:Static s:AppUiSettings.AccentViolet}}"
                                                  AutomationProperties.Name="Violet accent" />
+                                    <RadioButton GroupName="SettingsAccent"
+                                                 Content="Custom"
+                                                 IsChecked="{Binding IsCustomAccentSelected, Mode=TwoWay}"
+                                                 AutomationProperties.Name="Custom accent" />
+                                </WrapPanel>
+
+                                <!-- Custom accent editor row -->
+                                <StackPanel Orientation="Vertical" Spacing="6" Margin="0,4,0,0">
+                                    <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                        <Border Width="28"
+                                                Height="28"
+                                                CornerRadius="4"
+                                                Background="{Binding CustomAccentPreviewBrush}"
+                                                BorderBrush="{DynamicResource SubtleBorderBrush}"
+                                                BorderThickness="1"
+                                                VerticalAlignment="Center"
+                                                AutomationProperties.Name="Custom accent colour preview" />
+                                        <TextBox Text="{Binding CustomAccentHex, Mode=TwoWay}"
+                                                 PlaceholderText="#3B82F6"
+                                                 Width="120"
+                                                 MaxLength="9"
+                                                 VerticalAlignment="Center"
+                                                 AutomationProperties.Name="Custom accent hex code" />
+                                        <TextBlock Text="{Binding CustomAccentContrastRatioText}"
+                                                   Foreground="{DynamicResource MutedTextBrush}"
+                                                   FontSize="{DynamicResource FontSizeCaption}"
+                                                   VerticalAlignment="Center"
+                                                   IsVisible="{Binding IsCustomAccentValid}" />
+                                    </StackPanel>
+                                    <TextBlock Text="{Binding CustomAccentValidationMessage}"
+                                               Foreground="{DynamicResource DangerBrush}"
+                                               FontSize="{DynamicResource FontSizeCaption}"
+                                               IsVisible="{Binding HasCustomAccentValidationMessage}"
+                                               AutomationProperties.Name="Custom accent validation error" />
                                 </StackPanel>
                             </StackPanel>
                         </Border>

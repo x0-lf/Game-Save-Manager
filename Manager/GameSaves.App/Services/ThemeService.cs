@@ -338,15 +338,177 @@ namespace GameSaves.App.Services
                     PrimaryButtonPressed: Color.Parse("#5828A6")),
             };
 
+        /// <summary>
+        /// Parses an arbitrary hex string (#RGB, #RGBA, #RRGGBB, #AARRGGBB, or
+        /// hex without #) into an opaque <see cref="Color"/>. Returns false if
+        /// the input is empty or contains non-hex characters.
+        /// </summary>
+        public static bool TryParseHexColor(string? input, out Color color)
+        {
+            color = default;
+            if (string.IsNullOrWhiteSpace(input))
+                return false;
+
+            string trimmed = input.Trim();
+            if (!trimmed.StartsWith('#'))
+                trimmed = "#" + trimmed;
+
+            if (trimmed.Length is not (4 or 5 or 7 or 9))
+                return false;
+
+            for (int i = 1; i < trimmed.Length; i++)
+            {
+                if (!char.IsAsciiHexDigit(trimmed[i]))
+                    return false;
+            }
+
+            if (!Color.TryParse(trimmed, out Color parsed))
+                return false;
+
+            color = Color.FromArgb(255, parsed.R, parsed.G, parsed.B);
+            return true;
+        }
+
+        /// <summary>
+        /// Calculates the WCAG 2.1 relative luminance of an sRGB color.
+        /// L = 0.2126 * R + 0.7152 * G + 0.0722 * B where components are linearized.
+        /// </summary>
+        public static double CalculateRelativeLuminance(Color color)
+        {
+            double r = SrgbToLinear(color.R / 255.0);
+            double g = SrgbToLinear(color.G / 255.0);
+            double b = SrgbToLinear(color.B / 255.0);
+
+            return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        }
+
+        private static double SrgbToLinear(double channel) =>
+            channel <= 0.04045
+                ? channel / 12.92
+                : Math.Pow((channel + 0.055) / 1.055, 2.4);
+
+        /// <summary>
+        /// Calculates the WCAG 2.1 contrast ratio between two colors: (L1 + 0.05) / (L2 + 0.05).
+        /// </summary>
+        public static double CalculateContrastRatio(Color c1, Color c2)
+        {
+            double l1 = CalculateRelativeLuminance(c1);
+            double l2 = CalculateRelativeLuminance(c2);
+            double lighter = Math.Max(l1, l2);
+            double darker = Math.Min(l1, l2);
+
+            return (lighter + 0.05) / (darker + 0.05);
+        }
+
+        /// <summary>
+        /// Clamps or deepens a color's lightness in HSL space so that its contrast
+        /// ratio against <paramref name="textColor"/> meets or exceeds
+        /// <paramref name="minContrast"/> (default 4.5:1 for WCAG AA).
+        /// </summary>
+        public static Color ClampLightnessForContrast(
+            Color color,
+            Color textColor,
+            double minContrast = 4.5)
+        {
+            if (CalculateContrastRatio(color, textColor) >= minContrast)
+                return color;
+
+            HslColor hsl = color.ToHsl();
+            double low = 0.0;
+            double high = hsl.L;
+            Color best = new HslColor(hsl.A, hsl.H, hsl.S, 0.0).ToRgb();
+
+            for (int i = 0; i < 24; i++)
+            {
+                double mid = (low + high) / 2.0;
+                Color candidate = new HslColor(hsl.A, hsl.H, hsl.S, mid).ToRgb();
+
+                if (CalculateContrastRatio(candidate, textColor) >= minContrast)
+                {
+                    best = candidate;
+                    low = mid;
+                }
+                else
+                {
+                    high = mid;
+                }
+            }
+
+            if (CalculateContrastRatio(best, textColor) < minContrast)
+            {
+                HslColor bestHsl = best.ToHsl();
+                for (double l = bestHsl.L - 0.002; l >= 0.0; l -= 0.002)
+                {
+                    Color candidate = new HslColor(
+                        bestHsl.A, bestHsl.H, bestHsl.S, Math.Max(0.0, l)).ToRgb();
+                    if (CalculateContrastRatio(candidate, textColor) >= minContrast)
+                        return candidate;
+                }
+            }
+
+            return best;
+        }
+
+        /// <summary>
+        /// Dynamically creates an <see cref="AccentPalette"/> from an arbitrary custom color,
+        /// ensuring WCAG AA contrast (>= 4.5:1) against white text for primary button fills.
+        /// </summary>
+        internal static AccentPalette CreateCustomPalette(Color baseColor, bool isDark)
+        {
+            Color primaryButton = ClampLightnessForContrast(baseColor, Colors.White, 4.5);
+            HslColor baseHsl = baseColor.ToHsl();
+
+            if (isDark)
+            {
+                double accentLightness = Math.Clamp(Math.Max(baseHsl.L, 0.65), 0.60, 0.85);
+                Color accent = new HslColor(baseHsl.A, baseHsl.H, baseHsl.S, accentLightness).ToRgb();
+                Color brand = Shade(accent, 0.10);
+                Color accentHover = Shade(accent, 0.05);
+                Color accentPressed = Shade(accent, -0.06);
+
+                Color primaryButtonHover = Shade(primaryButton, 0.04);
+                Color primaryButtonPressed = Shade(primaryButton, -0.05);
+
+                return new AccentPalette(
+                    SystemAccentColor: baseColor,
+                    Accent: accent,
+                    Brand: brand,
+                    AccentHover: accentHover,
+                    AccentPressed: accentPressed,
+                    PrimaryButton: primaryButton,
+                    PrimaryButtonHover: primaryButtonHover,
+                    PrimaryButtonPressed: primaryButtonPressed);
+            }
+            else
+            {
+                Color primaryButtonHover = Shade(primaryButton, -0.05);
+                Color primaryButtonPressed = Shade(primaryButton, -0.10);
+
+                return new AccentPalette(
+                    SystemAccentColor: primaryButton,
+                    Accent: primaryButton,
+                    Brand: primaryButton,
+                    AccentHover: primaryButtonHover,
+                    AccentPressed: primaryButtonPressed,
+                    PrimaryButton: primaryButton,
+                    PrimaryButtonHover: primaryButtonHover,
+                    PrimaryButtonPressed: primaryButtonPressed);
+            }
+        }
+
         /// <summary>Returns the palette for an accent in one variant, defaulting to indigo.</summary>
         internal static AccentPalette GetPalette(string accentTheme, bool isDark)
         {
             IReadOnlyDictionary<string, AccentPalette> palettes =
                 isDark ? DarkAccents : LightAccents;
 
-            return palettes.TryGetValue(accentTheme, out AccentPalette? palette)
-                ? palette
-                : palettes[AppUiSettings.AccentIndigo];
+            if (palettes.TryGetValue(accentTheme, out AccentPalette? palette))
+                return palette;
+
+            if (TryParseHexColor(accentTheme, out Color customColor))
+                return CreateCustomPalette(customColor, isDark);
+
+            return palettes[AppUiSettings.AccentIndigo];
         }
 
         /// <summary>

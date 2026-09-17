@@ -125,6 +125,90 @@ namespace GameSaves.Tests
         }
 
         [Fact]
+        public void ChangingAccentTheme_ToCustomHex_PersistsAndSurvivesRestart()
+        {
+            string path = _temp.GetPath("custom-accent.json");
+            SettingsViewModel viewModel = CreateViewModel(path);
+
+            viewModel.AccentTheme = "#3B82F6";
+
+            Assert.True(viewModel.IsCustomAccentSelected);
+            Assert.Equal("#3B82F6", viewModel.CustomAccentHex);
+
+            AppUiSettings loaded = new UiSettingsStore(path).Load();
+            Assert.Equal("#3B82F6", loaded.AccentTheme);
+
+            SettingsViewModel restarted = CreateViewModel(path);
+            Assert.Equal("#3B82F6", restarted.AccentTheme);
+            Assert.True(restarted.IsCustomAccentSelected);
+            Assert.Equal("#3B82F6", restarted.CustomAccentHex);
+        }
+
+        [Fact]
+        public void SelectingCustomAccent_SetsNormalizedHex()
+        {
+            string path = _temp.GetPath("select-custom.json");
+            SettingsViewModel viewModel = CreateViewModel(path);
+
+            Assert.False(viewModel.IsCustomAccentSelected);
+
+            viewModel.CustomAccentHex = "#10B981";
+            viewModel.IsCustomAccentSelected = true;
+
+            Assert.Equal("#10B981", viewModel.AccentTheme);
+            Assert.True(viewModel.IsCustomAccentValid);
+            Assert.False(viewModel.HasCustomAccentValidationMessage);
+            Assert.NotNull(viewModel.CustomAccentPreviewBrush);
+        }
+
+        [Fact]
+        public void EditingCustomAccentHex_WithValidHex_UpdatesPreviewAndThemeWhenCustomSelected()
+        {
+            string path = _temp.GetPath("edit-custom-valid.json");
+            SettingsViewModel viewModel = CreateViewModel(path);
+
+            viewModel.IsCustomAccentSelected = true;
+            viewModel.CustomAccentHex = "8B5CF6";
+
+            Assert.Equal("#8B5CF6", viewModel.AccentTheme);
+            Assert.True(viewModel.IsCustomAccentValid);
+            Assert.False(viewModel.HasCustomAccentValidationMessage);
+            Assert.Contains("WCAG AA", viewModel.CustomAccentContrastRatioText);
+        }
+
+        [Fact]
+        public void EditingCustomAccentHex_WithInvalidHex_ShowsValidationMessageAndPreservesTheme()
+        {
+            string path = _temp.GetPath("edit-custom-invalid.json");
+            SettingsViewModel viewModel = CreateViewModel(path);
+
+            viewModel.AccentTheme = AppUiSettings.AccentTeal;
+            viewModel.CustomAccentHex = "#invalid";
+
+            Assert.False(viewModel.IsCustomAccentValid);
+            Assert.True(viewModel.HasCustomAccentValidationMessage);
+            Assert.Equal("Enter a valid hex code (e.g. #3B82F6)", viewModel.CustomAccentValidationMessage);
+            Assert.Equal(AppUiSettings.AccentTeal, viewModel.AccentTheme);
+        }
+
+        [Fact]
+        public void Initialization_WithCustomAccentHex_RestoresCustomState()
+        {
+            string path = _temp.GetPath("init-custom.json");
+            new UiSettingsStore(path).Save(
+                AppUiSettings.Default with { AccentTheme = "#F59E0B" });
+
+            SettingsViewModel viewModel = CreateViewModel(path);
+
+            Assert.True(viewModel.IsCustomAccentSelected);
+            Assert.Equal("#F59E0B", viewModel.AccentTheme);
+            Assert.Equal("#F59E0B", viewModel.CustomAccentHex);
+            Assert.True(viewModel.IsCustomAccentValid);
+            Assert.NotNull(viewModel.CustomAccentPreviewBrush);
+            Assert.Contains("WCAG AA", viewModel.CustomAccentContrastRatioText);
+        }
+
+        [Fact]
         public void ChangingTransparencyLevels_PersistAndSurviveRestart()
         {
             string path = _temp.GetPath("transparency.json");

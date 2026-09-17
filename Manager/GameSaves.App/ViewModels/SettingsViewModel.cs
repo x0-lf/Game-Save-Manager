@@ -1,5 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Avalonia.Media;
+using Avalonia.Media.Immutable;
 using GameSaves.App.Models;
 using GameSaves.App.Services;
 using GameSaves.Core.Sync;
@@ -30,9 +32,30 @@ namespace GameSaves.App.ViewModels
         [ObservableProperty]
         private string themeChoice;
 
-        // One of the AppUiSettings accent constants.
+        // One of the AppUiSettings accent constants, or a custom hex string.
         [ObservableProperty]
         private string accentTheme;
+
+        [ObservableProperty]
+        private bool isCustomAccentSelected;
+
+        [ObservableProperty]
+        private string customAccentHex = "#3B82F6";
+
+        [ObservableProperty]
+        private bool isCustomAccentValid = true;
+
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(HasCustomAccentValidationMessage))]
+        private string customAccentValidationMessage = string.Empty;
+
+        public bool HasCustomAccentValidationMessage => !string.IsNullOrEmpty(CustomAccentValidationMessage);
+
+        [ObservableProperty]
+        private string customAccentContrastRatioText = string.Empty;
+
+        [ObservableProperty]
+        private IBrush? customAccentPreviewBrush;
 
         // Opacity levels in [0.2, 1.0]; 1.0 is fully opaque. Changes apply
         // live and persist immediately.
@@ -193,6 +216,23 @@ namespace GameSaves.App.ViewModels
 
             themeChoice = settings.ThemeChoice;
             accentTheme = settings.AccentTheme;
+            if (AppUiSettings.IsPresetAccent(accentTheme))
+            {
+                isCustomAccentSelected = false;
+                customAccentHex = "#3B82F6";
+            }
+            else if (ThemeService.TryParseHexColor(accentTheme, out Color customColor))
+            {
+                isCustomAccentSelected = true;
+                customAccentHex = $"#{customColor.R:X2}{customColor.G:X2}{customColor.B:X2}";
+            }
+            else
+            {
+                accentTheme = AppUiSettings.DefaultAccentTheme;
+                isCustomAccentSelected = false;
+                customAccentHex = "#3B82F6";
+            }
+            UpdateCustomAccentState(customAccentHex, applyIfSelected: false);
             windowOpacity = settings.Transparency.Window;
             cardOpacity = settings.Transparency.Card;
             insetOpacity = settings.Transparency.Inset;
@@ -374,7 +414,80 @@ namespace GameSaves.App.ViewModels
             if (!AppUiSettings.IsAccentTheme(value))
                 return;
 
+            bool isPreset = AppUiSettings.IsPresetAccent(value);
+            if (isPreset)
+            {
+                if (IsCustomAccentSelected)
+                    IsCustomAccentSelected = false;
+            }
+            else
+            {
+                if (!IsCustomAccentSelected)
+                    IsCustomAccentSelected = true;
+
+                if (ThemeService.TryParseHexColor(value, out Color parsed))
+                {
+                    string normalized = $"#{parsed.R:X2}{parsed.G:X2}{parsed.B:X2}";
+                    if (!string.Equals(CustomAccentHex, normalized, StringComparison.OrdinalIgnoreCase))
+                    {
+                        CustomAccentHex = normalized;
+                    }
+                }
+            }
+
             SaveAndApply(settings => settings with { AccentTheme = value });
+        }
+
+        partial void OnIsCustomAccentSelectedChanged(bool value)
+        {
+            if (value)
+            {
+                if (ThemeService.TryParseHexColor(CustomAccentHex, out Color color))
+                {
+                    string normalized = $"#{color.R:X2}{color.G:X2}{color.B:X2}";
+                    if (AccentTheme != normalized)
+                        AccentTheme = normalized;
+                }
+                else
+                {
+                    CustomAccentHex = "#3B82F6";
+                    AccentTheme = "#3B82F6";
+                }
+            }
+        }
+
+        partial void OnCustomAccentHexChanged(string value)
+        {
+            UpdateCustomAccentState(value, applyIfSelected: IsCustomAccentSelected);
+        }
+
+        private void UpdateCustomAccentState(string hexInput, bool applyIfSelected)
+        {
+            if (ThemeService.TryParseHexColor(hexInput, out Color color))
+            {
+                IsCustomAccentValid = true;
+                CustomAccentValidationMessage = string.Empty;
+                CustomAccentPreviewBrush = new ImmutableSolidColorBrush(color);
+
+                Color primaryButton = ThemeService.ClampLightnessForContrast(color, Colors.White, 4.5);
+                double contrast = ThemeService.CalculateContrastRatio(primaryButton, Colors.White);
+                CustomAccentContrastRatioText = $"Contrast: {contrast:F1}:1 (WCAG AA)";
+
+                if (applyIfSelected && IsCustomAccentSelected)
+                {
+                    string normalized = $"#{color.R:X2}{color.G:X2}{color.B:X2}";
+                    if (AccentTheme != normalized)
+                    {
+                        AccentTheme = normalized;
+                    }
+                }
+            }
+            else
+            {
+                IsCustomAccentValid = false;
+                CustomAccentValidationMessage = "Enter a valid hex code (e.g. #3B82F6)";
+                CustomAccentContrastRatioText = string.Empty;
+            }
         }
 
         partial void OnWindowOpacityChanged(double value) =>

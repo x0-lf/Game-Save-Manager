@@ -85,6 +85,115 @@ namespace GameSaves.Tests
             Assert.Equal(Color.Parse("#243F99"), indigo.PrimaryButtonPressed);
         }
 
+        public static TheoryData<string> EdgeCaseCustomAccents => new()
+        {
+            "#FFFF00", // pure yellow (high luminance)
+            "#FFFFFF", // pure white (maximum luminance)
+            "#00FF00", // pure lime (very high green luminance)
+            "#000000", // pure black (zero luminance)
+            "#808080", // mid grey
+            "#FF0000", // pure red
+            "#0000FF", // pure blue
+            "#00FFFF", // pure cyan
+            "#FFA500", // orange
+            "#E0E0E0", // light grey
+            "#3B82F6", // modern blue
+            "#10B981", // modern emerald
+        };
+
+        [Theory]
+        [MemberData(nameof(EdgeCaseCustomAccents))]
+        public void CustomHexAccent_DefinesAllKeysInBothVariants(string hex)
+        {
+            foreach (bool isDark in new[] { true, false })
+            {
+                ThemeService.AccentPalette palette =
+                    ThemeService.GetPalette(hex, isDark);
+
+                var colors = palette.AsResources().ToDictionary(
+                    pair => pair.Key, pair => pair.Value);
+
+                Assert.Superset(
+                    ThemeService.AccentResourceKeys.ToHashSet(),
+                    colors.Keys.ToHashSet());
+                Assert.DoesNotContain(default, colors.Values);
+            }
+        }
+
+        [Theory]
+        [MemberData(nameof(EdgeCaseCustomAccents))]
+        public void CustomHexAccent_MeetsWcagAaContrastAcrossSpectrum(string hex)
+        {
+            foreach (bool isDark in new[] { true, false })
+            {
+                ThemeService.AccentPalette palette =
+                    ThemeService.GetPalette(hex, isDark);
+
+                double contrast = ThemeService.CalculateContrastRatio(
+                    palette.PrimaryButton, Colors.White);
+
+                Assert.True(
+                    contrast >= 4.5,
+                    $"Contrast for {hex} in {(isDark ? "Dark" : "Light")} was {contrast:F2}:1, below 4.5:1");
+            }
+        }
+
+        [Theory]
+        [InlineData("#3B82F6")]
+        [InlineData("3B82F6")]
+        [InlineData("#36F")]
+        [InlineData("36F")]
+        [InlineData("#FF3B82F6")]
+        public void TryParseHexColor_ParsesValidHexFormats(string input)
+        {
+            Assert.True(ThemeService.TryParseHexColor(input, out Color color));
+            Assert.Equal(255, color.A);
+        }
+
+        [Theory]
+        [InlineData("chartreuse")]
+        [InlineData("#xyz")]
+        [InlineData("12")]
+        [InlineData("#12345")]
+        [InlineData("")]
+        [InlineData("   ")]
+        [InlineData(null)]
+        public void TryParseHexColor_RejectsInvalidFormats(string? input)
+        {
+            Assert.False(ThemeService.TryParseHexColor(input, out _));
+        }
+
+        [Fact]
+        public void CalculateContrastRatio_MatchesWcagStandards()
+        {
+            double blackOnWhite = ThemeService.CalculateContrastRatio(
+                Colors.Black, Colors.White);
+            Assert.Equal(21.0, blackOnWhite, precision: 1);
+
+            double whiteOnWhite = ThemeService.CalculateContrastRatio(
+                Colors.White, Colors.White);
+            Assert.Equal(1.0, whiteOnWhite, precision: 1);
+
+            Color shippedIndigo = Color.Parse("#4F6EDB");
+            double indigoOnWhite = ThemeService.CalculateContrastRatio(
+                shippedIndigo, Colors.White);
+            Assert.True(indigoOnWhite >= 4.5);
+            Assert.InRange(indigoOnWhite, 4.57, 4.59);
+        }
+
+        [Fact]
+        public void InvalidHexAccent_FallsBackToIndigo()
+        {
+            ThemeService.AccentPalette expectedDark =
+                ThemeService.GetPalette(AppUiSettings.AccentIndigo, isDark: true);
+            ThemeService.AccentPalette expectedLight =
+                ThemeService.GetPalette(AppUiSettings.AccentIndigo, isDark: false);
+
+            Assert.Equal(expectedDark, ThemeService.GetPalette("not-a-color", isDark: true));
+            Assert.Equal(expectedDark, ThemeService.GetPalette("#GGGGGG", isDark: true));
+            Assert.Equal(expectedLight, ThemeService.GetPalette("#12", isDark: false));
+        }
+
         [Fact]
         public void WithOpacity_ScalesAlphaAndKeepsHue()
         {
