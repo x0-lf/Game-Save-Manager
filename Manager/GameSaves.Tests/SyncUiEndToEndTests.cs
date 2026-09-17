@@ -647,28 +647,19 @@ public sealed class SyncUiEndToEndTests
     }
 
     [Fact]
-    public void TheSftpProvider_HasNoSeamForAHermeticRemoteFileSystem()
+    public void TheSftpProvider_HasSeamForAHermeticRemoteFileSystem()
     {
-        // This is a finding pinned as a test rather than a defect fixed here.
-        // SftpSyncProvider constructs its own SftpRemoteFileSystem from the
-        // connection settings, so unlike GoogleDriveSyncProvider it cannot be
-        // handed a fake IRemoteFileSystem, and its transfer behaviour cannot be
-        // exercised without a real SSH server. Milestone W adds no product
-        // behaviour, so the seam is not added here.
-        //
-        // When a seam is added, rewrite this test to use it. Do not delete it.
+        // Rewritten for MAINT-001: SftpSyncProvider now accepts an injectable
+        // IRemoteFileSystem seam, enabling deterministic transfer testing
+        // without a live SSH server.
         ConstructorInfo[] constructors = typeof(SftpSyncProvider).GetConstructors(
             BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
 
-        ConstructorInfo only = Assert.Single(constructors);
+        Assert.All(constructors, c => Assert.False(c.IsPublic));
 
-        Assert.False(only.IsPublic);
         Assert.Contains(
-            only.GetParameters(),
-            parameter => parameter.ParameterType == typeof(SftpConnectionSettings));
-        Assert.DoesNotContain(
-            only.GetParameters(),
-            parameter => parameter.ParameterType == typeof(IRemoteFileSystem));
+            constructors,
+            c => c.GetParameters().Any(p => p.ParameterType == typeof(IRemoteFileSystem)));
     }
 
     [Fact]

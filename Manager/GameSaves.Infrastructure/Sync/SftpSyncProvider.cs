@@ -10,17 +10,52 @@ namespace GameSaves.Infrastructure.Sync
     /// </summary>
     public sealed class SftpSyncProvider : ISyncProvider
     {
-        private readonly SftpRemoteFileSystem _fileSystem;
+        private readonly IRemoteFileSystem _fileSystem;
         private readonly SyncEngine _engine;
+        private readonly bool _ownsFileSystem;
+        private bool _disposed;
 
         internal SftpSyncProvider(
             SftpConnectionSettings settings,
             SftpKnownHostsStore knownHosts,
             IBackupHistoryService backupHistoryService,
             ITransferHistoryRepository historyRepository)
+            : this(
+                ValidateSettings(settings),
+                new SftpRemoteFileSystem(settings, knownHosts ?? throw new ArgumentNullException(nameof(knownHosts))),
+                backupHistoryService,
+                historyRepository,
+                ownsFileSystem: true)
         {
-            RemoteRoot = settings.DisplayRoot;
-            _fileSystem = new SftpRemoteFileSystem(settings, knownHosts);
+        }
+
+        internal SftpSyncProvider(
+            SftpConnectionSettings settings,
+            IRemoteFileSystem fileSystem,
+            IBackupHistoryService backupHistoryService,
+            ITransferHistoryRepository historyRepository,
+            bool ownsFileSystem = true)
+            : this(
+                fileSystem,
+                (settings ?? throw new ArgumentNullException(nameof(settings))).DisplayRoot,
+                backupHistoryService,
+                historyRepository,
+                ownsFileSystem)
+        {
+        }
+
+        internal SftpSyncProvider(
+            IRemoteFileSystem fileSystem,
+            string remoteRoot,
+            IBackupHistoryService backupHistoryService,
+            ITransferHistoryRepository historyRepository,
+            bool ownsFileSystem = true)
+        {
+            _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
+            RemoteRoot = remoteRoot ?? throw new ArgumentNullException(nameof(remoteRoot));
+            ArgumentNullException.ThrowIfNull(backupHistoryService);
+            ArgumentNullException.ThrowIfNull(historyRepository);
+            _ownsFileSystem = ownsFileSystem;
 
             _engine = new SyncEngine(
                 _fileSystem,
@@ -38,6 +73,7 @@ namespace GameSaves.Infrastructure.Sync
             SyncOptions options,
             CancellationToken cancellationToken = default)
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
             return _engine.CreatePreviewAsync(options, cancellationToken);
         }
 
@@ -46,18 +82,30 @@ namespace GameSaves.Infrastructure.Sync
             SyncOptions options,
             CancellationToken cancellationToken = default)
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
             return _engine.ExecuteAsync(plan, options, cancellationToken);
         }
 
         public Task<IReadOnlyList<SyncLogEntry>> GetSyncLogAsync(
             CancellationToken cancellationToken = default)
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
             return _engine.GetSyncLogAsync(cancellationToken);
         }
 
         public void Dispose()
         {
-            _fileSystem.Dispose();
+            if (_disposed)
+                return;
+
+            _disposed = true;
+            if (_ownsFileSystem && _fileSystem is IDisposable disposable)
+            {
+                disposable.Dispose();
+            }
         }
+
+        private static SftpConnectionSettings ValidateSettings(SftpConnectionSettings settings) =>
+            settings ?? throw new ArgumentNullException(nameof(settings));
     }
 }

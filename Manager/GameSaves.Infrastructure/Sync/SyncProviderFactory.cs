@@ -11,6 +11,7 @@ namespace GameSaves.Infrastructure.Sync
         private readonly ITransferHistoryRepository _historyRepository;
         private readonly IGoogleDriveSyncProviderFactory _googleDriveProviders;
         private readonly SftpKnownHostsStore _knownHosts;
+        private readonly Func<SftpConnectionSettings, SftpKnownHostsStore, IRemoteFileSystem>? _sftpFileSystemFactory;
 
         // Internal because IGoogleDriveSyncProviderFactory is internal: a public
         // constructor taking it is CS0051. Dependency injection resolves this
@@ -21,11 +22,13 @@ namespace GameSaves.Infrastructure.Sync
             IBackupHistoryService backupHistoryService,
             ITransferHistoryRepository historyRepository,
             IAppDatabasePathProvider databasePathProvider,
-            IGoogleDriveSyncProviderFactory googleDriveProviders)
+            IGoogleDriveSyncProviderFactory googleDriveProviders,
+            Func<SftpConnectionSettings, SftpKnownHostsStore, IRemoteFileSystem>? sftpFileSystemFactory = null)
         {
             _backupHistoryService = backupHistoryService;
             _historyRepository = historyRepository;
             _googleDriveProviders = googleDriveProviders;
+            _sftpFileSystemFactory = sftpFileSystemFactory;
 
             string appDataDirectory =
                 Path.GetDirectoryName(databasePathProvider.GetDatabasePath())
@@ -57,11 +60,34 @@ namespace GameSaves.Infrastructure.Sync
 
         public ISyncProvider CreateSftpProvider(SftpConnectionSettings settings)
         {
+            if (_sftpFileSystemFactory is not null)
+            {
+                IRemoteFileSystem fileSystem = _sftpFileSystemFactory(settings, _knownHosts);
+                return new SftpSyncProvider(
+                    settings,
+                    fileSystem,
+                    _backupHistoryService,
+                    _historyRepository,
+                    ownsFileSystem: true);
+            }
+
             return new SftpSyncProvider(
                 settings,
                 _knownHosts,
                 _backupHistoryService,
                 _historyRepository);
+        }
+
+        internal ISyncProvider CreateSftpProvider(
+            SftpConnectionSettings settings,
+            IRemoteFileSystem fileSystem)
+        {
+            return new SftpSyncProvider(
+                settings,
+                fileSystem,
+                _backupHistoryService,
+                _historyRepository,
+                ownsFileSystem: true);
         }
 
         // Pure delegation. Every rejection rule already lives in the internal
