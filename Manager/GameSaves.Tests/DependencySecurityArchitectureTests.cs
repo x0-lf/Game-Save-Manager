@@ -4,7 +4,7 @@ namespace GameSaves.Tests;
 
 public sealed class DependencySecurityArchitectureTests
 {
-    private const string SqliteVersion = "10.0.10";
+    private const string SqliteVersion = "10.0.12";
     private const string SqliteBundleVersion = "2.1.12";
     private const string ValveKeyValueVersion = "0.20.0.417";
 

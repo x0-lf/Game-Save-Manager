@@ -12,8 +12,8 @@ public sealed class GoogleSdkBoundaryTests
     private static readonly IReadOnlyDictionary<string, string> ApprovedGooglePackages =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            ["Google.Apis.Auth"] = "1.75.0",
-            ["Google.Apis.Drive.v3"] = "1.75.0.4210"
+            ["Google.Apis.Auth"] = "1.76.0",
+            ["Google.Apis.Drive.v3"] = "1.76.0.4261"
         };
 
     private static readonly string[] ProviderNeutralProjectNames =
