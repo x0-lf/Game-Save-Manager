@@ -8,21 +8,21 @@ title, product outcome (The What), dependency, and observable completion criteri
 
 ## Now
 
-Current sprint focus: Virtualized DataGrid rendering optimizations (UI-015).
+Current sprint focus: Sanitized UI screenshots and documentation gallery (DOC-021).
 
 | ID | Title | Product outcome | Dependency | Completion criteria |
 | --- | --- | --- | --- | --- |
-| **UI-015** | Virtualized DataGrid rendering optimizations | Ultra-large save file hierarchies (10,000+ files) render with low memory overhead | OBS-018, OBS-019 | UI virtualization enabled for file trees; deferred node loading; smooth scrolling at 60 FPS |
+| **DOC-021** | Sanitized UI screenshots and documentation gallery | Stable user guides include useful, non-personal UI screenshots | UI stabilization | Approved screenshots contain no real account data, paths, saves, credentials, tokens, or remote IDs |
 
 ---
 
 ## Next
 
-Upcoming sprint priorities: Sanitized UI screenshots and documentation gallery, curated data distribution, and catalog expansion.
+Upcoming sprint priorities: Project-controlled curated mapping distribution, catalog expansion, and new cloud providers.
 
 | ID | Title | Product outcome | Dependency | Completion criteria |
 | --- | --- | --- | --- | --- |
-| **DOC-021** | Sanitized UI screenshots and documentation gallery | Stable user guides include useful, non-personal UI screenshots | UI stabilization | Approved screenshots contain no real account data, paths, saves, credentials, tokens, or remote IDs |
+| **DATA-002** | Project-controlled curated mapping distribution | Approved game mappings are versioned with the repository while private user state remains outside Git | DATA-001 | Versioned JSON/SQLite seed dataset of approved mappings; shipped with app; update and merge precedence rules defined |
 
 ---
 
@@ -32,7 +32,6 @@ Planned feature sprints: Curated data distribution, catalog expansion, new cloud
 
 | ID | Title | Product outcome | Dependency | Completion criteria |
 | --- | --- | --- | --- | --- |
-| **DATA-002** | Project-controlled curated mapping distribution | Approved game mappings are versioned with the repository while private user state remains outside Git | DATA-001 | Versioned JSON/SQLite seed dataset of approved mappings; shipped with app; update and merge precedence rules defined |
 | **DATA-003** | Safe schema migration, backup, and rollback engine | Database schema upgrades occur automatically with safe rollback on failure | DATA-002 | Idempotent migrations; pre-migration database backup; dry-run validation report; corrupted/locked database recovery tested |
 | **OBS-014** | Add reviewed titles and mappings from JSON (CATALOG-004) | Maintainers and users can import new game titles and save paths from JSON files | DATA-002, OBS-003 | JSON schema validation; imported paths default to `Pending` review status; duplicate titles detected; import report generated |
 | **OBS-015** | Missing titles tracklist generator (CATALOG-001, CATALOG-002) | Maintainers have an actionable, prioritized tracklist of games missing save path definitions | DATA-002, OBS-014 | Steam library manifests reconciled against database mappings; `missing-titles.json` exported with AppID, title, store URL, and research status |
@@ -119,6 +118,7 @@ Verified in code, documentation, and automated tests.
 
 | ID | Title | Product outcome | Dependency | Completion criteria |
 | --- | --- | --- | --- | --- |
+| **UI-015** | Virtualized DataGrid rendering optimizations | Ultra-large save file hierarchies (10,000+ files) render with low memory overhead, smooth 60 FPS scrolling, and deferred node expansion | OBS-018, OBS-019 | UI virtualization enabled across DataGrid and ListBox views (`InstalledGamesView`, `BackupHistoryView`, `TransferHistoryView`, `ManualBackupView`); `SaveFileTreeNodeViewModel` and `LazyFileTreeBuilder` implement deferred/lazy node loading so directory subtrees expand on demand without upfront allocation spikes; `SaveFileHierarchyController` flattens visible rows for virtualized DataGrid rendering; flat vs tree view mode toggling in backup files panel; automated tests in `VirtualizedDataGridAndTreeTests` verify 15,000-file indexing in < 200 ms with bounded memory; all 2,484 tests pass with 0 warnings and 0 errors in Release |
 | **OBS-022** | Dynamic custom accent colour system (UI-013) | Users can choose arbitrary hex accent colors while maintaining full readability and WCAG AA contrast | Theme architecture | `ThemeService` parses custom hex codes and calculates dynamic HSL palette; measures WCAG relative luminance and clamps lightness for >= 4.5:1 contrast against white text; high-contrast mode takes strict precedence over custom colors; invalid hex strings fall back cleanly to indigo; custom accent persists in `AppUiSettings` via `UiSettingsStore`; live preview, contrast status, and validation error feedback implemented in `SettingsView`; automated unit tests in `ThemeServiceTests`, `UiSettingsStoreTests`, and `SettingsViewModelTests` pass; all 2,468 tests pass with 0 warnings and 0 errors in Release |
 | **OBS-019** | Paginate transfer details, backup runs, and history | Large sync plans, file transfer previews, and backup history lists remain responsive and clear | OBS-018 | Paging applied to `SyncView` (Sync plan), `HistoryView` (Executed runs), and `BackupsView` (Backup runs) using reusable `PaginationController<T>` with standard presets and custom page sizes; selection state preserved across page switches; total transfer counts and summaries reflect complete filtered plan rather than visible page; automated unit tests in `TransferAndHistoryPaginationTests` pass; all 2,424 tests pass with 0 warnings and 0 errors in Release |
 | **OBS-018** | UI Pagination Engine for Installed Games (UI-012) | Users with large libraries (100–1,000+ games) navigate smoothly without UI freezing | UI revamp, Issue #25 | Reusable `PaginationController<T>` supports page sizes `[1, 3, 5, 7, 9, 10, 15, 20, 25, 30, 50, 75, 100, Custom]`; filtering and sorting apply before paging; selection preserved; 60 FPS rendering; automated tests in `PaginationControllerTests` pass |

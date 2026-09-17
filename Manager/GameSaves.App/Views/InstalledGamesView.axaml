@@ -103,6 +103,7 @@
                               ItemsSource="{Binding Pagination.CurrentPageItems}"
                               SelectedItem="{Binding SelectedGame}"
                               IsVisible="{Binding !!Games.Count}"
+                              AutomationProperties.Name="Installed games table"
                               AutoGenerateColumns="False"
                               IsReadOnly="True"
                               CanUserReorderColumns="True"

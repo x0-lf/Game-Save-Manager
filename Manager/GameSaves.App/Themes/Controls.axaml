@@ -400,6 +400,19 @@
         <Setter Property="Opacity" Value="0.18" />
     </Style>
 
+    <!-- Virtualized table list: removes default ListBoxItem padding and margins
+         so custom table rows inside virtualized ListBoxes align cleanly. -->
+    <Style Selector="ListBox.virtualizedTable">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0" />
+    </Style>
+    <Style Selector="ListBox.virtualizedTable > ListBoxItem">
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+    </Style>
+
     <!-- Keyboard focus on the text inputs and selects. The resting BorderBrush
          setters above are unconditional Styles, which outrank Fluent's own
          focused-border setter in its ControlTheme, so without these two rules

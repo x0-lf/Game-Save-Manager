@@ -239,6 +239,11 @@ namespace GameSaves.App.ViewModels
 
         public ObservableCollection<BackupItemRowViewModel> RunItems { get; } = new();
 
+        public SaveFileHierarchyController FileTree { get; } = new();
+
+        [ObservableProperty]
+        private bool isFileTreeMode;
+
         public ObservableCollection<BackupRestoreItemResultRowViewModel> RestoreResults { get; } = new();
 
         /// <summary>This page's panel arrangement.</summary>
@@ -562,9 +567,37 @@ namespace GameSaves.App.ViewModels
                 await RefreshRunsAsync();
         }
 
+        [RelayCommand]
+        private void ToggleFileViewMode()
+        {
+            IsFileTreeMode = !IsFileTreeMode;
+        }
+
+        [RelayCommand]
+        private void ToggleTreeNode(SaveFileTreeNodeViewModel? node)
+        {
+            if (node is not null)
+            {
+                FileTree.ToggleExpand(node);
+            }
+        }
+
+        [RelayCommand]
+        private void ExpandAllTreeNodes()
+        {
+            FileTree.ExpandAll();
+        }
+
+        [RelayCommand]
+        private void CollapseAllTreeNodes()
+        {
+            FileTree.CollapseAll();
+        }
+
         private void OnSelectedRunChanged(BackupRunRowViewModel? value)
         {
             RunItems.Clear();
+            FileTree.Clear();
             RestoreResults.Clear();
             ConfirmRestore = false;
             RestoreStatusMessage = "No restore has run yet.";
@@ -586,6 +619,8 @@ namespace GameSaves.App.ViewModels
 
             foreach (TransferOverwriteBackupItem item in value.Run.Manifest.Items)
                 RunItems.Add(new BackupItemRowViewModel(item));
+
+            FileTree.LoadItems(value.Run.Manifest.Items);
 
             if (RestoreToMappingLocation)
                 _ = LoadMappingOptionsAsync();
@@ -806,6 +841,8 @@ namespace GameSaves.App.ViewModels
                             itemRow.IsVerified = matched;
                         }
                     }
+
+                    FileTree.UpdateVerification(result.FileResults);
                 }
 
                 FileListStatusMessage = result.Strength switch

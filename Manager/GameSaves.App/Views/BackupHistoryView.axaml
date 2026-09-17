@@ -342,13 +342,39 @@
                                 Title="Files in this backup run"
                                 MinPanelHeight="160">
                 <wsp:WorkspacePanel.HeaderActions>
-                    <Button Content="Verify payload integrity"
-                            Command="{Binding VerifySelectedRunCommand}"
-                            IsEnabled="{Binding CanVerifySelectedRun}"
-                            VerticalAlignment="Center"
-                            ToolTip.Tip="Reads all payload files in this backup run and verifies them byte-for-byte against their SHA-256 hashes." />
+                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                        <Button Content="View hierarchy"
+                                Command="{Binding ToggleFileViewModeCommand}"
+                                IsVisible="{Binding !IsFileTreeMode}"
+                                VerticalAlignment="Center"
+                                ToolTip.Tip="Switch to expandable directory tree with deferred loading." />
+
+                        <Button Content="View table"
+                                Command="{Binding ToggleFileViewModeCommand}"
+                                IsVisible="{Binding IsFileTreeMode}"
+                                VerticalAlignment="Center"
+                                ToolTip.Tip="Switch to flat table with sorting and hashes." />
+
+                        <Button Content="Expand all"
+                                Command="{Binding ExpandAllTreeNodesCommand}"
+                                IsVisible="{Binding IsFileTreeMode}"
+                                VerticalAlignment="Center"
+                                ToolTip.Tip="Expand all directories in the tree." />
+
+                        <Button Content="Collapse all"
+                                Command="{Binding CollapseAllTreeNodesCommand}"
+                                IsVisible="{Binding IsFileTreeMode}"
+                                VerticalAlignment="Center"
+                                ToolTip.Tip="Collapse all directories back to top-level roots." />
+
+                        <Button Content="Verify payload integrity"
+                                Command="{Binding VerifySelectedRunCommand}"
+                                IsEnabled="{Binding CanVerifySelectedRun}"
+                                VerticalAlignment="Center"
+                                ToolTip.Tip="Reads all payload files in this backup run and verifies them byte-for-byte against their SHA-256 hashes." />
+                    </StackPanel>
                 </wsp:WorkspacePanel.HeaderActions>
-                <Grid RowDefinitions="Auto,Auto,*">
+                <Grid RowDefinitions="Auto,*">
 
                     <TextBlock Grid.Row="0"
                                Text="{Binding FileListStatusMessage}"
@@ -358,86 +384,190 @@
                                Margin="10,4,10,6"
                                TextWrapping="Wrap" />
 
-                    <Border Grid.Row="1"
-                            Padding="10,6"
-                            BorderBrush="{DynamicResource CardBorderBrush}"
-                            BorderThickness="0,0,0,1"
-                            IsVisible="{Binding !!RunItems.Count}">
-
-                        <Grid ColumnDefinitions="2*,90,120,90"
-                              ColumnSpacing="12">
-
-                            <TextBlock Grid.Column="0"
-                                       Text="Original location"
-                                       Foreground="{DynamicResource SecondaryTextBrush}"
-                                       FontWeight="Bold" />
-
-                            <TextBlock Grid.Column="1"
-                                       Text="Size"
-                                       Foreground="{DynamicResource SecondaryTextBrush}"
-                                       FontWeight="Bold" />
-
-                            <TextBlock Grid.Column="2"
-                                       Text="SHA-256"
-                                       Foreground="{DynamicResource SecondaryTextBrush}"
-                                       FontWeight="Bold" />
-
-                            <TextBlock Grid.Column="3"
-                                       Text="Status"
-                                       Foreground="{DynamicResource SecondaryTextBrush}"
-                                       FontWeight="Bold" />
-                        </Grid>
-                    </Border>
-
-                    <views:EmptyState Grid.Row="2"
+                    <views:EmptyState Grid.Row="1"
                                       Glyph="&#xE7C3;"
                                       Title="No files to show"
                                       Message="Select a backup run to see the files it contains."
                                       IsVisible="{Binding !RunItems.Count}" />
 
-                    <ScrollViewer Grid.Row="2"
-                                  VerticalScrollBarVisibility="Auto">
-                        <ItemsControl ItemsSource="{Binding RunItems}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="models:BackupItemRowViewModel">
-                                    <Border Padding="12"
-                                            BorderBrush="{DynamicResource SubtleBorderBrush}"
-                                            BorderThickness="0,0,0,1">
+                    <!-- Flat Table View with Virtualized DataGrid -->
+                    <DataGrid x:Name="BackupFilesGrid"
+                              Grid.Row="1"
+                              Classes="installedGamesTable"
+                              ItemsSource="{Binding RunItems}"
+                              AutoGenerateColumns="False"
+                              IsReadOnly="True"
+                              CanUserSortColumns="True"
+                              CanUserResizeColumns="True"
+                              GridLinesVisibility="Horizontal"
+                              HorizontalScrollBarVisibility="Auto"
+                              VerticalScrollBarVisibility="Auto"
+                              RowHeight="38"
+                              Background="Transparent"
+                              BorderThickness="0"
+                              AutomationProperties.Name="Backup files table">
+                        <DataGrid.IsVisible>
+                            <MultiBinding Converter="{x:Static BoolConverters.And}">
+                                <Binding Path="!!RunItems.Count" />
+                                <Binding Path="!IsFileTreeMode" />
+                            </MultiBinding>
+                        </DataGrid.IsVisible>
+                        <DataGrid.Columns>
+                            <DataGridTemplateColumn Header="Original location" Width="2*" SortMemberPath="OriginalFile">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="models:BackupItemRowViewModel">
+                                        <TextBlock Text="{Binding OriginalFile}"
+                                                   VerticalAlignment="Center"
+                                                   ToolTip.Tip="{Binding BackupFile}"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Margin="8,0" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
 
-                                        <Grid ColumnDefinitions="2*,90,120,90"
-                                              ColumnSpacing="12">
+                            <DataGridTemplateColumn Header="Size" Width="90" SortMemberPath="Item.Bytes">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="models:BackupItemRowViewModel">
+                                        <TextBlock Text="{Binding SizeDisplay}"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource MutedTextBrush}"
+                                                   Margin="8,0" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
 
-                                            <TextBlock Grid.Column="0"
-                                                       Text="{Binding OriginalFile}"
-                                                       Foreground="{DynamicResource SecondaryTextBrush}"
-                                                       ToolTip.Tip="{Binding BackupFile}"
-                                                       TextTrimming="CharacterEllipsis" />
+                            <DataGridTemplateColumn Header="SHA-256" Width="120" SortMemberPath="Sha256">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="models:BackupItemRowViewModel">
+                                        <TextBlock Text="{Binding Sha256Short}"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource MutedTextBrush}"
+                                                   ToolTip.Tip="{Binding Sha256}"
+                                                   FontFamily="Consolas,monospace"
+                                                   Margin="8,0" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
 
-                                            <TextBlock Grid.Column="1"
-                                                       Text="{Binding SizeDisplay}"
-                                                       Foreground="{DynamicResource MutedTextBrush}" />
+                            <DataGridTemplateColumn Header="Status" Width="110" SortMemberPath="StatusDisplay">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="models:BackupItemRowViewModel">
+                                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="8,0">
+                                            <TextBlock Text="{Binding StatusGlyph}"
+                                                       FontWeight="Bold"
+                                                       Foreground="{DynamicResource PrimaryTextBrush}" />
+                                            <TextBlock Text="{Binding StatusDisplay}"
+                                                       Foreground="{DynamicResource SecondaryTextBrush}" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
 
-                                            <TextBlock Grid.Column="2"
-                                                       Text="{Binding Sha256Short}"
+                    <!-- Hierarchical Tree View with Virtualized DataGrid and Deferred Expansion -->
+                    <DataGrid x:Name="BackupTreeGrid"
+                              Grid.Row="1"
+                              Classes="installedGamesTable"
+                              ItemsSource="{Binding FileTree.VisibleRows}"
+                              AutoGenerateColumns="False"
+                              IsReadOnly="True"
+                              CanUserResizeColumns="True"
+                              GridLinesVisibility="Horizontal"
+                              HorizontalScrollBarVisibility="Auto"
+                              VerticalScrollBarVisibility="Auto"
+                              RowHeight="38"
+                              Background="Transparent"
+                              BorderThickness="0"
+                              AutomationProperties.Name="Backup file hierarchy tree">
+                        <DataGrid.IsVisible>
+                            <MultiBinding Converter="{x:Static BoolConverters.And}">
+                                <Binding Path="!!RunItems.Count" />
+                                <Binding Path="IsFileTreeMode" />
+                            </MultiBinding>
+                        </DataGrid.IsVisible>
+                        <DataGrid.Columns>
+                            <DataGridTemplateColumn Header="File hierarchy" Width="2*">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="models:SaveFileTreeNodeViewModel">
+                                        <StackPanel Orientation="Horizontal"
+                                                    Margin="{Binding IndentMargin}"
+                                                    VerticalAlignment="Center">
+                                            <Button Background="Transparent"
+                                                    BorderThickness="0"
+                                                    Padding="2,0"
+                                                    MinWidth="20"
+                                                    MinHeight="20"
+                                                    VerticalAlignment="Center"
+                                                    IsVisible="{Binding IsDirectory}"
+                                                    Command="{Binding $parent[UserControl].((vm:BackupHistoryViewModel)DataContext).ToggleTreeNodeCommand}"
+                                                    CommandParameter="{Binding}"
+                                                    ToolTip.Tip="Expand or collapse folder">
+                                                <TextBlock Text="{Binding ExpanderGlyph}"
+                                                           FontFamily="Consolas,monospace"
+                                                           FontSize="10"
+                                                           Foreground="{DynamicResource AccentBrush}" />
+                                            </Button>
+                                            <TextBlock Text="   "
+                                                       FontFamily="Consolas,monospace"
+                                                       IsVisible="{Binding IsFile}"
+                                                       VerticalAlignment="Center" />
+                                            <TextBlock Text="{Binding TypeGlyph}"
+                                                       Margin="2,0,6,0"
+                                                       VerticalAlignment="Center" />
+                                            <TextBlock Text="{Binding Name}"
+                                                       ToolTip.Tip="{Binding RelativePath}"
+                                                       Foreground="{DynamicResource PrimaryTextBrush}"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <DataGridTemplateColumn Header="Size" Width="100">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="models:SaveFileTreeNodeViewModel">
+                                        <TextBlock Text="{Binding SizeDisplay}"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource MutedTextBrush}"
+                                                   Margin="8,0" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <DataGridTemplateColumn Header="Details / SHA-256" Width="140">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="models:SaveFileTreeNodeViewModel">
+                                        <Panel Margin="8,0" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding FileCountDisplay}"
+                                                       IsVisible="{Binding IsDirectory}"
+                                                       Foreground="{DynamicResource SecondaryTextBrush}" />
+                                            <TextBlock Text="{Binding Sha256Short}"
+                                                       IsVisible="{Binding IsFile}"
                                                        Foreground="{DynamicResource MutedTextBrush}"
                                                        ToolTip.Tip="{Binding Sha256}"
                                                        FontFamily="Consolas,monospace" />
+                                        </Panel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
 
-                                            <StackPanel Grid.Column="3"
-                                                        Orientation="Horizontal"
-                                                        Spacing="4">
-                                                <TextBlock Text="{Binding StatusGlyph}"
-                                                           FontWeight="Bold"
-                                                           Foreground="{DynamicResource PrimaryTextBrush}" />
-                                                <TextBlock Text="{Binding StatusDisplay}"
-                                                           Foreground="{DynamicResource SecondaryTextBrush}" />
-                                            </StackPanel>
-                                        </Grid>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </ScrollViewer>
+                            <DataGridTemplateColumn Header="Status" Width="110">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="models:SaveFileTreeNodeViewModel">
+                                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="8,0">
+                                            <TextBlock Text="{Binding StatusGlyph}"
+                                                       FontWeight="Bold"
+                                                       Foreground="{DynamicResource PrimaryTextBrush}" />
+                                            <TextBlock Text="{Binding StatusDisplay}"
+                                                       Foreground="{DynamicResource SecondaryTextBrush}" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
                 </Grid>
             </wsp:WorkspacePanel>
 
@@ -446,7 +576,7 @@
                                 IsVisible="{Binding !!Runs.Count}"
                                 Title="Restore results"
                                 Subtitle="Exactly what was restored, skipped, or failed during the last restore or preview.">
-                <Grid RowDefinitions="Auto,Auto">
+                <Grid RowDefinitions="Auto,*">
 
                     <Border Grid.Row="0"
                             Padding="10,6"
@@ -485,9 +615,15 @@
                                       Message="Run a restore preview to see exactly what would change."
                                       IsVisible="{Binding !RestoreResults.Count}" />
 
-                    <ItemsControl Grid.Row="1"
-                                  ItemsSource="{Binding RestoreResults}">
-                        <ItemsControl.ItemTemplate>
+                    <ListBox Grid.Row="1"
+                             Classes="virtualizedTable"
+                             ItemsSource="{Binding RestoreResults}"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             AutomationProperties.Name="Restore results list">
+                        <ListBox.ItemTemplate>
                             <DataTemplate x:DataType="models:BackupRestoreItemResultRowViewModel">
                                 <Border Padding="12"
                                         BorderBrush="{DynamicResource SubtleBorderBrush}"
@@ -526,8 +662,8 @@
                                     </StackPanel>
                                 </Border>
                             </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
                 </Grid>
             </wsp:WorkspacePanel>
 

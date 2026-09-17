@@ -290,62 +290,67 @@
                         </views:EmptyState.IsVisible>
                     </views:EmptyState>
 
-                    <ScrollViewer Grid.Row="2"
-                                  IsVisible="{Binding !!RunItems.Count}">
-                        <ItemsControl ItemsSource="{Binding RunItems}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="models:TransferRunItemRowViewModel">
-                                    <Border Padding="10,6"
-                                            BorderBrush="{DynamicResource SubtleBorderBrush}"
-                                            BorderThickness="0,0,0,1">
+                    <ListBox Grid.Row="2"
+                             Classes="virtualizedTable"
+                             ItemsSource="{Binding RunItems}"
+                             IsVisible="{Binding !!RunItems.Count}"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             AutomationProperties.Name="Executed run files list">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="models:TransferRunItemRowViewModel">
+                                <Border Padding="10,6"
+                                        BorderBrush="{DynamicResource SubtleBorderBrush}"
+                                        BorderThickness="0,0,0,1">
 
-                                        <StackPanel Spacing="3">
-                                            <Grid ColumnDefinitions="2*,2*,80,150,*"
-                                                  ColumnSpacing="10">
+                                    <StackPanel Spacing="3">
+                                        <Grid ColumnDefinitions="2*,2*,80,150,*"
+                                              ColumnSpacing="10">
 
-                                                <TextBlock Grid.Column="0"
-                                                           Text="{Binding SourceFile}"
-                                                           Foreground="{DynamicResource SecondaryTextBrush}"
-                                                           ToolTip.Tip="{Binding SourceFile}"
-                                                           FontSize="{DynamicResource FontSizeBody}"
-                                                           TextTrimming="CharacterEllipsis" />
-
-                                                <TextBlock Grid.Column="1"
-                                                           Text="{Binding TargetFile}"
-                                                           Foreground="{DynamicResource SecondaryTextBrush}"
-                                                           ToolTip.Tip="{Binding TargetFile}"
-                                                           FontSize="{DynamicResource FontSizeBody}"
-                                                           TextTrimming="CharacterEllipsis" />
-
-                                                <TextBlock Grid.Column="2"
-                                                           Text="{Binding SizeDisplay}"
-                                                           FontSize="{DynamicResource FontSizeBody}"
-                                                           Foreground="{DynamicResource MutedTextBrush}" />
-
-                                                <TextBlock Grid.Column="3"
-                                                           Text="{Binding Status}"
-                                                           Foreground="{DynamicResource PrimaryTextBrush}"
-                                                           FontSize="{DynamicResource FontSizeBody}"
-                                                           FontWeight="SemiBold" />
-
-                                                <TextBlock Grid.Column="4"
-                                                           Text="{Binding Error}"
-                                                           Foreground="{DynamicResource WarningBrush}"
-                                                           FontSize="{DynamicResource FontSizeBody}"
-                                                           TextWrapping="Wrap" />
-                                            </Grid>
-
-                                            <TextBlock Text="{Binding BackupDisplay}"
-                                                       IsVisible="{Binding HasBackup}"
-                                                       Foreground="{DynamicResource AccentBrush}"
-                                                       FontSize="{DynamicResource FontSizeMicro}"
+                                            <TextBlock Grid.Column="0"
+                                                       Text="{Binding SourceFile}"
+                                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                                       ToolTip.Tip="{Binding SourceFile}"
+                                                       FontSize="{DynamicResource FontSizeBody}"
                                                        TextTrimming="CharacterEllipsis" />
-                                        </StackPanel>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </ScrollViewer>
+
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding TargetFile}"
+                                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                                       ToolTip.Tip="{Binding TargetFile}"
+                                                       FontSize="{DynamicResource FontSizeBody}"
+                                                       TextTrimming="CharacterEllipsis" />
+
+                                            <TextBlock Grid.Column="2"
+                                                       Text="{Binding SizeDisplay}"
+                                                       FontSize="{DynamicResource FontSizeBody}"
+                                                       Foreground="{DynamicResource MutedTextBrush}" />
+
+                                            <TextBlock Grid.Column="3"
+                                                       Text="{Binding Status}"
+                                                       Foreground="{DynamicResource PrimaryTextBrush}"
+                                                       FontSize="{DynamicResource FontSizeBody}"
+                                                       FontWeight="SemiBold" />
+
+                                            <TextBlock Grid.Column="4"
+                                                       Text="{Binding Error}"
+                                                       Foreground="{DynamicResource WarningBrush}"
+                                                       FontSize="{DynamicResource FontSizeBody}"
+                                                       TextWrapping="Wrap" />
+                                        </Grid>
+
+                                        <TextBlock Text="{Binding BackupDisplay}"
+                                                   IsVisible="{Binding HasBackup}"
+                                                   Foreground="{DynamicResource AccentBrush}"
+                                                   FontSize="{DynamicResource FontSizeMicro}"
+                                                   TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
                 </Grid>
             </wsp:WorkspacePanel>
 
