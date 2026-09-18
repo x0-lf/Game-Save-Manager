@@ -259,6 +259,39 @@ dotnet run --project Manager/GameSaves/GameSaves.csproj -- tracklist --status Un
 dotnet run --project Manager/GameSaves/GameSaves.csproj -- tracklist -c candidates.json -o missing.json
 ```
 
+## Targeted PCGamingWiki web harvesting engine (OBS-016)
+
+The targeted harvesting engine (`PcgwHarvester`, `PcgwApiClient`, `PcgwSavePathExtractor`) enables automated querying of PCGamingWiki's MediaWiki and Cargo APIs to retrieve candidate save game directory structures for titles identified in missing tracklists (`OBS-015`) or custom AppID queues.
+
+### Architecture & mechanics
+
+1. **Tracklist Ingestion:**
+   `PcgwHarvestOptions` and `PcgwHarvester.ResolveHarvestTargets` consume tracklists directly from `missing-titles.json` (or `.csv`), raw AppID text files, or in-memory `MissingTitlesTracklist` objects. Game titles discovered in the tracklist are paired with their Steam AppIDs for provenance tracking.
+2. **Polite API Client:**
+   `PoliteHttpClient` enforces rate limits (`20 req/min`), user-agent identification (`client/version (contact URL; email)`), polite pause intervals, exponential backoff retries, and offline mock support (`HttpMessageHandler`).
+3. **Cargo & MediaWiki Parsing:**
+   The client queries Cargo API `Infobox_game` (`where: Steam_AppID HOLDS "{appId}"`) to resolve the canonical page ID and title, then retrieves the raw wikitext via MediaWiki `action=parse&prop=wikitext`.
+4. **Environment Token Normalization:**
+   `PcgwSavePathExtractor` parses `Save game data location` sections, converting PCGamingWiki templates (`{{p|localappdata}}`, `{{p|userprofile}}`, `{{p|documents}}`, `{{p|savedgames}}`, `{{p|steam}}`, `{{p|game}}`, compound templates like `{{p|localappdata\Game}}`, and angle-bracket tokens `<LocalAppData>`, `<UserDocuments>`, `<UserProfile>`) into normalized system environment tokens (`%LOCALAPPDATA%`, `%USERPROFILE%`, `%DOCUMENTS%`, `{SavedGames}`, `{SteamRoot}`, `{GameInstallPath}`). Path kind is automatically inferred as `Directory`, `File` (e.g. `.sav`, `.dat`, `.ini`), or `Glob`.
+5. **Strict Trust Model & Safety Invariants:**
+   All candidate paths extracted during web harvesting are imported into `save_path_mappings` with:
+   - `review_status = 'Pending'`
+   - `enabled = 0`
+   Harvested entries **never** bypass human review. They are completely ignored by `verify`, `backup`, and production restore operations until explicitly inspected and approved by a maintainer via the Reviewer tool or `approve-mapping` CLI command.
+
+### CLI targeted harvest commands
+
+```powershell
+# Ingest missing titles tracklist and harvest top 10 titles from PCGamingWiki
+dotnet run --project Manager/GameSaves/GameSaves.csproj -- pcgw-harvest-tracklist missing-titles.json External/Titles "SaveGameManager/0.1 (https://github.com/example; developer@example.invalid) .NET/10.0" 10
+
+# Ingest explicit AppIDs
+dotnet run --project Manager/GameSaves/GameSaves.csproj -- pcgw-harvest-appids External/Titles "SaveGameManager/0.1 (https://github.com/example; developer@example.invalid) .NET/10.0" 413150 674020
+
+# Ingest locally installed Steam games missing save paths
+dotnet run --project Manager/GameSaves/GameSaves.csproj -- pcgw-harvest-installed External/Titles "SaveGameManager/0.1 (https://github.com/example; developer@example.invalid) .NET/10.0" 5
+```
+
 ## CLI overview
 
 The `GameSaves` project owns:

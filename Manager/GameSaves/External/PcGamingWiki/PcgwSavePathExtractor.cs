@@ -1,4 +1,4 @@
-﻿using GameSaves.Core.Save;
+using GameSaves.Core.Save;
 using System.Text.RegularExpressions;
 
 namespace GameSaves.External
@@ -14,7 +14,7 @@ namespace GameSaves.External
             RegexOptions.Compiled);
 
         private static readonly Regex PathCandidateRegex = new(
-            @"(?i)(%APPDATA%|%LOCALAPPDATA%|%USERPROFILE%|%PROGRAMDATA%|%DOCUMENTS%|\{UserProfile\}|\{AppData\}|\{LocalAppData\}|\{ProgramData\}|\{Documents\}|\{SavedGames\}|\{SteamRoot\}|\{SteamUserData\}|\{GameInstallPath\}|\{LibraryRoot\}|\$HOME|\$XDG_CONFIG_HOME|\$XDG_DATA_HOME|~/|[A-Z]:\\)[^|\r\n<>\]]*",
+            @"(?i)(%APPDATA%|%LOCALAPPDATA%|%USERPROFILE%|%PROGRAMDATA%|%DOCUMENTS%|%PUBLIC%|\{UserProfile\}|\{AppData\}|\{LocalAppData\}|\{ProgramData\}|\{Documents\}|\{SavedGames\}|\{SteamRoot\}|\{SteamUserData\}|\{GameInstallPath\}|\{LibraryRoot\}|\$HOME|\$XDG_CONFIG_HOME|\$XDG_DATA_HOME|~/|[A-Z]:\\)[^|\r\n<>\]]*",
             RegexOptions.Compiled);
 
         public List<SavePathImportItem> ExtractCandidates(
@@ -50,6 +50,8 @@ namespace GameSaves.External
                         ? InferPlatformFromPath(path)
                         : platform;
 
+                    string pathKind = InferPathKind(path);
+
                     foreach (string steamAppId in title.SteamAppIds)
                     {
                         string key = $"{steamAppId}|{platform}|{path}";
@@ -62,7 +64,7 @@ namespace GameSaves.External
                             GameName: title.DisplayTitle ?? title.PageName.Replace('_', ' '),
                             Platform: platform,
                             PathTemplate: path,
-                            PathKind: "Directory",
+                            PathKind: pathKind,
                             SourceName: "PCGamingWiki-AutoExtracted",
                             SourceUrl: title.SourceUrl,
                             SourceLicense: "CC-BY-NC-SA unless otherwise noted",
@@ -102,14 +104,19 @@ namespace GameSaves.External
 
             result = ReplacePathTemplate(result, "appdata", "%APPDATA%");
             result = ReplacePathTemplate(result, "localappdata", "%LOCALAPPDATA%");
+            result = ReplacePathTemplate(result, "locallow", "%USERPROFILE%\\AppData\\LocalLow");
+            result = ReplacePathTemplate(result, "localappdatalow", "%USERPROFILE%\\AppData\\LocalLow");
             result = ReplacePathTemplate(result, "userprofile", "%USERPROFILE%");
             result = ReplacePathTemplate(result, "winuserprofile", "%USERPROFILE%");
             result = ReplacePathTemplate(result, "programdata", "%PROGRAMDATA%");
+            result = ReplacePathTemplate(result, "commonappdata", "%PROGRAMDATA%");
             result = ReplacePathTemplate(result, "documents", "%DOCUMENTS%");
             result = ReplacePathTemplate(result, "savedgames", "{SavedGames}");
             result = ReplacePathTemplate(result, "steam", "{SteamRoot}");
             result = ReplacePathTemplate(result, "steamapps", "{LibraryRoot}\\steamapps");
             result = ReplacePathTemplate(result, "uid", "*");
+            result = ReplacePathTemplate(result, "username", "*");
+            result = ReplacePathTemplate(result, "public", "%PUBLIC%");
             result = ReplacePathTemplate(result, "game", "{GameInstallPath}");
             result = ReplacePathTemplate(result, "path-to-game", "{GameInstallPath}");
             result = ReplacePathTemplate(result, "linuxhome", "$HOME");
@@ -120,11 +127,21 @@ namespace GameSaves.External
             result = ReplacePathTemplate(result, "osxhome", "$HOME");
             result = ReplacePathTemplate(result, "macosappsupport", "$HOME/Library/Application Support");
 
+            result = result.Replace("<LocalAppData>", "%LOCALAPPDATA%", StringComparison.OrdinalIgnoreCase);
+            result = result.Replace("<UserDocuments>", "%DOCUMENTS%", StringComparison.OrdinalIgnoreCase);
+            result = result.Replace("<Documents>", "%DOCUMENTS%", StringComparison.OrdinalIgnoreCase);
+            result = result.Replace("<UserProfile>", "%USERPROFILE%", StringComparison.OrdinalIgnoreCase);
+            result = result.Replace("<ProgramData>", "%PROGRAMDATA%", StringComparison.OrdinalIgnoreCase);
+            result = result.Replace("<AppData>", "%APPDATA%", StringComparison.OrdinalIgnoreCase);
+            result = result.Replace("<SavedGames>", "{SavedGames}", StringComparison.OrdinalIgnoreCase);
+            result = result.Replace("<SteamRoot>", "{SteamRoot}", StringComparison.OrdinalIgnoreCase);
+            result = result.Replace("<LibraryRoot>", "{LibraryRoot}", StringComparison.OrdinalIgnoreCase);
             result = result.Replace("<path-to-game>", "{GameInstallPath}", StringComparison.OrdinalIgnoreCase);
             result = result.Replace("<Steam-folder>", "{SteamRoot}", StringComparison.OrdinalIgnoreCase);
             result = result.Replace("<SteamLibrary-folder>", "{LibraryRoot}", StringComparison.OrdinalIgnoreCase);
             result = result.Replace("<user-id>", "*", StringComparison.OrdinalIgnoreCase);
             result = result.Replace("<Steam-user-id>", "*", StringComparison.OrdinalIgnoreCase);
+            result = result.Replace("<username>", "*", StringComparison.OrdinalIgnoreCase);
 
             result = Regex.Replace(
                 result,
@@ -242,6 +259,22 @@ namespace GameSaves.External
                 return "macos";
 
             return "windows";
+        }
+
+        public static string InferPathKind(string path)
+        {
+            string ext = Path.GetExtension(path);
+            if (!string.IsNullOrEmpty(ext))
+            {
+                if (path.Contains('*') || path.Contains('?'))
+                    return "Glob";
+
+                string extLower = ext.ToLowerInvariant();
+                if (extLower is ".ini" or ".sav" or ".dat" or ".xml" or ".json" or ".cfg" or ".bin" or ".sl2" or ".save" or ".db" or ".sqlite")
+                    return "File";
+            }
+
+            return "Directory";
         }
     }
 }

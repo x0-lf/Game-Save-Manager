@@ -1,4 +1,4 @@
-﻿using System.Net;
+using System.Net;
 using System.Text.Json;
 
 namespace GameSaves.External.Http
@@ -15,13 +15,21 @@ namespace GameSaves.External.Http
         public PoliteHttpClient(
             string userAgent,
             RateLimitOptions options)
+            : this(userAgent, options, null)
+        {
+        }
+
+        public PoliteHttpClient(
+            string userAgent,
+            RateLimitOptions options,
+            HttpMessageHandler? handler)
         {
             if (string.IsNullOrWhiteSpace(userAgent))
                 throw new ArgumentException("A meaningful User-Agent is required.", nameof(userAgent));
 
             _options = options;
 
-            var handler = new SocketsHttpHandler
+            handler ??= new SocketsHttpHandler
             {
                 AllowAutoRedirect = false,
                 AutomaticDecompression =

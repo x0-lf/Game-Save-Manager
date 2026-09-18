@@ -1,4 +1,4 @@
-﻿# How To Harvest PCGamingWiki Save Paths
+# How To Harvest PCGamingWiki Save Paths
 
 This guide explains how to use the developer-only PCGamingWiki harvester to build save-path database entries from Steam AppIDs.
 
@@ -244,6 +244,26 @@ Example:
 ```text
 413150,674020,1245620
 ```
+
+---
+
+## Harvest from a Missing Titles Tracklist (Recommended)
+
+In `OBS-015`, you can generate prioritized tracklists of games missing save path definitions. The `pcgw-harvest-tracklist` command directly ingests `missing-titles.json` or `missing-titles.csv`:
+
+```bash
+# 1. Generate an actionable tracklist of missing installed games
+dotnet run -- tracklist -i -o missing-titles.json
+
+# 2. Harvest candidate save paths for the top 10 missing titles from PCGamingWiki
+dotnet run -- pcgw-harvest-tracklist missing-titles.json External/Titles "SaveGameManager/0.1 (https://github.com/example; developer@example.invalid) .NET/10.0" 10
+```
+
+All extracted mappings are saved into `save_path_mappings` strictly with:
+- `review_status = 'Pending'`
+- `enabled = 0`
+
+Reviewers can then use the Reviewer application or CLI commands (`approve-mapping <id>`, `approve-app <steamAppId>`) to inspect and verify candidates before enabling them.
 
 ---
 

@@ -161,6 +161,11 @@ namespace GameSaves
                     RunBackup(dbPath, args[1], dryRun: false);
                     break;
 
+                case "pcgw-harvest-tracklist":
+                case "pcgw-harvest":
+                    await RunPcgwHarvestTracklist(args, dbPath);
+                    break;
+
                 case "pcgw-harvest-appids":
                     await RunPcgwHarvestAppIds(args, dbPath);
                     break;
@@ -801,6 +806,61 @@ namespace GameSaves
             Console.WriteLine($"  dotnet run -- pcgw-harvest-appids External/Titles \"SaveGameManager/0.1 (https://github.com/nickname; user@mail.com) .NET/10.0\" \"{result.OutputPath}\"");
         }
 
+        private static async Task RunPcgwHarvestTracklist(string[] args, string dbPath)
+        {
+            if (args.Length < 4)
+            {
+                Console.WriteLine("Usage:");
+                Console.WriteLine("  pcgw-harvest-tracklist <missing-titles.json> <output-root> <user-agent> [max-titles]");
+                Console.WriteLine("  pcgw-harvest <missing-titles.json> <output-root> <user-agent> [max-titles]");
+                Console.WriteLine();
+                Console.WriteLine("Example:");
+                Console.WriteLine("  dotnet run -- pcgw-harvest-tracklist missing-titles.json External/Titles \"SaveGameManager/0.1 (https://github.com/mynickname; myemail@email.com) .NET/10\" 10");
+                Environment.ExitCode = ExitCodeUsage;
+                return;
+            }
+
+            string tracklistPath = args[1];
+            string outputRoot = args[2];
+            string userAgent = args[3];
+
+            int maxTitles = 0;
+            if (args.Length >= 5)
+                int.TryParse(args[4], out maxTitles);
+
+            if (!File.Exists(tracklistPath))
+            {
+                Console.Error.WriteLine($"Error: Tracklist file not found: {tracklistPath}");
+                Environment.ExitCode = 1;
+                return;
+            }
+
+            Console.WriteLine($"Starting PCGamingWiki targeted harvest from tracklist: {tracklistPath}");
+            Console.WriteLine($"Output root: {outputRoot}");
+            Console.WriteLine($"User-Agent: {userAgent}");
+            if (maxTitles > 0)
+                Console.WriteLine($"Max titles to harvest: {maxTitles}");
+
+            var options = new PcgwHarvestOptions
+            {
+                DatabasePath = dbPath,
+                OutputRoot = outputRoot,
+                UserAgent = userAgent,
+                TracklistPath = tracklistPath,
+                RequestsPerMinute = 20,
+                PauseEveryRequests = 20,
+                PauseEveryRequestsDuration = TimeSpan.FromMinutes(1),
+                MaxTitlesToProcess = maxTitles,
+                ImportExtractedMappingsDisabled = true
+            };
+
+            var harvester = new PcgwHarvester(options);
+
+            PcgwHarvestResult result = await harvester.HarvestAsync();
+
+            PrintPcgwHarvestResult(result, result.TitlesIndexed);
+        }
+
         private static async Task RunPcgwHarvestAppIds(string[] args, string dbPath)
         {
             if (args.Length < 4)
@@ -1298,6 +1358,7 @@ namespace GameSaves
             Console.WriteLine("  verify");
             Console.WriteLine("  backup-dry-run <destination>");
             Console.WriteLine("  backup <destination>");
+            Console.WriteLine("  pcgw-harvest-tracklist <missing-titles.json> <output-root> <user-agent> [max-titles]");
             Console.WriteLine("  pcgw-harvest-appids <output-root> <user-agent> <appid|appid-file> [more-appids]");
             Console.WriteLine("  pcgw-harvest-installed <output-root> <user-agent> [max-games]");
             Console.WriteLine("  steam-catalog-fetch <output-root> <games|dlc|all> [max-apps] [steam-web-api-key]");

@@ -1,9 +1,9 @@
-﻿using GameSaves.External.Http;
+using GameSaves.External.Http;
 using System.Text.Json;
 
 namespace GameSaves.External
 {
-    public sealed class PcgwApiClient
+    public sealed class PcgwApiClient : IPcgwApiClient
     {
         private readonly PoliteHttpClient _http;
 
