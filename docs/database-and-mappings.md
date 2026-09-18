@@ -131,6 +131,65 @@ dotnet run --project Manager/GameSaves/GameSaves.csproj -- migrate
 dotnet run --project Manager/GameSaves/GameSaves.csproj -- migrate path/to/gamesave.db
 ```
 
+## Importing game titles and save paths from JSON (OBS-014)
+
+Maintainers and users can import new game titles and candidate save path mappings from
+external JSON files using the `IMappingImportService` (`MappingImportService`).
+
+### Supported JSON formats
+
+The import engine accepts:
+
+1. **Document Object format:**
+   ```json
+   {
+     "schemaVersion": 1,
+     "titles": [
+       {
+         "steamAppId": "400",
+         "title": "Portal",
+         "platformHint": "windows",
+         "sourceName": "CommunitySource"
+       }
+     ],
+     "mappings": [
+       {
+         "steamAppId": "400",
+         "gameName": "Portal",
+         "platform": "windows",
+         "pathTemplate": "%LOCALAPPDATA%/Portal/Saves",
+         "pathKind": "Directory",
+         "sourceName": "CommunitySource",
+         "priority": 100
+       }
+     ]
+   }
+   ```
+2. **Flat mappings array:** A JSON array of mapping items directly at root.
+3. **Flat titles array:** A JSON array of title items directly at root.
+4. **Flexible casing:** Property names can use either camelCase (`steamAppId`, `gameName`, `pathTemplate`) or snake_case (`steam_app_id`, `game_name`, `path_template`). App IDs can be strings or integers.
+
+### Validation & trust rules
+
+- **Required fields:** `steamAppId` and `title` for titles; `steamAppId`, `platform`, and `pathTemplate` for mappings.
+- **Platform allowlist:** `windows`, `linux`, `macos`, `steamdeck` (case-insensitive).
+- **Default Pending status:** In accordance with the project safety model, all imported candidate mappings default to `review_status = 'Pending'` and `enabled = 0`. They remain disabled and excluded from transfer/backup execution until reviewed in `GameSaves.Reviewer` or imported with explicit administrative approval (`--approve`).
+- **Approval preservation:** If an existing mapping in the database is already `Approved`, re-importing metadata does not downgrade its status unless the `pathKind` changed (which invalidates the previous review).
+- **Duplicate detection:** Duplicate mappings matching `(steam_app_id, platform, path_template)` and duplicate titles matching `steam_app_id` are detected, leaving existing records unchanged and reporting exact metrics.
+
+### CLI import commands
+
+```powershell
+# Import mappings or titles from JSON (defaults to Pending review and disabled)
+dotnet run --project Manager/GameSaves/GameSaves.csproj -- import candidates.json
+
+# Import and auto-approve trusted mappings
+dotnet run --project Manager/GameSaves/GameSaves.csproj -- import curated.json --approve
+
+# Using the import-json alias
+dotnet run --project Manager/GameSaves/GameSaves.csproj -- import-json mappings.json
+```
+
 ## CLI overview
 
 The `GameSaves` project owns:

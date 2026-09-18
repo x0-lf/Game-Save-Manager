@@ -89,6 +89,7 @@ namespace GameSaves
                     break;
 
                 case "import":
+                case "import-json":
                     if (args.Length < 2)
                     {
                         UsageError("Usage: import <savepaths.json> [--approve]");
@@ -337,11 +338,25 @@ namespace GameSaves
             var database = new SavePathDatabase(dbPath);
             database.Initialize();
 
-            database.ImportMappingsFromJson(jsonPath, enabled: autoApprove, reviewStatus: autoApprove ? "Approved" : "Pending");
+            var service = new MappingImportService();
+            var options = new MappingImportOptions
+            {
+                AutoApprove = autoApprove,
+                DefaultSourceName = "JsonImport"
+            };
 
-            Console.WriteLine($"Imported mappings from: {jsonPath}");
+            MappingImportReport report = service.ImportFile(dbPath, jsonPath, options);
+
+            Console.WriteLine($"Imported from: {jsonPath}");
             Console.WriteLine($"Status: {(autoApprove ? "Approved and enabled" : "Pending review (disabled by default)")}");
             Console.WriteLine($"Database: {dbPath}");
+            Console.WriteLine();
+            Console.WriteLine(report.FormatSummary());
+
+            if (!report.Success)
+            {
+                Environment.ExitCode = 1;
+            }
         }
 
         private static void ApproveMapping(string dbPath, long id, string? notes)

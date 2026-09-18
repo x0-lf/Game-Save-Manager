@@ -47,6 +47,18 @@ namespace GameSaves.Infrastructure.Save
             MigrateSchema();
         }
 
+        public MappingImportReport ImportWithReport(string jsonPath, MappingImportOptions? options = null)
+        {
+            var service = new MappingImportService();
+            return service.ImportFile(_databasePath, jsonPath, options);
+        }
+
+        public MappingImportReport ImportJsonWithReport(string jsonContent, MappingImportOptions? options = null)
+        {
+            var service = new MappingImportService();
+            return service.ImportJson(_databasePath, jsonContent, options);
+        }
+
         public void ImportMappingsFromJson(string jsonPath)
         {
             ImportMappingsFromJson(jsonPath, enabled: false, reviewStatus: "Pending");

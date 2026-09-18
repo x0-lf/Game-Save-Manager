@@ -27,6 +27,7 @@ namespace GameSaves.Infrastructure.DependencyInjection
         {
             services.AddSingleton<ISchemaMigrator, SchemaMigrator>();
             services.AddSingleton<ICuratedMappingSeeder, CuratedMappingSeeder>();
+            services.AddSingleton<IMappingImportService, MappingImportService>();
 
             // Wrapped so the schema is guaranteed before the first connection;
             // the desktop app has no other bootstrap path. See the decorator.
