@@ -8,11 +8,13 @@ using System.Linq;
 using GameSaves.External;
 using GameSaves.External.Steam;
 
+using GameSaves.Core.Catalog;
 using GameSaves.Core.Data;
 using GameSaves.Core.Steam;
 using GameSaves.Core.Save;
 using GameSaves.Core.Backup;
 
+using GameSaves.Infrastructure.Catalog;
 using GameSaves.Infrastructure.Data;
 using GameSaves.Infrastructure.Save;
 using GameSaves.Infrastructure.Backup;
@@ -181,6 +183,12 @@ namespace GameSaves
 
                 case "steam-catalog-export-next":
                     await RunSteamCatalogExportNext(args, dbPath);
+                    break;
+
+                case "tracklist":
+                case "missing-titles":
+                case "export-missing":
+                    RunTracklist(args, dbPath);
                     break;
 
                 case "help":
@@ -414,6 +422,213 @@ namespace GameSaves
             database.Initialize();
             int migrated = database.MigrateLegacyMappings(trustLegacyEnabledAsApproved: trustLegacy);
             Console.WriteLine($"Legacy mapping migration completed: {migrated} rows updated (TrustLegacyAsApproved: {trustLegacy}).");
+        }
+
+        private static void RunTracklist(string[] args, string dbPath)
+        {
+            var database = new SavePathDatabase(dbPath);
+            database.Initialize();
+
+            string? outputPath = null;
+            TracklistExportFormat? format = null;
+            bool installedOnly = false;
+            MissingTitleResearchStatus? statusFilter = null;
+            string? minPriority = null;
+            int? limit = null;
+            string platform = "windows";
+            string? candidatesPath = null;
+
+            for (int i = 1; i < args.Length; i++)
+            {
+                string arg = args[i];
+
+                if (arg.Equals("-o", StringComparison.OrdinalIgnoreCase) || arg.Equals("--output", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (i + 1 < args.Length)
+                        outputPath = args[++i];
+                }
+                else if (arg.Equals("-f", StringComparison.OrdinalIgnoreCase) || arg.Equals("--format", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (i + 1 < args.Length)
+                    {
+                        string fmt = args[++i].ToLowerInvariant();
+                        format = fmt switch
+                        {
+                            "csv" => TracklistExportFormat.Csv,
+                            "json" => TracklistExportFormat.Json,
+                            _ => null
+                        };
+                    }
+                }
+                else if (arg.Equals("-i", StringComparison.OrdinalIgnoreCase) || arg.Equals("--installed-only", StringComparison.OrdinalIgnoreCase))
+                {
+                    installedOnly = true;
+                }
+                else if (arg.Equals("--status", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (i + 1 < args.Length)
+                    {
+                        string s = args[++i];
+                        if (Enum.TryParse<MissingTitleResearchStatus>(s, ignoreCase: true, out var parsedStatus))
+                        {
+                            statusFilter = parsedStatus;
+                        }
+                        else if (!s.Equals("all", StringComparison.OrdinalIgnoreCase))
+                        {
+                            Console.WriteLine($"Unknown status filter: {s}. Valid: Unresearched, InReview, NoSaveLocation, All");
+                        }
+                    }
+                }
+                else if (arg.Equals("-p", StringComparison.OrdinalIgnoreCase) || arg.Equals("--min-priority", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (i + 1 < args.Length)
+                        minPriority = args[++i];
+                }
+                else if (arg.Equals("-n", StringComparison.OrdinalIgnoreCase) || arg.Equals("--limit", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (i + 1 < args.Length && int.TryParse(args[++i], out int l))
+                        limit = l;
+                }
+                else if (arg.Equals("--platform", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (i + 1 < args.Length)
+                        platform = args[++i];
+                }
+                else if (arg.Equals("-c", StringComparison.OrdinalIgnoreCase) || arg.Equals("--candidates", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (i + 1 < args.Length)
+                        candidatesPath = args[++i];
+                }
+            }
+
+            if (format == null && !string.IsNullOrWhiteSpace(outputPath))
+            {
+                if (outputPath.EndsWith(".csv", StringComparison.OrdinalIgnoreCase))
+                    format = TracklistExportFormat.Csv;
+                else
+                    format = TracklistExportFormat.Json;
+            }
+            format ??= TracklistExportFormat.Json;
+
+            List<MissingTitleCandidate>? candidates = null;
+            if (!string.IsNullOrWhiteSpace(candidatesPath))
+            {
+                if (File.Exists(candidatesPath))
+                {
+                    candidates = LoadCandidatesFromFile(candidatesPath);
+                }
+                else
+                {
+                    UsageError($"Candidates file not found: {candidatesPath}");
+                    return;
+                }
+            }
+
+            var options = new TracklistOptions(
+                IncludeInstalledOnly: installedOnly,
+                StatusFilter: statusFilter,
+                MinPriority: minPriority,
+                Limit: limit,
+                Platform: platform);
+
+            var generator = new TracklistGeneratorService();
+            MissingTitlesTracklist tracklist = generator.GenerateTracklist(dbPath, candidates, options);
+
+            Console.WriteLine("=== Missing Titles Tracklist Generator ===");
+            Console.WriteLine($"Database                    : {dbPath}");
+            Console.WriteLine($"Platform                    : {platform}");
+            Console.WriteLine($"Total candidates reconciled : {tracklist.TotalReconciled}");
+            Console.WriteLine($"Covered with approved paths : {tracklist.TotalCovered}");
+            Console.WriteLine($"Total missing coverage      : {tracklist.TotalMissing}");
+            Console.WriteLine($"  - Unresearched            : {tracklist.UnresearchedCount}");
+            Console.WriteLine($"  - In Review (candidates)  : {tracklist.InReviewCount}");
+            Console.WriteLine($"  - No Save Location        : {tracklist.NoSaveLocationCount}");
+            Console.WriteLine($"Exported items count        : {tracklist.Items.Count}");
+
+            if (!string.IsNullOrWhiteSpace(outputPath))
+            {
+                generator.ExportToFile(tracklist, outputPath, format.Value);
+                Console.WriteLine($"Output written to           : {outputPath} ({format.Value})");
+            }
+            else
+            {
+                Console.WriteLine();
+                Console.WriteLine("Top missing titles (first 10):");
+                int count = 0;
+                foreach (MissingTitleEntry item in tracklist.Items.Take(10))
+                {
+                    count++;
+                    string installedTag = item.IsInstalled ? "[Installed] " : "";
+                    Console.WriteLine($" {count}. {installedTag}{item.Title} (AppID: {item.SteamAppId}, Status: {item.ResearchStatus}, Priority: {item.Priority})");
+                    Console.WriteLine($"    Store: {item.StoreUrl}");
+                }
+
+                if (tracklist.Items.Count > 10)
+                {
+                    Console.WriteLine($" ... and {tracklist.Items.Count - 10} more titles.");
+                }
+                Console.WriteLine();
+                Console.WriteLine("Tip: Use -o <file.json|file.csv> to export the complete tracklist.");
+            }
+        }
+
+        private static List<MissingTitleCandidate> LoadCandidatesFromFile(string path)
+        {
+            var results = new List<MissingTitleCandidate>();
+            string extension = Path.GetExtension(path);
+
+            if (extension.Equals(".json", StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    string json = File.ReadAllText(path);
+                    using var doc = System.Text.Json.JsonDocument.Parse(json);
+                    if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Array)
+                    {
+                        foreach (var el in doc.RootElement.EnumerateArray())
+                        {
+                            string? appId = null;
+                            string? title = null;
+                            if (el.TryGetProperty("steamAppId", out var p1) || el.TryGetProperty("steam_app_id", out p1) || el.TryGetProperty("appId", out p1))
+                                appId = p1.ValueKind == System.Text.Json.JsonValueKind.Number ? p1.GetInt64().ToString() : p1.GetString();
+                            if (el.TryGetProperty("title", out var p2) || el.TryGetProperty("gameName", out p2) || el.TryGetProperty("game_name", out p2))
+                                title = p2.GetString();
+
+                            if (!string.IsNullOrWhiteSpace(appId))
+                            {
+                                results.Add(new MissingTitleCandidate(
+                                    SteamAppId: appId.Trim(),
+                                    Title: string.IsNullOrWhiteSpace(title) ? $"App {appId}" : title.Trim()));
+                            }
+                        }
+                    }
+                }
+                catch
+                {
+                    // Fall back to plain text reading
+                }
+            }
+
+            if (results.Count == 0)
+            {
+                // Plain text: one AppID per line or "AppId,Title"
+                foreach (string line in File.ReadAllLines(path))
+                {
+                    if (string.IsNullOrWhiteSpace(line) || line.TrimStart().StartsWith("#"))
+                        continue;
+
+                    string[] parts = line.Split(new[] { ',', '\t', ';' }, 2, StringSplitOptions.TrimEntries);
+                    string appId = parts[0];
+                    string title = parts.Length > 1 ? parts[1] : $"App {appId}";
+
+                    if (!string.IsNullOrWhiteSpace(appId) && appId.All(char.IsDigit))
+                    {
+                        results.Add(new MissingTitleCandidate(appId, title));
+                    }
+                }
+            }
+
+            return results;
         }
 
         private static void RunSteamCatalogQueueMissing(string dbPath)
@@ -1089,6 +1304,14 @@ namespace GameSaves
             Console.WriteLine("  steam-catalog-missing <output-appids.txt> [limit] [exclude-pcgw-linked]");
             Console.WriteLine("  steam-catalog-queue-missing");
             Console.WriteLine("  steam-catalog-export-next <output-appids.txt> [limit]");
+            Console.WriteLine("  tracklist [options] (aliases: missing-titles, export-missing)");
+            Console.WriteLine("    -o, --output <path>       Output file path (.json or .csv)");
+            Console.WriteLine("    -f, --format <json|csv>   Export format (default: inferred or json)");
+            Console.WriteLine("    -i, --installed-only      Reconcile locally installed Steam games only");
+            Console.WriteLine("    --status <status>         Filter status (Unresearched, InReview, NoSaveLocation, All)");
+            Console.WriteLine("    -p, --min-priority <p>    Filter minimum priority (High, Normal, Low)");
+            Console.WriteLine("    -n, --limit <count>       Limit number of exported items");
+            Console.WriteLine("    -c, --candidates <path>   Reconcile against custom candidate list");
             Console.WriteLine();
             Console.WriteLine("No arguments:");
             Console.WriteLine("  Runs your current detailed discovery test with fallback scan enabled.");

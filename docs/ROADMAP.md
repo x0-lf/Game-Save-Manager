@@ -8,21 +8,21 @@ title, product outcome (The What), dependency, and observable completion criteri
 
 ## Now
 
-Current sprint focus: Missing titles tracklist generator (OBS-015 / CATALOG-001, CATALOG-002).
+Current sprint focus: Targeted PCGamingWiki web harvesting engine (OBS-016 / CATALOG-003).
 
 | ID | Title | Product outcome | Dependency | Completion criteria |
 | --- | --- | --- | --- | --- |
-| **OBS-015** | Missing titles tracklist generator (CATALOG-001, CATALOG-002) | Maintainers have an actionable, prioritized tracklist of games missing save path definitions | DATA-002, DATA-003, OBS-014 | Steam library manifests reconciled against database mappings; `missing-titles.json` exported with AppID, title, store URL, and research status |
+| **OBS-016** | Targeted PCGamingWiki web harvesting engine (CATALOG-003) | Automated harvester queries PCGamingWiki Cargo API to fetch candidate save paths for queued titles | OBS-015, OBS-003 | Harvester processes missing AppIDs idempotently; rate limits and user-agent headers respected; parsed paths tokenized and saved as `Pending` |
 
 ---
 
 ## Next
 
-Upcoming sprint priorities: Targeted PCGamingWiki web harvesting engine (OBS-016 / CATALOG-003) and new cloud providers.
+Upcoming sprint priorities: AI-assisted save path pattern detector (OBS-017 / CATALOG-005) and new cloud providers.
 
 | ID | Title | Product outcome | Dependency | Completion criteria |
 | --- | --- | --- | --- | --- |
-| **OBS-016** | Targeted PCGamingWiki web harvesting engine (CATALOG-003) | Automated harvester queries PCGamingWiki Cargo API to fetch candidate save paths for queued titles | OBS-015, OBS-003 | Harvester processes missing AppIDs idempotently; rate limits and user-agent headers respected; parsed paths tokenized and saved as `Pending` |
+| **OBS-017** | AI-assisted save path pattern detector (CATALOG-005) | AI tooling analyzes complex directory trees and proposes tokenized save path candidates for human review | OBS-014, OBS-015, OBS-016 | Engine fingerprint heuristics (Unreal, Unity, Godot, Ren'Py); LLM generates schema-valid candidates with source rationale; AI cannot approve or enable paths |
 
 ---
 
@@ -32,7 +32,6 @@ Planned feature sprints: Curated data distribution, catalog expansion, new cloud
 
 | ID | Title | Product outcome | Dependency | Completion criteria |
 | --- | --- | --- | --- | --- |
-| **OBS-017** | AI-assisted save path pattern detector (CATALOG-005) | AI tooling analyzes complex directory trees and proposes tokenized save path candidates for human review | OBS-014, OBS-015, OBS-016 | Engine fingerprint heuristics (Unreal, Unity, Godot, Ren'Py); LLM generates schema-valid candidates with source rationale; AI cannot approve or enable paths |
 | **OBS-011** | Microsoft OneDrive cloud sync provider (PROVIDER-002, SYNC-002) | Users can sync backups to Microsoft OneDrive using sandboxed app-folder permissions | PROVIDER-006 | Microsoft Graph OAuth with PKCE; sandboxed to `Files.ReadWrite.AppFolder`; create-only uploads; quota display; provider parity tests pass |
 | **OBS-012** | Prove MEGA cloud provider integration boundary | Feasibility, licensing, and security architecture of MEGA cloud synchronization are proven | Safety model | Spike verifies authentication, 2FA challenges, DPAPI session storage, chunked uploads, and quota inspection using synthetic runs |
 | **OBS-013** | Deliver MEGA cloud sync provider (PROVIDER-008) | Users can select MEGA as a first-class cloud backup destination | OBS-012 | `MegaSyncProvider` registered in catalog/factory; create-only upload and safe conflict detection; quota display; parity tests pass |
@@ -114,6 +113,7 @@ Verified in code, documentation, and automated tests.
 
 | ID | Title | Product outcome | Dependency | Completion criteria |
 | --- | --- | --- | --- | --- |
+| **OBS-015** | Missing titles tracklist generator (CATALOG-001, CATALOG-002) | Maintainers have an actionable, prioritized tracklist of games missing save path definitions | DATA-002, DATA-003, OBS-014 | Reconciliation engine (`ITracklistGeneratorService`, `TracklistGeneratorService`) reconciles discovered Steam games, custom candidate feeds, and database catalog titles against `gamesave.db`; categorizes missing titles into research states (`Unresearched`, `InReview`, `NoSaveLocation`); deduplicates candidates with installed title precedence; priority ranking (`High` for installed, `Normal`/`Low` for uninstalled); strict privacy invariant excludes local filesystem paths and personal usernames; multi-format export for JSON (`missing-titles.json`) and RFC 4180 CSV (`missing-titles.csv`); CLI integration via `tracklist` (aliases `missing-titles`, `export-missing`) with filtering, limits, and summary output; bridged to `SavePathDatabase.GenerateTracklist`; documented in `docs/database-and-mappings.md`; 13 automated unit and integration tests in `TracklistGeneratorServiceTests` pass; all 2,533 tests pass with 0 warnings and 0 errors in Release |
 | **OBS-014** | Add reviewed titles and mappings from JSON (CATALOG-004) | Maintainers and users can import new game titles and save paths from JSON files | DATA-002, DATA-003, OBS-003 | Comprehensive JSON import engine (`IMappingImportService`, `MappingImportService`) supporting full documents (`MappingImportDocument`), flat mapping lists, and flat title lists; JSON schema validation with item-level diagnostics (`MappingImportError`); strict trust lifecycle defaults imported candidate mappings to `Pending` review status and disabled (`enabled = 0`); duplicate detection and reconciliation across existing mappings and `game_titles`; supports camelCase and snake_case properties; generates structured `MappingImportReport`; integrated into CLI `import` / `import-json` commands in `GameSaves/Program.cs` and `SavePathDatabase.ImportWithReport`; documented in `docs/database-and-mappings.md`; 12 automated unit and integration tests in `MappingImportServiceTests` pass; all 2,520 automated tests pass with 0 warnings and 0 errors in Release |
 | **DATA-003** | Safe schema migration, backup, and rollback engine | Database schema upgrades occur automatically with safe rollback on failure | DATA-002 | Idempotent versioned sequential migration engine (`ISchemaMigrator`, `SchemaMigrator`) tracking migrations in `schema_migrations` (`id`, `name`, `applied_utc`); initial migrations V001..V004 establish baseline schema, review columns, sync & secret tables, and catalog performance indexes; pre-flight integrity validation via `PRAGMA quick_check;`; automatic online pre-migration database snapshot captured to `backups/gamesave-pre-migration-{timestamp}-{guid}.db` via SQLite online backup API; atomic rollback restores pre-migration snapshot and clears connection pools on migration failure without partial schema corruptions; snapshot retention policy prunes backups exceeding retention limit (10); automatic execution on first database resolution via `SchemaInitializingAppDatabasePathProvider`; CLI `migrate`, `migrate-status`, and `migrate-dry-run` commands in `GameSaves/Program.cs`; documented in `docs/database-and-mappings.md` and `docs/safety-model.md`; 11 automated unit and integration tests in `SchemaMigrationEngineTests` pass; all 2,508 tests pass with 0 warnings and 0 errors in Release |
 | **DATA-002** | Project-controlled curated mapping distribution | Approved game mappings are versioned with the repository while private user state remains outside Git | DATA-001 | Versioned JSON seed dataset of approved mappings bundled as assembly embedded resource (`curated-mappings.json`); shipped with application; `ICuratedMappingSeeder` and `CuratedMappingSeeder` implement deterministic update and merge precedence rules (new curated mappings inserted as Approved/enabled, user custom mappings preserved untouched, local user disablement/review status alterations take defined precedence, canonical metadata refreshed cleanly); automatic seeding on startup via `SchemaInitializingAppDatabasePathProvider`; CLI `seed-curated` and `init-db` commands support bundled or custom seed ingestion; documented in `docs/database-and-mappings.md`; 9 automated tests in `CuratedMappingDistributionTests` pass; all 2,497 automated tests pass with 0 warnings and 0 errors in Release |

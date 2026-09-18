@@ -1,3 +1,4 @@
+using GameSaves.Core.Catalog;
 using GameSaves.Core.Data;
 using GameSaves.Core.Platform;
 using GameSaves.Core.Profiles;
@@ -6,6 +7,7 @@ using GameSaves.Core.Secrets;
 using GameSaves.Core.Steam;
 using GameSaves.Core.Transfers;
 using GameSaves.Core.Sync;
+using GameSaves.Infrastructure.Catalog;
 using GameSaves.Infrastructure.Data;
 using GameSaves.Infrastructure.Platform;
 using GameSaves.Infrastructure.Profiles;
@@ -28,6 +30,7 @@ namespace GameSaves.Infrastructure.DependencyInjection
             services.AddSingleton<ISchemaMigrator, SchemaMigrator>();
             services.AddSingleton<ICuratedMappingSeeder, CuratedMappingSeeder>();
             services.AddSingleton<IMappingImportService, MappingImportService>();
+            services.AddSingleton<ITracklistGeneratorService, TracklistGeneratorService>();
 
             // Wrapped so the schema is guaranteed before the first connection;
             // the desktop app has no other bootstrap path. See the decorator.

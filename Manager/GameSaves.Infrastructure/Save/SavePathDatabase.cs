@@ -1,5 +1,7 @@
+using GameSaves.Core.Catalog;
 using GameSaves.Core.Data;
 using GameSaves.Core.Save;
+using GameSaves.Infrastructure.Catalog;
 using GameSaves.Infrastructure.Data;
 using Microsoft.Data.Sqlite;
 using System.Collections.Concurrent;
@@ -57,6 +59,23 @@ namespace GameSaves.Infrastructure.Save
         {
             var service = new MappingImportService();
             return service.ImportJson(_databasePath, jsonContent, options);
+        }
+
+        public MissingTitlesTracklist GenerateTracklist(
+            IEnumerable<MissingTitleCandidate>? candidates = null,
+            TracklistOptions? options = null,
+            ITracklistGeneratorService? generator = null)
+        {
+            generator ??= new TracklistGeneratorService();
+            return generator.GenerateTracklist(_databasePath, candidates, options);
+        }
+
+        public MissingTitlesTracklist GenerateTracklistFromInstalled(
+            TracklistOptions? options = null,
+            ITracklistGeneratorService? generator = null)
+        {
+            generator ??= new TracklistGeneratorService();
+            return generator.GenerateTracklistFromInstalled(_databasePath, options);
         }
 
         public void ImportMappingsFromJson(string jsonPath)

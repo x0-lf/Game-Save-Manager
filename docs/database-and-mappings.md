@@ -190,6 +190,75 @@ dotnet run --project Manager/GameSaves/GameSaves.csproj -- import curated.json -
 dotnet run --project Manager/GameSaves/GameSaves.csproj -- import-json mappings.json
 ```
 
+## Missing titles tracklist generator (OBS-015)
+
+The missing titles tracklist generator (`ITracklistGeneratorService`, `TracklistGeneratorService`) enables maintainers and curators to identify, categorize, and prioritize game titles that lack save path definitions. It acts as an actionable bridge between discovered games (installed libraries, store feeds, or custom AppID sets) and the targeted harvesting engine (`OBS-016`).
+
+### Reconciliation & research statuses
+
+The tracklist engine reconciles candidates against `save_path_mappings` in `gamesave.db`:
+- **Covered:** The game has at least one enabled mapping with `review_status = 'Approved'`. These titles are excluded from missing tracklists.
+- **Unresearched:** The game has zero save path mappings in the database.
+- **InReview:** The game has candidate mappings in the database awaiting review and approval (`Pending` status).
+- **NoSaveLocation:** The game is documented or noted to have no local save files (e.g. server-side multiplayer or pure cloud).
+
+### Prioritization & privacy guarantees
+
+- **Priority:** Installed Steam games are automatically prioritized as `High`, ensuring maintainers focus on games actively present on user systems. Non-installed catalog titles default to `Normal` or `Low`.
+- **Deduplication:** Merges multiple instances of the same AppID (e.g. from local library scan and database catalog), ensuring installed status and higher priority take precedence.
+- **Strict Privacy Invariant:** Local filesystem paths, user profile paths, and personal directory tokens are strictly scrubbed and excluded. Exported tracklists contain exclusively public metadata: AppID, Title, Steam Store URL (`https://store.steampowered.com/app/{appId}`), Research Status, Priority, and candidate counts.
+
+### Export formats
+
+1. **JSON (`missing-titles.json`):**
+   ```json
+   {
+     "generatedUtc": "2026-09-18T21:00:00.0000000Z",
+     "totalReconciled": 150,
+     "totalCovered": 110,
+     "totalMissing": 40,
+     "unresearchedCount": 30,
+     "inReviewCount": 10,
+     "noSaveLocationCount": 0,
+     "items": [
+       {
+         "steamAppId": "123450",
+         "title": "Example Game",
+         "storeUrl": "https://store.steampowered.com/app/123450",
+         "researchStatus": "unresearched",
+         "priority": "High",
+         "isInstalled": true,
+         "existingCandidateCount": 0,
+         "discoveredUtc": "2026-09-18T21:00:00.0000000Z"
+       }
+     ]
+   }
+   ```
+2. **RFC 4180 CSV (`missing-titles.csv`):**
+   ```csv
+   SteamAppId,Title,StoreUrl,ResearchStatus,Priority,IsInstalled,ExistingCandidateCount,DiscoveredUtc,Notes
+   123450,Example Game,https://store.steampowered.com/app/123450,Unresearched,High,true,0,2026-09-18T21:00:00.0000000Z,
+   ```
+
+### CLI tracklist commands
+
+```powershell
+# Reconcile installed Steam games and print top missing titles to console
+dotnet run --project Manager/GameSaves/GameSaves.csproj -- tracklist -i
+
+# Export full missing titles tracklist to JSON
+dotnet run --project Manager/GameSaves/GameSaves.csproj -- tracklist -o missing-titles.json
+
+# Export missing titles tracklist to CSV
+dotnet run --project Manager/GameSaves/GameSaves.csproj -- tracklist -o missing-titles.csv -f csv
+
+# Filter by research status (e.g. only Unresearched titles)
+dotnet run --project Manager/GameSaves/GameSaves.csproj -- tracklist --status Unresearched -o unresearched.json
+
+# Reconcile against a custom candidate file (JSON or TXT)
+dotnet run --project Manager/GameSaves/GameSaves.csproj -- tracklist -c candidates.json -o missing.json
+```
+
 ## CLI overview
 
 The `GameSaves` project owns:
