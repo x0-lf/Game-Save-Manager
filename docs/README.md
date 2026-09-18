@@ -9,6 +9,7 @@ should link to it instead of maintaining a second explanation.
 - [Project overview and quick start](../README.md)
 - [Getting started](getting-started.md)
 - [Desktop application](desktop-app.md)
+- [UI screenshot gallery](gallery.md)
 - [Safety model](safety-model.md) **Security-sensitive**
 - [Current roadmap](ROADMAP.md)
 
@@ -48,6 +49,7 @@ and review procedures remain beside the executables that own them:
 | Documentation navigation and ownership | This file |
 | Runtime and source-build requirements | [Getting started](getting-started.md) |
 | Desktop workflows and UI states | [Desktop application](desktop-app.md) |
+| UI screenshot gallery | [UI screenshot gallery](gallery.md) |
 | User-data safety invariants | [Safety model](safety-model.md) |
 | Project boundaries and dependencies | [Architecture](architecture.md) |
 | Build, run, test, troubleshooting, release checks | [Development](development.md) |

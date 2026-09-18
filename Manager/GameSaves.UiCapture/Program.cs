@@ -72,6 +72,10 @@ namespace GameSaves.UiCapture
         // both themes, every accent, and High Contrast.
         private static bool _syncStatesOnly;
 
+        // Set by the "gallery" argument: capture curated, high-fidelity,
+        // completely sanitized documentation screenshots (DOC-021).
+        private static bool _galleryOnly;
+
         public static int Main(string[] args)
         {
             _layoutOnly = args.Length > 1 &&
@@ -82,6 +86,8 @@ namespace GameSaves.UiCapture
                 string.Equals(args[1], "material", StringComparison.OrdinalIgnoreCase);
             _syncStatesOnly = args.Length > 1 &&
                 string.Equals(args[1], "sync-states", StringComparison.OrdinalIgnoreCase);
+            _galleryOnly = args.Length > 1 &&
+                string.Equals(args[1], "gallery", StringComparison.OrdinalIgnoreCase);
 
             string outputDirectory = args.Length > 0
                 ? args[0]
@@ -220,6 +226,19 @@ namespace GameSaves.UiCapture
                     viewModel,
                     outputDirectory,
                     name => Shot(window, outputDirectory, name));
+            }
+
+            if (_galleryOnly)
+            {
+                return GallerySweep.Run(
+                    window,
+                    tabs,
+                    viewModel,
+                    themeService,
+                    settingsStore,
+                    outputDirectory,
+                    name => Shot(window, outputDirectory, name),
+                    provider.GetRequiredService<GameSaves.Core.Transfers.ITransferHistoryRepository>());
             }
 
             if (_layoutOnly)

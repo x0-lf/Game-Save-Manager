@@ -32,6 +32,10 @@ The rail's Scan or Refresh action is page-sensitive: it invokes the active
 page's existing command and is absent on Settings. A page that is already busy
 keeps the same command disabled in both places.
 
+![Dashboard overview](images/00-dashboard.png)
+
+![Installed games library](images/01-installed-games.png)
+
 ## Workspace layout and recovery
 
 Page sections can be moved between regions, resized, collapsed, hidden, or
@@ -43,6 +47,8 @@ workspace, followed by its confirmation action, to restore all default page
 layouts and reattach detached tabs. Settings also exposes hidden sections and
 tabs so hiding content never makes it permanently unreachable. Saved workspace
 layouts are explicit snapshots and are not applied automatically.
+
+![Workspace layout customization](images/10-workspace-layout.png)
 
 ## Window materials
 
@@ -58,6 +64,8 @@ materials and keeps every surface opaque. Remote sessions, older Windows
 versions, power settings, and Windows composition policy can affect support;
 that is a platform fallback, not evidence of save-data corruption.
 
+![Appearance preferences and custom accents](images/08-settings-appearance.png)
+
 ## Transfer profiles
 
 1. Choose distinct source and target Steam profiles.
@@ -72,6 +80,8 @@ Only approved mappings can supply additional paths. When Safe Mode overwrite is
 enabled, each target is backed up before replacement; a backup failure blocks
 that file.
 
+![Profile-to-profile transfer preview](images/03-transfer-preview.png)
+
 ## Manual backup
 
 Choose a profile, installed game, source set, and destination. The destination
@@ -83,6 +93,8 @@ Named presets store the destination and source choices. Applying or deleting a
 preset never starts a backup and never deletes backup data. Runs written under
 the application backup base appear in Backups; custom destinations remain
 self-contained but are not indexed there.
+
+![Manual backup](images/04-manual-backup.png)
 
 ## Backups and restore
 
@@ -101,6 +113,8 @@ ZIP export creates a self-contained archive. Import validates extraction,
 rewrites manifest paths to the imported location, and never overwrites an
 existing run. Cleanup is the only user-backup deletion feature; its exact
 boundary is owned by the [safety model](safety-model.md).
+
+![Backups hierarchical tree view](images/05-backups-tree.png)
 
 ## Sync
 
@@ -145,6 +159,8 @@ never described as verified until both sides have actually been read again.
 Provider-specific authentication, controls, and limitations belong to the
 [sync provider guide](sync-providers.md).
 
+![Cloud synchronization plan](images/06-sync-plan.png)
+
 ## UI state conventions
 
 - **Loading:** the current command is disabled while work is in flight.
@@ -157,5 +173,6 @@ Provider-specific authentication, controls, and limitations belong to the
 - **Failure:** a sanitized message is shown; credentials, raw provider payloads,
   account IDs, and Drive object IDs are not displayed.
 
-Screenshots are deferred until UI content and release material stabilize; see
-[DOC-021](ROADMAP.md).
+## Visual documentation gallery
+
+For an exhaustive gallery of all screens, virtualized data tables, cloud synchronization states, appearance modes, and custom accent palette showcases, see the [UI Screenshot Gallery](gallery.md).
