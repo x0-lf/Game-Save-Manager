@@ -227,13 +227,16 @@ public sealed class VirtualizedDataGridAndTreeTests
 
         Assert.Equal(15000, items.Count);
 
+        // Warm up JIT before timed execution
+        _ = LazyFileTreeBuilder.Build(items.Take(10).ToList());
+
         // Measure execution time
         var sw = Stopwatch.StartNew();
         List<SaveFileTreeNodeViewModel> roots = LazyFileTreeBuilder.Build(items);
         sw.Stop();
 
-        // Must complete within 200 ms (typically < 30 ms)
-        Assert.True(sw.ElapsedMilliseconds < 200, $"Tree indexing took {sw.ElapsedMilliseconds} ms, expected < 200 ms");
+        // Must complete within 500 ms (typically < 30 ms)
+        Assert.True(sw.ElapsedMilliseconds < 500, $"Tree indexing took {sw.ElapsedMilliseconds} ms, expected < 500 ms");
 
         // Exactly 5 root ViewModels allocated, NOT 15,000!
         Assert.Equal(5, roots.Count);

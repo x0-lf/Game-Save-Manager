@@ -1,4 +1,5 @@
 using GameSaves.Core.Platform;
+using GameSaves.Core.Save;
 using GameSaves.Infrastructure.Save;
 
 namespace GameSaves.Infrastructure.Platform
@@ -11,17 +12,23 @@ namespace GameSaves.Infrastructure.Platform
     // DI graph resolves the path through, so wrapping it guarantees the
     // schema exists before the first connection, exactly once per distinct
     // path, without any repository having to know about bootstrapping.
+    //
+    // Under DATA-002, it optionally accepts an ICuratedMappingSeeder to ensure
+    // project-curated approved mappings are seeded or updated on database creation/startup.
     public sealed class SchemaInitializingAppDatabasePathProvider
         : IAppDatabasePathProvider
     {
         private readonly IAppDatabasePathProvider _inner;
+        private readonly ICuratedMappingSeeder? _seeder;
         private readonly object _gate = new();
         private readonly HashSet<string> _initializedPaths = new();
 
         public SchemaInitializingAppDatabasePathProvider(
-            IAppDatabasePathProvider inner)
+            IAppDatabasePathProvider inner,
+            ICuratedMappingSeeder? seeder = null)
         {
             _inner = inner;
+            _seeder = seeder;
         }
 
         public string GetDatabasePath()
@@ -33,6 +40,7 @@ namespace GameSaves.Infrastructure.Platform
                 if (_initializedPaths.Add(path))
                 {
                     new SavePathDatabase(path).Initialize();
+                    _seeder?.Seed(path);
                 }
             }
 

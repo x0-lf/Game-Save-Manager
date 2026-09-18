@@ -8,9 +8,11 @@ namespace GameSaves.Infrastructure.Save
     public sealed class SavePathDatabase
     {
         private readonly string _connectionString;
+        private readonly string _databasePath;
 
         public SavePathDatabase(string databasePath)
         {
+            _databasePath = databasePath;
             string? directory = Path.GetDirectoryName(databasePath);
 
             if (!string.IsNullOrWhiteSpace(directory))
@@ -22,6 +24,14 @@ namespace GameSaves.Infrastructure.Save
             };
 
             _connectionString = builder.ToString();
+        }
+
+        public string DatabasePath => _databasePath;
+
+        public CuratedSeedResult SeedCuratedMappings(ICuratedMappingSeeder? seeder = null)
+        {
+            seeder ??= new CuratedMappingSeeder();
+            return seeder.Seed(_databasePath);
         }
 
         public void Initialize()

@@ -23,11 +23,15 @@ namespace GameSaves.Infrastructure.DependencyInjection
         public static IServiceCollection AddGameSavesInfrastructure(
             this IServiceCollection services)
         {
+            services.AddSingleton<ICuratedMappingSeeder, CuratedMappingSeeder>();
+
             // Wrapped so the schema is guaranteed before the first connection;
             // the desktop app has no other bootstrap path. See the decorator.
-            services.AddSingleton<IAppDatabasePathProvider>(
+            // Under DATA-002, curated mappings are also seeded on database initialization.
+            services.AddSingleton<IAppDatabasePathProvider>(provider =>
                 new SchemaInitializingAppDatabasePathProvider(
-                    new DefaultAppDatabasePathProvider()));
+                    new DefaultAppDatabasePathProvider(),
+                    provider.GetRequiredService<ICuratedMappingSeeder>()));
             services.AddSingleton<ICurrentPlatformProvider, CurrentPlatformProvider>();
 
             services.AddSingleton<ISteamRootLocator, RegistrySteamLocator>();

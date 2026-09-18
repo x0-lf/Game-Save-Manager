@@ -67,6 +67,10 @@ namespace GameSaves
                     InitializeDatabase(dbPath);
                     break;
 
+                case "seed-curated":
+                    SeedCurated(args, dbPath);
+                    break;
+
                 case "import":
                     if (args.Length < 2)
                     {
@@ -181,7 +185,42 @@ namespace GameSaves
             var database = new SavePathDatabase(dbPath);
             database.Initialize();
 
+            var seeder = new CuratedMappingSeeder();
+            CuratedSeedResult result = seeder.Seed(dbPath);
+
             Console.WriteLine($"Database initialized: {dbPath}");
+            Console.WriteLine($"Curated mappings seeded: {result.Inserted} inserted, {result.Updated} updated, {result.Unchanged} unchanged, {result.SkippedUserOverrides} user overrides preserved.");
+        }
+
+        private static void SeedCurated(string[] args, string dbPath)
+        {
+            var database = new SavePathDatabase(dbPath);
+            database.Initialize();
+
+            var seeder = new CuratedMappingSeeder();
+            CuratedSeedResult result;
+
+            if (args.Length >= 2)
+            {
+                string customJsonPath = args[1];
+                if (!File.Exists(customJsonPath))
+                {
+                    UsageError($"Curated seed file not found: {customJsonPath}");
+                    return;
+                }
+
+                string jsonContent = File.ReadAllText(customJsonPath);
+                result = seeder.Seed(dbPath, jsonContent);
+                Console.WriteLine($"Seeded curated mappings from external file: {customJsonPath}");
+            }
+            else
+            {
+                result = seeder.Seed(dbPath);
+                Console.WriteLine("Seeded curated mappings from bundled assembly seed dataset.");
+            }
+
+            Console.WriteLine($"Database: {dbPath}");
+            Console.WriteLine($"Summary: {result.TotalProcessed} processed — {result.Inserted} inserted, {result.Updated} updated, {result.Unchanged} unchanged, {result.SkippedUserOverrides} user overrides preserved.");
         }
 
         private static void ImportMappings(string dbPath, string jsonPath, bool autoApprove)
@@ -907,6 +946,7 @@ namespace GameSaves
             Console.WriteLine();
             Console.WriteLine("Commands:");
             Console.WriteLine("  init-db");
+            Console.WriteLine("  seed-curated [custom-seed.json]");
             Console.WriteLine("  import <savepaths.json> [--approve]");
             Console.WriteLine("  approve-mapping <id> [notes]");
             Console.WriteLine("  approve-app <steamAppId> [notes]");

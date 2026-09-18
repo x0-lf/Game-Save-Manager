@@ -30,4 +30,8 @@
     <InternalsVisibleTo Include="GameSaves.Tests" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\curated-mappings.json" />
+  </ItemGroup>
+
 </Project>

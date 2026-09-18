@@ -1,4 +1,4 @@
-﻿namespace GameSaves.Core.Save
+namespace GameSaves.Core.Save
 {
     public interface ISavePathMappingRepository
     {
@@ -16,6 +16,8 @@
             string platform);
 
         int CountApprovedMappings(string platform);
+
+        int CountCuratedMappings(string platform);
 
         int CountNeedsFixMappings(string platform);
 

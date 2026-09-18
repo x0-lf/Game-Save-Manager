@@ -200,6 +200,13 @@ namespace GameSaves.Infrastructure.Save
                 "enabled = 1 AND COALESCE(review_status, '') = 'Approved'");
         }
 
+        public int CountCuratedMappings(string platform)
+        {
+            return CountMappingsBySql(
+                platform,
+                $"source_name = '{CuratedMappingSeeder.CuratedSourceName}'");
+        }
+
         public int CountNeedsFixMappings(string platform)
         {
             return CountMappingsBySql(
