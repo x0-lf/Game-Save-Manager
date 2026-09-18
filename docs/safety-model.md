@@ -30,6 +30,13 @@ belong to the [security policy](../SECURITY.md).
     provider's own dry-run comparison: it copies, moves, deletes, overwrites,
     and repairs nothing, it can be cancelled, and neither its failure nor its
     cancellation alters or removes the transfer result already recorded.
+12. **Pre-migration backup and atomic schema rollback.** Database schema upgrades
+    never mutate the database without first capturing an online SQLite backup snapshot
+    in `%LOCALAPPDATA%\GameSave\backups\`. Migrations execute within isolated transactions.
+    If any migration throws or fails, the transaction is rolled back, database handles
+    are cleared, and the pre-migration snapshot is automatically restored over the
+    database file. Corrupted or locked databases (`SQLITE_BUSY`) refuse migration attempts
+    before any mutation occurs.
 
 ## What can be deleted
 

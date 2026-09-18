@@ -8,10 +8,12 @@ using System.Linq;
 using GameSaves.External;
 using GameSaves.External.Steam;
 
+using GameSaves.Core.Data;
 using GameSaves.Core.Steam;
 using GameSaves.Core.Save;
 using GameSaves.Core.Backup;
 
+using GameSaves.Infrastructure.Data;
 using GameSaves.Infrastructure.Save;
 using GameSaves.Infrastructure.Backup;
 using GameSaves.Infrastructure.Steam;
@@ -65,6 +67,21 @@ namespace GameSaves
             {
                 case "init-db":
                     InitializeDatabase(dbPath);
+                    break;
+
+                case "migrate":
+                    string targetMigrateDb = args.Length >= 2 ? args[1] : dbPath;
+                    RunMigrate(targetMigrateDb);
+                    break;
+
+                case "migrate-status":
+                    string targetStatusDb = args.Length >= 2 ? args[1] : dbPath;
+                    RunMigrateStatus(targetStatusDb);
+                    break;
+
+                case "migrate-dry-run":
+                    string targetDryRunDb = args.Length >= 2 ? args[1] : dbPath;
+                    RunMigrateDryRun(targetDryRunDb);
                     break;
 
                 case "seed-curated":
@@ -190,6 +207,98 @@ namespace GameSaves
 
             Console.WriteLine($"Database initialized: {dbPath}");
             Console.WriteLine($"Curated mappings seeded: {result.Inserted} inserted, {result.Updated} updated, {result.Unchanged} unchanged, {result.SkippedUserOverrides} user overrides preserved.");
+        }
+
+        private static void RunMigrate(string dbPath)
+        {
+            var migrator = new SchemaMigrator();
+            Console.WriteLine($"Running schema migrations for: {dbPath}");
+
+            MigrationExecutionResult result = migrator.Migrate(dbPath);
+            if (!result.Success)
+            {
+                Console.Error.WriteLine($"Migration failed: {result.ErrorMessage}");
+                if (result.RolledBack)
+                {
+                    Console.WriteLine("Database rollback succeeded. Database restored from pre-migration backup.");
+                }
+                Environment.ExitCode = 1;
+                return;
+            }
+
+            if (result.AppliedMigrations.Count == 0)
+            {
+                Console.WriteLine($"Database schema is already up to date (version {result.CurrentVersion}). No migrations applied.");
+            }
+            else
+            {
+                Console.WriteLine($"Migration completed successfully. Version upgraded from {result.PreviousVersion} to {result.CurrentVersion}.");
+                Console.WriteLine($"Applied migrations ({result.AppliedMigrations.Count}):");
+                foreach (string migration in result.AppliedMigrations)
+                {
+                    Console.WriteLine($"  - {migration}");
+                }
+                if (!string.IsNullOrWhiteSpace(result.PreMigrationBackupPath))
+                {
+                    Console.WriteLine($"Pre-migration backup snapshot saved: {result.PreMigrationBackupPath}");
+                }
+            }
+        }
+
+        private static void RunMigrateStatus(string dbPath)
+        {
+            var migrator = new SchemaMigrator();
+            Console.WriteLine($"Database: {dbPath}");
+
+            if (!File.Exists(dbPath))
+            {
+                Console.WriteLine("Database file does not exist yet.");
+                return;
+            }
+
+            IReadOnlyList<SchemaMigrationRecord> applied = migrator.GetAppliedMigrations(dbPath);
+            int currentVersion = applied.Count > 0 ? applied.Max(m => m.Id) : 0;
+            Console.WriteLine($"Current schema version: {currentVersion}");
+            Console.WriteLine($"Applied migrations ({applied.Count}):");
+            foreach (SchemaMigrationRecord record in applied)
+            {
+                Console.WriteLine($"  - [{record.Id}] {record.Name} (applied: {record.AppliedUtc:yyyy-MM-dd HH:mm:ss 'UTC'})");
+            }
+
+            MigrationPlan plan = migrator.Plan(dbPath);
+            Console.WriteLine($"Pending migrations ({plan.PendingMigrations.Count}):");
+            foreach (SchemaMigrationInfo pending in plan.PendingMigrations)
+            {
+                Console.WriteLine($"  - [{pending.Version}] {pending.Name} - {pending.Description}");
+            }
+        }
+
+        private static void RunMigrateDryRun(string dbPath)
+        {
+            var migrator = new SchemaMigrator();
+            Console.WriteLine($"Dry-run migration plan for: {dbPath}");
+
+            MigrationPlan plan = migrator.Plan(dbPath);
+            Console.WriteLine($"Integrity check: {(plan.IntegrityCheckPassed ? "OK" : $"FAILED ({plan.IntegrityMessage})")}");
+            Console.WriteLine($"Current version: {plan.CurrentVersion}");
+            Console.WriteLine($"Target version: {plan.TargetVersion}");
+
+            if (plan.PendingMigrations.Count == 0)
+            {
+                Console.WriteLine("Database is already at target version. No migrations to apply.");
+            }
+            else
+            {
+                Console.WriteLine($"Pending migrations to apply ({plan.PendingMigrations.Count}):");
+                foreach (SchemaMigrationInfo pending in plan.PendingMigrations)
+                {
+                    Console.WriteLine($"  - [{pending.Version}] {pending.Name}: {pending.Description}");
+                }
+                if (!string.IsNullOrWhiteSpace(plan.PlannedBackupPath))
+                {
+                    Console.WriteLine($"Planned pre-migration backup path: {plan.PlannedBackupPath}");
+                }
+            }
         }
 
         private static void SeedCurated(string[] args, string dbPath)
@@ -946,6 +1055,9 @@ namespace GameSaves
             Console.WriteLine();
             Console.WriteLine("Commands:");
             Console.WriteLine("  init-db");
+            Console.WriteLine("  migrate [dbPath]");
+            Console.WriteLine("  migrate-status [dbPath]");
+            Console.WriteLine("  migrate-dry-run [dbPath]");
             Console.WriteLine("  seed-curated [custom-seed.json]");
             Console.WriteLine("  import <savepaths.json> [--approve]");
             Console.WriteLine("  approve-mapping <id> [notes]");

@@ -15,10 +15,11 @@ The database contains mapping and review data, non-secret remote profiles,
 protected secret BLOBs, manual-backup presets, transfer and sync history, and
 catalog or harvesting state used by the current tools.
 
-Do not publish migration, rollback, corruption-recovery, or repair instructions
-yet. That work is blocked as DOC-011 until DATA-001 defines supported schema
-compatibility, backups, failure modes, and recovery ownership. Use copies of the
-database for investigation and do not edit a user's only copy.
+Schema upgrades are managed automatically via the versioned migration engine
+(`ISchemaMigrator`, DATA-003). Upgrades take atomic pre-migration backups before
+applying changes and safely roll back on failure. Direct manual editing of
+production databases is strongly discouraged; use copies of the database for
+investigation.
 
 ## Mapping trust lifecycle
 
@@ -79,6 +80,55 @@ dotnet run --project Manager/GameSaves/GameSaves.csproj -- seed-curated
 
 # Seed mappings from an external custom JSON seed file
 dotnet run --project Manager/GameSaves/GameSaves.csproj -- seed-curated path/to/custom-seed.json
+```
+
+## Schema migration, backup, and rollback engine (DATA-003)
+
+The database schema evolves through versioned, deterministic migrations defined in
+`GameSaves.Infrastructure.Data.Migrations`. Applied migrations are recorded in the
+`schema_migrations` table (`id`, `name`, `applied_utc`).
+
+### Migration safety workflow
+
+When migrations are executed (automatically on application startup via
+`SchemaInitializingAppDatabasePathProvider`, or manually via CLI):
+
+1. **Pre-flight integrity verification:** Executes `PRAGMA quick_check;`. If the database
+   is corrupted or locked (`SQLITE_BUSY`), migration is aborted immediately without modifying state.
+2. **Pending migration detection:** Compares applied migrations in `schema_migrations` with
+   registered `ISchemaMigration` implementations. If no migrations are pending, execution
+   completes with zero disk writes.
+3. **Pre-migration safety snapshot:** If migrations are pending, an online backup is captured
+   using the SQLite online backup API to:
+   ```text
+   %LOCALAPPDATA%\GameSave\backups\gamesave-pre-migration-{timestamp}-{guid}.db
+   ```
+   If the safety backup fails, migration is rejected immediately.
+4. **Transactional migration execution:** Each pending migration is executed inside an
+   isolated transaction. If an exception occurs:
+   - The active transaction is rolled back immediately.
+   - Database connection pools are cleared.
+   - The pre-migration backup snapshot is restored over the database file, guaranteeing
+     zero partial schema state or data corruption.
+5. **Backup retention:** Backup snapshots exceeding the default retention limit (10) are
+   pruned to avoid unbounded disk consumption.
+
+### CLI migration commands
+
+Maintainers and CLI users can inspect, plan, and execute database migrations:
+
+```powershell
+# Show current schema version and pending migrations
+dotnet run --project Manager/GameSaves/GameSaves.csproj -- migrate-status
+
+# Generate a dry-run migration plan with integrity check (read-only, no mutations)
+dotnet run --project Manager/GameSaves/GameSaves.csproj -- migrate-dry-run
+
+# Run pending migrations with automatic pre-migration backup snapshot
+dotnet run --project Manager/GameSaves/GameSaves.csproj -- migrate
+
+# Run against an explicit custom database file
+dotnet run --project Manager/GameSaves/GameSaves.csproj -- migrate path/to/gamesave.db
 ```
 
 ## CLI overview

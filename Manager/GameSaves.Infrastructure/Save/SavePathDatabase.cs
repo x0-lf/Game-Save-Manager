@@ -1,4 +1,6 @@
+using GameSaves.Core.Data;
 using GameSaves.Core.Save;
+using GameSaves.Infrastructure.Data;
 using Microsoft.Data.Sqlite;
 using System.Collections.Concurrent;
 using System.Text.Json;
@@ -34,16 +36,15 @@ namespace GameSaves.Infrastructure.Save
             return seeder.Seed(_databasePath);
         }
 
+        public MigrationExecutionResult MigrateSchema(ISchemaMigrator? migrator = null)
+        {
+            migrator ??= new SchemaMigrator();
+            return migrator.Migrate(_databasePath);
+        }
+
         public void Initialize()
         {
-            using var connection = new SqliteConnection(_connectionString);
-            connection.Open();
-
-            using var command = connection.CreateCommand();
-            command.CommandText = SavePathSchema.CreateSchemaSql;
-            command.ExecuteNonQuery();
-
-            EnsureReviewColumns(connection);
+            MigrateSchema();
         }
 
         public void ImportMappingsFromJson(string jsonPath)

@@ -1,5 +1,7 @@
+using GameSaves.Core.Data;
 using GameSaves.Core.Platform;
 using GameSaves.Core.Save;
+using GameSaves.Infrastructure.Data;
 using GameSaves.Infrastructure.Save;
 
 namespace GameSaves.Infrastructure.Platform
@@ -13,22 +15,25 @@ namespace GameSaves.Infrastructure.Platform
     // schema exists before the first connection, exactly once per distinct
     // path, without any repository having to know about bootstrapping.
     //
-    // Under DATA-002, it optionally accepts an ICuratedMappingSeeder to ensure
-    // project-curated approved mappings are seeded or updated on database creation/startup.
+    // Under DATA-002 and DATA-003, it accepts an ICuratedMappingSeeder and ISchemaMigrator
+    // to ensure versioned migrations and project-curated mappings are safely applied on database creation/startup.
     public sealed class SchemaInitializingAppDatabasePathProvider
         : IAppDatabasePathProvider
     {
         private readonly IAppDatabasePathProvider _inner;
         private readonly ICuratedMappingSeeder? _seeder;
+        private readonly ISchemaMigrator? _migrator;
         private readonly object _gate = new();
         private readonly HashSet<string> _initializedPaths = new();
 
         public SchemaInitializingAppDatabasePathProvider(
             IAppDatabasePathProvider inner,
-            ICuratedMappingSeeder? seeder = null)
+            ICuratedMappingSeeder? seeder = null,
+            ISchemaMigrator? migrator = null)
         {
             _inner = inner;
             _seeder = seeder;
+            _migrator = migrator;
         }
 
         public string GetDatabasePath()
@@ -39,7 +44,8 @@ namespace GameSaves.Infrastructure.Platform
             {
                 if (_initializedPaths.Add(path))
                 {
-                    new SavePathDatabase(path).Initialize();
+                    var migrator = _migrator ?? new SchemaMigrator();
+                    migrator.Migrate(path);
                     _seeder?.Seed(path);
                 }
             }

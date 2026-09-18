@@ -1,3 +1,4 @@
+using GameSaves.Core.Data;
 using GameSaves.Core.Platform;
 using GameSaves.Core.Profiles;
 using GameSaves.Core.Save;
@@ -5,6 +6,7 @@ using GameSaves.Core.Secrets;
 using GameSaves.Core.Steam;
 using GameSaves.Core.Transfers;
 using GameSaves.Core.Sync;
+using GameSaves.Infrastructure.Data;
 using GameSaves.Infrastructure.Platform;
 using GameSaves.Infrastructure.Profiles;
 using GameSaves.Infrastructure.GoogleDrive;
@@ -23,15 +25,17 @@ namespace GameSaves.Infrastructure.DependencyInjection
         public static IServiceCollection AddGameSavesInfrastructure(
             this IServiceCollection services)
         {
+            services.AddSingleton<ISchemaMigrator, SchemaMigrator>();
             services.AddSingleton<ICuratedMappingSeeder, CuratedMappingSeeder>();
 
             // Wrapped so the schema is guaranteed before the first connection;
             // the desktop app has no other bootstrap path. See the decorator.
-            // Under DATA-002, curated mappings are also seeded on database initialization.
+            // Under DATA-002 and DATA-003, migrations and curated mappings are seeded on database initialization.
             services.AddSingleton<IAppDatabasePathProvider>(provider =>
                 new SchemaInitializingAppDatabasePathProvider(
                     new DefaultAppDatabasePathProvider(),
-                    provider.GetRequiredService<ICuratedMappingSeeder>()));
+                    provider.GetRequiredService<ICuratedMappingSeeder>(),
+                    provider.GetRequiredService<ISchemaMigrator>()));
             services.AddSingleton<ICurrentPlatformProvider, CurrentPlatformProvider>();
 
             services.AddSingleton<ISteamRootLocator, RegistrySteamLocator>();
