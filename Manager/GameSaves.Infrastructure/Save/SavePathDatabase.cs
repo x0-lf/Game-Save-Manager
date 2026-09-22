@@ -78,6 +78,34 @@ namespace GameSaves.Infrastructure.Save
             return generator.GenerateTracklistFromInstalled(_databasePath, options);
         }
 
+        public async Task<AiDetectionResult> DetectSavePathsAsync(
+            AiDetectionRequest request,
+            IAiPatternDetectorService? detector = null,
+            CancellationToken cancellationToken = default)
+        {
+            detector ??= new AiPatternDetectorService();
+            return await detector.DetectSavePathsAsync(request, cancellationToken);
+        }
+
+        public async Task<(AiDetectionResult Result, int ImportedCount)> DetectAndImportSavePathsAsync(
+            AiDetectionRequest request,
+            IAiPatternDetectorService? detector = null,
+            int? overridePriority = null,
+            CancellationToken cancellationToken = default)
+        {
+            detector ??= new AiPatternDetectorService();
+            AiDetectionResult result = await detector.DetectSavePathsAsync(request, cancellationToken);
+            List<SavePathImportItem> items = detector.ToImportItems(result, overridePriority);
+
+            if (items.Count > 0)
+            {
+                // Strict Trust Invariant: All AI-proposed candidates are inserted as Pending and disabled (enabled = 0).
+                ImportMappings(items, enabled: false, reviewStatus: "Pending");
+            }
+
+            return (result, items.Count);
+        }
+
         public void ImportMappingsFromJson(string jsonPath)
         {
             ImportMappingsFromJson(jsonPath, enabled: false, reviewStatus: "Pending");

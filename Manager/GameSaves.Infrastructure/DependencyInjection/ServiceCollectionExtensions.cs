@@ -31,6 +31,7 @@ namespace GameSaves.Infrastructure.DependencyInjection
             services.AddSingleton<ICuratedMappingSeeder, CuratedMappingSeeder>();
             services.AddSingleton<IMappingImportService, MappingImportService>();
             services.AddSingleton<ITracklistGeneratorService, TracklistGeneratorService>();
+            services.AddSingleton<IAiPatternDetectorService, AiPatternDetectorService>();
 
             // Wrapped so the schema is guaranteed before the first connection;
             // the desktop app has no other bootstrap path. See the decorator.

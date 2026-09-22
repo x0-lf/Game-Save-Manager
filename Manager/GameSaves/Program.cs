@@ -196,6 +196,11 @@ namespace GameSaves
                     RunTracklist(args, dbPath);
                     break;
 
+                case "ai-detect-paths":
+                case "ai-detect":
+                    await RunAiDetectPaths(args, dbPath);
+                    break;
+
                 case "help":
                 case "--help":
                 case "-h":
@@ -634,6 +639,171 @@ namespace GameSaves
             }
 
             return results;
+        }
+
+        private static async Task RunAiDetectPaths(string[] args, string dbPath)
+        {
+            string? gameDir = null;
+            string? steamAppId = null;
+            string? gameName = null;
+            string? outputPath = null;
+            bool saveDb = false;
+            bool offline = false;
+
+            int positionalIndex = 0;
+            for (int i = 1; i < args.Length; i++)
+            {
+                string arg = args[i];
+
+                if (arg.Equals("-o", StringComparison.OrdinalIgnoreCase) || arg.Equals("--output", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (i + 1 < args.Length)
+                        outputPath = args[++i];
+                }
+                else if (arg.Equals("--save-db", StringComparison.OrdinalIgnoreCase))
+                {
+                    saveDb = true;
+                }
+                else if (arg.Equals("--offline", StringComparison.OrdinalIgnoreCase))
+                {
+                    offline = true;
+                }
+                else if (arg.Equals("-h", StringComparison.OrdinalIgnoreCase) || arg.Equals("--help", StringComparison.OrdinalIgnoreCase))
+                {
+                    Console.WriteLine("Usage:");
+                    Console.WriteLine("  ai-detect-paths <game-directory> [steam-app-id] [game-name] [--output <path>] [--save-db] [--offline]");
+                    Console.WriteLine("  ai-detect <game-directory> [steam-app-id] [game-name] [--output <path>] [--save-db] [--offline]");
+                    Console.WriteLine();
+                    Console.WriteLine("Arguments:");
+                    Console.WriteLine("  <game-directory>          Path to the game installation folder to inspect");
+                    Console.WriteLine("  [steam-app-id]            Optional Steam AppID associated with the game");
+                    Console.WriteLine("  [game-name]               Optional game title (inferred from folder or engine if omitted)");
+                    Console.WriteLine();
+                    Console.WriteLine("Options:");
+                    Console.WriteLine("  -o, --output <path>       Export candidate mappings to JSON file (schema v1)");
+                    Console.WriteLine("  --save-db                 Import candidate mappings directly into gamesave.db as Pending/disabled");
+                    Console.WriteLine("  --offline                 Force offline heuristic detection (skip AI completion query)");
+                    return;
+                }
+                else if (!arg.StartsWith("-", StringComparison.Ordinal))
+                {
+                    switch (positionalIndex)
+                    {
+                        case 0:
+                            gameDir = arg;
+                            break;
+                        case 1:
+                            steamAppId = arg;
+                            break;
+                        case 2:
+                            gameName = arg;
+                            break;
+                    }
+                    positionalIndex++;
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(gameDir))
+            {
+                Console.WriteLine("Usage:");
+                Console.WriteLine("  ai-detect-paths <game-directory> [steam-app-id] [game-name] [--output <path>] [--save-db] [--offline]");
+                Console.WriteLine("  ai-detect <game-directory> [steam-app-id] [game-name] [--output <path>] [--save-db] [--offline]");
+                Console.WriteLine();
+                Console.WriteLine("Example:");
+                Console.WriteLine(@"  dotnet run -- ai-detect-paths ""C:\Games\MyGame"" 123456 ""My Game"" --output savepaths.json");
+                Environment.ExitCode = ExitCodeUsage;
+                return;
+            }
+
+            if (!Directory.Exists(gameDir))
+            {
+                Console.Error.WriteLine($"Error: Game directory not found: {gameDir}");
+                Environment.ExitCode = 1;
+                return;
+            }
+
+            var service = new AiPatternDetectorService();
+            var request = new AiDetectionRequest(
+                GameDirectory: gameDir,
+                SteamAppId: steamAppId,
+                GameName: gameName,
+                OfflineOnly: offline);
+
+            Console.WriteLine("=== AI-Assisted Save Path Pattern Detector ===");
+            Console.WriteLine($"Inspected Directory : {Path.GetFullPath(gameDir)}");
+            if (!string.IsNullOrWhiteSpace(steamAppId))
+                Console.WriteLine($"Steam AppID         : {steamAppId}");
+            if (!string.IsNullOrWhiteSpace(gameName))
+                Console.WriteLine($"Specified Game Name : {gameName}");
+
+            AiDetectionResult result;
+            int importedCount = 0;
+
+            if (saveDb)
+            {
+                var database = new SavePathDatabase(dbPath);
+                database.Initialize();
+                var tuple = await database.DetectAndImportSavePathsAsync(request, service);
+                result = tuple.Result;
+                importedCount = tuple.ImportedCount;
+            }
+            else
+            {
+                result = await service.DetectSavePathsAsync(request);
+            }
+
+            Console.WriteLine($"Effective Game Name : {result.GameName}");
+            Console.WriteLine($"Detected Engine     : {result.DetectedEngine} (Confidence: {result.EngineConfidence})");
+            Console.WriteLine($"Detection Mode      : {(result.IsOfflineHeuristic ? "Offline Heuristic" : $"AI Model ({result.ModelVersion})")}");
+            Console.WriteLine($"Prompt Hash (SHA256): {result.PromptHash}");
+
+            if (result.EngineEvidence.Count > 0)
+            {
+                Console.WriteLine($"Identified Markers  : {string.Join(", ", result.EngineEvidence)}");
+            }
+
+            Console.WriteLine();
+            Console.WriteLine($"Proposed Save Path Candidates ({result.Proposals.Count}):");
+            if (result.Proposals.Count == 0)
+            {
+                Console.WriteLine("  (No candidate save paths could be inferred from directory markers)");
+            }
+            else
+            {
+                foreach (var p in result.Proposals)
+                {
+                    Console.WriteLine($" - [{p.Confidence}] {p.PathTemplate}");
+                    Console.WriteLine($"   Kind: {p.PathKind}, Platform: {p.Platform}, Priority: {p.Priority}");
+                    Console.WriteLine($"   Rationale: {p.Rationale}");
+                }
+            }
+
+            Console.WriteLine();
+            Console.WriteLine("--------------------------------------------------------------------------------");
+            Console.WriteLine("TRUST & SAFETY NOTICE:");
+            Console.WriteLine("All candidate proposals strictly default to review_status = 'Pending' and enabled = 0.");
+            Console.WriteLine("AI proposals never take autonomous runtime effect. Human review is required.");
+            Console.WriteLine("--------------------------------------------------------------------------------");
+
+            if (!string.IsNullOrWhiteSpace(outputPath))
+            {
+                MappingImportDocument doc = service.ToImportDocument(result);
+                var jsonOptions = new System.Text.Json.JsonSerializerOptions { WriteIndented = true };
+                string json = System.Text.Json.JsonSerializer.Serialize(doc, jsonOptions);
+                string? dir = Path.GetDirectoryName(outputPath);
+                if (!string.IsNullOrEmpty(dir))
+                    Directory.CreateDirectory(dir);
+                File.WriteAllText(outputPath, json);
+                Console.WriteLine();
+                Console.WriteLine($"Exported {doc.Mappings?.Count ?? 0} candidate mappings to: {outputPath}");
+            }
+
+            if (saveDb)
+            {
+                Console.WriteLine();
+                Console.WriteLine($"Imported {importedCount} candidate mappings directly to database: {dbPath}");
+                Console.WriteLine("Mappings are saved with status 'Pending' and disabled. Run 'approve-app' or review via UI to activate.");
+            }
         }
 
         private static void RunSteamCatalogQueueMissing(string dbPath)
@@ -1373,6 +1543,11 @@ namespace GameSaves
             Console.WriteLine("    -p, --min-priority <p>    Filter minimum priority (High, Normal, Low)");
             Console.WriteLine("    -n, --limit <count>       Limit number of exported items");
             Console.WriteLine("    -c, --candidates <path>   Reconcile against custom candidate list");
+            Console.WriteLine("  ai-detect-paths <game-dir> [appId] [name] [--output <path>] [--save-db] [--offline]");
+            Console.WriteLine("    (alias: ai-detect) Detect engine signatures and propose candidate save paths.");
+            Console.WriteLine("    -o, --output <path>       Export candidate mappings to JSON file (schema v1)");
+            Console.WriteLine("    --save-db                 Import candidate mappings directly to database as Pending/disabled");
+            Console.WriteLine("    --offline                 Force offline heuristic detection (skip AI completion query)");
             Console.WriteLine();
             Console.WriteLine("No arguments:");
             Console.WriteLine("  Runs your current detailed discovery test with fallback scan enabled.");
