@@ -384,6 +384,14 @@ public sealed class SyncRemoteProfileViewModelTests
             return Create("Google Drive", "Google Drive");
         }
 
+        public Guid? LastOneDriveProfileId { get; private set; }
+
+        public ISyncProvider CreateOneDriveProvider(Guid remoteProfileId)
+        {
+            LastOneDriveProfileId = remoteProfileId;
+            return Create("OneDrive", "OneDrive");
+        }
+
         public void ForgetSftpHostKey(string host, int port)
         {
         }

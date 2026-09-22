@@ -33,6 +33,11 @@ public sealed class SyncProviderSelectionTests
             {
                 Assert.Equal(SyncProviderKind.GoogleDrive, option.Kind);
                 Assert.Equal("Google Drive", option.DisplayName);
+            },
+            option =>
+            {
+                Assert.Equal(SyncProviderKind.OneDrive, option.Kind);
+                Assert.Equal("OneDrive", option.DisplayName);
             });
     }
 
@@ -79,7 +84,6 @@ public sealed class SyncProviderSelectionTests
 
     [Theory]
     [InlineData(SyncProviderKind.WebDav, "WebDAV sync is not implemented yet.")]
-    [InlineData(SyncProviderKind.OneDrive, "OneDrive sync is not implemented yet.")]
     public async Task UnimplementedProvider_BlocksBeforeFactoryCreation(
         SyncProviderKind kind,
         string expectedMessage)
@@ -94,6 +98,20 @@ public sealed class SyncProviderSelectionTests
         Assert.False(viewModel.CanExecuteSync);
         Assert.Equal(0, factory.LocalFolderCreateCount);
         Assert.Equal(0, factory.SftpCreateCount);
+    }
+
+    [Fact]
+    public async Task OneDrive_WithoutProfile_BlocksBeforeFactoryCreation()
+    {
+        var factory = new RecordingSyncProviderFactory();
+        var viewModel = CreateViewModel(factory, SyncUiSettings.Default);
+        viewModel.SelectedProviderKind = SyncProviderKind.OneDrive;
+
+        await viewModel.PreviewSyncCommand.ExecuteAsync(null);
+
+        Assert.Equal("Select a saved Microsoft OneDrive profile first.", viewModel.StatusMessage);
+        Assert.False(viewModel.CanExecuteSync);
+        Assert.Equal(0, factory.OneDriveCreateCount);
     }
 
     [Fact]
@@ -307,9 +325,11 @@ public sealed class SyncProviderSelectionTests
         public int LocalFolderCreateCount { get; private set; }
         public int SftpCreateCount { get; private set; }
         public int GoogleDriveCreateCount { get; private set; }
+        public int OneDriveCreateCount { get; private set; }
         public string? LastLocalFolderPath { get; private set; }
         public SftpConnectionSettings? LastSftpSettings { get; private set; }
         public Guid? LastGoogleDriveProfileId { get; private set; }
+        public Guid? LastOneDriveProfileId { get; private set; }
         public ISyncProvider? LastProvider { get; private set; }
 
         public ISyncProvider CreateLocalFolderProvider(string remoteRoot)
@@ -331,6 +351,13 @@ public sealed class SyncProviderSelectionTests
             GoogleDriveCreateCount++;
             LastGoogleDriveProfileId = remoteProfileId;
             return LastProvider = new FakeSyncProvider("Google Drive", "Google Drive");
+        }
+
+        public ISyncProvider CreateOneDriveProvider(Guid remoteProfileId)
+        {
+            OneDriveCreateCount++;
+            LastOneDriveProfileId = remoteProfileId;
+            return LastProvider = new FakeSyncProvider("OneDrive", "OneDrive: AppRoot (GameSave Manager)");
         }
 
         public void ForgetSftpHostKey(string host, int port)

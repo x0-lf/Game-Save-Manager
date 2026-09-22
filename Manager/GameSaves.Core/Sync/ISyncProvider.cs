@@ -49,6 +49,12 @@ namespace GameSaves.Core.Sync
         ISyncProvider CreateGoogleDriveProvider(Guid remoteProfileId);
 
         /// <summary>
+        /// Creates a provider for a saved Microsoft OneDrive remote profile.
+        /// Uses sandboxed application folder permissions (drive/special/approot).
+        /// </summary>
+        ISyncProvider CreateOneDriveProvider(Guid remoteProfileId);
+
+        /// <summary>
         /// Removes the stored host-key fingerprint for a server, so the next
         /// connection is treated as a first connect again.
         /// </summary>

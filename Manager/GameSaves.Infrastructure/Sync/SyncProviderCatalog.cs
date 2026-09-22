@@ -1,4 +1,4 @@
-﻿using GameSaves.Core.Sync;
+using GameSaves.Core.Sync;
 
 namespace GameSaves.Infrastructure.Sync
 {
@@ -77,11 +77,11 @@ namespace GameSaves.Infrastructure.Sync
                 new SyncProviderDescriptor(
                     SyncProviderKind.OneDrive,
                     "OneDrive",
-                    IsImplemented: false,
+                    IsImplemented: true,
                     CloudCapabilities(),
                     SyncProviderConfigurationSurface.InteractiveOAuth,
-                    "OneDrive sync is not implemented yet.",
-                    IsConfigurationAvailable: false)
+                    UnavailableMessage: null,
+                    IsConfigurationAvailable: true)
             };
 
         private static readonly IReadOnlyDictionary<SyncProviderKind, SyncProviderDescriptor> ByKind =

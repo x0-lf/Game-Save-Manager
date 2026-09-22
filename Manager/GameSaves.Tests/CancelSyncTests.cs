@@ -184,6 +184,9 @@ public sealed class CancelSyncTests
         public ISyncProvider CreateGoogleDriveProvider(Guid remoteProfileId) =>
             Provider;
 
+        public ISyncProvider CreateOneDriveProvider(Guid remoteProfileId) =>
+            Provider;
+
         public void ForgetSftpHostKey(string host, int port)
         {
         }

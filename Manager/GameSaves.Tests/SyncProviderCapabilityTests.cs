@@ -33,14 +33,15 @@ public sealed class SyncProviderCapabilityTests
     }
 
     [Fact]
-    public void LocalFolderSftpAndGoogleDrive_AreImplemented()
+    public void LocalFolderSftpGoogleDriveAndOneDrive_AreImplemented()
     {
         Assert.Equal(
             new[]
             {
                 SyncProviderKind.LocalFolder,
                 SyncProviderKind.Sftp,
-                SyncProviderKind.GoogleDrive
+                SyncProviderKind.GoogleDrive,
+                SyncProviderKind.OneDrive
             },
             _catalog.GetAll()
                 .Where(descriptor => descriptor.IsImplemented)
@@ -52,13 +53,14 @@ public sealed class SyncProviderCapabilityTests
             {
                 SyncProviderKind.LocalFolder,
                 SyncProviderKind.Sftp,
-                SyncProviderKind.GoogleDrive
+                SyncProviderKind.GoogleDrive,
+                SyncProviderKind.OneDrive
             },
             viewModel.ProviderOptions.Select(option => option.Kind));
 
         Assert.True(_catalog.GetDescriptor(SyncProviderKind.GoogleDrive).IsConfigurationAvailable);
+        Assert.True(_catalog.GetDescriptor(SyncProviderKind.OneDrive).IsConfigurationAvailable);
         Assert.False(_catalog.GetDescriptor(SyncProviderKind.WebDav).IsConfigurationAvailable);
-        Assert.False(_catalog.GetDescriptor(SyncProviderKind.OneDrive).IsConfigurationAvailable);
     }
 
     [Fact]
@@ -103,14 +105,13 @@ public sealed class SyncProviderCapabilityTests
             descriptor.Capabilities);
     }
 
-    [Theory]
-    [InlineData(SyncProviderKind.OneDrive)]
-    public void PlannedCloudCapabilities_AreDeclaredButUnavailable(
-        SyncProviderKind kind)
+    [Fact]
+    public void OneDriveCapabilities_AreConservativeAndExact()
     {
-        SyncProviderDescriptor descriptor = _catalog.GetDescriptor(kind);
+        SyncProviderDescriptor descriptor =
+            _catalog.GetDescriptor(SyncProviderKind.OneDrive);
 
-        Assert.False(descriptor.IsImplemented);
+        Assert.True(descriptor.IsImplemented);
         Assert.Equal(
             new SyncProviderCapabilities(
                 RequiresInteractiveLogin: true,

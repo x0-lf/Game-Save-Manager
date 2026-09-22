@@ -739,6 +739,89 @@
                             </Border>
                         </StackPanel>
 
+                        <!-- Microsoft OneDrive Configuration -->
+                        <StackPanel IsVisible="{Binding IsOneDriveSelected}"
+                                    Width="560"
+                                    HorizontalAlignment="Left"
+                                    Spacing="8">
+
+                            <TextBlock Text="Microsoft OneDrive account"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                       FontSize="{DynamicResource FontSizeBody}"
+                                       FontWeight="SemiBold" />
+
+                            <Grid ColumnDefinitions="Auto,*"
+                                  RowDefinitions="Auto,Auto,Auto"
+                                  ColumnSpacing="16"
+                                  RowSpacing="3">
+                                <TextBlock Grid.Row="0" Text="{Binding OneDriveAccountLabel}" Foreground="{DynamicResource MutedTextBrush}" FontSize="{DynamicResource FontSizeBody}" />
+                                <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding OneDriveAccountDisplayText}" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="{DynamicResource FontSizeBody}" />
+                                <TextBlock Grid.Row="1" Text="Email" Foreground="{DynamicResource MutedTextBrush}" FontSize="{DynamicResource FontSizeBody}" />
+                                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding OneDriveEmailDisplayText}" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="{DynamicResource FontSizeBody}" />
+                                <TextBlock Grid.Row="2" Text="Status" Foreground="{DynamicResource MutedTextBrush}" FontSize="{DynamicResource FontSizeBody}" />
+                                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding OneDriveStatusDisplayText}" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="{DynamicResource FontSizeBody}" />
+                            </Grid>
+
+                            <TextBlock Text="{Binding OneDriveQuotaSummary, StringFormat='Storage Quota: {0}'}"
+                                       IsVisible="{Binding OneDriveQuotaSummary, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                       FontSize="{DynamicResource FontSizeBody}" />
+
+                            <TextBlock Text="Scope: sandboxed application folder only (Files.ReadWrite.AppFolder)"
+                                       ToolTip.Tip="OAuth scope: Files.ReadWrite.AppFolder offline_access"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                       FontSize="{DynamicResource FontSizeBody}"
+                                       TextWrapping="Wrap" />
+
+                            <WrapPanel ItemSpacing="8" LineSpacing="6">
+                                <Button Content="Connect Microsoft OneDrive"
+                                        Command="{Binding ConnectOneDriveCommand}"
+                                        IsEnabled="{Binding CanConnectOneDrive}"
+                                        IsVisible="{Binding CanShowConnectOneDrive}" />
+                                <Button Content="Reconnect"
+                                        Command="{Binding ReconnectOneDriveCommand}"
+                                        IsEnabled="{Binding CanReconnectOneDrive}"
+                                        IsVisible="{Binding CanShowReconnectOneDrive}" />
+                                <Button Content="Disconnect"
+                                        Command="{Binding DisconnectOneDriveCommand}"
+                                        IsEnabled="{Binding CanDisconnectOneDrive}"
+                                        IsVisible="{Binding CanShowDisconnectOneDrive}" />
+                                <Button Content="Cancel"
+                                        Command="{Binding CancelOneDriveConnectionCommand}"
+                                        IsVisible="{Binding CanCancelOneDriveConnection}" />
+                            </WrapPanel>
+
+                            <CheckBox Content="Confirm removing locally stored Microsoft OneDrive authentication"
+                                      IsChecked="{Binding ConfirmDisconnectOneDrive}"
+                                      IsVisible="{Binding CanShowDisconnectOneDrive}"
+                                      ToolTip.Tip="The saved profile, local backups, remote OneDrive files, and Microsoft Account grant remain. Connecting again will be required." />
+
+                            <TextBlock Text="Disconnect removes protected authentication from this installation only. It does not delete the Microsoft account, revoke access in Microsoft account settings, or remove OneDrive files."
+                                       IsVisible="{Binding CanShowDisconnectOneDrive}"
+                                       Foreground="{DynamicResource MutedTextBrush}"
+                                       FontSize="{DynamicResource FontSizeBody}"
+                                       TextWrapping="Wrap" />
+
+                            <TextBlock Text="{Binding OneDriveConnectionMessage}"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                       FontSize="{DynamicResource FontSizeBody}"
+                                       TextWrapping="Wrap" />
+
+                            <Border Height="1"
+                                    Background="{DynamicResource SubtleBorderBrush}"
+                                    Margin="0,4" />
+
+                            <TextBlock Text="Sandboxed App Folder"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                       FontSize="{DynamicResource FontSizeBody}"
+                                       FontWeight="SemiBold" />
+
+                            <TextBlock Text="Backups sync directly into the dedicated sandboxed App Folder (special/approot) in your personal Microsoft OneDrive. Uploads only create files, downloads never overwrite local files, archive containers (.7z, .zip) are fully supported, and nothing is ever deleted remotely."
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                       FontSize="{DynamicResource FontSizeBody}"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+
                         <StackPanel Orientation="Horizontal"
                                     Spacing="10"
                                     IsVisible="{Binding CanLogout}">

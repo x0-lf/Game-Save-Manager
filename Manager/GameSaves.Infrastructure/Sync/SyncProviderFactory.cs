@@ -2,6 +2,7 @@ using GameSaves.Core.Platform;
 using GameSaves.Core.Sync;
 using GameSaves.Core.Transfers;
 using GameSaves.Infrastructure.GoogleDrive;
+using GameSaves.Infrastructure.OneDrive;
 
 namespace GameSaves.Infrastructure.Sync
 {
@@ -10,12 +11,13 @@ namespace GameSaves.Infrastructure.Sync
         private readonly IBackupHistoryService _backupHistoryService;
         private readonly ITransferHistoryRepository _historyRepository;
         private readonly IGoogleDriveSyncProviderFactory _googleDriveProviders;
+        private readonly IOneDriveSyncProviderFactory? _oneDriveProviders;
         private readonly SftpKnownHostsStore _knownHosts;
         private readonly Func<SftpConnectionSettings, SftpKnownHostsStore, IRemoteFileSystem>? _sftpFileSystemFactory;
 
-        // Internal because IGoogleDriveSyncProviderFactory is internal: a public
-        // constructor taking it is CS0051. Dependency injection resolves this
-        // through a registration lambda in the composition root, which keeps the
+        // Internal because IGoogleDriveSyncProviderFactory and IOneDriveSyncProviderFactory
+        // are internal: a public constructor taking them is CS0051. Dependency injection
+        // resolves this through a registration lambda in the composition root, which keeps the
         // dependency explicit here instead of hiding it behind a service
         // locator. See D-028, and D-026 for why the locator stays rejected.
         internal SyncProviderFactory(
@@ -23,11 +25,13 @@ namespace GameSaves.Infrastructure.Sync
             ITransferHistoryRepository historyRepository,
             IAppDatabasePathProvider databasePathProvider,
             IGoogleDriveSyncProviderFactory googleDriveProviders,
+            IOneDriveSyncProviderFactory? oneDriveProviders = null,
             Func<SftpConnectionSettings, SftpKnownHostsStore, IRemoteFileSystem>? sftpFileSystemFactory = null)
         {
             _backupHistoryService = backupHistoryService;
             _historyRepository = historyRepository;
             _googleDriveProviders = googleDriveProviders;
+            _oneDriveProviders = oneDriveProviders;
             _sftpFileSystemFactory = sftpFileSystemFactory;
 
             string appDataDirectory =
@@ -95,6 +99,16 @@ namespace GameSaves.Infrastructure.Sync
         // would only let a second taxonomy drift into the seam.
         public ISyncProvider CreateGoogleDriveProvider(Guid remoteProfileId) =>
             _googleDriveProviders.Create(remoteProfileId);
+
+        public ISyncProvider CreateOneDriveProvider(Guid remoteProfileId)
+        {
+            if (_oneDriveProviders is null)
+            {
+                throw new InvalidOperationException("Microsoft OneDrive provider factory is not configured.");
+            }
+
+            return _oneDriveProviders.Create(remoteProfileId);
+        }
 
         public void ForgetSftpHostKey(string host, int port)
         {

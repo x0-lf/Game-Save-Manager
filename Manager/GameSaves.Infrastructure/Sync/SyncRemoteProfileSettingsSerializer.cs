@@ -65,6 +65,16 @@ namespace GameSaves.Infrastructure.Sync
                             googleDrive.RequestedScope),
                         Options),
 
+                (SyncProviderKind.OneDrive, OneDriveSyncRemoteSettings oneDrive) =>
+                    JsonSerializer.Serialize(
+                        new OneDriveSettingsDto(
+                            oneDrive.SchemaVersion,
+                            oneDrive.AccountEmail,
+                            oneDrive.RequestedScope,
+                            oneDrive.AccountDisplayName,
+                            oneDrive.AppRootFolderId),
+                        Options),
+
                 _ => throw new ArgumentException(
                     "The provider settings do not match a supported persisted settings model.",
                     nameof(settings))
@@ -78,7 +88,8 @@ namespace GameSaves.Infrastructure.Sync
         {
             if (providerKind is not SyncProviderKind.LocalFolder and
                 not SyncProviderKind.Sftp and
-                not SyncProviderKind.GoogleDrive)
+                not SyncProviderKind.GoogleDrive and
+                not SyncProviderKind.OneDrive)
             {
                 return new SyncRemoteProfileSettingsReadResult(
                     null,
@@ -113,6 +124,7 @@ namespace GameSaves.Infrastructure.Sync
                     SyncProviderKind.LocalFolder => ReadLocalFolder(root),
                     SyncProviderKind.Sftp => ReadSftp(root),
                     SyncProviderKind.GoogleDrive => ReadGoogleDrive(root),
+                    SyncProviderKind.OneDrive => ReadOneDrive(root),
                     _ => Corrupted()
                 };
             }
@@ -201,6 +213,65 @@ namespace GameSaves.Infrastructure.Sync
             }
         }
 
+        private static SyncRemoteProfileSettingsReadResult ReadOneDrive(JsonElement root)
+        {
+            if (!TryReadString(root, "requestedScope", out string requestedScope))
+                return Corrupted();
+
+            try
+            {
+                requestedScope = OneDriveAuthorizationScopes.ValidateRequestedScope(requestedScope);
+            }
+            catch (ArgumentException)
+            {
+                return new SyncRemoteProfileSettingsReadResult(
+                    null,
+                    "The saved Microsoft OneDrive authorization scope is not supported.");
+            }
+
+            string? accountEmail = null;
+            if (TryGetProperty(root, "accountEmail", out JsonElement emailElement))
+            {
+                if (emailElement.ValueKind == JsonValueKind.String)
+                    accountEmail = emailElement.GetString();
+                else if (emailElement.ValueKind != JsonValueKind.Null)
+                    return Corrupted();
+            }
+
+            string? accountDisplayName = null;
+            if (TryGetProperty(root, "accountDisplayName", out JsonElement nameElement))
+            {
+                if (nameElement.ValueKind == JsonValueKind.String)
+                    accountDisplayName = nameElement.GetString();
+                else if (nameElement.ValueKind != JsonValueKind.Null)
+                    return Corrupted();
+            }
+
+            string? appRootFolderId = null;
+            if (TryGetProperty(root, "appRootFolderId", out JsonElement folderElement))
+            {
+                if (folderElement.ValueKind == JsonValueKind.String)
+                    appRootFolderId = folderElement.GetString();
+                else if (folderElement.ValueKind != JsonValueKind.Null)
+                    return Corrupted();
+            }
+
+            try
+            {
+                return new SyncRemoteProfileSettingsReadResult(
+                    new OneDriveSyncRemoteSettings(
+                        accountEmail,
+                        requestedScope,
+                        accountDisplayName,
+                        appRootFolderId),
+                    null);
+            }
+            catch (ArgumentException)
+            {
+                return Corrupted();
+            }
+        }
+
         private static SyncRemoteProfileSettingsReadResult Corrupted() =>
             new(null, "The saved provider settings are unreadable or corrupted.");
 
@@ -280,5 +351,12 @@ namespace GameSaves.Infrastructure.Sync
             int SchemaVersion,
             string? AccountEmail,
             string RequestedScope);
+
+        private sealed record OneDriveSettingsDto(
+            int SchemaVersion,
+            string? AccountEmail,
+            string RequestedScope,
+            string? AccountDisplayName,
+            string? AppRootFolderId);
     }
 }

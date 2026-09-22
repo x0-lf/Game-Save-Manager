@@ -12,6 +12,7 @@ using GameSaves.Infrastructure.Data;
 using GameSaves.Infrastructure.Platform;
 using GameSaves.Infrastructure.Profiles;
 using GameSaves.Infrastructure.GoogleDrive;
+using GameSaves.Infrastructure.OneDrive;
 using GameSaves.Infrastructure.Registry;
 using GameSaves.Infrastructure.Save;
 using GameSaves.Infrastructure.Secrets;
@@ -70,7 +71,8 @@ namespace GameSaves.Infrastructure.DependencyInjection
                     provider.GetRequiredService<IBackupHistoryService>(),
                     provider.GetRequiredService<ITransferHistoryRepository>(),
                     provider.GetRequiredService<IAppDatabasePathProvider>(),
-                    provider.GetRequiredService<IGoogleDriveSyncProviderFactory>()));
+                    provider.GetRequiredService<IGoogleDriveSyncProviderFactory>(),
+                    provider.GetRequiredService<IOneDriveSyncProviderFactory>()));
             services.AddSingleton<IUtcClock, SystemUtcClock>();
 
             // Registered beside the clock and for the same reason: so a test
@@ -269,6 +271,13 @@ namespace GameSaves.Infrastructure.DependencyInjection
                     provider.GetRequiredService<IUtcClock>(),
                     provider.GetRequiredService<IGoogleDriveObjectIdCache>(),
                     provider.GetRequiredService<IGoogleDriveValidationCoordinator>()));
+
+            services.AddSingleton<IOneDriveApiClient, OneDriveApiClient>();
+            services.AddSingleton<OneDriveOAuthService>();
+            services.AddSingleton<IOneDriveOAuthService>(provider =>
+                provider.GetRequiredService<OneDriveOAuthService>());
+            services.AddSingleton<IOneDriveRemoteFileSystemFactory, OneDriveRemoteFileSystemFactory>();
+            services.AddSingleton<IOneDriveSyncProviderFactory, OneDriveSyncProviderFactory>();
 
             return services;
         }

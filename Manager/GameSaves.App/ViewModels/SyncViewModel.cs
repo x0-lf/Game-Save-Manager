@@ -25,6 +25,7 @@ namespace GameSaves.App.ViewModels
         private readonly ISyncRemoteProfileRepository _profileRepository;
         private readonly ISyncRemoteProfileService _profileService;
         private readonly IGoogleDriveOAuthService _googleDriveOAuthService;
+        private readonly IOneDriveOAuthService? _oneDriveOAuthService;
         private readonly IGoogleDriveRootFolderService _googleDriveRootFolderService;
         private readonly IBackupHistoryService? _backupHistoryService;
         private readonly IUtcClock _clock;
@@ -48,6 +49,9 @@ namespace GameSaves.App.ViewModels
         private CancellationTokenSource? _googleAuthenticationCancellation;
         private long _googleAuthenticationGeneration;
         private bool _googleDriveInteractiveOperation;
+        private CancellationTokenSource? _oneDriveAuthenticationCancellation;
+        private long _oneDriveAuthenticationGeneration;
+        private bool _oneDriveInteractiveOperation;
         private bool _isBulkLoadingItems;
         private CancellationTokenSource? _googleRootFolderCancellation;
 
@@ -78,6 +82,18 @@ namespace GameSaves.App.ViewModels
             string? AccountEmail,
             bool HasStoredAuthentication);
 
+        private enum OneDriveInteractiveOperation
+        {
+            Connect,
+            Reconnect
+        }
+
+        private sealed record OneDriveUiSnapshot(
+            OneDriveConnectionStatus Status,
+            string? AccountDisplayName,
+            string? AccountEmail,
+            bool HasStoredOneDriveAuthentication);
+
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(CanSwitchToGoogleDriveDesktop))]
         private bool isLoading;
@@ -94,6 +110,14 @@ namespace GameSaves.App.ViewModels
         [NotifyPropertyChangedFor(nameof(IsLocalFolderSelected))]
         [NotifyPropertyChangedFor(nameof(IsSftpSelected))]
         [NotifyPropertyChangedFor(nameof(IsGoogleDriveSelected))]
+        [NotifyPropertyChangedFor(nameof(IsOneDriveSelected))]
+        [NotifyPropertyChangedFor(nameof(CanConnectOneDrive))]
+        [NotifyPropertyChangedFor(nameof(CanReconnectOneDrive))]
+        [NotifyPropertyChangedFor(nameof(CanDisconnectOneDrive))]
+        [NotifyPropertyChangedFor(nameof(CanShowConnectOneDrive))]
+        [NotifyPropertyChangedFor(nameof(CanShowReconnectOneDrive))]
+        [NotifyPropertyChangedFor(nameof(CanShowDisconnectOneDrive))]
+        [NotifyPropertyChangedFor(nameof(CanUseOneDriveForSync))]
         [NotifyPropertyChangedFor(nameof(SelectedProviderSupportsArchiveContainers))]
         [NotifyPropertyChangedFor(nameof(ArchiveSyncNotice))]
         [NotifyPropertyChangedFor(nameof(ShowArchiveSyncNotice))]
@@ -270,6 +294,13 @@ namespace GameSaves.App.ViewModels
         [NotifyPropertyChangedFor(nameof(CanCheckGoogleDriveRootFolder))]
         [NotifyPropertyChangedFor(nameof(CanShowRecreateGoogleDriveRootFolder))]
         [NotifyPropertyChangedFor(nameof(CanRecreateGoogleDriveRootFolder))]
+        [NotifyPropertyChangedFor(nameof(CanConnectOneDrive))]
+        [NotifyPropertyChangedFor(nameof(CanReconnectOneDrive))]
+        [NotifyPropertyChangedFor(nameof(CanDisconnectOneDrive))]
+        [NotifyPropertyChangedFor(nameof(CanShowConnectOneDrive))]
+        [NotifyPropertyChangedFor(nameof(CanShowReconnectOneDrive))]
+        [NotifyPropertyChangedFor(nameof(CanShowDisconnectOneDrive))]
+        [NotifyPropertyChangedFor(nameof(CanUseOneDriveForSync))]
         [NotifyPropertyChangedFor(nameof(CanPreviewSync))]
         private SyncRemoteProfile? selectedRemoteProfile;
 
@@ -391,6 +422,71 @@ namespace GameSaves.App.ViewModels
         private string googleDriveRootFolderMessage =
             "Connect Google Drive before setting up its backup folder.";
 
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(CanConnectOneDrive))]
+        [NotifyPropertyChangedFor(nameof(CanReconnectOneDrive))]
+        [NotifyPropertyChangedFor(nameof(CanDisconnectOneDrive))]
+        [NotifyPropertyChangedFor(nameof(CanCancelOneDriveConnection))]
+        private bool isOneDriveConnecting;
+
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(OneDriveAccountDisplayText))]
+        [NotifyPropertyChangedFor(nameof(OneDriveEmailDisplayText))]
+        [NotifyPropertyChangedFor(nameof(OneDriveAccountLabel))]
+        [NotifyPropertyChangedFor(nameof(CanConnectOneDrive))]
+        [NotifyPropertyChangedFor(nameof(CanReconnectOneDrive))]
+        [NotifyPropertyChangedFor(nameof(CanShowConnectOneDrive))]
+        [NotifyPropertyChangedFor(nameof(CanShowReconnectOneDrive))]
+        [NotifyPropertyChangedFor(nameof(CanShowDisconnectOneDrive))]
+        private string? oneDriveAccountDisplayName;
+
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(OneDriveAccountDisplayText))]
+        [NotifyPropertyChangedFor(nameof(OneDriveEmailDisplayText))]
+        [NotifyPropertyChangedFor(nameof(OneDriveAccountLabel))]
+        [NotifyPropertyChangedFor(nameof(CanConnectOneDrive))]
+        [NotifyPropertyChangedFor(nameof(CanReconnectOneDrive))]
+        [NotifyPropertyChangedFor(nameof(CanShowConnectOneDrive))]
+        [NotifyPropertyChangedFor(nameof(CanShowReconnectOneDrive))]
+        [NotifyPropertyChangedFor(nameof(CanShowDisconnectOneDrive))]
+        private string? oneDriveAccountEmail;
+
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(CanConnectOneDrive))]
+        [NotifyPropertyChangedFor(nameof(CanReconnectOneDrive))]
+        [NotifyPropertyChangedFor(nameof(CanDisconnectOneDrive))]
+        [NotifyPropertyChangedFor(nameof(CanShowConnectOneDrive))]
+        [NotifyPropertyChangedFor(nameof(CanShowReconnectOneDrive))]
+        [NotifyPropertyChangedFor(nameof(CanShowDisconnectOneDrive))]
+        [NotifyPropertyChangedFor(nameof(CanUseOneDriveForSync))]
+        [NotifyPropertyChangedFor(nameof(OneDriveAccountDisplayText))]
+        [NotifyPropertyChangedFor(nameof(OneDriveEmailDisplayText))]
+        [NotifyPropertyChangedFor(nameof(OneDriveAccountLabel))]
+        [NotifyPropertyChangedFor(nameof(OneDriveStatusDisplayText))]
+        private OneDriveConnectionStatus oneDriveConnectionStatus =
+            OneDriveConnectionStatus.NotConfigured;
+
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(CanDisconnectOneDrive))]
+        private bool confirmDisconnectOneDrive;
+
+        [ObservableProperty]
+        private string oneDriveConnectionMessage =
+            "Save a Microsoft OneDrive profile before connecting.";
+
+        [ObservableProperty]
+        private string? oneDriveQuotaSummary;
+
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(CanConnectOneDrive))]
+        [NotifyPropertyChangedFor(nameof(CanReconnectOneDrive))]
+        [NotifyPropertyChangedFor(nameof(CanShowConnectOneDrive))]
+        [NotifyPropertyChangedFor(nameof(CanShowReconnectOneDrive))]
+        [NotifyPropertyChangedFor(nameof(CanDisconnectOneDrive))]
+        [NotifyPropertyChangedFor(nameof(CanShowDisconnectOneDrive))]
+        [NotifyPropertyChangedFor(nameof(CanUseOneDriveForSync))]
+        private bool hasStoredOneDriveAuthentication;
+
         private bool _keepTargetSectionOpen;
 
         /// <summary>
@@ -461,6 +557,9 @@ namespace GameSaves.App.ViewModels
         public Task GoogleRootFolderInitializationTask { get; private set; } =
             Task.CompletedTask;
 
+        public Task OneDriveAuthenticationInitializationTask { get; private set; } =
+            Task.CompletedTask;
+
         public SyncProviderDescriptor SelectedProviderDescriptor =>
             _providerCatalog.GetDescriptor(SelectedProviderKind);
 
@@ -525,6 +624,7 @@ namespace GameSaves.App.ViewModels
             SyncProviderKind.Sftp =>
                 !string.IsNullOrWhiteSpace(SftpHost),
             SyncProviderKind.GoogleDrive => HasUsableGoogleDriveProfile,
+            SyncProviderKind.OneDrive => HasUsableOneDriveProfile,
             _ => false,
         };
 
@@ -564,8 +664,18 @@ namespace GameSaves.App.ViewModels
             SyncProviderKind.GoogleDrive =>
                 $"{GoogleDriveEndpointAccount} — {GoogleDriveEndpointFolder}",
 
+            SyncProviderKind.OneDrive =>
+                $"{OneDriveEndpointAccount} — AppRoot (GameSave Manager)",
+
             _ => "This sync provider is not available in this version."
         };
+
+        private string OneDriveEndpointAccount =>
+            OneDriveAccountEmail ??
+            OneDriveAccountDisplayName ??
+            (SelectedRemoteProfile?.ProviderSettings as OneDriveSyncRemoteSettings)
+                ?.AccountEmail ??
+            "No Microsoft account connected";
 
         private string GoogleDriveEndpointAccount =>
             GoogleDriveAccountEmail ??
@@ -795,6 +905,121 @@ namespace GameSaves.App.ViewModels
             IsGoogleDriveConnecting &&
             _googleDriveInteractiveOperation;
 
+        public bool IsOneDriveSelected =>
+            SelectedProviderKind == SyncProviderKind.OneDrive &&
+            SelectedProviderDescriptor.ConfigurationSurface ==
+            SyncProviderConfigurationSurface.InteractiveOAuth;
+
+        public bool IsOneDriveOAuthClientConfigurationAvailable =>
+            _oneDriveOAuthService?.GetClientConfigurationState().IsAvailable ?? true;
+
+        public string OneDriveAccountDisplayText =>
+            OneDriveConnectionStatus == OneDriveConnectionStatus.Disconnected ||
+            (string.IsNullOrWhiteSpace(OneDriveAccountDisplayName) &&
+             string.IsNullOrWhiteSpace(OneDriveAccountEmail))
+                ? "Not connected"
+                : OneDriveAccountDisplayName ?? OneDriveAccountEmail!;
+
+        public string OneDriveEmailDisplayText =>
+            OneDriveConnectionStatus == OneDriveConnectionStatus.Disconnected ||
+            string.IsNullOrWhiteSpace(OneDriveAccountEmail)
+                ? "Not available"
+                : OneDriveAccountEmail;
+
+        public string OneDriveAccountLabel =>
+            OneDriveConnectionStatus == OneDriveConnectionStatus.Connected
+                ? "Account"
+                : (OneDriveConnectionStatus is
+                       OneDriveConnectionStatus.ReauthenticationRequired or
+                       OneDriveConnectionStatus.StoredAuthenticationAvailable) &&
+                  (OneDriveAccountDisplayName is not null || OneDriveAccountEmail is not null)
+                    ? "Previously connected account"
+                    : "Account";
+
+        public string OneDriveStatusDisplayText => OneDriveConnectionStatus switch
+        {
+            OneDriveConnectionStatus.ReauthenticationRequired =>
+                "Authorization expired or revoked",
+            OneDriveConnectionStatus.StoredAuthenticationAvailable =>
+                "Checking stored authentication",
+            OneDriveConnectionStatus.NotConfigured => "Not configured",
+            OneDriveConnectionStatus.Disconnected => "Disconnected",
+            OneDriveConnectionStatus.Connecting => "Connecting",
+            OneDriveConnectionStatus.Connected => "Connected",
+            OneDriveConnectionStatus.Unavailable => "Unavailable",
+            OneDriveConnectionStatus.Failed => "Connection failed",
+            _ => "Unknown"
+        };
+
+        private bool HasUsableOneDriveProfile =>
+            SelectedRemoteProfile is
+            {
+                ProviderKind: SyncProviderKind.OneDrive,
+                SettingsError: null,
+                ProviderSettings: OneDriveSyncRemoteSettings
+                {
+                    SchemaVersion: OneDriveSyncRemoteSettings.CurrentSchemaVersion
+                }
+            };
+
+        public bool CanShowConnectOneDrive =>
+            IsOneDriveSelected &&
+            HasUsableOneDriveProfile &&
+            (OneDriveConnectionStatus is OneDriveConnectionStatus.Disconnected or
+                OneDriveConnectionStatus.Failed) &&
+            !HasStoredOneDriveAuthentication &&
+            OneDriveAccountDisplayName is null &&
+            OneDriveAccountEmail is null;
+
+        public bool CanConnectOneDrive =>
+            IsOneDriveSelected &&
+            HasUsableOneDriveProfile &&
+            CanShowConnectOneDrive &&
+            !IsOneDriveConnecting &&
+            IsOneDriveOAuthClientConfigurationAvailable;
+
+        public bool CanShowReconnectOneDrive =>
+            IsOneDriveSelected &&
+            HasUsableOneDriveProfile &&
+            ((OneDriveConnectionStatus is OneDriveConnectionStatus.Connected or
+                  OneDriveConnectionStatus.ReauthenticationRequired) ||
+             (OneDriveConnectionStatus == OneDriveConnectionStatus.Failed &&
+              (HasStoredOneDriveAuthentication ||
+               OneDriveAccountDisplayName is not null ||
+               OneDriveAccountEmail is not null)));
+
+        public bool CanReconnectOneDrive =>
+            CanShowReconnectOneDrive &&
+            !IsOneDriveConnecting &&
+            IsOneDriveOAuthClientConfigurationAvailable;
+
+        public bool CanShowDisconnectOneDrive =>
+            IsOneDriveSelected &&
+            HasUsableOneDriveProfile &&
+            (HasStoredOneDriveAuthentication ||
+             OneDriveConnectionStatus is
+                 OneDriveConnectionStatus.Connected or
+                 OneDriveConnectionStatus.ReauthenticationRequired or
+                 OneDriveConnectionStatus.StoredAuthenticationAvailable ||
+             OneDriveAccountDisplayName is not null ||
+             OneDriveAccountEmail is not null);
+
+        public bool CanDisconnectOneDrive =>
+            CanShowDisconnectOneDrive &&
+            !IsOneDriveConnecting &&
+            ConfirmDisconnectOneDrive;
+
+        public bool CanCancelOneDriveConnection =>
+            IsOneDriveSelected &&
+            IsOneDriveConnecting &&
+            _oneDriveInteractiveOperation;
+
+        public bool CanUseOneDriveForSync =>
+            IsOneDriveSelected &&
+            SelectedProviderDescriptor.IsImplemented &&
+            OneDriveConnectionStatus == OneDriveConnectionStatus.Connected &&
+            HasStoredOneDriveAuthentication;
+
         public string GoogleDriveRootFolderDisplayText =>
             GoogleDriveRootFolderDisplayName ?? "Not configured";
 
@@ -1017,7 +1242,8 @@ namespace GameSaves.App.ViewModels
             IGoogleDriveRootFolderService? googleDriveRootFolderService = null,
             IBackupHistoryService? backupHistoryService = null,
             IRetryBackoffNotifier? retryBackoffNotifier = null,
-            IGoogleDriveDesktopDetector? googleDriveDesktopDetector = null)
+            IGoogleDriveDesktopDetector? googleDriveDesktopDetector = null,
+            IOneDriveOAuthService? oneDriveOAuthService = null)
         {
             Workspace = workspaceLayout.Page(
                 GameSaves.App.Services.UiRailLayoutSettings.TabSync);
@@ -1030,6 +1256,7 @@ namespace GameSaves.App.ViewModels
             _profileService = profileService;
             _clock = clock;
             _googleDriveOAuthService = googleDriveOAuthService;
+            _oneDriveOAuthService = oneDriveOAuthService;
             // Keep direct construction compatible with the pre-Milestone-L
             // ViewModel contract. Application DI always supplies the real
             // Infrastructure service; the fallback performs no external work.
@@ -1113,7 +1340,9 @@ namespace GameSaves.App.ViewModels
         partial void OnSelectedProviderKindChanged(SyncProviderKind value)
         {
             CancelGoogleAuthentication();
+            CancelOneDriveAuthentication();
             ConfirmDisconnectGoogleDrive = false;
+            ConfirmDisconnectOneDrive = false;
             ConfirmRecreateGoogleDriveRootFolder = false;
 
             if (value != SyncProviderKind.Sftp)
@@ -1133,6 +1362,12 @@ namespace GameSaves.App.ViewModels
                 GoogleDriveConnectionStatus = GoogleDriveConnectionStatus.NotConfigured;
                 GoogleDriveConnectionMessage =
                     "Save the Google Drive profile before connecting so its authentication can be stored securely.";
+            }
+            else if (value == SyncProviderKind.OneDrive && SelectedRemoteProfile is null)
+            {
+                OneDriveConnectionStatus = OneDriveConnectionStatus.NotConfigured;
+                OneDriveConnectionMessage =
+                    "Save the Microsoft OneDrive profile before connecting so its authentication can be stored securely.";
             }
         }
 
@@ -1288,7 +1523,9 @@ namespace GameSaves.App.ViewModels
         private void UseWithoutSavedProfile()
         {
             CancelGoogleAuthentication();
+            CancelOneDriveAuthentication();
             ConfirmDisconnectGoogleDrive = false;
+            ConfirmDisconnectOneDrive = false;
             ConfirmRecreateGoogleDriveRootFolder = false;
             _suppressProfileSelection = true;
             SelectedRemoteProfile = null;
@@ -1309,6 +1546,7 @@ namespace GameSaves.App.ViewModels
             InvalidatePlan(force: true);
             HasStoredAuthentication = false;
             ResetGoogleDriveState();
+            ResetOneDriveState();
             ConfirmDeleteRemoteProfile = false;
             RemoteProfileState = "Unsaved settings (no profile)";
             StatusMessage = "Using the current sync settings without a saved remote profile. Build a new preview when ready.";
@@ -1320,7 +1558,9 @@ namespace GameSaves.App.ViewModels
             bool persistSelection)
         {
             CancelGoogleAuthentication();
+            CancelOneDriveAuthentication();
             ConfirmDisconnectGoogleDrive = false;
+            ConfirmDisconnectOneDrive = false;
             ConfirmRecreateGoogleDriveRootFolder = false;
             HasStoredAuthentication = false;
             _applyingProfile = true;
@@ -1337,6 +1577,7 @@ namespace GameSaves.App.ViewModels
                         RemoteRootPath = local.LocalFolderPath;
                         ResetSftpNonSecretFields();
                         ResetGoogleDriveState();
+                        ResetOneDriveState();
                         break;
 
                     case SftpSyncRemoteSettings sftp:
@@ -1350,11 +1591,13 @@ namespace GameSaves.App.ViewModels
                         SftpKeyFilePath = sftp.PrivateKeyFilePath ?? "";
                         SftpRemotePath = sftp.RemotePath;
                         ResetGoogleDriveState();
+                        ResetOneDriveState();
                         break;
 
                     case GoogleDriveSyncRemoteSettings googleDrive:
                         RemoteRootPath = "";
                         ResetSftpNonSecretFields();
+                        ResetOneDriveState();
                         GoogleDriveAccountDisplayName = profile.AccountDisplayName;
                         GoogleDriveAccountEmail = googleDrive.AccountEmail;
                         GoogleDriveConnectionStatus =
@@ -1373,10 +1616,23 @@ namespace GameSaves.App.ViewModels
                                 : "The saved Google Drive backup folder will be validated after authentication.";
                         break;
 
+                    case OneDriveSyncRemoteSettings oneDrive:
+                        RemoteRootPath = "";
+                        ResetSftpNonSecretFields();
+                        ResetGoogleDriveState();
+                        OneDriveAccountDisplayName = profile.AccountDisplayName;
+                        OneDriveAccountEmail = oneDrive.AccountEmail;
+                        OneDriveConnectionStatus =
+                            OneDriveConnectionStatus.StoredAuthenticationAvailable;
+                        OneDriveConnectionMessage =
+                            "Checking stored Microsoft OneDrive authentication…";
+                        break;
+
                     default:
                         RemoteRootPath = "";
                         ResetSftpNonSecretFields();
                         ResetGoogleDriveState();
+                        ResetOneDriveState();
                         break;
                 }
             }
@@ -1389,15 +1645,19 @@ namespace GameSaves.App.ViewModels
             ConfirmDeleteRemoteProfile = false;
             RemoteProfileState = profile.SettingsError is null &&
                                  (profile.ProviderKind == SyncProviderKind.GoogleDrive ||
+                                  profile.ProviderKind == SyncProviderKind.OneDrive ||
                                   GetUnavailableProviderMessage(profile.ProviderKind) is null)
                 ? "Saved"
                 : "Profile unavailable";
             StatusMessage = profile.ProviderKind == SyncProviderKind.GoogleDrive &&
                             profile.SettingsError is null
                 ? "Loaded the Google Drive profile. Checking stored authentication without opening a browser. Backup synchronization remains unavailable."
-                : profile.SettingsError ??
-                  GetUnavailableProviderMessage(profile.ProviderKind) ??
-                  $"Loaded remote profile '{profile.DisplayName}'. Build a new sync preview when ready.";
+                : profile.ProviderKind == SyncProviderKind.OneDrive &&
+                  profile.SettingsError is null
+                    ? "Loaded the Microsoft OneDrive profile. Checking stored authentication without opening a browser."
+                    : profile.SettingsError ??
+                      GetUnavailableProviderMessage(profile.ProviderKind) ??
+                      $"Loaded remote profile '{profile.DisplayName}'. Build a new sync preview when ready.";
 
             if (persistSelection)
                 SaveNonSecretSettings();
@@ -1406,6 +1666,11 @@ namespace GameSaves.App.ViewModels
                 profile.ProviderSettings is GoogleDriveSyncRemoteSettings)
             {
                 BeginGoogleAuthenticationRestore(profile.Id);
+            }
+            else if (profile.ProviderKind == SyncProviderKind.OneDrive &&
+                profile.ProviderSettings is OneDriveSyncRemoteSettings)
+            {
+                BeginOneDriveAuthenticationRestore(profile.Id);
             }
             else
             {
@@ -1417,7 +1682,9 @@ namespace GameSaves.App.ViewModels
         private void NewRemoteProfile()
         {
             CancelGoogleAuthentication();
+            CancelOneDriveAuthentication();
             ConfirmDisconnectGoogleDrive = false;
+            ConfirmDisconnectOneDrive = false;
             ConfirmRecreateGoogleDriveRootFolder = false;
             _suppressProfileSelection = true;
             SelectedRemoteProfile = null;
@@ -1434,6 +1701,7 @@ namespace GameSaves.App.ViewModels
                 ResetSftpNonSecretFields();
                 ClearSessionOnlySftpState();
                 ResetGoogleDriveState();
+                ResetOneDriveState();
             }
             finally
             {
@@ -1497,6 +1765,20 @@ namespace GameSaves.App.ViewModels
                             "Connect Google Drive before setting up its backup folder.";
                     }
                 }
+                else if (profile.ProviderKind == SyncProviderKind.OneDrive)
+                {
+                    OneDriveAccountDisplayName = profile.AccountDisplayName;
+                    OneDriveAccountEmail =
+                        (profile.ProviderSettings as OneDriveSyncRemoteSettings)?.AccountEmail;
+
+                    if (isNewProfile)
+                    {
+                        OneDriveConnectionStatus = OneDriveConnectionStatus.Disconnected;
+                        OneDriveConnectionMessage =
+                            "Profile saved. Connect Microsoft OneDrive to authorize this account.";
+                        HasStoredOneDriveAuthentication = false;
+                    }
+                }
                 RemoteProfileState = "Saved";
                 StatusMessage = $"Remote profile '{profile.DisplayName}' saved. No connection was started.";
                 SaveNonSecretSettings();
@@ -1544,6 +1826,15 @@ namespace GameSaves.App.ViewModels
                         GoogleDriveRootFolderStatus.Unconfigured;
                     GoogleDriveRootFolderMessage =
                         "Connect Google Drive before setting up its backup folder.";
+                }
+                else if (profile.ProviderKind == SyncProviderKind.OneDrive)
+                {
+                    OneDriveAccountDisplayName = null;
+                    OneDriveAccountEmail = null;
+                    OneDriveConnectionStatus = OneDriveConnectionStatus.Disconnected;
+                    OneDriveConnectionMessage =
+                        "Profile saved. Connect Microsoft OneDrive to authorize this account.";
+                    HasStoredOneDriveAuthentication = false;
                 }
                 InvalidatePlan(force: true);
                 RemoteProfileState = "Saved";
@@ -2344,6 +2635,467 @@ namespace GameSaves.App.ViewModels
             GoogleAuthenticationInitializationTask = Task.CompletedTask;
         }
 
+        private void CancelOneDriveAuthentication()
+        {
+            _oneDriveAuthenticationGeneration++;
+            _oneDriveAuthenticationCancellation?.Cancel();
+            _oneDriveAuthenticationCancellation?.Dispose();
+            _oneDriveAuthenticationCancellation = null;
+            _oneDriveInteractiveOperation = false;
+            IsOneDriveConnecting = false;
+            OnPropertyChanged(nameof(CanCancelOneDriveConnection));
+            OneDriveAuthenticationInitializationTask = Task.CompletedTask;
+        }
+
+        private void ResetOneDriveState()
+        {
+            OneDriveAccountDisplayName = null;
+            OneDriveAccountEmail = null;
+            OneDriveConnectionStatus = OneDriveConnectionStatus.NotConfigured;
+            OneDriveConnectionMessage =
+                "Save a Microsoft OneDrive profile before connecting.";
+            OneDriveQuotaSummary = null;
+            ConfirmDisconnectOneDrive = false;
+            HasStoredOneDriveAuthentication = false;
+        }
+
+        [RelayCommand]
+        private Task ConnectOneDriveAsync() =>
+            RunOneDriveInteractiveAuthenticationAsync(OneDriveInteractiveOperation.Connect);
+
+        [RelayCommand]
+        private Task ReconnectOneDriveAsync() =>
+            RunOneDriveInteractiveAuthenticationAsync(OneDriveInteractiveOperation.Reconnect);
+
+        [RelayCommand]
+        private void CancelOneDriveConnection()
+        {
+            if (!IsOneDriveConnecting)
+                return;
+
+            ConfirmDisconnectOneDrive = false;
+            OneDriveConnectionMessage =
+                "Cancelling Microsoft OneDrive sign-in…";
+            _oneDriveAuthenticationCancellation?.Cancel();
+        }
+
+        [RelayCommand]
+        private async Task DisconnectOneDriveAsync()
+        {
+            if (!IsOneDriveSelected ||
+                SelectedRemoteProfile is not { ProviderKind: SyncProviderKind.OneDrive } profile)
+            {
+                StatusMessage = "Select a saved Microsoft OneDrive profile before disconnecting.";
+                return;
+            }
+
+            if (!ConfirmDisconnectOneDrive)
+            {
+                StatusMessage =
+                    "Confirm removing locally stored Microsoft OneDrive authentication first. The saved profile, backups, and OneDrive files will remain.";
+                return;
+            }
+
+            if (_oneDriveOAuthService is null)
+            {
+                StatusMessage = "Microsoft OneDrive service is unavailable.";
+                return;
+            }
+
+            CancelOneDriveAuthentication();
+            long generation = ++_oneDriveAuthenticationGeneration;
+            var cancellation = new CancellationTokenSource();
+            _oneDriveAuthenticationCancellation = cancellation;
+            _oneDriveInteractiveOperation = false;
+            IsOneDriveConnecting = true;
+            InvalidatePlan(force: true);
+            ClearSessionOnlySftpState();
+            OneDriveConnectionMessage = "Removing locally stored Microsoft OneDrive authentication...";
+            StatusMessage = OneDriveConnectionMessage;
+
+            try
+            {
+                OneDriveDisconnectionResult result =
+                    await _oneDriveOAuthService.DisconnectAsync(
+                        profile.Id,
+                        cancellation.Token);
+
+                if (generation != _oneDriveAuthenticationGeneration ||
+                    SelectedRemoteProfile?.Id != profile.Id ||
+                    !IsOneDriveSelected)
+                {
+                    return;
+                }
+
+                if (result.Succeeded)
+                {
+                    HasStoredOneDriveAuthentication = false;
+                    OneDriveConnectionStatus = OneDriveConnectionStatus.Disconnected;
+                    OneDriveAccountDisplayName = null;
+                    OneDriveAccountEmail = null;
+                    OneDriveQuotaSummary = null;
+                    ConfirmDisconnectOneDrive = false;
+                    RefreshProfileList(profile.Id);
+                }
+                else
+                {
+                    if (result.LocalAuthenticationRemoved)
+                    {
+                        HasStoredOneDriveAuthentication = false;
+                    }
+
+                    OneDriveConnectionStatus = result.Status ==
+                        OneDriveDisconnectionStatus.SecretStoreUnavailable
+                            ? OneDriveConnectionStatus.Unavailable
+                            : OneDriveConnectionStatus.Failed;
+
+                    SyncRemoteProfile? current = _profileRepository.GetById(profile.Id);
+
+                    if (current is not null)
+                    {
+                        RefreshProfileList(current.Id);
+                        OneDriveAccountDisplayName = current.AccountDisplayName;
+                        OneDriveAccountEmail =
+                            (current.ProviderSettings as OneDriveSyncRemoteSettings)?.AccountEmail;
+                    }
+                }
+
+                OneDriveConnectionMessage = result.Message ?? result.Status.ToString();
+                StatusMessage = OneDriveConnectionMessage;
+            }
+            catch (OperationCanceledException)
+            {
+                OneDriveConnectionMessage =
+                    "Microsoft OneDrive disconnect was cancelled. No backup data was changed.";
+                StatusMessage = OneDriveConnectionMessage;
+                ConfirmDisconnectOneDrive = false;
+            }
+            catch
+            {
+                OneDriveConnectionStatus = OneDriveConnectionStatus.Failed;
+                OneDriveConnectionMessage =
+                    "Locally stored Microsoft OneDrive authentication could not be removed.";
+                StatusMessage = OneDriveConnectionMessage;
+            }
+            finally
+            {
+                if (generation == _oneDriveAuthenticationGeneration)
+                {
+                    IsOneDriveConnecting = false;
+                    cancellation.Dispose();
+                    _oneDriveAuthenticationCancellation = null;
+                }
+            }
+        }
+
+        private async Task RunOneDriveInteractiveAuthenticationAsync(
+            OneDriveInteractiveOperation operation)
+        {
+            if (!IsOneDriveSelected ||
+                SelectedRemoteProfile is not { ProviderKind: SyncProviderKind.OneDrive } profile)
+            {
+                OneDriveConnectionStatus = OneDriveConnectionStatus.NotConfigured;
+                OneDriveConnectionMessage =
+                    "Save the Microsoft OneDrive profile before connecting so its authentication can be stored securely.";
+                StatusMessage = OneDriveConnectionMessage;
+                return;
+            }
+
+            if (_oneDriveOAuthService is null)
+            {
+                OneDriveConnectionStatus = OneDriveConnectionStatus.Unavailable;
+                OneDriveConnectionMessage = "Microsoft OneDrive service is unavailable.";
+                StatusMessage = OneDriveConnectionMessage;
+                return;
+            }
+
+            OneDriveOAuthClientConfigurationState configuration =
+                _oneDriveOAuthService.GetClientConfigurationState();
+
+            if (!configuration.IsAvailable)
+            {
+                OneDriveConnectionStatus = OneDriveConnectionStatus.Unavailable;
+                OneDriveConnectionMessage = configuration.Message ??
+                    "Microsoft OneDrive OAuth client configuration is unavailable.";
+                StatusMessage = OneDriveConnectionMessage;
+                return;
+            }
+
+            if (IsOneDriveConnecting)
+                return;
+
+            var previousState = new OneDriveUiSnapshot(
+                OneDriveConnectionStatus,
+                OneDriveAccountDisplayName,
+                OneDriveAccountEmail,
+                HasStoredOneDriveAuthentication);
+
+            CancelOneDriveAuthentication();
+            long generation = ++_oneDriveAuthenticationGeneration;
+            var cancellation = new CancellationTokenSource();
+            _oneDriveAuthenticationCancellation = cancellation;
+            _oneDriveInteractiveOperation = true;
+            IsOneDriveConnecting = true;
+            OnPropertyChanged(nameof(CanCancelOneDriveConnection));
+            OneDriveConnectionStatus = OneDriveConnectionStatus.Connecting;
+            OneDriveConnectionMessage =
+                operation == OneDriveInteractiveOperation.Reconnect
+                    ? "Waiting for Microsoft OneDrive reauthorization in the system browser…"
+                    : "Waiting for Microsoft OneDrive authorization in the system browser…";
+            StatusMessage = OneDriveConnectionMessage;
+
+            try
+            {
+                OneDriveAuthenticationResult result =
+                    operation == OneDriveInteractiveOperation.Reconnect
+                        ? await _oneDriveOAuthService.ReconnectAsync(
+                            profile.Id,
+                            cancellation.Token)
+                        : await _oneDriveOAuthService.ConnectAsync(
+                            profile.Id,
+                            cancellation.Token);
+                ApplyOneDriveAuthenticationResult(
+                    profile.Id,
+                    generation,
+                    result,
+                    operation,
+                    previousState);
+            }
+            catch (OperationCanceledException)
+            {
+                ApplyOneDriveAuthenticationResult(
+                    profile.Id,
+                    generation,
+                    new OneDriveAuthenticationResult(
+                        OneDriveAuthenticationStatus.Cancelled,
+                        Succeeded: false,
+                        ErrorCode: OneDriveOAuthErrorCodes.Cancelled,
+                        Message: "Microsoft OneDrive sign-in was cancelled. No backup data was changed."),
+                    operation,
+                    previousState);
+            }
+            catch
+            {
+                ApplyOneDriveAuthenticationResult(
+                    profile.Id,
+                    generation,
+                    new OneDriveAuthenticationResult(
+                        OneDriveAuthenticationStatus.Failed,
+                        Succeeded: false,
+                        ErrorCode: OneDriveOAuthErrorCodes.Failed,
+                        Message: "Microsoft OneDrive sign-in failed. Review the developer OAuth configuration and try again."),
+                    operation,
+                    previousState);
+            }
+            finally
+            {
+                if (generation == _oneDriveAuthenticationGeneration)
+                {
+                    IsOneDriveConnecting = false;
+                    _oneDriveInteractiveOperation = false;
+                    OnPropertyChanged(nameof(CanCancelOneDriveConnection));
+                    _oneDriveAuthenticationCancellation?.Dispose();
+                    _oneDriveAuthenticationCancellation = null;
+                }
+            }
+        }
+
+        private void BeginOneDriveAuthenticationRestore(Guid profileId)
+        {
+            CancelOneDriveAuthentication();
+            long generation = ++_oneDriveAuthenticationGeneration;
+            var cancellation = new CancellationTokenSource();
+            _oneDriveAuthenticationCancellation = cancellation;
+            _oneDriveInteractiveOperation = false;
+            IsOneDriveConnecting = true;
+            OneDriveConnectionStatus =
+                OneDriveConnectionStatus.StoredAuthenticationAvailable;
+            OneDriveConnectionMessage =
+                "Checking stored Microsoft OneDrive authentication…";
+            OneDriveAuthenticationInitializationTask = RestoreOneDriveAuthenticationAsync(
+                profileId,
+                generation,
+                cancellation);
+        }
+
+        private async Task RestoreOneDriveAuthenticationAsync(
+            Guid profileId,
+            long generation,
+            CancellationTokenSource cancellation)
+        {
+            try
+            {
+                if (_oneDriveOAuthService is null)
+                {
+                    ApplyOneDriveAuthenticationResult(
+                        profileId,
+                        generation,
+                        new OneDriveAuthenticationResult(
+                            OneDriveAuthenticationStatus.Unavailable,
+                            Succeeded: false,
+                            ErrorCode: OneDriveOAuthErrorCodes.ClientIdMissing,
+                            Message: "Microsoft OneDrive service is unavailable."));
+                    return;
+                }
+
+                OneDriveAuthenticationResult result =
+                    await _oneDriveOAuthService.RestoreAsync(
+                        profileId,
+                        cancellation.Token);
+                ApplyOneDriveAuthenticationResult(profileId, generation, result);
+            }
+            catch (OperationCanceledException)
+            {
+                // A provider/profile change deliberately makes this result stale.
+            }
+            catch
+            {
+                ApplyOneDriveAuthenticationResult(
+                    profileId,
+                    generation,
+                    new OneDriveAuthenticationResult(
+                        OneDriveAuthenticationStatus.Failed,
+                        Succeeded: false,
+                        ErrorCode: OneDriveOAuthErrorCodes.Failed,
+                        Message: "Stored Microsoft OneDrive authentication could not be checked."));
+            }
+            finally
+            {
+                if (generation == _oneDriveAuthenticationGeneration)
+                {
+                    IsOneDriveConnecting = false;
+                    cancellation.Dispose();
+                    _oneDriveAuthenticationCancellation = null;
+                }
+            }
+        }
+
+        private void ApplyOneDriveAuthenticationResult(
+            Guid profileId,
+            long generation,
+            OneDriveAuthenticationResult result,
+            OneDriveInteractiveOperation? operation = null,
+            OneDriveUiSnapshot? previousState = null)
+        {
+            if (generation != _oneDriveAuthenticationGeneration ||
+                SelectedRemoteProfile?.Id != profileId ||
+                !IsOneDriveSelected)
+            {
+                return;
+            }
+
+            OneDriveConnectionStatus = result.Status switch
+            {
+                OneDriveAuthenticationStatus.Connected =>
+                    OneDriveConnectionStatus.Connected,
+                OneDriveAuthenticationStatus.NoStoredAuthentication =>
+                    OneDriveConnectionStatus.Disconnected,
+                OneDriveAuthenticationStatus.ReauthenticationRequired or
+                OneDriveAuthenticationStatus.TokenCorrupted or
+                OneDriveAuthenticationStatus.AuthorizationRevoked =>
+                    OneDriveConnectionStatus.ReauthenticationRequired,
+                OneDriveAuthenticationStatus.ClientConfigurationMissing or
+                OneDriveAuthenticationStatus.SecretStoreUnavailable or
+                OneDriveAuthenticationStatus.Unavailable =>
+                    OneDriveConnectionStatus.Unavailable,
+                OneDriveAuthenticationStatus.Cancelled or
+                OneDriveAuthenticationStatus.AuthorizationDenied
+                    when operation == OneDriveInteractiveOperation.Reconnect &&
+                         previousState is not null => previousState.Status,
+                OneDriveAuthenticationStatus.Cancelled or
+                OneDriveAuthenticationStatus.AuthorizationDenied =>
+                    OneDriveConnectionStatus.Disconnected,
+                OneDriveAuthenticationStatus.Failed or
+                OneDriveAuthenticationStatus.AccountLookupFailed or
+                OneDriveAuthenticationStatus.BrowserLaunchFailed or
+                OneDriveAuthenticationStatus.CallbackFailed
+                    when operation == OneDriveInteractiveOperation.Reconnect &&
+                         previousState is not null => previousState.Status,
+                _ => OneDriveConnectionStatus.Failed
+            };
+
+            if (operation == OneDriveInteractiveOperation.Reconnect &&
+                previousState is not null &&
+                result.Status is (OneDriveAuthenticationStatus.Cancelled or
+                    OneDriveAuthenticationStatus.AuthorizationDenied or
+                    OneDriveAuthenticationStatus.Failed or
+                    OneDriveAuthenticationStatus.AccountLookupFailed or
+                    OneDriveAuthenticationStatus.BrowserLaunchFailed or
+                    OneDriveAuthenticationStatus.CallbackFailed))
+            {
+                OneDriveAccountDisplayName = previousState.AccountDisplayName;
+                OneDriveAccountEmail = previousState.AccountEmail;
+                HasStoredOneDriveAuthentication = previousState.HasStoredOneDriveAuthentication;
+            }
+
+            if (result.Succeeded)
+            {
+                OneDriveAccountDisplayName = result.AccountDisplayName;
+                OneDriveAccountEmail = result.AccountEmail;
+                HasStoredOneDriveAuthentication = true;
+
+                SyncRemoteProfile? updated = _profileRepository.GetById(profileId);
+
+                if (updated is not null)
+                {
+                    RefreshProfileList(updated.Id);
+                    OneDriveAccountDisplayName = updated.AccountDisplayName;
+                    OneDriveAccountEmail =
+                        (updated.ProviderSettings as OneDriveSyncRemoteSettings)?.AccountEmail;
+                }
+
+                _ = LoadOneDriveQuotaAsync(profileId, generation);
+            }
+            else if (result.Status == OneDriveAuthenticationStatus.NoStoredAuthentication)
+            {
+                HasStoredOneDriveAuthentication = false;
+                OneDriveQuotaSummary = null;
+            }
+            else if (result.Status is
+                     OneDriveAuthenticationStatus.ReauthenticationRequired or
+                     OneDriveAuthenticationStatus.TokenCorrupted)
+            {
+                HasStoredOneDriveAuthentication = true;
+                OneDriveQuotaSummary = null;
+            }
+            else if (result.Status == OneDriveAuthenticationStatus.AuthorizationRevoked)
+            {
+                HasStoredOneDriveAuthentication = false;
+                OneDriveQuotaSummary = null;
+            }
+            else
+            {
+                OneDriveQuotaSummary = null;
+            }
+
+            OneDriveConnectionMessage = result.Message ?? result.Status.ToString();
+            StatusMessage = OneDriveConnectionMessage;
+        }
+
+        private async Task LoadOneDriveQuotaAsync(Guid profileId, long generation)
+        {
+            if (_oneDriveOAuthService is null)
+                return;
+
+            try
+            {
+                OneDriveQuotaInfo? quota = await _oneDriveOAuthService.GetQuotaAsync(profileId);
+
+                if (generation == _oneDriveAuthenticationGeneration &&
+                    SelectedRemoteProfile?.Id == profileId &&
+                    IsOneDriveSelected &&
+                    quota is not null)
+                {
+                    OneDriveQuotaSummary =
+                        $"{quota.FormattedUsed} of {quota.FormattedTotal} used ({quota.FormattedRemaining} free)";
+                }
+            }
+            catch
+            {
+                // Quota fetch is best-effort; failure should not break connected status
+            }
+        }
+
         private SyncRemoteProfile BuildProfile(
             Guid id,
             DateTimeOffset createdUtc,
@@ -2413,6 +3165,21 @@ namespace GameSaves.App.ViewModels
                         SelectedRemoteProfile?.ProviderKind == SyncProviderKind.GoogleDrive
                             ? SelectedRemoteProfile.RemoteFolderId
                             : null;
+                    break;
+
+                case SyncProviderKind.OneDrive:
+                    settings = new OneDriveSyncRemoteSettings(
+                        includeGoogleAccountMetadata ? OneDriveAccountEmail : null,
+                        OneDriveAuthorizationScopes.AppFolder,
+                        includeGoogleAccountMetadata ? OneDriveAccountDisplayName : null);
+                    accountDisplayName = includeGoogleAccountMetadata
+                        ? OneDriveAccountDisplayName
+                        : null;
+                    remoteRootDisplayName =
+                        SelectedRemoteProfile?.ProviderKind == SyncProviderKind.OneDrive
+                            ? SelectedRemoteProfile.RemoteRootDisplayName
+                            : "OneDrive: AppRoot (GameSave Manager)";
+                    remoteFolderId = "approot";
                     break;
 
                 default:
@@ -2590,6 +3357,10 @@ namespace GameSaves.App.ViewModels
                     _syncProviderFactory.CreateGoogleDriveProvider(
                         SelectedRemoteProfile!.Id),
 
+                SyncProviderKind.OneDrive =>
+                    _syncProviderFactory.CreateOneDriveProvider(
+                        SelectedRemoteProfile!.Id),
+
                 _ => throw new NotSupportedException(
                     GetUnavailableProviderMessage(SelectedProviderKind)
                     ?? "The selected sync provider is unsupported.")
@@ -2643,8 +3414,32 @@ namespace GameSaves.App.ViewModels
 
                 SyncProviderKind.GoogleDrive => ValidateGoogleDriveSelection(),
 
+                SyncProviderKind.OneDrive => ValidateOneDriveSelection(),
+
                 _ => GetUnavailableProviderMessage(SelectedProviderKind)
             };
+        }
+
+        private string? ValidateOneDriveSelection()
+        {
+            string? unavailable =
+                GetUnavailableProviderMessage(SyncProviderKind.OneDrive);
+
+            if (unavailable is not null)
+                return unavailable;
+
+            if (SelectedRemoteProfile is not
+                { ProviderKind: SyncProviderKind.OneDrive })
+            {
+                return "Select a saved Microsoft OneDrive profile first.";
+            }
+
+            if (!CanUseOneDriveForSync)
+            {
+                return "Connect Microsoft OneDrive before syncing.";
+            }
+
+            return null;
         }
 
         /// <summary>

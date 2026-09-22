@@ -8,18 +8,18 @@ the shared invariants are defined in the [safety model](safety-model.md).
 
 | Behavior | Local Folder | SFTP | Google Drive | WebDAV | OneDrive |
 | --- | --- | --- | --- | --- | --- |
-| Available | Yes | Yes | Yes | No | No |
-| Authentication | Filesystem access | Password or private key over SSH | System-browser OAuth with PKCE | Not implemented | Not implemented |
-| Secret storage | None | Password and passphrase are session-only | OAuth token in protected secret store | None | None |
-| Folder selection | Native local folder picker or typed path | Typed remote path | Creates or discovers one app folder; no arbitrary picker | Unavailable | Unavailable |
-| Connection/status check | Yes | Yes | Yes | Blocked | Blocked |
-| Quota display | No | No | No current UI | No | No |
+| Available | Yes | Yes | Yes | No | Yes |
+| Authentication | Filesystem access | Password or private key over SSH | System-browser OAuth with PKCE | Not implemented | System-browser OAuth with PKCE (`Files.ReadWrite.AppFolder`) |
+| Secret storage | None | Password and passphrase are session-only | OAuth token in protected secret store | None | OAuth token in protected secret store (DPAPI) |
+| Folder selection | Native local folder picker or typed path | Typed remote path | Creates or discovers one app folder; no arbitrary picker | Unavailable | Sandboxed application folder (`drive/special/approot`); no arbitrary picker |
+| Connection/status check | Yes | Yes | Yes | Blocked | Yes |
+| Quota display | No | No | No current UI | No | Yes (Total, Used, Remaining) |
 | Open-location control | Opens local folder | No | Opens the app folder in the browser | No | No |
-| Upload backup runs | Yes | Yes | Yes | No | No |
-| Download backup runs | Yes | Yes | Yes | No | No |
-| Overwrite runs | Never | Never | Never | N/A | N/A |
-| Delete runs | Never | Never | Never | N/A | N/A |
-| Provider-specific tests | Shared engine and UI coverage | Shared engine coverage; provider seam gap | Extensive deterministic coverage and recorded live acceptance | Availability guards | Availability guards |
+| Upload backup runs | Yes | Yes | Yes | No | Yes |
+| Download backup runs | Yes | Yes | Yes | No | Yes |
+| Overwrite runs | Never | Never | Never | N/A | Never |
+| Delete runs | Never | Never | Never | N/A | Never |
+| Provider-specific tests | Shared engine and UI coverage | Shared engine coverage; provider seam gap | Extensive deterministic coverage and recorded live acceptance | Availability guards | Extensive deterministic coverage (offline mocks for Graph API & OAuth) |
 
 The capability catalog describes intended provider potential. The live UI is
 narrower: Google Drive does not currently display quota or offer arbitrary
@@ -130,6 +130,39 @@ Developer OAuth configuration is documented separately in the
 [developer-only setup guide](google-drive-developer-setup.md). Closed chronology
 and evidence are [historical records](history/google-drive-acceptance.md), not
 the source of current provider status.
+
+## Microsoft OneDrive
+
+Microsoft OneDrive requests sandboxed permissions via Microsoft Graph:
+
+```text
+Files.ReadWrite.AppFolder offline_access
+```
+
+### Safety & Sandboxing Invariants
+
+1. **Sandboxed App Folder:** All sync operations strictly target the sandboxed
+   application folder (`drive/special/approot`). The application never requests broad
+   Drive scopes (`Files.ReadWrite`, `Files.ReadWrite.All`) and has zero visibility into
+   the user's personal documents, photos, or other OneDrive content.
+2. **Interactive OAuth with PKCE:** Authentication uses the system browser, loopback
+   redirect listener (`http://localhost:<port>/`), and PKCE (Proof Key for Code Exchange)
+   with code verifier and challenge.
+3. **Protected Secret Storage:** OAuth tokens (access token and refresh token) are
+   encrypted at rest via Windows DPAPI through `ISecretStore` under profile-scoped keys
+   `SecretKey(remoteProfileId, SecretNames.OneDriveTokenData)`.
+4. **Automatic Token Refresh:** Access tokens are automatically refreshed within 5
+   minutes of expiry using the stored refresh token.
+5. **Create-Only Uploads:** Backup runs are uploaded strictly in create-only mode.
+   Existing remote files are never overwritten; `manifest.json` is always uploaded last
+   to prevent incomplete runs from being identified as valid backups.
+6. **Zero Deletion:** Synchronization never deletes existing local or remote runs.
+   A same-name run with different contents is treated as an immutable conflict and left untouched.
+7. **Archive Containers Supported:** Like Local Folder and SFTP, OneDrive supports
+   compressed `.zip` backup archives (`SupportsArchiveContainers => true`).
+8. **Storage Quota & Health:** Live storage quota is fetched from Microsoft Graph
+   `/me/drive` (`total`, `used`, `remaining` bytes) and displayed directly in the UI,
+   with a low-storage warning when remaining quota falls below 10%.
 
 ## Performance choices
 

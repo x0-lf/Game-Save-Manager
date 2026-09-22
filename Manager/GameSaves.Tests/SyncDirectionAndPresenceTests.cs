@@ -1021,6 +1021,8 @@ public sealed class SyncDirectionAndPresenceTests
 
         public ISyncProvider CreateGoogleDriveProvider(Guid remoteProfileId) => _provider;
 
+        public ISyncProvider CreateOneDriveProvider(Guid remoteProfileId) => _provider;
+
         public void ForgetSftpHostKey(string host, int port)
         {
         }
