@@ -488,6 +488,7 @@ public sealed class TransferAndHistoryPaginationTests
         public ISyncProvider CreateSftpProvider(SftpConnectionSettings settings) => provider;
         public ISyncProvider CreateGoogleDriveProvider(Guid remoteProfileId) => provider;
         public ISyncProvider CreateOneDriveProvider(Guid remoteProfileId) => provider;
+        public ISyncProvider CreateMegaProvider(Guid remoteProfileId) => provider;
         public void ForgetSftpHostKey(string host, int port) { }
     }
 

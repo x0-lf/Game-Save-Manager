@@ -38,6 +38,11 @@ public sealed class SyncProviderSelectionTests
             {
                 Assert.Equal(SyncProviderKind.OneDrive, option.Kind);
                 Assert.Equal("OneDrive", option.DisplayName);
+            },
+            option =>
+            {
+                Assert.Equal(SyncProviderKind.Mega, option.Kind);
+                Assert.Equal("MEGA", option.DisplayName);
             });
     }
 
@@ -112,6 +117,20 @@ public sealed class SyncProviderSelectionTests
         Assert.Equal("Select a saved Microsoft OneDrive profile first.", viewModel.StatusMessage);
         Assert.False(viewModel.CanExecuteSync);
         Assert.Equal(0, factory.OneDriveCreateCount);
+    }
+
+    [Fact]
+    public async Task Mega_WithoutProfile_BlocksBeforeFactoryCreation()
+    {
+        var factory = new RecordingSyncProviderFactory();
+        var viewModel = CreateViewModel(factory, SyncUiSettings.Default);
+        viewModel.SelectedProviderKind = SyncProviderKind.Mega;
+
+        await viewModel.PreviewSyncCommand.ExecuteAsync(null);
+
+        Assert.Equal("Select a saved MEGA profile first.", viewModel.StatusMessage);
+        Assert.False(viewModel.CanExecuteSync);
+        Assert.Equal(0, factory.MegaCreateCount);
     }
 
     [Fact]
@@ -326,10 +345,12 @@ public sealed class SyncProviderSelectionTests
         public int SftpCreateCount { get; private set; }
         public int GoogleDriveCreateCount { get; private set; }
         public int OneDriveCreateCount { get; private set; }
+        public int MegaCreateCount { get; private set; }
         public string? LastLocalFolderPath { get; private set; }
         public SftpConnectionSettings? LastSftpSettings { get; private set; }
         public Guid? LastGoogleDriveProfileId { get; private set; }
         public Guid? LastOneDriveProfileId { get; private set; }
+        public Guid? LastMegaProfileId { get; private set; }
         public ISyncProvider? LastProvider { get; private set; }
 
         public ISyncProvider CreateLocalFolderProvider(string remoteRoot)
@@ -358,6 +379,13 @@ public sealed class SyncProviderSelectionTests
             OneDriveCreateCount++;
             LastOneDriveProfileId = remoteProfileId;
             return LastProvider = new FakeSyncProvider("OneDrive", "OneDrive: AppRoot (GameSave Manager)");
+        }
+
+        public ISyncProvider CreateMegaProvider(Guid remoteProfileId)
+        {
+            MegaCreateCount++;
+            LastMegaProfileId = remoteProfileId;
+            return LastProvider = new FakeSyncProvider("MEGA", "MEGA: GameSave Manager Backups");
         }
 
         public void ForgetSftpHostKey(string host, int port)

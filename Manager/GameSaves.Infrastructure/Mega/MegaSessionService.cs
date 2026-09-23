@@ -127,6 +127,27 @@ namespace GameSaves.Infrastructure.Mega
                 deleteResult.Succeeded ? "Session removed from protected store." : "Failed to remove session from protected store.");
         }
 
+        public async Task<MegaQuotaInfo?> GetQuotaAsync(
+            Guid remoteProfileId,
+            CancellationToken cancellationToken = default)
+        {
+            if (remoteProfileId == Guid.Empty)
+                return null;
+
+            MegaSessionToken? session = await GetSessionAsync(remoteProfileId, cancellationToken);
+            if (session == null)
+                return null;
+
+            try
+            {
+                return await _apiClient.GetQuotaAsync(session, cancellationToken);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
         private sealed class MegaSessionDto
         {
             [JsonPropertyName("schema_version")]

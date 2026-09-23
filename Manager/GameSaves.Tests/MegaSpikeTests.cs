@@ -393,17 +393,17 @@ namespace GameSaves.Tests
         }
 
         [Fact]
-        public void SyncProviderCatalog_ExposesMegaAsPlannedAndUnavailable()
+        public void SyncProviderCatalog_ExposesMegaAsImplementedAndAvailable()
         {
             var catalog = new SyncProviderCatalog();
             SyncProviderDescriptor descriptor = catalog.GetDescriptor(SyncProviderKind.Mega);
 
             Assert.NotNull(descriptor);
-            Assert.False(descriptor.IsImplemented);
-            Assert.False(descriptor.IsConfigurationAvailable);
+            Assert.True(descriptor.IsImplemented);
+            Assert.True(descriptor.IsConfigurationAvailable);
             Assert.Equal("MEGA", descriptor.DisplayName);
             Assert.Equal(SyncProviderConfigurationSurface.ServerCredentials, descriptor.ConfigurationSurface);
-            Assert.NotNull(descriptor.UnavailableMessage);
+            Assert.Null(descriptor.UnavailableMessage);
             Assert.True(descriptor.Capabilities.SupportsResumableUpload);
             Assert.True(descriptor.Capabilities.SupportsRemoteQuota);
         }

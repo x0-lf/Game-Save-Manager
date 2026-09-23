@@ -8,21 +8,21 @@ title, product outcome (The What), dependency, and observable completion criteri
 
 ## Now
 
-Current sprint focus: Deliver MEGA cloud sync provider (OBS-013 / PROVIDER-008).
+Current sprint focus: WebDAV and Nextcloud sync provider (SYNC-001 / PROVIDER-001).
 
 | ID | Title | Product outcome | Dependency | Completion criteria |
 | --- | --- | --- | --- | --- |
-| **OBS-013** | Deliver MEGA cloud sync provider (PROVIDER-008) | Users can select MEGA as a first-class cloud backup destination | OBS-012 | `MegaSyncProvider` registered in catalog/factory; create-only upload and safe conflict detection; quota display; parity tests pass |
+| **SYNC-001** | WebDAV and Nextcloud sync provider (PROVIDER-001) | Users can synchronize backups to private WebDAV or Nextcloud servers | PROVIDER-005, MAINT-001 | RFC 4918 methods implemented; TLS enforced; Nextcloud compatibility proven; create-only uploads and safe preview checks pass |
 
 ---
 
 ## Next
 
-Upcoming sprint priorities: WebDAV and Nextcloud sync provider (SYNC-001 / PROVIDER-001).
+Upcoming sprint priorities: Multi-target profile synchronization (SYNC-003 / PROVIDER-003).
 
 | ID | Title | Product outcome | Dependency | Completion criteria |
 | --- | --- | --- | --- | --- |
-| **SYNC-001** | WebDAV and Nextcloud sync provider (PROVIDER-001) | Users can synchronize backups to private WebDAV or Nextcloud servers | PROVIDER-005, MAINT-001 | RFC 4918 methods implemented; TLS enforced; Nextcloud compatibility proven; create-only uploads and safe preview checks pass |
+| **SYNC-003** | Multi-target profile synchronization (PROVIDER-003) | One backup set can be synchronized to multiple explicitly selected profiles in one workflow | Stable providers | Preview and history identify each destination; failures remain isolated; execution order and concurrency clear |
 
 ---
 
@@ -32,7 +32,6 @@ Planned feature sprints: Curated data distribution, catalog expansion, new cloud
 
 | ID | Title | Product outcome | Dependency | Completion criteria |
 | --- | --- | --- | --- | --- |
-| **SYNC-003** | Multi-target profile synchronization (PROVIDER-003) | One backup set can be synchronized to multiple explicitly selected profiles in one workflow | Stable providers | Preview and history identify each destination; failures remain isolated; execution order and concurrency clear |
 | **SYNC-004** | Remote quota and provider health dashboard (PROVIDER-004) | Users can inspect available cloud storage quotas and provider health status | PROVIDER-007 | Unified health widget reports verified capability data and degrades cleanly when unavailable |
 | **BACKUP-001** | Compressed-by-default backup container format | New backups default to compressed containers while remaining verifiable and restorable | OBS-004, BACKUP-006 | Compressed backup container versioned; manifest integrity preserved; restore validates content before replacement; opt-out uncompressed setting |
 | **BACKUP-003** | Scheduled backups and synchronization umbrella | Umbrella epic for background backups and unattended synchronization | Headless workflows, secret safety | Scheduling is opt-in; preview-equivalent validation before execution; results appear in History; secrets protected |
@@ -109,6 +108,7 @@ Verified in code, documentation, and automated tests.
 
 | ID | Title | Product outcome | Dependency | Completion criteria |
 | --- | --- | --- | --- | --- |
+| **OBS-013** | Deliver MEGA cloud sync provider (PROVIDER-008) | Users can select MEGA as a first-class cloud backup destination | OBS-012 | Production `MegaRemoteFileSystem` implements `IRemoteFileSystem` targeting dedicated root folder `GameSave Manager Backups`; create-only upload semantics and manifest-last placement verified; zero deletion and immutable conflict handling; storage quota inspection via `/uq` API with live UI summary and < 10% low-capacity warning; archive container support enabled (`SupportsArchiveContainers => true`); `MegaSyncProvider` and `MegaSyncProviderFactory` wired into `SyncProviderFactory.CreateMegaProvider`; `SyncRemoteProfileSettingsSerializer` round-trips `MegaSyncRemoteSettings`; `SyncProviderCatalog` reflects `SyncProviderKind.Mega` as `IsImplemented: true` and `IsConfigurationAvailable: true`; complete Avalonia UI panel in `SyncView.axaml` and `SyncViewModel.cs` with credential inputs, TOTP 2FA challenge handling, connect, reconnect, disconnect, cancel, and quota display; DPAPI encrypted session tokens stored under `SecretKey(profileId, SecretNames.MegaSessionData)`; 27 automated unit and integration tests in `MegaSyncProviderTests` pass; all 2,621 automated tests pass with 0 warnings and 0 errors in Release |
 | **OBS-012** | Prove MEGA cloud provider integration boundary | Feasibility, licensing, and security architecture of MEGA cloud synchronization are proven | Safety model | Spike proves feasibility, zero third-party dependency architecture (.NET 10 internal client), and licensing safety; PBKDF2/SHA-512 password key derivation, AES-128 master key decryption, and TOTP 2FA handling verified; DPAPI session token encryption under `SecretKey(profileId, SecretNames.MegaSessionData)` and disconnect clearing tested; create-only upload guard, manifest-last ordering, synthetic run upload/download, and quota inspection (< 10% low capacity warning) verified; descriptor declared in catalog; 17 automated tests in `MegaSpikeTests` and `SyncProviderCapabilityTests` pass; all 2,594 tests pass with 0 warnings and 0 errors in Release |
 | **OBS-011** | Microsoft OneDrive cloud sync provider (PROVIDER-002, SYNC-002) | Users can sync backups to Microsoft OneDrive using sandboxed app-folder permissions | PROVIDER-006 | Microsoft Graph OAuth 2.0 with PKCE; sandboxed to `Files.ReadWrite.AppFolder` targeting `drive/special/approot`; create-only uploads with manifest-last ordering; zip archive containers supported (`SupportsArchiveContainers => true`); zero deletion and immutable conflict handling; storage quota inspection via `/me/drive` with UI warning; OAuth tokens encrypted via Windows DPAPI secret store; 18 automated unit and integration tests in `OneDriveSyncProviderTests` pass; all 2,577 tests pass with 0 warnings and 0 errors in Release |
 | **OBS-017** | AI-assisted save path pattern detector (CATALOG-005) | AI tooling analyzes complex directory trees and proposes tokenized save path candidates for human review | OBS-014, OBS-015, OBS-016 | Engine fingerprint heuristics (`GameEngineFingerprinter`) identify Unreal, Unity (with `app.info` company/product resolution), Godot, Ren'Py, Source, and RPG Maker signatures; directory tree sanitizer (`DirectoryTreeSanitizer`) scrubs personal usernames and redacts sensitive credentials/tokens; `IAiPatternDetectorService` / `AiPatternDetectorService` generates tokenized candidate save paths (`%LOCALAPPDATA%`, `%APPDATA%`, `%USERPROFILE%`, `{Documents}`, `{SavedGames}`, `{SteamRoot}`, `{GameInstallPath}`) with offline heuristics and pluggable AI completion (`IAiCompletionClient`); strict trust model guarantees all candidate proposals default to `review_status = 'Pending'` and `enabled = 0`, requiring human review before runtime activation; audit trail tracks SHA-256 prompt hash and model version; CLI integration via `ai-detect-paths` (alias `ai-detect`) with `--output` JSON export and `--save-db` direct pending database import; documented in `docs/database-and-mappings.md`; 10 automated unit and integration tests in `AiPatternDetectorTests` pass; all 2,563 tests pass with 0 warnings and 0 errors in Release |

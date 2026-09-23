@@ -822,6 +822,98 @@
                                        TextWrapping="Wrap" />
                         </StackPanel>
 
+                        <!-- MEGA Cloud Drive Configuration -->
+                        <StackPanel IsVisible="{Binding IsMegaSelected}"
+                                    Width="560"
+                                    HorizontalAlignment="Left"
+                                    Spacing="8">
+
+                            <TextBlock Text="MEGA account"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                       FontSize="{DynamicResource FontSizeBody}"
+                                       FontWeight="SemiBold" />
+
+                            <Grid ColumnDefinitions="Auto,*"
+                                  RowDefinitions="Auto,Auto,Auto"
+                                  ColumnSpacing="16"
+                                  RowSpacing="3">
+                                <TextBlock Grid.Row="0" Text="{Binding MegaAccountLabel}" Foreground="{DynamicResource MutedTextBrush}" FontSize="{DynamicResource FontSizeBody}" />
+                                <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding MegaAccountDisplayText}" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="{DynamicResource FontSizeBody}" />
+                                <TextBlock Grid.Row="1" Text="Email" Foreground="{DynamicResource MutedTextBrush}" FontSize="{DynamicResource FontSizeBody}" />
+                                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding MegaEmailDisplayText}" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="{DynamicResource FontSizeBody}" />
+                                <TextBlock Grid.Row="2" Text="Status" Foreground="{DynamicResource MutedTextBrush}" FontSize="{DynamicResource FontSizeBody}" />
+                                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding MegaStatusDisplayText}" Foreground="{DynamicResource PrimaryTextBrush}" FontSize="{DynamicResource FontSizeBody}" />
+                            </Grid>
+
+                            <TextBlock Text="{Binding MegaQuotaSummary, StringFormat='Storage Quota: {0}'}"
+                                       IsVisible="{Binding MegaQuotaSummary, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                       FontSize="{DynamicResource FontSizeBody}" />
+
+                            <!-- Credentials input: shown when configuring or reconnecting -->
+                            <StackPanel Spacing="6"
+                                        IsVisible="{Binding CanShowMegaCredentialsInput}">
+                                <TextBox Text="{Binding MegaEmail}"
+                                         PlaceholderText="MEGA account email" />
+
+                                <TextBox Text="{Binding MegaPassword}"
+                                         PasswordChar="●"
+                                         PlaceholderText="MEGA password (used once for authentication, never stored)" />
+
+                                <TextBox Text="{Binding MegaTwoFactorCode}"
+                                         PlaceholderText="6-digit Two-Factor Authenticator code (TOTP)"
+                                         IsVisible="{Binding IsMegaTwoFactorRequired}" />
+                            </StackPanel>
+
+                            <WrapPanel ItemSpacing="8" LineSpacing="6">
+                                <Button Content="Connect MEGA"
+                                        Command="{Binding ConnectMegaCommand}"
+                                        IsEnabled="{Binding CanConnectMega}"
+                                        IsVisible="{Binding CanShowConnectMega}" />
+                                <Button Content="Reconnect"
+                                        Command="{Binding ReconnectMegaCommand}"
+                                        IsEnabled="{Binding CanReconnectMega}"
+                                        IsVisible="{Binding CanShowReconnectMega}" />
+                                <Button Content="Disconnect"
+                                        Command="{Binding DisconnectMegaCommand}"
+                                        IsEnabled="{Binding CanDisconnectMega}"
+                                        IsVisible="{Binding CanShowDisconnectMega}" />
+                                <Button Content="Cancel"
+                                        Command="{Binding CancelMegaConnectionCommand}"
+                                        IsVisible="{Binding CanCancelMegaConnection}" />
+                            </WrapPanel>
+
+                            <CheckBox Content="Confirm removing locally stored MEGA session authentication"
+                                      IsChecked="{Binding ConfirmDisconnectMega}"
+                                      IsVisible="{Binding CanShowDisconnectMega}"
+                                      ToolTip.Tip="The saved profile, local backups, and remote MEGA files remain. Connecting again will be required." />
+
+                            <TextBlock Text="Disconnect removes protected session tokens from this installation only. It does not delete your MEGA account or remove remote backup files."
+                                       IsVisible="{Binding CanShowDisconnectMega}"
+                                       Foreground="{DynamicResource MutedTextBrush}"
+                                       FontSize="{DynamicResource FontSizeBody}"
+                                       TextWrapping="Wrap" />
+
+                            <TextBlock Text="{Binding MegaConnectionMessage}"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                       FontSize="{DynamicResource FontSizeBody}"
+                                       TextWrapping="Wrap" />
+
+                            <Border Height="1"
+                                    Background="{DynamicResource SubtleBorderBrush}"
+                                    Margin="0,4" />
+
+                            <TextBlock Text="Dedicated Root Folder"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                       FontSize="{DynamicResource FontSizeBody}"
+                                       FontWeight="SemiBold" />
+
+                            <TextBlock Text="Backups sync directly into the dedicated 'GameSave Manager Backups' folder in your MEGA cloud drive root. Uploads only create files, downloads never overwrite local files, archive containers (.7z, .zip) are fully supported, and nothing is ever deleted remotely."
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                       FontSize="{DynamicResource FontSizeBody}"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+
                         <StackPanel Orientation="Horizontal"
                                     Spacing="10"
                                     IsVisible="{Binding CanLogout}">

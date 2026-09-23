@@ -8,18 +8,18 @@ the shared invariants are defined in the [safety model](safety-model.md).
 
 | Behavior | Local Folder | SFTP | Google Drive | WebDAV | OneDrive | MEGA |
 | --- | --- | --- | --- | --- | --- | --- |
-| Available | Yes | Yes | Yes | No | Yes | Spiked (In Development) |
+| Available | Yes | Yes | Yes | No | Yes | Yes |
 | Authentication | Filesystem access | Password or private key over SSH | System-browser OAuth with PKCE | Not implemented | System-browser OAuth with PKCE (`Files.ReadWrite.AppFolder`) | Email + password key derivation with optional TOTP 2FA |
 | Secret storage | None | Password and passphrase are session-only | OAuth token in protected secret store | None | OAuth token in protected secret store (DPAPI) | Session token and master key in protected secret store (DPAPI) |
 | Folder selection | Native local folder picker or typed path | Typed remote path | Creates or discovers one app folder; no arbitrary picker | Unavailable | Sandboxed application folder (`drive/special/approot`); no arbitrary picker | Dedicated app root folder (`GameSave Manager Backups`); no arbitrary picker |
-| Connection/status check | Yes | Yes | Yes | Blocked | Yes | Yes (spiked) |
+| Connection/status check | Yes | Yes | Yes | Blocked | Yes | Yes |
 | Quota display | No | No | No current UI | No | Yes (Total, Used, Remaining) | Yes (Total, Used, Remaining) |
 | Open-location control | Opens local folder | No | Opens the app folder in the browser | No | No | No |
 | Upload backup runs | Yes | Yes | Yes | No | Yes | Yes (chunked with AES-128-CTR and MAC) |
 | Download backup runs | Yes | Yes | Yes | No | Yes | Yes (streaming decryption) |
 | Overwrite runs | Never | Never | Never | N/A | Never | Never (create-only guard) |
 | Delete runs | Never | Never | Never | N/A | Never | Never (zero deletion) |
-| Provider-specific tests | Shared engine and UI coverage | Shared engine coverage; provider seam gap | Extensive deterministic coverage and recorded live acceptance | Availability guards | Extensive deterministic coverage (offline mocks for Graph API & OAuth) | Extensive deterministic coverage (MegaSpikeTests offline mocks) |
+| Provider-specific tests | Shared engine and UI coverage | Shared engine coverage; provider seam gap | Extensive deterministic coverage and recorded live acceptance | Availability guards | Extensive deterministic coverage (offline mocks for Graph API & OAuth) | Extensive deterministic coverage (MegaSyncProviderTests & MegaSpikeTests offline doubles) |
 
 The capability catalog describes intended provider potential. The live UI is
 narrower: Google Drive does not currently display quota or offer arbitrary
@@ -164,10 +164,9 @@ Files.ReadWrite.AppFolder offline_access
    `/me/drive` (`total`, `used`, `remaining` bytes) and displayed directly in the UI,
    with a low-storage warning when remaining quota falls below 10%.
 
-## MEGA (Spike Architecture — OBS-012)
+## MEGA (OBS-012 Spike & OBS-013 Full Delivery)
 
-Task `OBS-012` establishes the architectural spike and proves the integration boundary,
-cryptographic guarantees, licensing decisions, and safety invariants for MEGA cloud synchronization:
+Task `OBS-012` established the architectural spike, cryptographic guarantees, and licensing decisions, and task `OBS-013` (PROVIDER-008) delivered the production MEGA cloud sync provider (`MegaRemoteFileSystem`, `MegaSyncProvider`, `MegaSyncProviderFactory`, and UI integration):
 
 ### 1. Dependency & Licensing Evaluation
 

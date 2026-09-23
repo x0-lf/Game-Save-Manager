@@ -55,6 +55,12 @@ namespace GameSaves.Core.Sync
         ISyncProvider CreateOneDriveProvider(Guid remoteProfileId);
 
         /// <summary>
+        /// Creates a provider for a saved MEGA cloud remote profile.
+        /// Uses dedicated application folder inside the user's MEGA cloud drive.
+        /// </summary>
+        ISyncProvider CreateMegaProvider(Guid remoteProfileId);
+
+        /// <summary>
         /// Removes the stored host-key fingerprint for a server, so the next
         /// connection is treated as a first connect again.
         /// </summary>

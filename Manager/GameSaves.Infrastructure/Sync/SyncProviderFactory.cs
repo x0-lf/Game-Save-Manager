@@ -2,6 +2,7 @@ using GameSaves.Core.Platform;
 using GameSaves.Core.Sync;
 using GameSaves.Core.Transfers;
 using GameSaves.Infrastructure.GoogleDrive;
+using GameSaves.Infrastructure.Mega;
 using GameSaves.Infrastructure.OneDrive;
 
 namespace GameSaves.Infrastructure.Sync
@@ -12,10 +13,11 @@ namespace GameSaves.Infrastructure.Sync
         private readonly ITransferHistoryRepository _historyRepository;
         private readonly IGoogleDriveSyncProviderFactory _googleDriveProviders;
         private readonly IOneDriveSyncProviderFactory? _oneDriveProviders;
+        private readonly IMegaSyncProviderFactory? _megaProviders;
         private readonly SftpKnownHostsStore _knownHosts;
         private readonly Func<SftpConnectionSettings, SftpKnownHostsStore, IRemoteFileSystem>? _sftpFileSystemFactory;
 
-        // Internal because IGoogleDriveSyncProviderFactory and IOneDriveSyncProviderFactory
+        // Internal because IGoogleDriveSyncProviderFactory, IOneDriveSyncProviderFactory, and IMegaSyncProviderFactory
         // are internal: a public constructor taking them is CS0051. Dependency injection
         // resolves this through a registration lambda in the composition root, which keeps the
         // dependency explicit here instead of hiding it behind a service
@@ -26,12 +28,14 @@ namespace GameSaves.Infrastructure.Sync
             IAppDatabasePathProvider databasePathProvider,
             IGoogleDriveSyncProviderFactory googleDriveProviders,
             IOneDriveSyncProviderFactory? oneDriveProviders = null,
+            IMegaSyncProviderFactory? megaProviders = null,
             Func<SftpConnectionSettings, SftpKnownHostsStore, IRemoteFileSystem>? sftpFileSystemFactory = null)
         {
             _backupHistoryService = backupHistoryService;
             _historyRepository = historyRepository;
             _googleDriveProviders = googleDriveProviders;
             _oneDriveProviders = oneDriveProviders;
+            _megaProviders = megaProviders;
             _sftpFileSystemFactory = sftpFileSystemFactory;
 
             string appDataDirectory =
@@ -108,6 +112,16 @@ namespace GameSaves.Infrastructure.Sync
             }
 
             return _oneDriveProviders.Create(remoteProfileId);
+        }
+
+        public ISyncProvider CreateMegaProvider(Guid remoteProfileId)
+        {
+            if (_megaProviders is null)
+            {
+                throw new InvalidOperationException("MEGA provider factory is not configured.");
+            }
+
+            return _megaProviders.Create(remoteProfileId);
         }
 
         public void ForgetSftpHostKey(string host, int port)

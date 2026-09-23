@@ -74,5 +74,9 @@ namespace GameSaves.Core.Sync
         Task<MegaDisconnectionResult> DisconnectAsync(
             Guid remoteProfileId,
             CancellationToken cancellationToken = default);
+
+        Task<MegaQuotaInfo?> GetQuotaAsync(
+            Guid remoteProfileId,
+            CancellationToken cancellationToken = default);
     }
 }

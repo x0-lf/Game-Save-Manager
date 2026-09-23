@@ -73,7 +73,8 @@ namespace GameSaves.Infrastructure.DependencyInjection
                     provider.GetRequiredService<ITransferHistoryRepository>(),
                     provider.GetRequiredService<IAppDatabasePathProvider>(),
                     provider.GetRequiredService<IGoogleDriveSyncProviderFactory>(),
-                    provider.GetRequiredService<IOneDriveSyncProviderFactory>()));
+                    provider.GetRequiredService<IOneDriveSyncProviderFactory>(),
+                    provider.GetService<IMegaSyncProviderFactory>()));
             services.AddSingleton<IUtcClock, SystemUtcClock>();
 
             // Registered beside the clock and for the same reason: so a test
@@ -282,6 +283,8 @@ namespace GameSaves.Infrastructure.DependencyInjection
 
             services.AddSingleton<IMegaApiClient, MegaApiClient>();
             services.AddSingleton<IMegaSessionService, MegaSessionService>();
+            services.AddSingleton<IMegaRemoteFileSystemFactory, MegaRemoteFileSystemFactory>();
+            services.AddSingleton<IMegaSyncProviderFactory, MegaSyncProviderFactory>();
 
             return services;
         }

@@ -85,7 +85,7 @@ namespace GameSaves.Infrastructure.Sync
                 new SyncProviderDescriptor(
                     SyncProviderKind.Mega,
                     "MEGA",
-                    IsImplemented: false,
+                    IsImplemented: true,
                     new SyncProviderCapabilities(
                         RequiresInteractiveLogin: false,
                         RequiresServerCredentials: true,
@@ -97,8 +97,8 @@ namespace GameSaves.Infrastructure.Sync
                         SupportsLogout: true,
                         SupportsOpenRemoteLocation: false),
                     SyncProviderConfigurationSurface.ServerCredentials,
-                    "MEGA cloud sync provider is in development (spiked in OBS-012).",
-                    IsConfigurationAvailable: false)
+                    UnavailableMessage: null,
+                    IsConfigurationAvailable: true)
             };
 
         private static readonly IReadOnlyDictionary<SyncProviderKind, SyncProviderDescriptor> ByKind =

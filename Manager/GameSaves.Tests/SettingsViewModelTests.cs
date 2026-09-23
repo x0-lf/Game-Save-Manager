@@ -1122,7 +1122,7 @@ namespace GameSaves.Tests
                             ? "Available"
                             : descriptor.UnavailableMessage ?? "Not implemented")),
                 viewModel.ProviderStatuses.Select(row => (row.Name, row.Status)));
-            Assert.Equal(4, viewModel.ProviderStatuses.Count);
+            Assert.Equal(5, viewModel.ProviderStatuses.Count);
         }
 
         // A8 Data locations: every surfaced path is the exact file the
