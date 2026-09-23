@@ -61,6 +61,7 @@ public sealed class SyncProviderCapabilityTests
         Assert.True(_catalog.GetDescriptor(SyncProviderKind.GoogleDrive).IsConfigurationAvailable);
         Assert.True(_catalog.GetDescriptor(SyncProviderKind.OneDrive).IsConfigurationAvailable);
         Assert.False(_catalog.GetDescriptor(SyncProviderKind.WebDav).IsConfigurationAvailable);
+        Assert.False(_catalog.GetDescriptor(SyncProviderKind.Mega).IsConfigurationAvailable);
     }
 
     [Fact]
@@ -144,6 +145,28 @@ public sealed class SyncProviderCapabilityTests
                 SupportsConnectionTesting: true,
                 SupportsLogout: true,
                 SupportsOpenRemoteLocation: true),
+            descriptor.Capabilities);
+    }
+
+    [Fact]
+    public void PlannedMegaCapabilities_AreConservativeButUnavailable()
+    {
+        SyncProviderDescriptor descriptor =
+            _catalog.GetDescriptor(SyncProviderKind.Mega);
+
+        Assert.False(descriptor.IsImplemented);
+        Assert.False(descriptor.IsConfigurationAvailable);
+        Assert.Equal(
+            new SyncProviderCapabilities(
+                RequiresInteractiveLogin: false,
+                RequiresServerCredentials: true,
+                SupportsResumableUpload: true,
+                SupportsRemoteQuota: true,
+                SupportsRemoteFolderSelection: false,
+                SupportsPersistentAuthentication: true,
+                SupportsConnectionTesting: true,
+                SupportsLogout: true,
+                SupportsOpenRemoteLocation: false),
             descriptor.Capabilities);
     }
 

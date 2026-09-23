@@ -6,20 +6,20 @@ the shared invariants are defined in the [safety model](safety-model.md).
 
 ## Implementation matrix
 
-| Behavior | Local Folder | SFTP | Google Drive | WebDAV | OneDrive |
-| --- | --- | --- | --- | --- | --- |
-| Available | Yes | Yes | Yes | No | Yes |
-| Authentication | Filesystem access | Password or private key over SSH | System-browser OAuth with PKCE | Not implemented | System-browser OAuth with PKCE (`Files.ReadWrite.AppFolder`) |
-| Secret storage | None | Password and passphrase are session-only | OAuth token in protected secret store | None | OAuth token in protected secret store (DPAPI) |
-| Folder selection | Native local folder picker or typed path | Typed remote path | Creates or discovers one app folder; no arbitrary picker | Unavailable | Sandboxed application folder (`drive/special/approot`); no arbitrary picker |
-| Connection/status check | Yes | Yes | Yes | Blocked | Yes |
-| Quota display | No | No | No current UI | No | Yes (Total, Used, Remaining) |
-| Open-location control | Opens local folder | No | Opens the app folder in the browser | No | No |
-| Upload backup runs | Yes | Yes | Yes | No | Yes |
-| Download backup runs | Yes | Yes | Yes | No | Yes |
-| Overwrite runs | Never | Never | Never | N/A | Never |
-| Delete runs | Never | Never | Never | N/A | Never |
-| Provider-specific tests | Shared engine and UI coverage | Shared engine coverage; provider seam gap | Extensive deterministic coverage and recorded live acceptance | Availability guards | Extensive deterministic coverage (offline mocks for Graph API & OAuth) |
+| Behavior | Local Folder | SFTP | Google Drive | WebDAV | OneDrive | MEGA |
+| --- | --- | --- | --- | --- | --- | --- |
+| Available | Yes | Yes | Yes | No | Yes | Spiked (In Development) |
+| Authentication | Filesystem access | Password or private key over SSH | System-browser OAuth with PKCE | Not implemented | System-browser OAuth with PKCE (`Files.ReadWrite.AppFolder`) | Email + password key derivation with optional TOTP 2FA |
+| Secret storage | None | Password and passphrase are session-only | OAuth token in protected secret store | None | OAuth token in protected secret store (DPAPI) | Session token and master key in protected secret store (DPAPI) |
+| Folder selection | Native local folder picker or typed path | Typed remote path | Creates or discovers one app folder; no arbitrary picker | Unavailable | Sandboxed application folder (`drive/special/approot`); no arbitrary picker | Dedicated app root folder (`GameSave Manager Backups`); no arbitrary picker |
+| Connection/status check | Yes | Yes | Yes | Blocked | Yes | Yes (spiked) |
+| Quota display | No | No | No current UI | No | Yes (Total, Used, Remaining) | Yes (Total, Used, Remaining) |
+| Open-location control | Opens local folder | No | Opens the app folder in the browser | No | No | No |
+| Upload backup runs | Yes | Yes | Yes | No | Yes | Yes (chunked with AES-128-CTR and MAC) |
+| Download backup runs | Yes | Yes | Yes | No | Yes | Yes (streaming decryption) |
+| Overwrite runs | Never | Never | Never | N/A | Never | Never (create-only guard) |
+| Delete runs | Never | Never | Never | N/A | Never | Never (zero deletion) |
+| Provider-specific tests | Shared engine and UI coverage | Shared engine coverage; provider seam gap | Extensive deterministic coverage and recorded live acceptance | Availability guards | Extensive deterministic coverage (offline mocks for Graph API & OAuth) | Extensive deterministic coverage (MegaSpikeTests offline mocks) |
 
 The capability catalog describes intended provider potential. The live UI is
 narrower: Google Drive does not currently display quota or offer arbitrary
@@ -163,6 +163,54 @@ Files.ReadWrite.AppFolder offline_access
 8. **Storage Quota & Health:** Live storage quota is fetched from Microsoft Graph
    `/me/drive` (`total`, `used`, `remaining` bytes) and displayed directly in the UI,
    with a low-storage warning when remaining quota falls below 10%.
+
+## MEGA (Spike Architecture — OBS-012)
+
+Task `OBS-012` establishes the architectural spike and proves the integration boundary,
+cryptographic guarantees, licensing decisions, and safety invariants for MEGA cloud synchronization:
+
+### 1. Dependency & Licensing Evaluation
+
+- **Option A (External `MegaApiClient`):** The widely known third-party library `MegaApiClient`
+  is MIT licensed, but depends on `Newtonsoft.Json` and legacy cryptographic abstractions.
+  Adopting it would introduce external dependency bloat, transitive package complexity, and
+  potential friction with GSM's trimmed .NET 10 `System.Text.Json` architecture.
+- **Option B (Native Internal Client `IMegaApiClient` / `MegaApiClient` — Selected):**
+  GSM implements a clean, native internal client using built-in .NET 10 primitives
+  (`System.Security.Cryptography`, `System.Text.Json`, `HttpClient`). This achieves:
+  * Zero new third-party dependencies and zero license/copyleft contamination.
+  * Direct high-performance crypto (`Aes`, `Rfc2898DeriveBytes.Pbkdf2`, `HMACSHA256`).
+  * 100% deterministic testability with injectable `HttpMessageHandler` doubles without live network requirements.
+
+### 2. Cryptographic & Protocol Architecture
+
+1. **Key Derivation:** Client derives a 128-bit master password key using PBKDF2 with SHA-512
+   and email salt (`Rfc2898DeriveBytes.Pbkdf2`), and computes user hash `uh` for session negotiation.
+2. **Master Key Decryption:** Upon successful session exchange (`{"a": "us"}`), the encrypted
+   master key `k` is decrypted using the derived password AES key.
+3. **Two-Factor Authentication (TOTP):** If an account has 2FA enabled, MEGA returns error `-26`
+   (`EMFAREQUIRED`). The client detects this condition (`MegaAuthenticationStatus.TwoFactorRequired`)
+   and prompts for the 6-digit TOTP pin (`mfa`).
+4. **Chunked Uploads with CBC-MAC:** Files are uploaded in standard MEGA chunks (128 KB doubling
+   up to 1 MB) with AES-128-CTR streaming encryption and running CBC-MAC checksum calculation.
+5. **Node Attributes Encryption:** Folder and file names are serialized into JSON attributes
+   prefixed with `MEGA{"n":"name"}`, padded, and encrypted with AES-128-CBC.
+
+### 3. Safety & Secret Protection Invariants
+
+1. **DPAPI Secret Protection:** Session tokens and derived master keys are stored encrypted at rest
+   via Windows DPAPI through `ISecretStore` under `SecretKey(profileId, SecretNames.MegaSessionData)`.
+2. **Zero Plaintext Secret Exposure:** `MegaSessionToken.ToString()` strictly masks session tokens
+   (`***`) and completely omits master key bytes to prevent accidental credential leakage in logs or diagnostics.
+3. **Dedicated Root Folder:** Synchronizations strictly target a dedicated application folder
+   (`GameSave Manager Backups`) inside the user's cloud drive root (`MegaNodeType.Root`).
+4. **Create-Only Upload Guard:** `MegaRemoteFileSystemSpike.UploadRunAsync` verifies that a run with
+   the requested name does not exist prior to initiating upload. Existing runs cannot be overwritten.
+5. **Manifest-Last Placement:** All payload files are uploaded before `manifest.json`. An interrupted
+   upload leaves an incomplete run that is ignored rather than misidentified as a valid backup.
+6. **Zero Deletion:** Sync operations never call node deletion on existing backup runs.
+7. **Storage Quota Inspection:** Live quota is queried via `{"a": "uq", "strg": 1}` (`mpos` used bytes,
+   `msto` total bytes), with remaining capacity calculated and a warning triggered when free space is under 10%.
 
 ## Performance choices
 

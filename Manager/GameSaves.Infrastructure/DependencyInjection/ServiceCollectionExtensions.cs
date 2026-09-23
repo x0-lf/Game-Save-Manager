@@ -13,6 +13,7 @@ using GameSaves.Infrastructure.Platform;
 using GameSaves.Infrastructure.Profiles;
 using GameSaves.Infrastructure.GoogleDrive;
 using GameSaves.Infrastructure.OneDrive;
+using GameSaves.Infrastructure.Mega;
 using GameSaves.Infrastructure.Registry;
 using GameSaves.Infrastructure.Save;
 using GameSaves.Infrastructure.Secrets;
@@ -278,6 +279,9 @@ namespace GameSaves.Infrastructure.DependencyInjection
                 provider.GetRequiredService<OneDriveOAuthService>());
             services.AddSingleton<IOneDriveRemoteFileSystemFactory, OneDriveRemoteFileSystemFactory>();
             services.AddSingleton<IOneDriveSyncProviderFactory, OneDriveSyncProviderFactory>();
+
+            services.AddSingleton<IMegaApiClient, MegaApiClient>();
+            services.AddSingleton<IMegaSessionService, MegaSessionService>();
 
             return services;
         }

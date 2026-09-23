@@ -13,6 +13,7 @@ namespace GameSaves.Core.Sync
         Sftp = 1,
         GoogleDrive = 2,
         WebDav = 3,
-        OneDrive = 4
+        OneDrive = 4,
+        Mega = 5
     }
 }

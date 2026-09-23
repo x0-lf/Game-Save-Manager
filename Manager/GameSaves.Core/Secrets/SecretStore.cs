@@ -51,6 +51,7 @@ namespace GameSaves.Core.Secrets
     {
         public const string OAuthTokenData = "oauth-token-data";
         public const string OneDriveTokenData = "onedrive-token-data";
+        public const string MegaSessionData = "mega-session-data";
         public const string WebDavPassword = "webdav-password";
         public const string SftpPassword = "sftp-password";
         public const string SftpPrivateKeyPassphrase = "sftp-private-key-passphrase";
@@ -60,6 +61,7 @@ namespace GameSaves.Core.Secrets
             {
                 OAuthTokenData,
                 OneDriveTokenData,
+                MegaSessionData,
                 WebDavPassword,
                 SftpPassword,
                 SftpPrivateKeyPassphrase
