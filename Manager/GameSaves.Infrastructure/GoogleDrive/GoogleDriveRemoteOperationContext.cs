@@ -83,7 +83,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
     /// The embedded result uses the existing validation taxonomy and contains
     /// no profile name, account data, credential, or Drive object ID.
     /// </summary>
-    internal class GoogleDriveRemoteOperationException : Exception, IRetryDelayCarrier
+    internal class GoogleDriveRemoteOperationException : Exception
     {
         public GoogleDriveRemoteOperationException(
             GoogleDriveRemoteValidationResult result,
@@ -102,8 +102,6 @@ namespace GameSaves.Infrastructure.GoogleDrive
         }
 
         public GoogleDriveRemoteValidationResult Result { get; }
-
-        public TimeSpan? RetryAfterDelay => Result.RetryAfterDelay;
 
         public override string ToString() =>
             $"{GetType().Name}: {Result.ToSafeDiagnosticString()}";

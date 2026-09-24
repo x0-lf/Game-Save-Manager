@@ -122,13 +122,24 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 isRateLimited: IsRateLimitedDriveFailure);
         }
 
+        // Result.Retryable is the validation screen's "try again later" flag and
+        // is also true for permanent states such as a missing client
+        // configuration. Only transport-level trouble is worth a backoff, the
+        // same rule as GoogleDriveApiFailureMapper.IsRetryable.
         private static bool IsRetryableDriveFailure(Exception exception) =>
-            exception is GoogleDriveRemoteOperationException { Result.Retryable: true };
+            exception is GoogleDriveRemoteOperationException
+            {
+                Result.Status: GoogleDriveRemoteValidationStatus.RateLimited or
+                    GoogleDriveRemoteValidationStatus.Unavailable
+            };
 
         private static bool IsRateLimitedDriveFailure(Exception exception) =>
-            exception is GoogleDriveRemoteOperationException { Result.Status: GoogleDriveRemoteValidationStatus.RateLimited } ||
-            (exception is IRetryDelayCarrier { RetryAfterDelay: not null });
+            exception is GoogleDriveRemoteOperationException { Result.Status: GoogleDriveRemoteValidationStatus.RateLimited };
 
+        // The display root becomes the provider's RemoteRoot, which reaches
+        // sync plans and persisted transfer history, so a saved name that
+        // carries the Drive folder ID or the account email falls back to the
+        // neutral default.
         private static string GetSafeDisplayRoot(SyncRemoteProfile? profile)
         {
             if (profile?.ProviderKind != SyncProviderKind.GoogleDrive)
@@ -158,9 +169,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
     }
 
     /// <summary>
-    /// Google Drive implementation boundary for the currently completed
-    /// remote primitives. Google Drive stays inactive in the provider catalog
-    /// and factory, so SyncEngine still cannot treat it as a working provider.
+    /// Google Drive implementation of the remote boundary SyncEngine drives.
+    /// GoogleDriveSyncProviderFactory hands it to the shared engine provider.
     /// </summary>
     internal sealed class GoogleDriveRemoteFileSystem : IRemoteFileSystem
     {

@@ -45,6 +45,7 @@ namespace GameSaves.Core.Catalog
 
     /// <summary>
     /// A single save path candidate proposed by AI or engine heuristics.
+    /// <see cref="IsAiProposal"/> is true only for candidates taken from an AI completion.
     /// </summary>
     public sealed record AiCandidateProposal(
         string PathTemplate,
@@ -54,7 +55,8 @@ namespace GameSaves.Core.Catalog
         GameEngineKind Engine,
         string Rationale,
         int Priority = 70,
-        string? Notes = null);
+        string? Notes = null,
+        bool IsAiProposal = false);
 
     /// <summary>
     /// Complete analysis result from the AI pattern detector.

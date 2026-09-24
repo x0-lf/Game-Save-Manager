@@ -18,7 +18,7 @@ namespace GameSaves.Tests;
 public sealed class AuditRemediationTests
 {
     [Fact]
-    public async Task Preview_WhenLocalRunIsContainer_AndRemoteCannotStoreContainers_WarnsAndMarksItem()
+    public async Task Preview_WhenLocalRunIsContainer_AndRemoteCannotStoreContainers_WarnsAndLeavesItOut()
     {
         using var temp = new TemporaryDirectory();
         var pathProvider = new TestDatabasePathProvider(temp.GetPath("app", "gamesave.db"));
@@ -46,18 +46,12 @@ public sealed class AuditRemediationTests
 
         SyncPlan plan = await engine.CreatePreviewAsync(new SyncOptions { Upload = true });
 
+        // Warned about, and not planned: an upload execution must refuse
+        // would be counted, enable Sync and fail on every run.
         Assert.Contains(plan.Warnings, w => w.Code == "LocalContainerUnsupported");
-        SyncItem item = Assert.Single(plan.Items);
-        Assert.Contains("Cannot upload: remote location does not support archive containers", item.StatusText);
-
-        // Executing upload should fail safely with clear guidance
-        SyncResult result = await engine.ExecuteAsync(
-            plan,
-            new SyncOptions { DryRun = false, ConfirmExecution = true, Upload = true });
-
-        SyncItemResult itemResult = Assert.Single(result.Items);
-        Assert.Equal(SyncItemStatus.Failed, itemResult.Status);
-        Assert.Contains("cannot store containers", itemResult.Error);
+        Assert.Empty(plan.Items);
+        Assert.Equal(0, plan.UploadCount);
+        Assert.False(plan.CanExecute);
     }
 
     [Fact]
@@ -182,10 +176,10 @@ public sealed class AuditRemediationTests
         Directory.CreateDirectory(basePath);
 
         // 1. Stale temporary directories (> 1 hour old)
-        string staleStaging = Path.Combine(basePath, ".staging_stale1");
-        string staleExport = Path.Combine(basePath, ".export_stale2");
-        string staleDownload = Path.Combine(basePath, ".download_stale3");
-        string staleExportFile = Path.Combine(basePath, ".export_stale4.tmp");
+        string staleStaging = Path.Combine(basePath, WorkingName(".staging_"));
+        string staleExport = Path.Combine(basePath, WorkingName(".export_"));
+        string staleDownload = Path.Combine(basePath, WorkingName(".download_"));
+        string staleExportFile = Path.Combine(basePath, WorkingName(".export_") + ".tmp");
 
         Directory.CreateDirectory(staleStaging);
         Directory.CreateDirectory(staleExport);
@@ -199,8 +193,8 @@ public sealed class AuditRemediationTests
         File.SetLastWriteTimeUtc(staleExportFile, oldTime);
 
         // 2. Fresh temporary directories (< 5 minutes old)
-        string freshStaging = Path.Combine(basePath, ".staging_fresh1");
-        string freshDownload = Path.Combine(basePath, ".download_fresh2");
+        string freshStaging = Path.Combine(basePath, WorkingName(".staging_"));
+        string freshDownload = Path.Combine(basePath, WorkingName(".download_"));
         Directory.CreateDirectory(freshStaging);
         Directory.CreateDirectory(freshDownload);
 
@@ -222,6 +216,85 @@ public sealed class AuditRemediationTests
         Assert.True(Directory.Exists(freshDownload));
         Assert.True(Directory.Exists(validRunDir));
     }
+
+    [Fact]
+    public void PurgeStaleWorkingDirectories_KeepsOldDirectoryWithRecentNestedWrite()
+    {
+        using var temp = new TemporaryDirectory();
+        var history = new BackupHistoryService(new TestDatabasePathProvider(temp.GetPath("app", "gamesave.db")));
+        string basePath = history.GetBackupBasePath();
+
+        // A long import: the directories were created hours ago and stopped changing
+        // once their children existed, but a file deep inside is still being written.
+        string staging = Path.Combine(basePath, WorkingName(".staging_"));
+        string nested = Path.Combine(staging, "files", "C", "Game");
+        Directory.CreateDirectory(nested);
+        File.WriteAllText(Path.Combine(nested, "part.sav"), "in progress");
+
+        DateTime oldTime = DateTime.UtcNow.AddHours(-3);
+        Directory.SetLastWriteTimeUtc(nested, oldTime);
+        Directory.SetLastWriteTimeUtc(Path.Combine(staging, "files", "C"), oldTime);
+        Directory.SetLastWriteTimeUtc(Path.Combine(staging, "files"), oldTime);
+        Directory.SetLastWriteTimeUtc(staging, oldTime);
+
+        history.PurgeStaleWorkingDirectories(TimeSpan.FromHours(1));
+
+        Assert.True(File.Exists(Path.Combine(nested, "part.sav")));
+    }
+
+    [Fact]
+    public void PurgeStaleWorkingDirectories_NeverTouchesNamesTheWritersDoNotGenerate()
+    {
+        using var temp = new TemporaryDirectory();
+        var history = new BackupHistoryService(new TestDatabasePathProvider(temp.GetPath("app", "gamesave.db")));
+        string basePath = history.GetBackupBasePath();
+
+        // An imported run keeps its archive's name, and nothing stops that name
+        // from starting with a working prefix.
+        string importedRun = Path.Combine(basePath, ".staging_backup");
+        TestData.CreateBackupRun(importedRun, temp.GetPath("orig.sav"), "user data");
+        string lookalikeFile = Path.Combine(basePath, ".export_notes.tmp");
+        File.WriteAllText(lookalikeFile, "user file");
+
+        DateTime oldTime = DateTime.UtcNow.AddHours(-3);
+        foreach (string file in Directory.EnumerateFiles(importedRun, "*", SearchOption.AllDirectories))
+            File.SetLastWriteTimeUtc(file, oldTime);
+        foreach (string dir in Directory.EnumerateDirectories(importedRun, "*", SearchOption.AllDirectories))
+            Directory.SetLastWriteTimeUtc(dir, oldTime);
+        Directory.SetLastWriteTimeUtc(importedRun, oldTime);
+        File.SetLastWriteTimeUtc(lookalikeFile, oldTime);
+
+        history.PurgeStaleWorkingDirectories(TimeSpan.FromHours(1));
+
+        Assert.True(File.Exists(Path.Combine(importedRun, "manifest.json")));
+        Assert.True(File.Exists(lookalikeFile));
+    }
+
+    [Fact]
+    public async Task GetRunsAsync_PurgesStaleWorkingDirectoriesOncePerInstance()
+    {
+        using var temp = new TemporaryDirectory();
+        var history = new BackupHistoryService(new TestDatabasePathProvider(temp.GetPath("app", "gamesave.db")));
+        string basePath = history.GetBackupBasePath();
+        DateTime oldTime = DateTime.UtcNow.AddHours(-3);
+
+        string first = Path.Combine(basePath, WorkingName(".download_"));
+        Directory.CreateDirectory(first);
+        Directory.SetLastWriteTimeUtc(first, oldTime);
+
+        await history.GetRunsAsync();
+        Assert.False(Directory.Exists(first));
+
+        string second = Path.Combine(basePath, WorkingName(".download_"));
+        Directory.CreateDirectory(second);
+        Directory.SetLastWriteTimeUtc(second, oldTime);
+
+        // A history refresh is a read; the purge already ran for this instance.
+        await history.GetRunsAsync();
+        Assert.True(Directory.Exists(second));
+    }
+
+    private static string WorkingName(string prefix) => prefix + Guid.NewGuid().ToString("N");
 
     [Fact]
     public void SyncViewModel_ExposesArchiveSyncCapabilitiesAndNotice()

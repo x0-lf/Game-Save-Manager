@@ -130,6 +130,18 @@ namespace GameSaves.App.Views
                     .ToArray());
         }
 
+        // The grid holds only the current page, so its own sort would reorder
+        // that page alone. The view model sorts the whole library instead, and
+        // the event is handled so the grid never re-sorts a page on top of the
+        // global order (which also means no header sort glyph is drawn).
+        private void OnGamesGridSorting(object? sender, DataGridColumnEventArgs e)
+        {
+            e.Handled = true;
+
+            if (_viewModel is not null && !string.IsNullOrEmpty(e.Column.SortMemberPath))
+                _viewModel.ToggleSort(e.Column.SortMemberPath);
+        }
+
         private DataGridColumn FindColumn(string key)
         {
             return GamesGrid.Columns.Single(column =>

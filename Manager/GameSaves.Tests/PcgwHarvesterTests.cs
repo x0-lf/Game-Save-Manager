@@ -2,6 +2,7 @@ using GameSaves.Core.Catalog;
 using GameSaves.Core.Save;
 using GameSaves.External;
 using GameSaves.External.Http;
+using GameSaves.Infrastructure.Catalog;
 using GameSaves.Infrastructure.Save;
 using System.Net;
 using System.Text;
@@ -35,122 +36,63 @@ namespace GameSaves.Tests
             }
         }
 
-        [Fact]
-        public void ResolveHarvestTargets_FromTracklistObject_ResolvesAppIdsAndKnownTitles()
-        {
-            var tracklist = new MissingTitlesTracklist(
+        private static MissingTitlesTracklist CreateTracklist(params MissingTitleEntry[] items) =>
+            new(
                 GeneratedUtc: DateTimeOffset.UtcNow,
-                TotalReconciled: 2,
+                TotalReconciled: 220,
                 TotalCovered: 0,
-                TotalMissing: 2,
-                UnresearchedCount: 2,
+                TotalMissing: items.Length,
+                UnresearchedCount: items.Length,
                 InReviewCount: 0,
                 NoSaveLocationCount: 0,
-                Items: new List<MissingTitleEntry>
-                {
-                    new MissingTitleEntry("400", "Portal", "https://store.steampowered.com/app/400/", MissingTitleResearchStatus.Unresearched, "High", false, 0, DateTimeOffset.UtcNow),
-                    new MissingTitleEntry("620", "Portal 2", "https://store.steampowered.com/app/620/", MissingTitleResearchStatus.Unresearched, "High", false, 0, DateTimeOffset.UtcNow)
-                });
+                Items: items);
 
-            var options = new PcgwHarvestOptions
-            {
-                DatabasePath = _databasePath,
-                OutputRoot = Path.Combine(_tempDirectory, "out"),
-                UserAgent = "TestAgent/1.0",
-                Tracklist = tracklist
-            };
+        private static MissingTitleEntry Entry(string appId, string title) =>
+            new(appId, title, $"https://store.steampowered.com/app/{appId}", MissingTitleResearchStatus.Unresearched, "Normal", false, 0, DateTimeOffset.UtcNow);
 
-            var (appIds, knownTitles) = PcgwHarvester.ResolveHarvestTargets(options);
+        [Fact]
+        public void ReadAppIds_FromTracklistJsonExport_ReadsOnlyTheListedAppIds()
+        {
+            // The documented flow: `tracklist -o missing-titles.json` then `pcgw-harvest-tracklist missing-titles.json`.
+            string json = new TracklistGeneratorService().ExportJson(
+                CreateTracklist(Entry("105600", "Terraria"), Entry("620", "Portal 2")));
 
-            Assert.Equal(2, appIds.Count);
-            Assert.Contains("400", appIds);
-            Assert.Contains("620", appIds);
-            Assert.Equal("Portal", knownTitles["400"]);
-            Assert.Equal("Portal 2", knownTitles["620"]);
+            List<string> appIds = PcgwHarvester.ReadAppIds(json);
+
+            // Not 220 (totalReconciled) or 0/2 (the other counters): only the steamAppId values.
+            Assert.Equal(new[] { "105600", "620" }, appIds);
         }
 
         [Fact]
-        public void ResolveHarvestTargets_FromTracklistJsonFile_ResolvesAppIdsAndKnownTitles()
+        public void ReadAppIds_FromJsonArrays_ReadsStringsNumbersAndSteamAppIdProperties()
         {
-            var tracklist = new MissingTitlesTracklist(
-                GeneratedUtc: DateTimeOffset.UtcNow,
-                TotalReconciled: 1,
-                TotalCovered: 0,
-                TotalMissing: 1,
-                UnresearchedCount: 1,
-                InReviewCount: 0,
-                NoSaveLocationCount: 0,
-                Items: new List<MissingTitleEntry>
-                {
-                    new MissingTitleEntry("105600", "Terraria", "https://store.steampowered.com/app/105600/", MissingTitleResearchStatus.Unresearched, "Normal", false, 0, DateTimeOffset.UtcNow)
-                });
+            Assert.Equal(new[] { "400", "620" }, PcgwHarvester.ReadAppIds("""["400", 620, "abc"]"""));
+            Assert.Equal(new[] { "400", "620" }, PcgwHarvester.ReadAppIds("""[{"SteamAppId": "400"}, {"steamappid": 620}, {"title": "No id"}]"""));
+        }
 
-            string jsonPath = Path.Combine(_tempDirectory, "missing-titles.json");
-            File.WriteAllText(jsonPath, JsonSerializer.Serialize(tracklist, new JsonSerializerOptions { WriteIndented = true }));
-
-            var options = new PcgwHarvestOptions
-            {
-                DatabasePath = _databasePath,
-                OutputRoot = Path.Combine(_tempDirectory, "out"),
-                UserAgent = "TestAgent/1.0",
-                TracklistPath = jsonPath
-            };
-
-            var (appIds, knownTitles) = PcgwHarvester.ResolveHarvestTargets(options);
-
-            string appId = Assert.Single(appIds);
-            Assert.Equal("105600", appId);
-            Assert.Equal("Terraria", knownTitles["105600"]);
+        [Theory]
+        [InlineData("""{"totalReconciled": 220, "items": [""")]
+        [InlineData("""{"totalReconciled": 220}""")]
+        public void ReadAppIds_FromUnreadableJson_ThrowsInsteadOfScanningForDigits(string content)
+        {
+            Assert.Throws<InvalidDataException>(() => PcgwHarvester.ReadAppIds(content));
         }
 
         [Fact]
-        public void ResolveHarvestTargets_FromTracklistCsvFile_ResolvesAppIdsAndKnownTitles()
+        public void ReadAppIds_FromTracklistCsvExport_ReadsTheSteamAppIdColumn()
         {
-            string csvPath = Path.Combine(_tempDirectory, "missing-titles.csv");
-            string csvContent = "SteamAppId,Title,StoreUrl,ResearchStatus,Priority,IsInstalled,ExistingCandidateCount,DiscoveredUtc,Notes\r\n" +
-                                "413150,Stardew Valley,https://store.steampowered.com/app/413150/,Unresearched,High,false,0,2026-09-18T00:00:00Z,\r\n";
-            File.WriteAllText(csvPath, csvContent);
+            string csv = new TracklistGeneratorService().ExportCsv(
+                CreateTracklist(Entry("413150", "Stardew Valley, 2016 Edition"), Entry("620", "Portal 2")));
 
-            var options = new PcgwHarvestOptions
-            {
-                DatabasePath = _databasePath,
-                OutputRoot = Path.Combine(_tempDirectory, "out"),
-                UserAgent = "TestAgent/1.0",
-                TracklistPath = csvPath
-            };
-
-            var (appIds, knownTitles) = PcgwHarvester.ResolveHarvestTargets(options);
-
-            string appId = Assert.Single(appIds);
-            Assert.Equal("413150", appId);
-            Assert.Equal("Stardew Valley", knownTitles["413150"]);
+            Assert.Equal(new[] { "413150", "620" }, PcgwHarvester.ReadAppIds(csv));
         }
 
         [Fact]
-        public void ResolveHarvestTargets_WithSkipExistingInDatabase_ExcludesCoveredTitles()
+        public void ReadAppIds_FromPlainText_IgnoresCommentsTitlesAndNonAsciiDigits()
         {
-            var db = new SavePathDatabase(_databasePath);
-            db.Initialize();
+            string text = "# my list 12345\n400 620,730\n413150, Portal 2\n١٢٣\n";
 
-            // Insert mapping for 400
-            db.ImportMappings(new[]
-            {
-                new SavePathImportItem("400", "Portal", "windows", "%LOCALAPPDATA%\\Portal", "Directory", "Test", null, null, null)
-            }, enabled: true, reviewStatus: "Approved");
-
-            var options = new PcgwHarvestOptions
-            {
-                DatabasePath = _databasePath,
-                OutputRoot = Path.Combine(_tempDirectory, "out"),
-                UserAgent = "TestAgent/1.0",
-                SteamAppIds = new[] { "400", "620" },
-                SkipExistingInDatabase = true
-            };
-
-            var (appIds, _) = PcgwHarvester.ResolveHarvestTargets(options, db);
-
-            string remaining = Assert.Single(appIds);
-            Assert.Equal("620", remaining);
+            Assert.Equal(new[] { "400", "620", "730", "413150" }, PcgwHarvester.ReadAppIds(text));
         }
 
         [Fact]
@@ -165,24 +107,39 @@ namespace GameSaves.Tests
                 MaxTitlesToProcess = 3
             };
 
-            var (appIds, _) = PcgwHarvester.ResolveHarvestTargets(options);
+            List<string> appIds = PcgwHarvester.ResolveHarvestTargets(options);
 
-            Assert.Equal(3, appIds.Count);
             Assert.Equal(new[] { "100", "200", "300" }, appIds);
         }
 
         [Fact]
-        public void ResolveHarvestTargets_NonExistentTracklistPath_ThrowsFileNotFoundException()
+        public async Task HarvestAsync_WhenAnHttpTimeoutHitsOneTitle_RecordsFailureAndContinues()
         {
+            var mockApiClient = new MockPcgwApiClient
+            {
+                ResolveHandler = appId => appId == "111"
+                    ? throw new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout.")
+                    : new PcgwTitle(202, "Second_Game", "Second Game", new List<string> { appId }, "https://www.pcgamingwiki.com/wiki/Second_Game"),
+                WikitextHandler = _ => """
+                    ===Save game data location===
+                    {{Game data/saves|Windows|%LOCALAPPDATA%\SecondGame\Saves}}
+                    """
+            };
+
             var options = new PcgwHarvestOptions
             {
                 DatabasePath = _databasePath,
-                OutputRoot = Path.Combine(_tempDirectory, "out"),
+                OutputRoot = Path.Combine(_tempDirectory, "timeout_out"),
                 UserAgent = "TestAgent/1.0",
-                TracklistPath = Path.Combine(_tempDirectory, "does-not-exist.json")
+                SteamAppIds = new[] { "111", "222" }
             };
 
-            Assert.Throws<FileNotFoundException>(() => PcgwHarvester.ResolveHarvestTargets(options));
+            var harvester = new PcgwHarvester(options, mockApiClient, savePathDatabase: new SavePathDatabase(_databasePath));
+
+            PcgwHarvestResult result = await harvester.HarvestAsync();
+
+            Assert.Equal(1, result.TitlesFailed);
+            Assert.Equal(1, result.TitlesProcessed);
         }
 
         [Fact]

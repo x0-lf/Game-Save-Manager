@@ -43,8 +43,7 @@ namespace GameSaves.Core.Sync
         SyncItem Item,
         long Bytes,
         SyncItemStatus Status,
-        string? Error,
-        VerificationStrength Verification = VerificationStrength.None);
+        string? Error);
 
     public sealed record SyncResult(
         SyncPlan Plan,

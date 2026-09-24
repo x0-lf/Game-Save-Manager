@@ -5,6 +5,7 @@ using GameSaves.App.Models;
 using GameSaves.Core.Transfers;
 using System;
 using System.Collections.ObjectModel;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -16,7 +17,6 @@ namespace GameSaves.App.ViewModels
 
         private readonly ITransferHistoryRepository _historyRepository;
         private bool _initialized;
-        private bool _isBulkLoading;
         private TransferRunRowViewModel? _selectedRun;
 
         [ObservableProperty]
@@ -30,13 +30,10 @@ namespace GameSaves.App.ViewModels
             get => _selectedRun;
             set
             {
-                if (value is null && !_isBulkLoading && _selectedRun is not null && Runs.Contains(_selectedRun))
-                {
-                    if (Pagination.IsPaging || !Pagination.CurrentPageItems.Contains(_selectedRun))
-                    {
-                        return; // Ignore null assignment during page switch
-                    }
-                }
+                // A list control writes null when the selected run is merely on
+                // another page; the selection itself is kept.
+                if (value is null && _selectedRun is not null && Runs.Contains(_selectedRun) && Pagination.IsOffPage(_selectedRun))
+                    return;
 
                 if (SetProperty(ref _selectedRun, value))
                 {
@@ -45,7 +42,7 @@ namespace GameSaves.App.ViewModels
             }
         }
 
-        public ObservableCollection<TransferRunRowViewModel> Runs { get; } = new();
+        public BulkObservableCollection<TransferRunRowViewModel> Runs { get; } = new();
 
         public PaginationController<TransferRunRowViewModel> Pagination { get; } = new()
         {
@@ -70,14 +67,6 @@ namespace GameSaves.App.ViewModels
             Pagination.PageChanged += (_, _) =>
             {
                 OnPropertyChanged(nameof(SelectedRun));
-            };
-
-            Runs.CollectionChanged += (_, _) =>
-            {
-                if (!_isBulkLoading)
-                {
-                    Pagination.SetSource(Runs);
-                }
             };
         }
 
@@ -136,23 +125,12 @@ namespace GameSaves.App.ViewModels
                 IsLoading = true;
                 StatusMessage = "Reading run history...";
 
-                _isBulkLoading = true;
-                try
-                {
-                    Runs.Clear();
-                    SelectedRun = null;
+                var runs = await Task.Run(() => _historyRepository.GetRecentRuns(MaxRuns));
 
-                    var runs = await Task.Run(() => _historyRepository.GetRecentRuns(MaxRuns));
-
-                    foreach (TransferRunInfo run in runs)
-                        Runs.Add(new TransferRunRowViewModel(run));
-                }
-                finally
-                {
-                    _isBulkLoading = false;
-                }
-
-                Pagination.SetSource(Runs);
+                // Swapped only once the read succeeded, so the old rows stay
+                // consistent with the old page until the new ones replace both.
+                Runs.ReplaceAll(runs.Select(run => new TransferRunRowViewModel(run)));
+                SelectedRun = null;
 
                 StatusMessage = Runs.Count == 0
                     ? "No executed runs recorded yet."
@@ -160,10 +138,14 @@ namespace GameSaves.App.ViewModels
             }
             catch (Exception ex)
             {
+                // Nothing stale stays clickable under a failed read.
+                Runs.Clear();
+                SelectedRun = null;
                 StatusMessage = $"Failed to read run history: {ex.Message}";
             }
             finally
             {
+                Pagination.SetSource(Runs);
                 IsLoading = false;
             }
         }

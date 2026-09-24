@@ -26,12 +26,12 @@ namespace GameSaves.App.ViewModels
         private readonly ISyncRemoteProfileService _profileService;
         private readonly IGoogleDriveOAuthService _googleDriveOAuthService;
         private readonly IOneDriveOAuthService? _oneDriveOAuthService;
-        private readonly IMegaSessionService? _megaSessionService;
         private readonly IGoogleDriveRootFolderService _googleDriveRootFolderService;
         private readonly IBackupHistoryService? _backupHistoryService;
         private readonly IUtcClock _clock;
         private readonly IRetryBackoffNotifier? _retryBackoffNotifier;
         private readonly IGoogleDriveDesktopDetector? _googleDriveDesktopDetector;
+        private readonly SynchronizationContext? _uiContext;
         private CancellationTokenSource? _countdownCancellation;
         private SyncPlan? _lastPlan;
         private ISyncProvider? _lastProvider;
@@ -53,8 +53,6 @@ namespace GameSaves.App.ViewModels
         private CancellationTokenSource? _oneDriveAuthenticationCancellation;
         private long _oneDriveAuthenticationGeneration;
         private bool _oneDriveInteractiveOperation;
-        private CancellationTokenSource? _megaAuthenticationCancellation;
-        private long _megaAuthenticationGeneration;
         private bool _isBulkLoadingItems;
         private CancellationTokenSource? _googleRootFolderCancellation;
 
@@ -121,15 +119,6 @@ namespace GameSaves.App.ViewModels
         [NotifyPropertyChangedFor(nameof(CanShowReconnectOneDrive))]
         [NotifyPropertyChangedFor(nameof(CanShowDisconnectOneDrive))]
         [NotifyPropertyChangedFor(nameof(CanUseOneDriveForSync))]
-        [NotifyPropertyChangedFor(nameof(IsMegaSelected))]
-        [NotifyPropertyChangedFor(nameof(CanConnectMega))]
-        [NotifyPropertyChangedFor(nameof(CanReconnectMega))]
-        [NotifyPropertyChangedFor(nameof(CanDisconnectMega))]
-        [NotifyPropertyChangedFor(nameof(CanShowConnectMega))]
-        [NotifyPropertyChangedFor(nameof(CanShowReconnectMega))]
-        [NotifyPropertyChangedFor(nameof(CanShowDisconnectMega))]
-        [NotifyPropertyChangedFor(nameof(CanUseMegaForSync))]
-        [NotifyPropertyChangedFor(nameof(CanShowMegaCredentialsInput))]
         [NotifyPropertyChangedFor(nameof(SelectedProviderSupportsArchiveContainers))]
         [NotifyPropertyChangedFor(nameof(ArchiveSyncNotice))]
         [NotifyPropertyChangedFor(nameof(ShowArchiveSyncNotice))]
@@ -231,6 +220,7 @@ namespace GameSaves.App.ViewModels
         [NotifyPropertyChangedFor(nameof(CanVerifyLastSync))]
         [NotifyPropertyChangedFor(nameof(CanCancelVerification))]
         [NotifyPropertyChangedFor(nameof(CanPreviewSync))]
+        [NotifyPropertyChangedFor(nameof(CanSwitchToGoogleDriveDesktop))]
         private bool isVerifying;
 
         [ObservableProperty]
@@ -263,7 +253,6 @@ namespace GameSaves.App.ViewModels
 
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(CanCancelSync))]
-        [NotifyPropertyChangedFor(nameof(CanSwitchToGoogleDriveDesktop))]
         private bool isSyncRunning;
 
         [ObservableProperty]
@@ -445,6 +434,7 @@ namespace GameSaves.App.ViewModels
         [NotifyPropertyChangedFor(nameof(OneDriveAccountDisplayText))]
         [NotifyPropertyChangedFor(nameof(OneDriveEmailDisplayText))]
         [NotifyPropertyChangedFor(nameof(OneDriveAccountLabel))]
+        [NotifyPropertyChangedFor(nameof(RemoteEndpointDisplay))]
         [NotifyPropertyChangedFor(nameof(CanConnectOneDrive))]
         [NotifyPropertyChangedFor(nameof(CanReconnectOneDrive))]
         [NotifyPropertyChangedFor(nameof(CanShowConnectOneDrive))]
@@ -456,6 +446,7 @@ namespace GameSaves.App.ViewModels
         [NotifyPropertyChangedFor(nameof(OneDriveAccountDisplayText))]
         [NotifyPropertyChangedFor(nameof(OneDriveEmailDisplayText))]
         [NotifyPropertyChangedFor(nameof(OneDriveAccountLabel))]
+        [NotifyPropertyChangedFor(nameof(RemoteEndpointDisplay))]
         [NotifyPropertyChangedFor(nameof(CanConnectOneDrive))]
         [NotifyPropertyChangedFor(nameof(CanReconnectOneDrive))]
         [NotifyPropertyChangedFor(nameof(CanShowConnectOneDrive))]
@@ -498,73 +489,6 @@ namespace GameSaves.App.ViewModels
         [NotifyPropertyChangedFor(nameof(CanShowDisconnectOneDrive))]
         [NotifyPropertyChangedFor(nameof(CanUseOneDriveForSync))]
         private bool hasStoredOneDriveAuthentication;
-
-        [ObservableProperty]
-        [NotifyPropertyChangedFor(nameof(CanConnectMega))]
-        [NotifyPropertyChangedFor(nameof(CanReconnectMega))]
-        [NotifyPropertyChangedFor(nameof(MegaAccountDisplayText))]
-        [NotifyPropertyChangedFor(nameof(MegaEmailDisplayText))]
-        private string? megaEmail;
-
-        [ObservableProperty]
-        [NotifyPropertyChangedFor(nameof(CanConnectMega))]
-        [NotifyPropertyChangedFor(nameof(CanReconnectMega))]
-        private string? megaPassword;
-
-        [ObservableProperty]
-        [NotifyPropertyChangedFor(nameof(CanConnectMega))]
-        [NotifyPropertyChangedFor(nameof(CanReconnectMega))]
-        private string? megaTwoFactorCode;
-
-        [ObservableProperty]
-        [NotifyPropertyChangedFor(nameof(CanConnectMega))]
-        [NotifyPropertyChangedFor(nameof(CanReconnectMega))]
-        private bool isMegaTwoFactorRequired;
-
-        [ObservableProperty]
-        [NotifyPropertyChangedFor(nameof(CanConnectMega))]
-        [NotifyPropertyChangedFor(nameof(CanReconnectMega))]
-        [NotifyPropertyChangedFor(nameof(CanDisconnectMega))]
-        [NotifyPropertyChangedFor(nameof(CanCancelMegaConnection))]
-        private bool isMegaConnecting;
-
-        [ObservableProperty]
-        [NotifyPropertyChangedFor(nameof(CanConnectMega))]
-        [NotifyPropertyChangedFor(nameof(CanReconnectMega))]
-        [NotifyPropertyChangedFor(nameof(CanDisconnectMega))]
-        [NotifyPropertyChangedFor(nameof(CanShowConnectMega))]
-        [NotifyPropertyChangedFor(nameof(CanShowReconnectMega))]
-        [NotifyPropertyChangedFor(nameof(CanShowDisconnectMega))]
-        [NotifyPropertyChangedFor(nameof(CanUseMegaForSync))]
-        [NotifyPropertyChangedFor(nameof(CanShowMegaCredentialsInput))]
-        [NotifyPropertyChangedFor(nameof(MegaAccountDisplayText))]
-        [NotifyPropertyChangedFor(nameof(MegaEmailDisplayText))]
-        [NotifyPropertyChangedFor(nameof(MegaAccountLabel))]
-        [NotifyPropertyChangedFor(nameof(MegaStatusDisplayText))]
-        private MegaConnectionStatus megaConnectionStatus =
-            MegaConnectionStatus.Disconnected;
-
-        [ObservableProperty]
-        [NotifyPropertyChangedFor(nameof(CanDisconnectMega))]
-        private bool confirmDisconnectMega;
-
-        [ObservableProperty]
-        private string megaConnectionMessage =
-            "Save a MEGA profile before connecting.";
-
-        [ObservableProperty]
-        private string? megaQuotaSummary;
-
-        [ObservableProperty]
-        [NotifyPropertyChangedFor(nameof(CanConnectMega))]
-        [NotifyPropertyChangedFor(nameof(CanReconnectMega))]
-        [NotifyPropertyChangedFor(nameof(CanShowConnectMega))]
-        [NotifyPropertyChangedFor(nameof(CanShowReconnectMega))]
-        [NotifyPropertyChangedFor(nameof(CanDisconnectMega))]
-        [NotifyPropertyChangedFor(nameof(CanShowDisconnectMega))]
-        [NotifyPropertyChangedFor(nameof(CanUseMegaForSync))]
-        [NotifyPropertyChangedFor(nameof(CanShowMegaCredentialsInput))]
-        private bool hasStoredMegaAuthentication;
 
         private bool _keepTargetSectionOpen;
 
@@ -639,9 +563,6 @@ namespace GameSaves.App.ViewModels
         public Task OneDriveAuthenticationInitializationTask { get; private set; } =
             Task.CompletedTask;
 
-        public Task MegaAuthenticationInitializationTask { get; private set; } =
-            Task.CompletedTask;
-
         public SyncProviderDescriptor SelectedProviderDescriptor =>
             _providerCatalog.GetDescriptor(SelectedProviderKind);
 
@@ -707,7 +628,6 @@ namespace GameSaves.App.ViewModels
                 !string.IsNullOrWhiteSpace(SftpHost),
             SyncProviderKind.GoogleDrive => HasUsableGoogleDriveProfile,
             SyncProviderKind.OneDrive => HasUsableOneDriveProfile,
-            SyncProviderKind.Mega => HasUsableMegaProfile,
             _ => false,
         };
 
@@ -750,16 +670,8 @@ namespace GameSaves.App.ViewModels
             SyncProviderKind.OneDrive =>
                 $"{OneDriveEndpointAccount} — AppRoot (GameSave Manager)",
 
-            SyncProviderKind.Mega =>
-                $"{MegaEndpointAccount} — GameSave Manager Backups",
-
             _ => "This sync provider is not available in this version."
         };
-
-        private string MegaEndpointAccount =>
-            MegaEmail ??
-            (SelectedRemoteProfile?.ProviderSettings as MegaSyncRemoteSettings)?.UserEmail ??
-            "MEGA account";
 
         private string OneDriveEndpointAccount =>
             OneDriveAccountEmail ??
@@ -1001,8 +913,8 @@ namespace GameSaves.App.ViewModels
             SelectedProviderDescriptor.ConfigurationSurface ==
             SyncProviderConfigurationSurface.InteractiveOAuth;
 
-        public bool IsOneDriveOAuthClientConfigurationAvailable =>
-            _oneDriveOAuthService?.GetClientConfigurationState().IsAvailable ?? true;
+        private bool IsOneDriveOAuthClientConfigurationAvailable =>
+            _oneDriveOAuthService?.GetClientConfigurationState().IsAvailable ?? false;
 
         public string OneDriveAccountDisplayText =>
             OneDriveConnectionStatus == OneDriveConnectionStatus.Disconnected ||
@@ -1111,102 +1023,6 @@ namespace GameSaves.App.ViewModels
             OneDriveConnectionStatus == OneDriveConnectionStatus.Connected &&
             HasStoredOneDriveAuthentication;
 
-        public bool IsMegaSelected => SelectedProviderKind == SyncProviderKind.Mega;
-
-        public string MegaAccountDisplayText =>
-            MegaConnectionStatus == MegaConnectionStatus.Disconnected ||
-            string.IsNullOrWhiteSpace(MegaEmail)
-                ? "Not connected"
-                : MegaEmail;
-
-        public string MegaEmailDisplayText =>
-            MegaConnectionStatus == MegaConnectionStatus.Disconnected ||
-            string.IsNullOrWhiteSpace(MegaEmail)
-                ? "Not available"
-                : MegaEmail;
-
-        public string MegaAccountLabel =>
-            MegaConnectionStatus == MegaConnectionStatus.Connected
-                ? "Account"
-                : (MegaConnectionStatus is MegaConnectionStatus.SessionExpired or MegaConnectionStatus.StoredAuthenticationAvailable) && !string.IsNullOrWhiteSpace(MegaEmail)
-                    ? "Previously connected account"
-                    : "Account";
-
-        public string MegaStatusDisplayText => MegaConnectionStatus switch
-        {
-            MegaConnectionStatus.SessionExpired => "Session expired",
-            MegaConnectionStatus.StoredAuthenticationAvailable => "Checking stored authentication",
-            MegaConnectionStatus.Disconnected => "Disconnected",
-            MegaConnectionStatus.Connecting => "Connecting",
-            MegaConnectionStatus.Connected => "Connected",
-            MegaConnectionStatus.TwoFactorRequired => "2FA verification required",
-            MegaConnectionStatus.Failed => "Connection failed",
-            _ => "Unknown"
-        };
-
-        private bool HasUsableMegaProfile =>
-            SelectedRemoteProfile is
-            {
-                ProviderKind: SyncProviderKind.Mega,
-                SettingsError: null,
-                ProviderSettings: MegaSyncRemoteSettings
-                {
-                    SchemaVersion: MegaSyncRemoteSettings.CurrentSchemaVersion
-                }
-            };
-
-        public bool CanShowMegaCredentialsInput =>
-            IsMegaSelected &&
-            HasUsableMegaProfile &&
-            MegaConnectionStatus != MegaConnectionStatus.Connected;
-
-        public bool CanShowConnectMega =>
-            IsMegaSelected &&
-            HasUsableMegaProfile &&
-            (MegaConnectionStatus is MegaConnectionStatus.Disconnected or MegaConnectionStatus.Failed or MegaConnectionStatus.TwoFactorRequired) &&
-            !HasStoredMegaAuthentication;
-
-        public bool CanConnectMega =>
-            IsMegaSelected &&
-            HasUsableMegaProfile &&
-            CanShowConnectMega &&
-            !IsMegaConnecting &&
-            !string.IsNullOrWhiteSpace(MegaEmail) &&
-            !string.IsNullOrWhiteSpace(MegaPassword);
-
-        public bool CanShowReconnectMega =>
-            IsMegaSelected &&
-            HasUsableMegaProfile &&
-            ((MegaConnectionStatus is MegaConnectionStatus.Connected or MegaConnectionStatus.SessionExpired) ||
-             (MegaConnectionStatus == MegaConnectionStatus.Failed && HasStoredMegaAuthentication));
-
-        public bool CanReconnectMega =>
-            CanShowReconnectMega &&
-            !IsMegaConnecting &&
-            !string.IsNullOrWhiteSpace(MegaEmail) &&
-            !string.IsNullOrWhiteSpace(MegaPassword);
-
-        public bool CanShowDisconnectMega =>
-            IsMegaSelected &&
-            HasUsableMegaProfile &&
-            (HasStoredMegaAuthentication ||
-             MegaConnectionStatus is MegaConnectionStatus.Connected or MegaConnectionStatus.SessionExpired or MegaConnectionStatus.StoredAuthenticationAvailable);
-
-        public bool CanDisconnectMega =>
-            CanShowDisconnectMega &&
-            !IsMegaConnecting &&
-            ConfirmDisconnectMega;
-
-        public bool CanCancelMegaConnection =>
-            IsMegaSelected &&
-            IsMegaConnecting;
-
-        public bool CanUseMegaForSync =>
-            IsMegaSelected &&
-            SelectedProviderDescriptor.IsImplemented &&
-            MegaConnectionStatus == MegaConnectionStatus.Connected &&
-            HasStoredMegaAuthentication;
-
         public string GoogleDriveRootFolderDisplayText =>
             GoogleDriveRootFolderDisplayName ?? "Not configured";
 
@@ -1284,60 +1100,64 @@ namespace GameSaves.App.ViewModels
                 GoogleDriveRootFolderStatus.Ready or
                 GoogleDriveRootFolderStatus.Moved;
 
-        public bool IsGoogleDriveDesktopInstalled =>
-            _googleDriveDesktopDetector?.IsInstalled ?? false;
+        // The rate-limit banner is Google-specific text; backoff events are
+        // only raised by the Google Drive provider today.
+        public bool ShowGoogleDriveDesktopPromotion => IsRateLimited && IsGoogleDriveSelected;
 
-        public string? GoogleDriveDesktopMountedPath =>
-            _googleDriveDesktopDetector?.MountedDrivePath;
+        // Offered only when the detector found a real Drive mount: without
+        // one, a "switch" would point backups at a folder nothing uploads.
+        public bool CanSwitchToGoogleDriveDesktop =>
+            !IsLoading &&
+            !IsVerifying &&
+            _googleDriveDesktopDetector?.DefaultSyncFolderPath is not null;
 
-        public string GoogleDriveDesktopSuggestedFolder =>
-            _googleDriveDesktopDetector?.DefaultSyncFolderPath ??
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Google Drive", "GameSaves");
-
-        public bool ShowGoogleDriveDesktopPromotion =>
-            IsGoogleDriveSelected || IsRateLimited || SelectedRemoteProfile?.ProviderKind == SyncProviderKind.GoogleDrive;
-
-        public bool CanSwitchToGoogleDriveDesktop => !IsLoading && !IsSyncRunning;
-
-        public bool IsTargetingGoogleDriveDesktop
-        {
-            get
-            {
-                if (!IsLocalFolderSelected || string.IsNullOrWhiteSpace(RemoteRootPath))
-                    return false;
-
-                string path = RemoteRootPath.Trim();
-
-                if (_googleDriveDesktopDetector?.MountedDrivePath is { } mounted &&
-                    path.StartsWith(mounted, StringComparison.OrdinalIgnoreCase))
-                {
-                    return true;
-                }
-
-                return path.StartsWith(@"G:\", StringComparison.OrdinalIgnoreCase) ||
-                       path.Contains("Google Drive", StringComparison.OrdinalIgnoreCase) ||
-                       path.Contains("DriveFS", StringComparison.OrdinalIgnoreCase);
-            }
-        }
+        public bool IsTargetingGoogleDriveDesktop =>
+            IsLocalFolderSelected &&
+            !string.IsNullOrWhiteSpace(RemoteRootPath) &&
+            _googleDriveDesktopDetector?.MountedDrivePath is { } mounted &&
+            RemoteRootPath.Trim().StartsWith(mounted, StringComparison.OrdinalIgnoreCase);
 
         [RelayCommand]
         public void SwitchToGoogleDriveDesktop()
         {
+            if (_googleDriveDesktopDetector?.DefaultSyncFolderPath is not { } targetFolder)
+            {
+                StatusMessage =
+                    "Google Drive for Desktop was not detected. Install it and sign in, then restart the app.";
+                return;
+            }
+
+            // Starts an unsaved Local folder setup rather than rewriting the
+            // selected profile: saving would otherwise convert a Google Drive
+            // profile into a Local folder one and orphan its stored token.
+            NewRemoteProfile();
             SelectedProviderKind = SyncProviderKind.LocalFolder;
-            string targetFolder = GoogleDriveDesktopSuggestedFolder;
             RemoteRootPath = targetFolder;
             StatusMessage = $"Switched to Google Drive for Desktop ({targetFolder}). Local files copy directly to the mounted Drive and sync in the background.";
+            ClearRateLimitDiagnostics();
+        }
+
+        private void ClearRateLimitDiagnostics()
+        {
             IsRateLimited = false;
             RateLimitDiagnosticMessage = "";
         }
 
         private void OnRetryBackoffStarted(object? sender, RetryBackoffEventArgs e)
         {
+            // Handlers write bound properties. The notifier is raised from
+            // inside the retry wrapper, on whatever thread the transfer runs.
+            if (_uiContext is not null && SynchronizationContext.Current != _uiContext)
+            {
+                _uiContext.Post(_ => OnRetryBackoffStarted(sender, e), null);
+                return;
+            }
+
             IsRetrying = true;
             if (e.IsRateLimited)
             {
                 IsRateLimited = true;
-                RateLimitDiagnosticMessage = FormatRateLimitDiagnostic(e.Exception);
+                RateLimitDiagnosticMessage = FormatRateLimitDiagnostic();
             }
 
             _countdownCancellation?.Cancel();
@@ -1350,6 +1170,12 @@ namespace GameSaves.App.ViewModels
 
         private void OnRetryBackoffEnded(object? sender, RetryBackoffEventArgs e)
         {
+            if (_uiContext is not null && SynchronizationContext.Current != _uiContext)
+            {
+                _uiContext.Post(_ => OnRetryBackoffEnded(sender, e), null);
+                return;
+            }
+
             _countdownCancellation?.Cancel();
             IsRetrying = false;
             RetryCountdownText = "";
@@ -1360,16 +1186,12 @@ namespace GameSaves.App.ViewModels
             int remainingSeconds = Math.Max(1, (int)Math.Ceiling(e.Delay.TotalSeconds));
             string reason = e.IsRateLimited
                 ? "Rate limited by provider"
-                : (e.IsServerInstructed ? "Server requested backoff" : "Temporary transfer error");
+                : "Temporary transfer error";
 
             while (remainingSeconds > 0 && !token.IsCancellationRequested)
             {
-                string text = $"{reason}. Retrying attempt {e.Attempt}/{e.MaxAttempts} in {remainingSeconds}s...";
-                RetryCountdownText = text;
-                if (IsSyncRunning)
-                {
-                    ProgressText = text;
-                }
+                RetryCountdownText =
+                    $"{reason}. Retrying attempt {e.Attempt + 1}/{e.MaxAttempts} in {remainingSeconds}s...";
 
                 try
                 {
@@ -1384,32 +1206,12 @@ namespace GameSaves.App.ViewModels
             }
         }
 
-        public static string FormatRateLimitDiagnostic(Exception? exception = null)
+        public static string FormatRateLimitDiagnostic()
         {
             return "Google Drive API rate limit reached (HTTP 429 Too Many Requests / rateLimitExceeded). " +
                    "Direct Google Drive API usage is subject to per-minute request limits. " +
                    "For fast, unrestricted bulk transfers, use Google Drive for Desktop with the Local Folder provider. " +
                    "Local copy success confirms files are written to the mounted drive; Google Drive for Desktop manages cloud upload and synchronization.";
-        }
-
-        public static bool IsRateLimitException(Exception? exception)
-        {
-            for (Exception? current = exception; current is not null; current = current.InnerException)
-            {
-                if (current is IRetryDelayCarrier { RetryAfterDelay: not null })
-                    return true;
-
-                string message = current.Message;
-                if (message.Contains("429", StringComparison.OrdinalIgnoreCase) ||
-                    message.Contains("TooManyRequests", StringComparison.OrdinalIgnoreCase) ||
-                    message.Contains("rateLimitExceeded", StringComparison.OrdinalIgnoreCase) ||
-                    message.Contains("userRateLimitExceeded", StringComparison.OrdinalIgnoreCase))
-                {
-                    return true;
-                }
-            }
-
-            return false;
         }
 
         /// <summary>This page's panel arrangement.</summary>
@@ -1430,8 +1232,7 @@ namespace GameSaves.App.ViewModels
             IBackupHistoryService? backupHistoryService = null,
             IRetryBackoffNotifier? retryBackoffNotifier = null,
             IGoogleDriveDesktopDetector? googleDriveDesktopDetector = null,
-            IOneDriveOAuthService? oneDriveOAuthService = null,
-            IMegaSessionService? megaSessionService = null)
+            IOneDriveOAuthService? oneDriveOAuthService = null)
         {
             Workspace = workspaceLayout.Page(
                 GameSaves.App.Services.UiRailLayoutSettings.TabSync);
@@ -1445,7 +1246,6 @@ namespace GameSaves.App.ViewModels
             _clock = clock;
             _googleDriveOAuthService = googleDriveOAuthService;
             _oneDriveOAuthService = oneDriveOAuthService;
-            _megaSessionService = megaSessionService;
             // Keep direct construction compatible with the pre-Milestone-L
             // ViewModel contract. Application DI always supplies the real
             // Infrastructure service; the fallback performs no external work.
@@ -1458,6 +1258,7 @@ namespace GameSaves.App.ViewModels
             _backupHistoryService = backupHistoryService;
             _retryBackoffNotifier = retryBackoffNotifier;
             _googleDriveDesktopDetector = googleDriveDesktopDetector;
+            _uiContext = SynchronizationContext.Current;
 
             if (_retryBackoffNotifier is not null)
             {
@@ -1496,11 +1297,7 @@ namespace GameSaves.App.ViewModels
             };
         }
 
-        partial void OnRemoteRootPathChanged(string value)
-        {
-            OnPropertyChanged(nameof(IsTargetingGoogleDriveDesktop));
-            OnPersistentSettingChanged();
-        }
+        partial void OnRemoteRootPathChanged(string value) => OnPersistentSettingChanged();
 
         partial void OnUploadEnabledChanged(bool value) => InvalidatePlan();
 
@@ -1518,30 +1315,18 @@ namespace GameSaves.App.ViewModels
             OnPropertyChanged(nameof(CanPreviewSync));
             OnPropertyChanged(nameof(CanExecuteSyncNow));
             OnPropertyChanged(nameof(CanVerifyLastSync));
-            OnPropertyChanged(nameof(CanSwitchToGoogleDriveDesktop));
-        }
-
-        partial void OnIsRateLimitedChanged(bool value)
-        {
-            OnPropertyChanged(nameof(ShowGoogleDriveDesktopPromotion));
         }
 
         partial void OnSelectedProviderKindChanged(SyncProviderKind value)
         {
-            CancelGoogleAuthentication();
-            CancelOneDriveAuthentication();
-            ConfirmDisconnectGoogleDrive = false;
-            ConfirmDisconnectOneDrive = false;
-            ConfirmRecreateGoogleDriveRootFolder = false;
+            CancelAllAuthentication();
+            ClearRateLimitDiagnostics();
 
             if (value != SyncProviderKind.Sftp)
                 ClearSessionOnlySftpState();
 
             InvalidatePlan();
             MarkProfileDirty();
-
-            OnPropertyChanged(nameof(IsTargetingGoogleDriveDesktop));
-            OnPropertyChanged(nameof(ShowGoogleDriveDesktopPromotion));
 
             StatusMessage = GetUnavailableProviderMessage(value)
                 ?? "Sync provider changed. Configure it and build a new sync preview.";
@@ -1557,12 +1342,6 @@ namespace GameSaves.App.ViewModels
                 OneDriveConnectionStatus = OneDriveConnectionStatus.NotConfigured;
                 OneDriveConnectionMessage =
                     "Save the Microsoft OneDrive profile before connecting so its authentication can be stored securely.";
-            }
-            else if (value == SyncProviderKind.Mega && SelectedRemoteProfile is null)
-            {
-                MegaConnectionStatus = MegaConnectionStatus.Disconnected;
-                MegaConnectionMessage =
-                    "Save the MEGA profile before connecting so its authentication can be stored securely.";
             }
         }
 
@@ -1677,6 +1456,8 @@ namespace GameSaves.App.ViewModels
                 return;
 
             _lastPlan = null;
+            // A check still reading the old endpoint must not outlive it.
+            _verificationCancellation?.Cancel();
             _lastProvider?.Dispose();
             _lastProvider = null;
             // The completed result stays on screen, but it can no longer be
@@ -1717,11 +1498,7 @@ namespace GameSaves.App.ViewModels
 
         private void UseWithoutSavedProfile()
         {
-            CancelGoogleAuthentication();
-            CancelOneDriveAuthentication();
-            ConfirmDisconnectGoogleDrive = false;
-            ConfirmDisconnectOneDrive = false;
-            ConfirmRecreateGoogleDriveRootFolder = false;
+            CancelAllAuthentication();
             _suppressProfileSelection = true;
             SelectedRemoteProfile = null;
             _suppressProfileSelection = false;
@@ -1742,7 +1519,6 @@ namespace GameSaves.App.ViewModels
             HasStoredAuthentication = false;
             ResetGoogleDriveState();
             ResetOneDriveState();
-            ResetMegaState();
             ConfirmDeleteRemoteProfile = false;
             RemoteProfileState = "Unsaved settings (no profile)";
             StatusMessage = "Using the current sync settings without a saved remote profile. Build a new preview when ready.";
@@ -1753,13 +1529,8 @@ namespace GameSaves.App.ViewModels
             SyncRemoteProfile profile,
             bool persistSelection)
         {
-            CancelGoogleAuthentication();
-            CancelOneDriveAuthentication();
-            CancelMegaAuthentication();
-            ConfirmDisconnectGoogleDrive = false;
-            ConfirmDisconnectOneDrive = false;
-            ConfirmDisconnectMega = false;
-            ConfirmRecreateGoogleDriveRootFolder = false;
+            CancelAllAuthentication();
+            ClearRateLimitDiagnostics();
             HasStoredAuthentication = false;
             _applyingProfile = true;
 
@@ -1769,14 +1540,18 @@ namespace GameSaves.App.ViewModels
                 SelectedProviderKind = profile.ProviderKind;
                 RemoteProfileDisplayName = profile.DisplayName;
 
+                // Account state, quota and connection status always belong to
+                // one profile. Reset them all once, before the case below loads
+                // the new profile's own values, so nothing from the previously
+                // selected profile survives the switch.
+                ResetGoogleDriveState();
+                ResetOneDriveState();
+
                 switch (profile.ProviderSettings)
                 {
                     case LocalFolderSyncRemoteSettings local:
                         RemoteRootPath = local.LocalFolderPath;
                         ResetSftpNonSecretFields();
-                        ResetGoogleDriveState();
-                        ResetOneDriveState();
-                        ResetMegaState();
                         break;
 
                     case SftpSyncRemoteSettings sftp:
@@ -1789,16 +1564,11 @@ namespace GameSaves.App.ViewModels
                         SftpUsePassword = !SftpUsePrivateKey;
                         SftpKeyFilePath = sftp.PrivateKeyFilePath ?? "";
                         SftpRemotePath = sftp.RemotePath;
-                        ResetGoogleDriveState();
-                        ResetOneDriveState();
-                        ResetMegaState();
                         break;
 
                     case GoogleDriveSyncRemoteSettings googleDrive:
                         RemoteRootPath = "";
                         ResetSftpNonSecretFields();
-                        ResetOneDriveState();
-                        ResetMegaState();
                         GoogleDriveAccountDisplayName = profile.AccountDisplayName;
                         GoogleDriveAccountEmail = googleDrive.AccountEmail;
                         GoogleDriveConnectionStatus =
@@ -1820,8 +1590,6 @@ namespace GameSaves.App.ViewModels
                     case OneDriveSyncRemoteSettings oneDrive:
                         RemoteRootPath = "";
                         ResetSftpNonSecretFields();
-                        ResetGoogleDriveState();
-                        ResetMegaState();
                         OneDriveAccountDisplayName = profile.AccountDisplayName;
                         OneDriveAccountEmail = oneDrive.AccountEmail;
                         OneDriveConnectionStatus =
@@ -1830,24 +1598,9 @@ namespace GameSaves.App.ViewModels
                             "Checking stored Microsoft OneDrive authentication…";
                         break;
 
-                    case MegaSyncRemoteSettings mega:
-                        RemoteRootPath = "";
-                        ResetSftpNonSecretFields();
-                        ResetGoogleDriveState();
-                        ResetOneDriveState();
-                        MegaEmail = mega.UserEmail;
-                        MegaConnectionStatus =
-                            MegaConnectionStatus.StoredAuthenticationAvailable;
-                        MegaConnectionMessage =
-                            "Checking stored MEGA authentication…";
-                        break;
-
                     default:
                         RemoteRootPath = "";
                         ResetSftpNonSecretFields();
-                        ResetGoogleDriveState();
-                        ResetOneDriveState();
-                        ResetMegaState();
                         break;
                 }
             }
@@ -1859,24 +1612,19 @@ namespace GameSaves.App.ViewModels
             InvalidatePlan(force: true);
             ConfirmDeleteRemoteProfile = false;
             RemoteProfileState = profile.SettingsError is null &&
-                                 (profile.ProviderKind == SyncProviderKind.GoogleDrive ||
-                                  profile.ProviderKind == SyncProviderKind.OneDrive ||
-                                  profile.ProviderKind == SyncProviderKind.Mega ||
-                                  GetUnavailableProviderMessage(profile.ProviderKind) is null)
+                                 GetUnavailableProviderMessage(profile.ProviderKind) is null
                 ? "Saved"
                 : "Profile unavailable";
-            StatusMessage = profile.ProviderKind == SyncProviderKind.GoogleDrive &&
-                            profile.SettingsError is null
-                ? "Loaded the Google Drive profile. Checking stored authentication without opening a browser. Backup synchronization remains unavailable."
-                : profile.ProviderKind == SyncProviderKind.OneDrive &&
-                  profile.SettingsError is null
-                    ? "Loaded the Microsoft OneDrive profile. Checking stored authentication without opening a browser."
-                    : profile.ProviderKind == SyncProviderKind.Mega &&
-                      profile.SettingsError is null
-                        ? "Loaded the MEGA profile. Checking stored authentication."
-                        : profile.SettingsError ??
-                          GetUnavailableProviderMessage(profile.ProviderKind) ??
-                          $"Loaded remote profile '{profile.DisplayName}'. Build a new sync preview when ready.";
+            StatusMessage = profile.SettingsError ??
+                            GetUnavailableProviderMessage(profile.ProviderKind) ??
+                            profile.ProviderSettings switch
+                            {
+                                GoogleDriveSyncRemoteSettings =>
+                                    "Loaded the Google Drive profile. Checking stored authentication without opening a browser.",
+                                OneDriveSyncRemoteSettings =>
+                                    "Loaded the Microsoft OneDrive profile. Checking stored authentication without opening a browser.",
+                                _ => $"Loaded remote profile '{profile.DisplayName}'. Build a new sync preview when ready."
+                            };
 
             if (persistSelection)
                 SaveNonSecretSettings();
@@ -1891,11 +1639,6 @@ namespace GameSaves.App.ViewModels
             {
                 BeginOneDriveAuthenticationRestore(profile.Id);
             }
-            else if (profile.ProviderKind == SyncProviderKind.Mega &&
-                profile.ProviderSettings is MegaSyncRemoteSettings)
-            {
-                BeginMegaAuthenticationRestore(profile.Id);
-            }
             else
             {
                 _ = RefreshStoredAuthenticationAsync(profile.Id);
@@ -1905,13 +1648,7 @@ namespace GameSaves.App.ViewModels
         [RelayCommand]
         private void NewRemoteProfile()
         {
-            CancelGoogleAuthentication();
-            CancelOneDriveAuthentication();
-            CancelMegaAuthentication();
-            ConfirmDisconnectGoogleDrive = false;
-            ConfirmDisconnectOneDrive = false;
-            ConfirmDisconnectMega = false;
-            ConfirmRecreateGoogleDriveRootFolder = false;
+            CancelAllAuthentication();
             _suppressProfileSelection = true;
             SelectedRemoteProfile = null;
             _suppressProfileSelection = false;
@@ -1928,7 +1665,6 @@ namespace GameSaves.App.ViewModels
                 ClearSessionOnlySftpState();
                 ResetGoogleDriveState();
                 ResetOneDriveState();
-                ResetMegaState();
             }
             finally
             {
@@ -2006,18 +1742,6 @@ namespace GameSaves.App.ViewModels
                         HasStoredOneDriveAuthentication = false;
                     }
                 }
-                else if (profile.ProviderKind == SyncProviderKind.Mega)
-                {
-                    MegaEmail = (profile.ProviderSettings as MegaSyncRemoteSettings)?.UserEmail;
-
-                    if (isNewProfile)
-                    {
-                        MegaConnectionStatus = MegaConnectionStatus.Disconnected;
-                        MegaConnectionMessage =
-                            "Profile saved. Connect MEGA to authorize this account.";
-                        HasStoredMegaAuthentication = false;
-                    }
-                }
                 RemoteProfileState = "Saved";
                 StatusMessage = $"Remote profile '{profile.DisplayName}' saved. No connection was started.";
                 SaveNonSecretSettings();
@@ -2048,7 +1772,7 @@ namespace GameSaves.App.ViewModels
                     updatedUtc: now,
                     lastUsedUtc: null,
                     lastSuccessfulConnectionUtc: null,
-                    includeGoogleAccountMetadata: false));
+                    includeAccountMetadata: false));
 
                 RefreshProfileList(profile.Id);
                 ClearSessionOnlySftpState();
@@ -2074,17 +1798,6 @@ namespace GameSaves.App.ViewModels
                     OneDriveConnectionMessage =
                         "Profile saved. Connect Microsoft OneDrive to authorize this account.";
                     HasStoredOneDriveAuthentication = false;
-                }
-                else if (profile.ProviderKind == SyncProviderKind.Mega)
-                {
-                    MegaEmail = null;
-                    MegaPassword = null;
-                    MegaTwoFactorCode = null;
-                    IsMegaTwoFactorRequired = false;
-                    MegaConnectionStatus = MegaConnectionStatus.Disconnected;
-                    MegaConnectionMessage =
-                        "Profile saved. Connect MEGA to authorize this account.";
-                    HasStoredMegaAuthentication = false;
                 }
                 InvalidatePlan(force: true);
                 RemoteProfileState = "Saved";
@@ -2158,7 +1871,7 @@ namespace GameSaves.App.ViewModels
                 Guid profileId = SelectedRemoteProfile.Id;
                 string deletedName = SelectedRemoteProfile.DisplayName;
                 InvalidatePlan(force: true);
-                CancelGoogleAuthentication();
+                CancelAllAuthentication();
                 ClearSessionOnlySftpState();
 
                 SyncRemoteProfileDeleteResult result =
@@ -2897,6 +2610,20 @@ namespace GameSaves.App.ViewModels
             OneDriveAuthenticationInitializationTask = Task.CompletedTask;
         }
 
+        // Every sign-in flow and every pending destructive confirmation belongs
+        // to the profile and provider that were on screen when it started.
+        // Switching provider, loading, creating or deleting a profile abandons
+        // them all; a flow left running could otherwise store a token for a
+        // profile that is no longer selected, or no longer exists.
+        private void CancelAllAuthentication()
+        {
+            CancelGoogleAuthentication();
+            CancelOneDriveAuthentication();
+            ConfirmDisconnectGoogleDrive = false;
+            ConfirmDisconnectOneDrive = false;
+            ConfirmRecreateGoogleDriveRootFolder = false;
+        }
+
         private void ResetOneDriveState()
         {
             OneDriveAccountDisplayName = null;
@@ -3346,363 +3073,13 @@ namespace GameSaves.App.ViewModels
             }
         }
 
-        private void CancelMegaAuthentication()
-        {
-            _megaAuthenticationCancellation?.Cancel();
-            _megaAuthenticationCancellation?.Dispose();
-            _megaAuthenticationCancellation = null;
-            IsMegaConnecting = false;
-            OnPropertyChanged(nameof(CanCancelMegaConnection));
-            MegaAuthenticationInitializationTask = Task.CompletedTask;
-        }
-
-        private void ResetMegaState()
-        {
-            MegaEmail = null;
-            MegaPassword = null;
-            MegaTwoFactorCode = null;
-            IsMegaTwoFactorRequired = false;
-            MegaConnectionStatus = MegaConnectionStatus.Disconnected;
-            MegaConnectionMessage = "Save a MEGA profile before connecting.";
-            MegaQuotaSummary = null;
-            ConfirmDisconnectMega = false;
-            HasStoredMegaAuthentication = false;
-        }
-
-        [RelayCommand]
-        private async Task ConnectMegaAsync()
-        {
-            await RunMegaAuthenticationAsync(isReconnect: false);
-        }
-
-        [RelayCommand]
-        private async Task ReconnectMegaAsync()
-        {
-            await RunMegaAuthenticationAsync(isReconnect: true);
-        }
-
-        private async Task RunMegaAuthenticationAsync(bool isReconnect)
-        {
-            if (!IsMegaSelected ||
-                SelectedRemoteProfile is not { ProviderKind: SyncProviderKind.Mega } profile)
-            {
-                MegaConnectionStatus = MegaConnectionStatus.Disconnected;
-                MegaConnectionMessage =
-                    "Save the MEGA profile before connecting so its authentication can be stored securely.";
-                StatusMessage = MegaConnectionMessage;
-                return;
-            }
-
-            if (_megaSessionService is null)
-            {
-                MegaConnectionStatus = MegaConnectionStatus.Failed;
-                MegaConnectionMessage = "MEGA session service is unavailable.";
-                StatusMessage = MegaConnectionMessage;
-                return;
-            }
-
-            if (string.IsNullOrWhiteSpace(MegaEmail) || string.IsNullOrWhiteSpace(MegaPassword))
-            {
-                MegaConnectionMessage = "MEGA email and password are required.";
-                StatusMessage = MegaConnectionMessage;
-                return;
-            }
-
-            if (IsMegaConnecting)
-                return;
-
-            CancelMegaAuthentication();
-            long generation = ++_megaAuthenticationGeneration;
-            var cancellation = new CancellationTokenSource();
-            _megaAuthenticationCancellation = cancellation;
-            IsMegaConnecting = true;
-            OnPropertyChanged(nameof(CanCancelMegaConnection));
-            MegaConnectionStatus = MegaConnectionStatus.Connecting;
-            MegaConnectionMessage = isReconnect
-                ? "Re-authenticating with MEGA…"
-                : "Authenticating with MEGA…";
-            StatusMessage = MegaConnectionMessage;
-
-            try
-            {
-                MegaAuthenticationResult result = await _megaSessionService.AuthenticateAsync(
-                    profile.Id,
-                    MegaEmail.Trim(),
-                    MegaPassword,
-                    IsMegaTwoFactorRequired ? MegaTwoFactorCode : null,
-                    cancellation.Token);
-
-                if (generation != _megaAuthenticationGeneration ||
-                    SelectedRemoteProfile?.Id != profile.Id ||
-                    !IsMegaSelected)
-                {
-                    return;
-                }
-
-                if (result.RequiresTwoFactor)
-                {
-                    MegaConnectionStatus = MegaConnectionStatus.TwoFactorRequired;
-                    IsMegaTwoFactorRequired = true;
-                    MegaConnectionMessage = "Two-factor authentication code required. Please enter the 6-digit TOTP code and click Connect.";
-                    StatusMessage = MegaConnectionMessage;
-                }
-                else if (result.Succeeded)
-                {
-                    MegaConnectionStatus = MegaConnectionStatus.Connected;
-                    HasStoredMegaAuthentication = true;
-                    IsMegaTwoFactorRequired = false;
-                    MegaPassword = null; // Zero sensitive credential retention in memory
-                    MegaTwoFactorCode = null;
-
-                    SyncRemoteProfile? updated = _profileRepository.GetById(profile.Id);
-                    if (updated is not null)
-                    {
-                        RefreshProfileList(updated.Id);
-                    }
-
-                    MegaConnectionMessage = "Connected to MEGA successfully.";
-                    StatusMessage = MegaConnectionMessage;
-                    _ = LoadMegaQuotaAsync(profile.Id, generation);
-                }
-                else
-                {
-                    MegaConnectionStatus = MegaConnectionStatus.Failed;
-                    MegaConnectionMessage = result.Message ?? "MEGA authentication failed.";
-                    StatusMessage = MegaConnectionMessage;
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                MegaConnectionMessage = "MEGA sign-in was cancelled.";
-                StatusMessage = MegaConnectionMessage;
-            }
-            catch (Exception ex)
-            {
-                MegaConnectionStatus = MegaConnectionStatus.Failed;
-                MegaConnectionMessage = $"MEGA sign-in failed: {ex.Message}";
-                StatusMessage = MegaConnectionMessage;
-            }
-            finally
-            {
-                if (generation == _megaAuthenticationGeneration)
-                {
-                    IsMegaConnecting = false;
-                    OnPropertyChanged(nameof(CanCancelMegaConnection));
-                    _megaAuthenticationCancellation?.Dispose();
-                    _megaAuthenticationCancellation = null;
-                }
-            }
-        }
-
-        [RelayCommand]
-        private async Task DisconnectMegaAsync()
-        {
-            if (!IsMegaSelected ||
-                SelectedRemoteProfile is not { ProviderKind: SyncProviderKind.Mega } profile)
-            {
-                return;
-            }
-
-            if (_megaSessionService is null)
-            {
-                StatusMessage = "MEGA session service is unavailable.";
-                return;
-            }
-
-            CancelMegaAuthentication();
-            long generation = ++_megaAuthenticationGeneration;
-            var cancellation = new CancellationTokenSource();
-            _megaAuthenticationCancellation = cancellation;
-            IsMegaConnecting = true;
-            InvalidatePlan(force: true);
-            ClearSessionOnlySftpState();
-            MegaConnectionMessage = "Removing locally stored MEGA authentication...";
-            StatusMessage = MegaConnectionMessage;
-
-            try
-            {
-                MegaDisconnectionResult result = await _megaSessionService.DisconnectAsync(
-                    profile.Id,
-                    cancellation.Token);
-
-                if (generation != _megaAuthenticationGeneration ||
-                    SelectedRemoteProfile?.Id != profile.Id ||
-                    !IsMegaSelected)
-                {
-                    return;
-                }
-
-                if (result.Succeeded)
-                {
-                    HasStoredMegaAuthentication = false;
-                    MegaConnectionStatus = MegaConnectionStatus.Disconnected;
-                    MegaQuotaSummary = null;
-                    ConfirmDisconnectMega = false;
-                    RefreshProfileList(profile.Id);
-                }
-                else
-                {
-                    MegaConnectionStatus = MegaConnectionStatus.Failed;
-                }
-
-                MegaConnectionMessage = result.Message ?? result.Status.ToString();
-                StatusMessage = MegaConnectionMessage;
-            }
-            catch (OperationCanceledException)
-            {
-                MegaConnectionMessage = "MEGA disconnect was cancelled.";
-                StatusMessage = MegaConnectionMessage;
-                ConfirmDisconnectMega = false;
-            }
-            catch
-            {
-                MegaConnectionStatus = MegaConnectionStatus.Failed;
-                MegaConnectionMessage = "Locally stored MEGA authentication could not be removed.";
-                StatusMessage = MegaConnectionMessage;
-            }
-            finally
-            {
-                if (generation == _megaAuthenticationGeneration)
-                {
-                    IsMegaConnecting = false;
-                    cancellation.Dispose();
-                    _megaAuthenticationCancellation = null;
-                }
-            }
-        }
-
-        [RelayCommand]
-        private void CancelMegaConnection()
-        {
-            CancelMegaAuthentication();
-            MegaConnectionMessage = "MEGA connection was cancelled.";
-            StatusMessage = MegaConnectionMessage;
-        }
-
-        private void BeginMegaAuthenticationRestore(Guid profileId)
-        {
-            CancelMegaAuthentication();
-            long generation = ++_megaAuthenticationGeneration;
-            var cancellation = new CancellationTokenSource();
-            _megaAuthenticationCancellation = cancellation;
-            IsMegaConnecting = true;
-            MegaConnectionStatus = MegaConnectionStatus.StoredAuthenticationAvailable;
-            MegaConnectionMessage = "Checking stored MEGA authentication…";
-            MegaAuthenticationInitializationTask = RestoreMegaAuthenticationAsync(
-                profileId,
-                generation,
-                cancellation.Token);
-        }
-
-        private async Task RestoreMegaAuthenticationAsync(
-            Guid profileId,
-            long generation,
-            CancellationToken cancellationToken)
-        {
-            try
-            {
-                if (_megaSessionService is null)
-                {
-                    MegaConnectionStatus = MegaConnectionStatus.Disconnected;
-                    MegaConnectionMessage = "MEGA session service is unavailable.";
-                    return;
-                }
-
-                MegaSessionToken? session = await _megaSessionService.GetSessionAsync(
-                    profileId,
-                    cancellationToken);
-
-                if (generation != _megaAuthenticationGeneration ||
-                    SelectedRemoteProfile?.Id != profileId ||
-                    !IsMegaSelected)
-                {
-                    return;
-                }
-
-                if (session is not null)
-                {
-                    MegaConnectionStatus = MegaConnectionStatus.Connected;
-                    HasStoredMegaAuthentication = true;
-                    MegaEmail = session.UserEmail;
-                    MegaConnectionMessage = "Connected to MEGA (using stored session).";
-                    StatusMessage = MegaConnectionMessage;
-                    _ = LoadMegaQuotaAsync(profileId, generation);
-                }
-                else
-                {
-                    MegaConnectionStatus = MegaConnectionStatus.Disconnected;
-                    HasStoredMegaAuthentication = false;
-                    MegaConnectionMessage = "No stored MEGA session found. Enter credentials to connect.";
-                    StatusMessage = MegaConnectionMessage;
-                }
-            }
-            catch
-            {
-                if (generation == _megaAuthenticationGeneration)
-                {
-                    MegaConnectionStatus = MegaConnectionStatus.Failed;
-                    MegaConnectionMessage = "Stored MEGA authentication could not be checked.";
-                    StatusMessage = MegaConnectionMessage;
-                }
-            }
-            finally
-            {
-                if (generation == _megaAuthenticationGeneration)
-                {
-                    IsMegaConnecting = false;
-                }
-            }
-        }
-
-        private async Task LoadMegaQuotaAsync(Guid profileId, long generation)
-        {
-            if (_megaSessionService is null)
-                return;
-
-            try
-            {
-                MegaQuotaInfo? quota = await _megaSessionService.GetQuotaAsync(profileId);
-
-                if (generation == _megaAuthenticationGeneration &&
-                    SelectedRemoteProfile?.Id == profileId &&
-                    IsMegaSelected &&
-                    quota is not null)
-                {
-                    double percentUsed = quota.TotalBytes > 0 ? (double)quota.UsedBytes / quota.TotalBytes * 100 : 0;
-                    string summary = $"{FormatMegaBytes(quota.UsedBytes)} of {FormatMegaBytes(quota.TotalBytes)} used ({percentUsed:F1}%)";
-                    if (quota.TotalBytes > 0 && (double)quota.RemainingBytes / quota.TotalBytes < 0.10)
-                    {
-                        summary += " - Warning: Less than 10% storage remaining!";
-                    }
-                    MegaQuotaSummary = summary;
-                }
-            }
-            catch
-            {
-                // Quota fetch is best-effort
-            }
-        }
-
-        private static string FormatMegaBytes(long bytes)
-        {
-            string[] suffixes = { "B", "KB", "MB", "GB", "TB" };
-            int i = 0;
-            double d = bytes;
-            while (d >= 1024 && i < suffixes.Length - 1)
-            {
-                d /= 1024;
-                i++;
-            }
-            return $"{d:0.##} {suffixes[i]}";
-        }
-
         private SyncRemoteProfile BuildProfile(
             Guid id,
             DateTimeOffset createdUtc,
             DateTimeOffset updatedUtc,
             DateTimeOffset? lastUsedUtc,
             DateTimeOffset? lastSuccessfulConnectionUtc,
-            bool includeGoogleAccountMetadata = true)
+            bool includeAccountMetadata = true)
         {
             string displayName = SyncRemoteProfileValidation.NormalizeDisplayName(
                 RemoteProfileDisplayName);
@@ -3752,9 +3129,9 @@ namespace GameSaves.App.ViewModels
 
                 case SyncProviderKind.GoogleDrive:
                     settings = new GoogleDriveSyncRemoteSettings(
-                        includeGoogleAccountMetadata ? GoogleDriveAccountEmail : null,
+                        includeAccountMetadata ? GoogleDriveAccountEmail : null,
                         GoogleDriveAuthorizationScopes.DriveFile);
-                    accountDisplayName = includeGoogleAccountMetadata
+                    accountDisplayName = includeAccountMetadata
                         ? GoogleDriveAccountDisplayName
                         : null;
                     remoteRootDisplayName =
@@ -3769,32 +3146,16 @@ namespace GameSaves.App.ViewModels
 
                 case SyncProviderKind.OneDrive:
                     settings = new OneDriveSyncRemoteSettings(
-                        includeGoogleAccountMetadata ? OneDriveAccountEmail : null,
+                        includeAccountMetadata ? OneDriveAccountEmail : null,
                         OneDriveAuthorizationScopes.AppFolder,
-                        includeGoogleAccountMetadata ? OneDriveAccountDisplayName : null);
-                    accountDisplayName = includeGoogleAccountMetadata
+                        includeAccountMetadata ? OneDriveAccountDisplayName : null);
+                    accountDisplayName = includeAccountMetadata
                         ? OneDriveAccountDisplayName
                         : null;
                     remoteRootDisplayName =
                         SelectedRemoteProfile?.ProviderKind == SyncProviderKind.OneDrive
                             ? SelectedRemoteProfile.RemoteRootDisplayName
                             : "OneDrive: AppRoot (GameSave Manager)";
-                    remoteFolderId = "approot";
-                    break;
-
-                case SyncProviderKind.Mega:
-                    settings = new MegaSyncRemoteSettings(
-                        includeGoogleAccountMetadata ? (MegaAccountDisplayText == "Not connected" ? null : MegaAccountDisplayText) : null,
-                        rootFolderNodeId: null,
-                        rootFolderName: MegaSyncRemoteSettings.DefaultRootFolderName);
-                    accountDisplayName = includeGoogleAccountMetadata
-                        ? (MegaAccountDisplayText == "Not connected" ? null : MegaAccountDisplayText)
-                        : null;
-                    remoteRootDisplayName =
-                        SelectedRemoteProfile?.ProviderKind == SyncProviderKind.Mega
-                            ? SelectedRemoteProfile.RemoteRootDisplayName
-                            : "MEGA: GameSave Manager Backups";
-                    remoteFolderId = "root";
                     break;
 
                 default:
@@ -3976,10 +3337,6 @@ namespace GameSaves.App.ViewModels
                     _syncProviderFactory.CreateOneDriveProvider(
                         SelectedRemoteProfile!.Id),
 
-                SyncProviderKind.Mega =>
-                    _syncProviderFactory.CreateMegaProvider(
-                        SelectedRemoteProfile!.Id),
-
                 _ => throw new NotSupportedException(
                     GetUnavailableProviderMessage(SelectedProviderKind)
                     ?? "The selected sync provider is unsupported.")
@@ -4035,88 +3392,39 @@ namespace GameSaves.App.ViewModels
 
                 SyncProviderKind.OneDrive => ValidateOneDriveSelection(),
 
-                SyncProviderKind.Mega => ValidateMegaSelection(),
-
                 _ => GetUnavailableProviderMessage(SelectedProviderKind)
             };
         }
 
-        private string? ValidateMegaSelection()
-        {
-            string? unavailable =
-                GetUnavailableProviderMessage(SyncProviderKind.Mega);
+        private string? ValidateOneDriveSelection() =>
+            ValidateCloudSelection(
+                SyncProviderKind.OneDrive,
+                "Select a saved Microsoft OneDrive profile first.",
+                CanUseOneDriveForSync,
+                "Connect Microsoft OneDrive before syncing.");
 
-            if (unavailable is not null)
-                return unavailable;
-
-            if (SelectedRemoteProfile is not
-                { ProviderKind: SyncProviderKind.Mega })
-            {
-                return "Select a saved MEGA profile first.";
-            }
-
-            if (!CanUseMegaForSync)
-            {
-                return "Connect MEGA before syncing.";
-            }
-
-            return null;
-        }
-
-        private string? ValidateOneDriveSelection()
-        {
-            string? unavailable =
-                GetUnavailableProviderMessage(SyncProviderKind.OneDrive);
-
-            if (unavailable is not null)
-                return unavailable;
-
-            if (SelectedRemoteProfile is not
-                { ProviderKind: SyncProviderKind.OneDrive })
-            {
-                return "Select a saved Microsoft OneDrive profile first.";
-            }
-
-            if (!CanUseOneDriveForSync)
-            {
-                return "Connect Microsoft OneDrive before syncing.";
-            }
-
-            return null;
-        }
+        private string? ValidateGoogleDriveSelection() =>
+            ValidateCloudSelection(
+                SyncProviderKind.GoogleDrive,
+                "Select a saved Google Drive profile first.",
+                CanUseGoogleDriveForSync,
+                "Connect Google Drive and set up its backup folder before syncing.");
 
         /// <summary>
-        /// Refuses a Google Drive selection that <see cref="CreateConfiguredProvider"/>
-        /// could not build. The saved profile check is the one that method
-        /// depends on directly; everything else about readiness already lives in
-        /// <see cref="CanUseGoogleDriveForSync"/> and is not restated here.
+        /// Refuses a cloud selection that <see cref="CreateConfiguredProvider"/>
+        /// could not build. The catalog's own "unavailable" answer comes first,
+        /// then the saved profile the factory needs; everything else about
+        /// readiness already lives in the provider's CanUse*ForSync flag.
         /// </summary>
-        private string? ValidateGoogleDriveSelection()
-        {
-            // While the catalog still reports Google Drive unimplemented, that
-            // is the accurate answer and takes precedence over any advice about
-            // profiles. It also keeps this method inert until the catalog is
-            // activated, so the two halves can land in separate changes without
-            // a reachable failure in between.
-            string? unavailable =
-                GetUnavailableProviderMessage(SyncProviderKind.GoogleDrive);
-
-            if (unavailable is not null)
-                return unavailable;
-
-            if (SelectedRemoteProfile is not
-                { ProviderKind: SyncProviderKind.GoogleDrive })
-            {
-                return "Select a saved Google Drive profile first.";
-            }
-
-            if (!CanUseGoogleDriveForSync)
-            {
-                return "Connect Google Drive and set up its backup folder before syncing.";
-            }
-
-            return null;
-        }
+        private string? ValidateCloudSelection(
+            SyncProviderKind kind,
+            string noProfileMessage,
+            bool ready,
+            string notReadyMessage) =>
+            GetUnavailableProviderMessage(kind) ??
+            (SelectedRemoteProfile?.ProviderKind != kind ? noProfileMessage
+                : ready ? null
+                : notReadyMessage);
 
         private string? ValidateSftpSelection()
         {
@@ -4223,6 +3531,9 @@ namespace GameSaves.App.ViewModels
 
         private void UpdateSelectedSummary()
         {
+            if (_isBulkLoadingItems)
+                return;
+
             var selectable = Items.Where(row => row.IsSelectable).ToList();
 
             if (selectable.Count == 0)
@@ -4242,17 +3553,25 @@ namespace GameSaves.App.ViewModels
         }
 
         [RelayCommand]
-        private void SelectAllRuns()
-        {
-            foreach (SyncItemRowViewModel row in Items.Where(r => r.IsSelectable))
-                row.IncludeInSync = true;
-        }
+        private void SelectAllRuns() => SetAllIncluded(true);
 
         [RelayCommand]
-        private void DeselectAllRuns()
+        private void DeselectAllRuns() => SetAllIncluded(false);
+
+        private void SetAllIncluded(bool include)
         {
-            foreach (SyncItemRowViewModel row in Items.Where(r => r.IsSelectable))
-                row.IncludeInSync = false;
+            _isBulkLoadingItems = true;
+            try
+            {
+                foreach (SyncItemRowViewModel row in Items.Where(r => r.IsSelectable))
+                    row.IncludeInSync = include;
+            }
+            finally
+            {
+                _isBulkLoadingItems = false;
+            }
+
+            UpdateSelectedSummary();
         }
 
         [RelayCommand]
@@ -4604,14 +3923,14 @@ namespace GameSaves.App.ViewModels
             }
 
             bool verifyAfterwards = false;
+            bool syncExecuting = false;
 
             try
             {
                 IsLoading = true;
                 IsSyncRunning = true;
                 IsCancellingSync = false;
-                IsRateLimited = false;
-                RateLimitDiagnosticMessage = "";
+                ClearRateLimitDiagnostics();
                 _syncCancellation?.Dispose();
                 _syncCancellation = new CancellationTokenSource();
                 TryUpdateLastUsed();
@@ -4621,7 +3940,7 @@ namespace GameSaves.App.ViewModels
                 ProgressText = "Starting...";
                 ExecutionStatusMessage = "Syncing backup runs...";
 
-                bool syncExecuting = true;
+                syncExecuting = true;
                 // Progress<T> marshals reports back to the UI thread.
                 var progress = new Progress<SyncProgress>(p =>
                 {
@@ -4701,20 +4020,17 @@ namespace GameSaves.App.ViewModels
             }
             catch (Exception ex)
             {
-                if (IsRateLimitException(ex))
-                {
-                    IsRateLimited = true;
-                    RateLimitDiagnosticMessage = FormatRateLimitDiagnostic(ex);
-                    ExecutionStatusMessage = $"Sync rate limited by provider: {ex.Message}";
-                }
-                else
-                {
-                    ExecutionStatusMessage = $"Sync failed: {ex.Message}";
-                }
+                // IsRateLimited comes only from the provider's typed backoff
+                // signal. Sniffing "429" in the message matched run folders
+                // named by timestamp (yyyyMMdd_HHmmss) on any provider.
+                ExecutionStatusMessage = IsRateLimited
+                    ? $"Sync rate limited by provider: {ex.Message}"
+                    : $"Sync failed: {ex.Message}";
                 ProgressText = "";
             }
             finally
             {
+                syncExecuting = false;
                 _countdownCancellation?.Cancel();
                 IsRetrying = false;
                 RetryCountdownText = "";
@@ -4796,11 +4112,18 @@ namespace GameSaves.App.ViewModels
             VerificationStatusMessage =
                 $"Checking {copied.Count} transferred run(s) on both sides. Nothing is copied, moved, or deleted.";
 
+            ISyncProvider provider = _lastProvider;
+
             try
             {
-                SyncPlan plan = await _lastProvider.CreatePreviewAsync(
+                SyncPlan plan = await provider.CreatePreviewAsync(
                     new SyncOptions { Upload = true, Download = true, ArchiveSync = ArchiveSync },
                     _verificationCancellation.Token);
+
+                // Settings changed while the check ran: its plan describes an
+                // endpoint that is gone and must not become the current plan.
+                if (!ReferenceEquals(provider, _lastProvider))
+                    throw new OperationCanceledException();
 
                 var byName = plan.Items.ToDictionary(
                     item => item.RunName,
@@ -4906,25 +4229,9 @@ namespace GameSaves.App.ViewModels
             }
         }
 
-        private static string FormatBytes(long bytes)
-        {
-            if (bytes < 1024)
-                return $"{bytes} B";
-
-            double kb = bytes / 1024.0;
-
-            if (kb < 1024)
-                return $"{kb:0.##} KB";
-
-            double mb = kb / 1024.0;
-
-            if (mb < 1024)
-                return $"{mb:0.##} MB";
-
-            double gb = mb / 1024.0;
-
-            return $"{gb:0.##} GB";
-        }
+        // Kept as a method: its signature ends the source slice that
+        // SyncUiProviderParityTests inspects.
+        private static string FormatBytes(long bytes) => ByteSize.Format(bytes);
 
         private sealed class UnavailableGoogleDriveRootFolderService
             : IGoogleDriveRootFolderService

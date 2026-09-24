@@ -44,16 +44,18 @@ public sealed class VirtualizedDataGridAndTreeTests
         Assert.Equal(10, roots.Count);
         Assert.All(roots, r => Assert.True(r.IsDirectory));
         Assert.All(roots, r => Assert.False(r.IsChildrenLoaded));
-        Assert.All(roots, r => Assert.True(r.HasChildren));
 
-        // In standard TreeView, Children starts with 1 dummy placeholder item
-        Assert.All(roots, r => Assert.Single(r.Children));
-        Assert.All(roots, r => Assert.Equal("Loading...", r.Children[0].Name));
+        // No child view model exists until a folder is expanded
+        Assert.All(roots, r => Assert.Empty(r.Children));
 
         // Aggregates are computed correctly during indexing without creating child ViewModels
         Assert.All(roots, r => Assert.Equal(1000, r.FileCount));
         Assert.All(roots, r => Assert.Equal(1000 * 1024, r.SizeBytes));
-        Assert.All(roots, r => Assert.Equal("1,000 files", r.StatusDisplay));
+        Assert.All(roots, r => Assert.Equal("1,000 files", r.FileCountDisplay));
+
+        // The count shows in its own column, not a second time as the status
+        Assert.All(roots, r => Assert.Equal(string.Empty, r.StatusDisplay));
+        Assert.All(roots, r => Assert.Equal(string.Empty, r.StatusGlyph));
     }
 
     [Fact]
@@ -85,8 +87,7 @@ public sealed class VirtualizedDataGridAndTreeTests
         // Multi-level deferred: Slot1's children must NOT be loaded yet!
         var slot1 = saves.Children.First(c => c.Name == "Slot1");
         Assert.False(slot1.IsChildrenLoaded);
-        Assert.Single(slot1.Children); // dummy
-        Assert.Equal("Loading...", slot1.Children[0].Name);
+        Assert.Empty(slot1.Children);
 
         // Act: expand Slot1
         slot1.IsExpanded = true;
@@ -113,8 +114,6 @@ public sealed class VirtualizedDataGridAndTreeTests
 
         // Initially, visible rows equals root nodes (Config, Saves)
         Assert.Equal(2, controller.VisibleRows.Count);
-        Assert.Equal(3, controller.TotalFileCount);
-        Assert.Equal(3500, controller.TotalSizeBytes);
 
         var saves = controller.RootNodes.First(r => r.Name == "Saves");
 
@@ -180,10 +179,11 @@ public sealed class VirtualizedDataGridAndTreeTests
         var controller = new SaveFileHierarchyController();
         controller.LoadItems(items);
 
+        // The verifier keys results by each file's original location.
         var verificationResults = new Dictionary<string, bool>
         {
-            ["files/save1.dat"] = true,
-            ["files/save2.dat"] = false
+            ["orig/save1.dat"] = true,
+            ["orig/save2.dat"] = false
         };
 
         // Act: expand all so leaf files are materialized, then update verification
@@ -200,6 +200,68 @@ public sealed class VirtualizedDataGridAndTreeTests
         Assert.False(file2.IsVerified);
         Assert.Equal("Mismatch", file2.StatusDisplay);
         Assert.Equal("✕", file2.StatusGlyph);
+    }
+
+    [Fact]
+    public void SaveFileHierarchyController_VerificationBeforeExpanding_ReachesFilesLoadedLater()
+    {
+        var items = new List<TransferOverwriteBackupItem>
+        {
+            new(@"C:\Saves\Slot1\save1.dat", @"D:\Backups\run\files\C\Saves\Slot1\save1.dat", 1000, "hash1", DateTimeOffset.UtcNow),
+            new(@"C:\Saves\Slot2\save2.dat", @"D:\Backups\run\files\C\Saves\Slot2\save2.dat", 2000, "hash2", DateTimeOffset.UtcNow)
+        };
+
+        var controller = new SaveFileHierarchyController();
+        controller.LoadItems(items);
+
+        // Verify first, while nothing below the roots exists yet.
+        controller.UpdateVerification(new Dictionary<string, bool>
+        {
+            [@"C:\Saves\Slot1\save1.dat"] = true,
+            [@"C:\Saves\Slot2\save2.dat"] = false
+        });
+        controller.ExpandAll();
+
+        Assert.True(controller.VisibleRows.Single(r => r.Name == "save1.dat").IsVerified);
+        Assert.False(controller.VisibleRows.Single(r => r.Name == "save2.dat").IsVerified);
+    }
+
+    [Fact]
+    public void SaveFileHierarchyController_TreeStartsAtTheOriginalDrive_NotTheBackupStore()
+    {
+        var items = new List<TransferOverwriteBackupItem>
+        {
+            new(@"E:\Games\Saves\slot.sav", @"C:\Users\me\Backups\run_1\files\E\Games\Saves\slot.sav", 10, "hash", DateTimeOffset.UtcNow)
+        };
+
+        var controller = new SaveFileHierarchyController();
+        controller.LoadItems(items);
+
+        SaveFileTreeNodeViewModel root = Assert.Single(controller.RootNodes);
+        Assert.Equal("E:", root.Name);
+
+        controller.ExpandAll();
+        Assert.Equal(@"E:\Games\Saves\slot.sav", controller.VisibleRows.Single(r => r.IsFile).FullPath);
+    }
+
+    [Fact]
+    public void SaveFileHierarchyController_ExpandAll_RaisesOneCollectionChange()
+    {
+        var controller = new SaveFileHierarchyController();
+        controller.LoadFromDescriptors(
+        [
+            new("A/B/C/file1.dat", 100),
+            new("A/B/C/file2.dat", 200),
+            new("X/Y/file3.dat", 300)
+        ]);
+
+        int changes = 0;
+        controller.VisibleRows.CollectionChanged += (_, _) => changes++;
+
+        controller.ExpandAll();
+
+        Assert.Equal(1, changes);
+        Assert.Equal(8, controller.VisibleRows.Count);
     }
 
     // =========================================================================
@@ -257,7 +319,7 @@ public sealed class VirtualizedDataGridAndTreeTests
     [InlineData(1073741824, "1 GB")]
     public void FormatBytes_ProducesAccurateHumanReadableStrings(long bytes, string expected)
     {
-        string actual = SaveFileTreeNodeViewModel.FormatBytes(bytes);
+        string actual = GameSaves.App.Common.ByteSize.Format(bytes);
         Assert.Equal(expected, actual);
     }
 
@@ -339,6 +401,68 @@ public sealed class VirtualizedDataGridAndTreeTests
         Assert.NotNull(resultsList);
         Assert.Equal("ListBox", resultsList.Name.LocalName);
         Assert.Contains("virtualizedTable", (string?)resultsList.Attribute("Classes"));
+    }
+
+    [Fact]
+    public void ControlsAxaml_SelectedListRows_TintTheBackgroundWithoutFadingTheText()
+    {
+        XDocument doc = XDocument.Load(FindAppFile("Themes", "Controls.axaml"));
+
+        var selectedStyles = doc.Descendants()
+            .Where(e => e.Name.LocalName == "Style" &&
+                        ((string?)e.Attribute("Selector"))?.Contains("ListBoxItem:selected") == true)
+            .ToList();
+
+        Assert.NotEmpty(selectedStyles);
+        Assert.DoesNotContain(
+            selectedStyles.SelectMany(style => style.Elements()),
+            setter => (string?)setter.Attribute("Property") == "Opacity");
+    }
+
+    [Theory]
+    [InlineData("BackupHistoryView.axaml")]
+    [InlineData("InstalledGamesView.axaml")]
+    [InlineData("ManualBackupView.axaml")]
+    [InlineData("ProfilesView.axaml")]
+    [InlineData("TransferHistoryView.axaml")]
+    [InlineData("TransferPreviewView.axaml")]
+    public void WorkspacePanels_NeverBindThroughTheUserControl(string view)
+    {
+        // A floated panel lives in its own window, where no UserControl
+        // ancestor exists, so such a binding silently does nothing there.
+        XDocument doc = XDocument.Load(FindAppFile("Views", view));
+
+        var offenders = doc.Descendants()
+            .Where(e => e.Name.LocalName == "WorkspacePanel")
+            .SelectMany(panel => panel.DescendantsAndSelf())
+            .SelectMany(e => e.Attributes())
+            .Where(a => a.Value.Contains("$parent[UserControl]"))
+            .Select(a => a.Value)
+            .ToList();
+
+        Assert.Empty(offenders);
+    }
+
+    [Fact]
+    public void BackupHistoryView_TreeExpander_HasAnAccessibleNameAndScaledGlyph()
+    {
+        string xaml = File.ReadAllText(FindAppFile("Views", "BackupHistoryView.axaml"));
+
+        Assert.Contains("AutomationProperties.Name=\"{Binding Name, StringFormat='Expand or collapse {0}'}\"", xaml);
+        Assert.DoesNotContain("FontSize=\"10\"", xaml);
+    }
+
+    [Fact]
+    public void InstalledGamesView_HeaderSort_IsRoutedToTheViewModel()
+    {
+        XDocument doc = XDocument.Load(FindAppFile("Views", "InstalledGamesView.axaml"));
+        XElement? grid = FindElementByName(doc, "GamesGrid");
+
+        Assert.NotNull(grid);
+        Assert.Equal("OnGamesGridSorting", (string?)grid.Attribute("Sorting"));
+        Assert.All(
+            grid.Descendants().Where(e => e.Name.LocalName.EndsWith("Column") && e.Attribute("Tag") is not null),
+            column => Assert.False(string.IsNullOrEmpty((string?)column.Attribute("SortMemberPath"))));
     }
 
     [Fact]

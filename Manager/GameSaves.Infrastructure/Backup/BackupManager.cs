@@ -2,11 +2,11 @@
 using GameSaves.Core.Backup;
 using GameSaves.Core.Save;
 using GameSaves.Infrastructure.Save;
+using GameSaves.Infrastructure.Transfers;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Security.Cryptography;
 
 namespace GameSaves.Infrastructure.Backup
 {
@@ -165,7 +165,7 @@ namespace GameSaves.Infrastructure.Backup
                 string? sha256 = null;
 
                 if (computeHashes)
-                    sha256 = ComputeSha256(sourceFile);
+                    sha256 = Sha256Hasher.HashFile(sourceFile);
 
                 if (!dryRun)
                 {
@@ -201,13 +201,6 @@ namespace GameSaves.Infrastructure.Backup
                     null,
                     ex.Message);
             }
-        }
-
-        private static string ComputeSha256(string filePath)
-        {
-            using FileStream stream = File.OpenRead(filePath);
-            byte[] hash = SHA256.HashData(stream);
-            return Convert.ToHexString(hash);
         }
 
         private static string MakeSafeFileName(string value)

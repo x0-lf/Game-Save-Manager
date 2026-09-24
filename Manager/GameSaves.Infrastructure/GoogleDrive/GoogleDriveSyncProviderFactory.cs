@@ -1,5 +1,6 @@
 using GameSaves.Core.Sync;
 using GameSaves.Core.Transfers;
+using GameSaves.Infrastructure.Sync;
 
 namespace GameSaves.Infrastructure.GoogleDrive
 {
@@ -64,8 +65,15 @@ namespace GameSaves.Infrastructure.GoogleDrive
             if (rejection is not null)
                 throw new GoogleDriveRemoteOperationException(rejection);
 
-            return new GoogleDriveSyncProvider(
-                _fileSystemFactory.Create(remoteProfileId),
+            IRemoteFileSystem fileSystem = _fileSystemFactory.Create(remoteProfileId);
+
+            // The sanitized display root is the only root the provider knows.
+            // It reaches sync plans and persisted transfer history, so it must
+            // never be an account address, object ID, or Drive URL.
+            return new EngineSyncProvider(
+                "Google Drive",
+                fileSystem.DisplayRoot,
+                fileSystem,
                 _backupHistoryService,
                 _historyRepository);
         }

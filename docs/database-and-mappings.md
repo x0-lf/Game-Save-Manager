@@ -78,8 +78,9 @@ dotnet run --project Manager/GameSaves/GameSaves.csproj -- init-db
 # Seed or refresh curated mappings from bundled assembly resource
 dotnet run --project Manager/GameSaves/GameSaves.csproj -- seed-curated
 
-# Seed mappings from an external custom JSON seed file
-dotnet run --project Manager/GameSaves/GameSaves.csproj -- seed-curated path/to/custom-seed.json
+# Mappings from any other JSON file go through import; --approve is the one
+# explicit approval path (seed-curated no longer takes a file)
+dotnet run --project Manager/GameSaves/GameSaves.csproj -- import path/to/mappings.json --approve
 ```
 
 ## Schema migration, backup, and rollback engine (DATA-003)
@@ -95,21 +96,22 @@ When migrations are executed (automatically on application startup via
 
 1. **Pre-flight integrity verification:** Executes `PRAGMA quick_check;`. If the database
    is corrupted or locked (`SQLITE_BUSY`), migration is aborted immediately without modifying state.
-2. **Pending migration detection:** Compares applied migrations in `schema_migrations` with
-   registered `ISchemaMigration` implementations. If no migrations are pending, execution
-   completes with zero disk writes.
+2. **Pending migration detection:** The migration history is read first; pending means a
+   registered version that is not recorded as applied (a renamed migration is not re-run).
+   If nothing is pending, execution completes with zero disk writes and no integrity scan.
 3. **Pre-migration safety snapshot:** If migrations are pending, an online backup is captured
    using the SQLite online backup API to:
    ```text
    %LOCALAPPDATA%\GameSave\backups\gamesave-pre-migration-{timestamp}-{guid}.db
    ```
-   If the safety backup fails, migration is rejected immediately.
-4. **Transactional migration execution:** Each pending migration is executed inside an
-   isolated transaction. If an exception occurs:
-   - The active transaction is rolled back immediately.
-   - Database connection pools are cleared.
-   - The pre-migration backup snapshot is restored over the database file, guaranteeing
-     zero partial schema state or data corruption.
+   The snapshot drops `protected_sync_secrets` and is vacuumed, so it never holds
+   provider secrets. If the safety backup fails, migration is rejected immediately.
+   The snapshot is a manual recovery point; it is not restored automatically.
+4. **All-or-nothing execution:** Every pending migration runs inside one `BEGIN IMMEDIATE`
+   transaction with a single commit. If any step throws, the whole transaction rolls back,
+   the previous schema version stays recorded, and the result reports the rollback.
+   The application and `init-db` refuse to continue on a failed migration instead of
+   running against a half-known schema.
 5. **Backup retention:** Backup snapshots exceeding the default retention limit (10) are
    pruned to avoid unbounded disk consumption.
 
@@ -121,7 +123,8 @@ Maintainers and CLI users can inspect, plan, and execute database migrations:
 # Show current schema version and pending migrations
 dotnet run --project Manager/GameSaves/GameSaves.csproj -- migrate-status
 
-# Generate a dry-run migration plan with integrity check (read-only, no mutations)
+# Generate a dry-run migration plan with integrity check (read-only, no mutations);
+# shows the snapshot directory and exits 1 when the integrity check fails
 dotnet run --project Manager/GameSaves/GameSaves.csproj -- migrate-dry-run
 
 # Run pending migrations with automatic pre-migration backup snapshot
@@ -167,15 +170,17 @@ The import engine accepts:
    ```
 2. **Flat mappings array:** A JSON array of mapping items directly at root.
 3. **Flat titles array:** A JSON array of title items directly at root.
-4. **Flexible casing:** Property names can use either camelCase (`steamAppId`, `gameName`, `pathTemplate`) or snake_case (`steam_app_id`, `game_name`, `path_template`). App IDs can be strings or integers.
+4. **Flexible casing:** Property names are matched case-insensitively, so camelCase, PascalCase (what `ai-detect --output` and the harvester write), and snake_case (`steam_app_id`, `game_name`, `path_template`) all work; `path` is accepted as an alias for the template. App IDs can be strings or integers.
+5. **Wrong shapes are errors:** a root that is neither an array nor an object, an object with neither `titles` nor `mappings`, or a non-object element is reported as a JSON error rather than importing nothing silently.
 
 ### Validation & trust rules
 
 - **Required fields:** `steamAppId` and `title` for titles; `steamAppId`, `platform`, and `pathTemplate` for mappings.
 - **Platform allowlist:** `windows`, `linux`, `macos`, `steamdeck` (case-insensitive).
+- **Shape checks:** `pathKind` must be `Directory`, `File`, or `Glob`; templates may not contain NUL; priority is 0-10000; AppIDs must be digits only and not all zeros. Invalid rows are rejected and reported, never stored.
 - **Default Pending status:** In accordance with the project safety model, all imported candidate mappings default to `review_status = 'Pending'` and `enabled = 0`. They remain disabled and excluded from transfer/backup execution until reviewed in `GameSaves.Reviewer` or imported with explicit administrative approval (`--approve`).
-- **Approval preservation:** If an existing mapping in the database is already `Approved`, re-importing metadata does not downgrade its status unless the `pathKind` changed (which invalidates the previous review).
-- **Duplicate detection:** Duplicate mappings matching `(steam_app_id, platform, path_template)` and duplicate titles matching `steam_app_id` are detected, leaving existing records unchanged and reporting exact metrics.
+- **Reviewed rows are never rewritten by untrusted imports:** without `--approve`, a re-import may update only a mapping that is still `Pending`. Approved, rejected, needs-fix, and curated rows are left exactly as they are. With `--approve`, a changed `pathKind` still resets review. The one audited write path is `SavePathMappingWriter`.
+- **Duplicate detection:** Existing mappings matching `(steam_app_id, platform, path_template)` and existing titles matching `steam_app_id` are reported as unchanged or "already present"; an update runs only when a field actually differs.
 
 ### CLI import commands
 
@@ -310,9 +315,10 @@ The service identifies game engine markers directly from directory layouts:
 ### Directory sanitization & privacy guarantees
 
 Before any directory tree is analyzed or passed to AI models:
-- **Username Scrubbing:** Current user profiles (`Environment.UserName`, `Users/<username>`) are scrubbed and replaced with generic tokens (`[USER]`).
+- **Scrubbing:** The formatted tree and the prompt header (game name, evidence, company) have the current user name, 8+ digit IDs, and e-mail addresses replaced with generic tokens (`[USER]`).
 - **Sensitive File Redaction:** Sensitive credentials, private keys, environment files, and authentication tokens (`.env`, `credentials.json`, `id_rsa`, `*.key`, `*.pem`, `*.token`) are completely excluded from inspection and prompt generation.
-- **Limit Enforcement:** Directory traversal is strictly capped by depth (`maxDepth = 4` by default) and file count (`maxFiles = 500` by default) to avoid unbounded recursion or excessive prompt payloads.
+- **Limit Enforcement:** Traversal skips reparse points and unreadable entries, lists a folder's files before its subfolders, and is capped by depth (`maxDepth = 4`) and one shared entry budget for files and folders (`maxEntries = 500`).
+- **Bounded AI proposals:** No AI client ships with the App; the seam is pluggable. A completion may propose at most 8 paths of at most 260 characters. Each must start with a known root (`%LOCALAPPDATA%`, `%APPDATA%`, `%USERPROFILE%`, `%DOCUMENTS%`, `{Documents}`, `{SteamRoot}`, `{GameInstallPath}`, `{LibraryRoot}`) followed by plain names only (no `..`, drive, UNC, or invalid characters); anything else is dropped.
 
 ### Strict trust model & human-in-the-loop lifecycle
 
@@ -321,7 +327,7 @@ In full alignment with the project safety invariants:
   - `review_status = 'Pending'`
   - `enabled = 0`
 - **Zero Autonomous Execution:** AI suggestions **never** take autonomous runtime effect. Runtime backup and restore operations ignore all `Pending` paths.
-- **Audit Trail:** Every proposal includes a SHA-256 prompt hash, model version tag, and engine evidence in its notes.
+- **Audit Trail:** Heuristic rows are noted "Engine-heuristic candidate"; rows merged from an AI completion are noted "AI-assisted candidate" with the prompt hash and model. `ai-detect --save-db` / `--output` require a numeric AppID.
 - **Human Review Mandatory:** A maintainer must explicitly inspect and verify the candidate path in the Reviewer UI or via `approve-mapping` / `approve-app` CLI commands before it can be activated.
 
 ### CLI pattern detector commands

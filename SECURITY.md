@@ -134,7 +134,7 @@ Credible data-loss defects should be reported privately when public reproduction
 
 The following are normally handled as bugs, feature requests, or upstream reports unless they cross a documented security boundary:
 
-- missing roadmap functionality, including WebDAV, OneDrive, and other work
+- missing roadmap functionality, including WebDAV, MEGA, and other work
   explicitly listed as unavailable in the current roadmap;
 - inaccurate or incomplete unapproved harvested save-path candidates;
 - the wording of a third-party consent screen when the application still requests only its documented scope;

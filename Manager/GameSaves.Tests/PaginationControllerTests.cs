@@ -82,7 +82,7 @@ public sealed class PaginationControllerTests
 
         controller.CustomPageSizeText = "37";
         Assert.Equal(37, controller.PageSize);
-        Assert.Equal(37, controller.CustomPageSize);
+        Assert.Equal("37", controller.CustomPageSizeText);
         Assert.Equal(3, controller.TotalPages); // 37 + 37 + 26 = 100
         Assert.Equal(37, controller.CurrentPageItems.Count);
 
@@ -124,7 +124,7 @@ public sealed class PaginationControllerTests
         Assert.Equal(42, controller.PageSize);
         Assert.Equal(PaginationController<int>.CustomPageSizeOption, controller.SelectedPageSizeOption);
         Assert.True(controller.IsCustomPageSize);
-        Assert.Equal(42, controller.CustomPageSize);
+        Assert.Equal("42", controller.CustomPageSizeText);
     }
 
     [Fact]
@@ -150,10 +150,10 @@ public sealed class PaginationControllerTests
         controller.GoToPage(-5);
         Assert.Equal(1, controller.CurrentPage);
 
-        controller.CurrentPage = 999;
+        controller.GoToPage(999);
         Assert.Equal(3, controller.CurrentPage);
 
-        controller.CurrentPage = 0;
+        controller.GoToPage(0);
         Assert.Equal(1, controller.CurrentPage);
     }
 
@@ -246,36 +246,105 @@ public sealed class PaginationControllerTests
     }
 
     [Fact]
-    public void FilteringAndSorting_ApplyPriorToPagination()
+    public void Sorting_AppliesPriorToPagination_AndSurvivesANewSource()
     {
         var controller = new PaginationController<int>();
         controller.SetPageSize(5);
         controller.SetSource(Enumerable.Range(1, 30)); // 1..30
 
-        // Filter only even numbers: 2, 4, 6, ... 30 (15 items)
-        controller.ApplyFilter(x => x % 2 == 0);
-        Assert.Equal(15, controller.TotalItemCount);
-        Assert.Equal(3, controller.TotalPages);
-        Assert.Equal(1, controller.CurrentPage);
-        Assert.Equal(new[] { 2, 4, 6, 8, 10 }, controller.CurrentPageItems);
-
-        // Sort descending: 30, 28, 26, ...
         controller.ApplySort(items => items.OrderByDescending(x => x));
-        Assert.Equal(15, controller.TotalItemCount);
-        Assert.Equal(new[] { 30, 28, 26, 24, 22 }, controller.CurrentPageItems);
+        Assert.Equal(30, controller.TotalItemCount);
+        Assert.Equal(new[] { 30, 29, 28, 27, 26 }, controller.CurrentPageItems);
 
-        // Advance to page 2
         controller.NextPage();
         Assert.Equal(2, controller.CurrentPage);
-        Assert.Equal(new[] { 20, 18, 16, 14, 12 }, controller.CurrentPageItems);
+        Assert.Equal(new[] { 25, 24, 23, 22, 21 }, controller.CurrentPageItems);
 
-        // Clear filter: restores 30 items
-        controller.ApplyFilter(null, resetToFirstPage: true);
-        Assert.Equal(30, controller.TotalItemCount);
-        Assert.Equal(6, controller.TotalPages);
-        Assert.Equal(1, controller.CurrentPage);
-        // Retains descending sort: 30, 29, 28, 27, 26
-        Assert.Equal(new[] { 30, 29, 28, 27, 26 }, controller.CurrentPageItems);
+        // A new source keeps the sort.
+        controller.SetSource(Enumerable.Range(1, 10));
+        Assert.Equal(2, controller.CurrentPage);
+        Assert.Equal(new[] { 5, 4, 3, 2, 1 }, controller.CurrentPageItems);
+    }
+
+    [Fact]
+    public void PageSummaryText_UsesTheSingularOnlyWhenTheTotalIsOne()
+    {
+        var controller = new PaginationController<int>
+        {
+            ItemName = "game",
+            PluralItemName = "games"
+        };
+
+        controller.SetPageSize(5);
+        controller.SetSource(Enumerable.Range(1, 6));
+        controller.GoToPage(2); // one row visible, six in total
+
+        Assert.Equal("Showing 6 of 6 games", controller.PageSummaryText);
+    }
+
+    [Fact]
+    public void SelectingANonPresetNumber_BehavesLikeACustomPageSize()
+    {
+        var controller = new PaginationController<int>();
+
+        controller.SelectedPageSizeOption = "42";
+
+        Assert.Equal(42, controller.PageSize);
+        Assert.Equal(PaginationController<int>.CustomPageSizeOption, controller.SelectedPageSizeOption);
+        Assert.True(controller.IsCustomPageSize);
+        Assert.Equal("42", controller.CustomPageSizeText);
+    }
+
+    [Fact]
+    public void PageChange_ReplacesTheSameCollectionWithOneReset()
+    {
+        var controller = new PaginationController<int>();
+        controller.SetPageSize(10);
+        controller.SetSource(Enumerable.Range(1, 30));
+        var items = controller.CurrentPageItems;
+        var events = new List<System.Collections.Specialized.NotifyCollectionChangedAction>();
+        bool pagingDuringEvent = false;
+        items.CollectionChanged += (_, e) =>
+        {
+            events.Add(e.Action);
+            pagingDuringEvent = controller.IsPaging;
+        };
+
+        controller.NextPage();
+
+        Assert.Same(items, controller.CurrentPageItems);
+        Assert.Equal([System.Collections.Specialized.NotifyCollectionChangedAction.Reset], events);
+        Assert.True(pagingDuringEvent);
+        Assert.Equal(11, controller.CurrentPageItems[0]);
+    }
+
+    [Fact]
+    public void IsOffPage_IsTrueOnlyForItemsNotOnTheVisiblePage()
+    {
+        var controller = new PaginationController<int>();
+        controller.SetPageSize(10);
+        controller.SetSource(Enumerable.Range(1, 30));
+
+        Assert.False(controller.IsOffPage(5));
+        Assert.True(controller.IsOffPage(15));
+    }
+
+    [Fact]
+    public void InstalledGamesViewModel_ToggleSort_AscendsOnANewColumnAndFlipsOnTheSameOne()
+    {
+        var vm = new InstalledGamesViewModel(
+            new FakeStatusService([CreateStatus(1, "Zelda"), CreateStatus(2, "Apex"), CreateStatus(3, "Mario")]),
+            SyncProviderSelectionTests.NewWorkspaceLayout());
+        vm.RefreshCommand.Execute(null);
+
+        vm.ToggleSort("GameName");
+        Assert.Equal("Apex", vm.Pagination.CurrentPageItems[0].GameName);
+
+        vm.ToggleSort("GameName");
+        Assert.Equal("Zelda", vm.Pagination.CurrentPageItems[0].GameName);
+
+        vm.ToggleSort("AppId");
+        Assert.Equal("1", vm.Pagination.CurrentPageItems[0].AppId);
     }
 
     [Fact]

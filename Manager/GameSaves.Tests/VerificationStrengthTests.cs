@@ -15,7 +15,7 @@ namespace GameSaves.Tests;
 public sealed class VerificationStrengthTests
 {
     [Fact]
-    public void VerifyPayloadIntegrity_FolderBackup_MatchesHashes_ReturnsPayloadVerified()
+    public async Task VerifyPayloadIntegrity_FolderBackup_MatchesHashes_ReturnsPayloadVerified()
     {
         using var temp = new TemporaryDirectory();
         string runRoot = temp.GetPath("run_folder");
@@ -23,10 +23,9 @@ public sealed class VerificationStrengthTests
         TransferBackupRunInfo run = TestData.CreateBackupRun(runRoot, original, "verified payload content");
 
         var reader = new BackupMetadataReader();
-        VerificationStrengthResult result = reader.VerifyPayloadIntegrity(run);
+        VerificationStrengthResult result = await reader.VerifyPayloadIntegrityAsync(run);
 
         Assert.Equal(VerificationStrength.PayloadVerified, result.Strength);
-        Assert.True(result.IsSuccess);
         Assert.Null(result.Error);
         Assert.Equal(1, result.VerifiedFiles);
         Assert.Equal(1, result.TotalFiles);
@@ -35,7 +34,7 @@ public sealed class VerificationStrengthTests
     }
 
     [Fact]
-    public void VerifyPayloadIntegrity_FolderBackup_TamperedFile_ReturnsPayloadMismatch()
+    public async Task VerifyPayloadIntegrity_FolderBackup_TamperedFile_ReturnsPayloadMismatch()
     {
         using var temp = new TemporaryDirectory();
         string runRoot = temp.GetPath("run_tampered");
@@ -46,10 +45,9 @@ public sealed class VerificationStrengthTests
         File.WriteAllText(run.Manifest.Items[0].BackupFile, "tampered malicious content");
 
         var reader = new BackupMetadataReader();
-        VerificationStrengthResult result = reader.VerifyPayloadIntegrity(run);
+        VerificationStrengthResult result = await reader.VerifyPayloadIntegrityAsync(run);
 
         Assert.Equal(VerificationStrength.PayloadMismatch, result.Strength);
-        Assert.False(result.IsSuccess);
         Assert.NotNull(result.Error);
         Assert.Contains("hash mismatch", result.Error, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(0, result.VerifiedFiles);
@@ -85,9 +83,8 @@ public sealed class VerificationStrengthTests
         Assert.NotNull(zipRun);
         Assert.Equal(BackupContainerFormat.Zip, zipRun.ContainerFormat);
 
-        VerificationStrengthResult result = reader.VerifyPayloadIntegrity(zipRun);
+        VerificationStrengthResult result = await reader.VerifyPayloadIntegrityAsync(zipRun);
         Assert.Equal(VerificationStrength.PayloadVerified, result.Strength);
-        Assert.True(result.IsSuccess);
         Assert.Null(result.Error);
         Assert.Equal(1, result.VerifiedFiles);
         Assert.Equal(1, result.TotalFiles);
@@ -133,9 +130,8 @@ public sealed class VerificationStrengthTests
         Assert.True(built, error);
         Assert.NotNull(zipRun);
 
-        VerificationStrengthResult result = reader.VerifyPayloadIntegrity(zipRun);
+        VerificationStrengthResult result = await reader.VerifyPayloadIntegrityAsync(zipRun);
         Assert.Equal(VerificationStrength.PayloadMismatch, result.Strength);
-        Assert.False(result.IsSuccess);
         Assert.NotNull(result.Error);
         Assert.Contains("hash mismatch", result.Error, StringComparison.OrdinalIgnoreCase);
     }
@@ -167,9 +163,8 @@ public sealed class VerificationStrengthTests
         Assert.NotNull(sevenZipRun);
         Assert.Equal(BackupContainerFormat.SevenZip, sevenZipRun.ContainerFormat);
 
-        VerificationStrengthResult result = reader.VerifyPayloadIntegrity(sevenZipRun);
+        VerificationStrengthResult result = await reader.VerifyPayloadIntegrityAsync(sevenZipRun);
         Assert.Equal(VerificationStrength.PayloadVerified, result.Strength);
-        Assert.True(result.IsSuccess);
         Assert.Null(result.Error);
         Assert.Equal(1, result.VerifiedFiles);
     }
@@ -226,8 +221,6 @@ public sealed class VerificationStrengthTests
         Assert.True(built, buildError);
         Assert.NotNull(runInfo);
         Assert.Equal(VerificationStrength.SidecarManifestMatch, runInfo.Verification);
-        Assert.True(runInfo.IsSidecarMatch);
-        Assert.False(runInfo.IsPayloadVerified);
     }
 
     [Fact]
@@ -250,10 +243,13 @@ public sealed class VerificationStrengthTests
             Item: syncItem,
             Bytes: 1024,
             Status: SyncItemStatus.Uploaded,
-            Error: null,
-            Verification: VerificationStrength.ManifestMatch);
+            Error: null);
 
-        var rowVm = new SyncItemResultRowViewModel(result, "Remote");
+        // The state a post-sync re-read assigns; a transfer alone never does.
+        var rowVm = new SyncItemResultRowViewModel(result, "Remote")
+        {
+            Verification = SyncVerificationState.ManifestMatch
+        };
 
         Assert.Equal("Manifest match", rowVm.StateText);
         Assert.Equal("✓", rowVm.StateGlyph);
@@ -282,10 +278,12 @@ public sealed class VerificationStrengthTests
             Item: syncItem,
             Bytes: 2048,
             Status: SyncItemStatus.Uploaded,
-            Error: null,
-            Verification: VerificationStrength.SidecarManifestMatch);
+            Error: null);
 
-        var rowVm = new SyncItemResultRowViewModel(result, "Remote");
+        var rowVm = new SyncItemResultRowViewModel(result, "Remote")
+        {
+            Verification = SyncVerificationState.SidecarManifestMatch
+        };
 
         Assert.Equal("Sidecar manifest match", rowVm.StateText);
         Assert.Equal("⚠", rowVm.StateGlyph);
@@ -319,13 +317,15 @@ public sealed class VerificationStrengthTests
 
         var normalVm = new TransferRunRowViewModel(normalRun);
         Assert.Equal("Copied (unverified)", normalVm.VerificationDisplay);
-        Assert.Equal("✓", normalVm.VerificationGlyph);
+        Assert.Equal("◷", normalVm.VerificationGlyph); // same state, same glyph as Backups
+        Assert.Equal(string.Empty, normalVm.FlagsDisplay);
         Assert.Contains("Cryptographic payload bytes were not re-read", normalVm.VerificationTooltip);
 
         var dryRun = normalRun with { DryRun = true };
         var dryVm = new TransferRunRowViewModel(dryRun);
         Assert.Equal("Dry run", dryVm.VerificationDisplay);
         Assert.Equal("◷", dryVm.VerificationGlyph);
+        Assert.DoesNotContain("dry run", dryVm.FlagsDisplay); // the badge already says so
 
         var blockedRun = normalRun with { BlockedReason = "Target folder locked by another process" };
         var blockedVm = new TransferRunRowViewModel(blockedRun);
@@ -362,8 +362,8 @@ public sealed class VerificationStrengthTests
         Assert.Single(vm.Runs);
 
         vm.SelectedRun = vm.Runs[0];
-        Assert.True(vm.CanVerifySelectedRun);
-        Assert.Equal(VerificationStrength.ManifestMatch, vm.SelectedRun.Verification);
+        Assert.True(vm.VerifySelectedRunCommand.CanExecute(null));
+        Assert.Equal(VerificationStrength.None, vm.SelectedRun.Verification);
         Assert.Single(vm.RunItems);
         Assert.Null(vm.RunItems[0].IsVerified);
 
@@ -371,11 +371,103 @@ public sealed class VerificationStrengthTests
         await vm.VerifySelectedRunCommand.ExecuteAsync(null);
 
         Assert.Equal(VerificationStrength.PayloadVerified, vm.SelectedRun.Verification);
-        Assert.True(vm.SelectedRun.IsPayloadVerified);
         Assert.True(vm.RunItems[0].IsVerified);
         Assert.Equal("Verified", vm.RunItems[0].StatusDisplay);
         Assert.Equal("✓", vm.RunItems[0].StatusGlyph);
         Assert.Contains("Payload verified", vm.FileListStatusMessage);
+    }
+
+    [Fact]
+    public async Task BackupHistoryViewModel_SwitchingRunsDuringVerify_CancelsItAndReportsNothingStale()
+    {
+        using var temp = new TemporaryDirectory();
+        TransferBackupRunInfo first = TestData.CreateBackupRun(temp.GetPath("run_a"), temp.GetPath("a.dat"), "a");
+        TransferBackupRunInfo second = TestData.CreateBackupRun(temp.GetPath("run_b"), temp.GetPath("b.dat"), "b");
+        var history = new GatedHistoryService([first, second]);
+        BackupHistoryViewModel vm = CreateViewModel(history);
+
+        await vm.InitializeAsync();
+        vm.SelectedRun = vm.Runs[0];
+        VerificationStrength before = vm.Runs[0].Verification;
+
+        Task verifying = vm.VerifySelectedRunCommand.ExecuteAsync(null);
+        Assert.True(vm.IsLoading); // one busy flag: nothing destructive can start while hashing
+
+        vm.SelectedRun = vm.Runs[1];
+        Assert.True(history.Token.IsCancellationRequested);
+
+        history.Release.SetResult(new VerificationStrengthResult(
+            VerificationStrength.PayloadMismatch, "stale failure"));
+        await verifying;
+
+        Assert.Equal(before, vm.Runs[0].Verification);
+        Assert.Equal("", vm.FileListStatusMessage);
+        Assert.False(vm.IsLoading);
+    }
+
+    [Fact]
+    public async Task BackupHistoryViewModel_MissingPayload_IsShownAsPayloadMissing()
+    {
+        using var temp = new TemporaryDirectory();
+        TransferBackupRunInfo run = TestData.CreateBackupRun(temp.GetPath("run_m"), temp.GetPath("m.dat"), "m");
+        var history = new GatedHistoryService([run]);
+        history.Release.SetResult(new VerificationStrengthResult(VerificationStrength.MissingLocally));
+        BackupHistoryViewModel vm = CreateViewModel(history);
+
+        await vm.InitializeAsync();
+        vm.SelectedRun = vm.Runs[0];
+        await vm.VerifySelectedRunCommand.ExecuteAsync(null);
+
+        Assert.Equal("Payload missing", vm.SelectedRun.VerificationDisplay);
+        Assert.Equal("✕", vm.SelectedRun.VerificationGlyph);
+        Assert.Equal("Payload missing", vm.FileListStatusMessage);
+    }
+
+    [Fact]
+    public async Task BackupHistoryViewModel_CancelledVerify_LeavesTheBadgeAlone()
+    {
+        using var temp = new TemporaryDirectory();
+        TransferBackupRunInfo run = TestData.CreateBackupRun(temp.GetPath("run_c"), temp.GetPath("c.dat"), "c");
+        var history = new GatedHistoryService([run]);
+        history.Release.SetResult(new VerificationStrengthResult(VerificationStrength.Cancelled));
+        BackupHistoryViewModel vm = CreateViewModel(history);
+
+        await vm.InitializeAsync();
+        vm.SelectedRun = vm.Runs[0];
+        VerificationStrength before = vm.SelectedRun.Verification;
+        await vm.VerifySelectedRunCommand.ExecuteAsync(null);
+
+        Assert.Equal(before, vm.SelectedRun.Verification);
+    }
+
+    private static BackupHistoryViewModel CreateViewModel(IBackupHistoryService history) =>
+        new(
+            history,
+            new FakeBackupRestoreService(),
+            new FakeBackupCleanupService(),
+            new BackupArchiveService(history),
+            new FakeFolderPickerService(),
+            new ProfilesViewModel(new EmptySteamDiscoveryService(), new FakeSteamProfileDetector(), SyncProviderSelectionTests.NewWorkspaceLayout()),
+            SyncProviderSelectionTests.NewWorkspaceLayout());
+
+    // Verification completes only when the test releases it, and records the
+    // token it was given.
+    private sealed class GatedHistoryService(IReadOnlyList<TransferBackupRunInfo> runs) : IBackupHistoryService
+    {
+        public TaskCompletionSource<VerificationStrengthResult> Release { get; } = new();
+
+        public CancellationToken Token { get; private set; }
+
+        public Task<IReadOnlyList<TransferBackupRunInfo>> GetRunsAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(runs);
+
+        public string GetBackupBasePath() => runs[0].BackupRootPath;
+
+        public Task<VerificationStrengthResult> VerifyRunIntegrityAsync(TransferBackupRunInfo run, CancellationToken cancellationToken = default)
+        {
+            Token = cancellationToken;
+            return Release.Task;
+        }
     }
 
     private sealed class FakeSingleRunHistoryService : IBackupHistoryService

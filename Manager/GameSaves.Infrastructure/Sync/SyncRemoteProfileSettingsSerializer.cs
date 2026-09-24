@@ -75,15 +75,6 @@ namespace GameSaves.Infrastructure.Sync
                             oneDrive.AppRootFolderId),
                         Options),
 
-                (SyncProviderKind.Mega, MegaSyncRemoteSettings mega) =>
-                    JsonSerializer.Serialize(
-                        new MegaSettingsDto(
-                            mega.SchemaVersion,
-                            mega.UserEmail,
-                            mega.RootFolderNodeId,
-                            mega.RootFolderName),
-                        Options),
-
                 _ => throw new ArgumentException(
                     "The provider settings do not match a supported persisted settings model.",
                     nameof(settings))
@@ -95,11 +86,9 @@ namespace GameSaves.Infrastructure.Sync
             int providerSettingsVersion,
             string json)
         {
-            if (providerKind is not SyncProviderKind.LocalFolder and
-                not SyncProviderKind.Sftp and
-                not SyncProviderKind.GoogleDrive and
-                not SyncProviderKind.OneDrive and
-                not SyncProviderKind.Mega)
+            // Only implemented providers have a persisted settings model; the
+            // rest (WebDAV, MEGA, unknown kinds) report the catalog's message.
+            if (!_providerCatalog.IsImplemented(providerKind))
             {
                 return new SyncRemoteProfileSettingsReadResult(
                     null,
@@ -135,7 +124,6 @@ namespace GameSaves.Infrastructure.Sync
                     SyncProviderKind.Sftp => ReadSftp(root),
                     SyncProviderKind.GoogleDrive => ReadGoogleDrive(root),
                     SyncProviderKind.OneDrive => ReadOneDrive(root),
-                    SyncProviderKind.Mega => ReadMega(root),
                     _ => Corrupted()
                 };
             }
@@ -202,15 +190,8 @@ namespace GameSaves.Infrastructure.Sync
                     "The saved Google Drive authorization scope is not supported.");
             }
 
-            string? accountEmail = null;
-
-            if (TryGetProperty(root, "accountEmail", out JsonElement emailElement))
-            {
-                if (emailElement.ValueKind == JsonValueKind.String)
-                    accountEmail = emailElement.GetString();
-                else if (emailElement.ValueKind != JsonValueKind.Null)
-                    return Corrupted();
-            }
+            if (!TryReadOptionalString(root, "accountEmail", out string? accountEmail))
+                return Corrupted();
 
             try
             {
@@ -240,31 +221,11 @@ namespace GameSaves.Infrastructure.Sync
                     "The saved Microsoft OneDrive authorization scope is not supported.");
             }
 
-            string? accountEmail = null;
-            if (TryGetProperty(root, "accountEmail", out JsonElement emailElement))
+            if (!TryReadOptionalString(root, "accountEmail", out string? accountEmail) ||
+                !TryReadOptionalString(root, "accountDisplayName", out string? accountDisplayName) ||
+                !TryReadOptionalString(root, "appRootFolderId", out string? appRootFolderId))
             {
-                if (emailElement.ValueKind == JsonValueKind.String)
-                    accountEmail = emailElement.GetString();
-                else if (emailElement.ValueKind != JsonValueKind.Null)
-                    return Corrupted();
-            }
-
-            string? accountDisplayName = null;
-            if (TryGetProperty(root, "accountDisplayName", out JsonElement nameElement))
-            {
-                if (nameElement.ValueKind == JsonValueKind.String)
-                    accountDisplayName = nameElement.GetString();
-                else if (nameElement.ValueKind != JsonValueKind.Null)
-                    return Corrupted();
-            }
-
-            string? appRootFolderId = null;
-            if (TryGetProperty(root, "appRootFolderId", out JsonElement folderElement))
-            {
-                if (folderElement.ValueKind == JsonValueKind.String)
-                    appRootFolderId = folderElement.GetString();
-                else if (folderElement.ValueKind != JsonValueKind.Null)
-                    return Corrupted();
+                return Corrupted();
             }
 
             try
@@ -283,49 +244,33 @@ namespace GameSaves.Infrastructure.Sync
             }
         }
 
-        private static SyncRemoteProfileSettingsReadResult ReadMega(JsonElement root)
-        {
-            string? userEmail = null;
-            if (TryGetProperty(root, "userEmail", out JsonElement emailElement))
-            {
-                if (emailElement.ValueKind == JsonValueKind.String)
-                    userEmail = emailElement.GetString();
-                else if (emailElement.ValueKind != JsonValueKind.Null)
-                    return Corrupted();
-            }
-
-            string? rootFolderNodeId = null;
-            if (TryGetProperty(root, "rootFolderNodeId", out JsonElement nodeElement))
-            {
-                if (nodeElement.ValueKind == JsonValueKind.String)
-                    rootFolderNodeId = nodeElement.GetString();
-                else if (nodeElement.ValueKind != JsonValueKind.Null)
-                    return Corrupted();
-            }
-
-            string? rootFolderName = MegaSyncRemoteSettings.DefaultRootFolderName;
-            if (TryGetProperty(root, "rootFolderName", out JsonElement folderElement))
-            {
-                if (folderElement.ValueKind == JsonValueKind.String)
-                    rootFolderName = folderElement.GetString();
-                else if (folderElement.ValueKind != JsonValueKind.Null)
-                    return Corrupted();
-            }
-
-            try
-            {
-                return new SyncRemoteProfileSettingsReadResult(
-                    new MegaSyncRemoteSettings(userEmail, rootFolderNodeId, rootFolderName),
-                    null);
-            }
-            catch (ArgumentException)
-            {
-                return Corrupted();
-            }
-        }
-
         private static SyncRemoteProfileSettingsReadResult Corrupted() =>
             new(null, "The saved provider settings are unreadable or corrupted.");
+
+        /// <summary>
+        /// Reads an optional string property: absent or null yields null. Returns
+        /// false only when the property is present with a non-string type, which
+        /// the callers treat as corrupted settings.
+        /// </summary>
+        private static bool TryReadOptionalString(
+            JsonElement root,
+            string propertyName,
+            out string? value)
+        {
+            value = null;
+
+            if (!TryGetProperty(root, propertyName, out JsonElement element) ||
+                element.ValueKind == JsonValueKind.Null)
+            {
+                return true;
+            }
+
+            if (element.ValueKind != JsonValueKind.String)
+                return false;
+
+            value = element.GetString();
+            return true;
+        }
 
         private static bool TryReadString(
             JsonElement root,
@@ -410,11 +355,5 @@ namespace GameSaves.Infrastructure.Sync
             string RequestedScope,
             string? AccountDisplayName,
             string? AppRootFolderId);
-
-        private sealed record MegaSettingsDto(
-            int SchemaVersion,
-            string? UserEmail,
-            string? RootFolderNodeId,
-            string? RootFolderName);
     }
 }

@@ -56,14 +56,8 @@ namespace GameSaves.Core.Transfers
 
         /// <summary>
         /// Reads every file in the backup container (folder or archive) and verifies its SHA-256
-        /// cryptographic hash byte-for-byte against the manifest.
-        /// </summary>
-        VerificationStrengthResult VerifyPayloadIntegrity(
-            TransferBackupRunInfo runInfo,
-            CancellationToken cancellationToken = default);
-
-        /// <summary>
-        /// Asynchronously verifies every file in the backup container against its recorded SHA-256 hash.
+        /// cryptographic hash byte-for-byte against the manifest. Content the manifest does not
+        /// list fails verification; a read failure leaves the run unverified rather than mismatched.
         /// </summary>
         Task<VerificationStrengthResult> VerifyPayloadIntegrityAsync(
             TransferBackupRunInfo runInfo,

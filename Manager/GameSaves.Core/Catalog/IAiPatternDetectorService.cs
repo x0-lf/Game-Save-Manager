@@ -21,6 +21,7 @@ namespace GameSaves.Core.Catalog
         /// <summary>
         /// Converts detection proposals into schema-valid SavePathImportItem objects
         /// with review_status strictly defaulted to 'Pending' and enabled = false.
+        /// Throws <see cref="System.InvalidOperationException"/> when the result has no numeric Steam AppID.
         /// </summary>
         List<SavePathImportItem> ToImportItems(
             AiDetectionResult result,
@@ -28,6 +29,7 @@ namespace GameSaves.Core.Catalog
 
         /// <summary>
         /// Converts detection proposals into a schema-valid MappingImportDocument.
+        /// Throws <see cref="System.InvalidOperationException"/> when the result has no numeric Steam AppID.
         /// </summary>
         MappingImportDocument ToImportDocument(
             AiDetectionResult result,

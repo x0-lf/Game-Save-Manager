@@ -30,13 +30,24 @@ belong to the [security policy](../SECURITY.md).
     provider's own dry-run comparison: it copies, moves, deletes, overwrites,
     and repairs nothing, it can be cancelled, and neither its failure nor its
     cancellation alters or removes the transfer result already recorded.
-12. **Pre-migration backup and atomic schema rollback.** Database schema upgrades
-    never mutate the database without first capturing an online SQLite backup snapshot
-    in `%LOCALAPPDATA%\GameSave\backups\`. Migrations execute within isolated transactions.
-    If any migration throws or fails, the transaction is rolled back, database handles
-    are cleared, and the pre-migration snapshot is automatically restored over the
-    database file. Corrupted or locked databases (`SQLITE_BUSY`) refuse migration attempts
-    before any mutation occurs.
+    Locally listed backup runs start unverified. Payload verification hashes
+    every file the manifest lists and fails on content the manifest does not
+    list or on a link inside the run folder; archive entries are hashed no
+    further than their declared size and the import bounds. A run that cannot
+    be read is reported as unverified, not as tampered.
+12. **All-or-nothing schema migration.** Pending migrations run in one
+    `BEGIN IMMEDIATE` transaction with a single commit; any failure rolls back
+    every step and leaves the previous version recorded. Before migrating, an
+    online SQLite snapshot is written to `%LOCALAPPDATA%\GameSave\backups\` as a
+    manual recovery point; it excludes `protected_sync_secrets`. Corrupted or
+    locked databases (`SQLITE_BUSY`) refuse migration before any mutation.
+13. **Untrusted mappings stay untrusted.** Harvested, AI-assisted, heuristic,
+    and unapproved JSON-import candidates are stored `Pending` and disabled, and
+    a re-import from those sources may update only rows that are still
+    `Pending`: it never rewrites an approved, rejected, needs-fix, or curated
+    mapping. `import --approve` is the one explicit approval path; the audited
+    rule lives in `SavePathMappingWriter.cs`. Invalid candidates (unknown
+    platform or path kind, non-numeric or zero AppID) are dropped, not stored.
 
 ## What can be deleted
 
@@ -54,6 +65,10 @@ backup runs:
 - failed Google Drive downloads may remove only the unique temporary file created
   by that download;
 - ZIP import and similar operations may clean up only their own internal temporary files.
+  Orphaned working folders (`.staging_<32 hex>`, `.download_<32 hex>`,
+  `.export_<32 hex>` and `.export_<32 hex>.tmp`) are purged once per process,
+  only when nothing inside them has been written for over an hour; any other
+  name, including a real run that starts with a dot, is never touched.
 
 ## Integrity and confidentiality
 

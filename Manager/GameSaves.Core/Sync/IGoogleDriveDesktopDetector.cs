@@ -1,18 +1,13 @@
 namespace GameSaves.Core.Sync;
 
 /// <summary>
-/// Detects local installations and mounted filesystem endpoints for the
-/// official Google Drive for Desktop application.
+/// Locates the mounted filesystem endpoint of the official Google Drive for
+/// Desktop application.
 /// </summary>
 public interface IGoogleDriveDesktopDetector
 {
     /// <summary>
-    /// Indicates whether Google Drive for Desktop is detected on the local system.
-    /// </summary>
-    bool IsInstalled { get; }
-
-    /// <summary>
-    /// Gets the root path of the mounted Google Drive virtual filesystem (e.g. "G:\My Drive" or "G:\"),
+    /// Gets the root path of the mounted Google Drive virtual filesystem (e.g. "G:\My Drive"),
     /// or <c>null</c> if not mounted or detected.
     /// </summary>
     string? MountedDrivePath { get; }

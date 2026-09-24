@@ -164,9 +164,11 @@ public sealed class GoogleDriveSyncProviderTests
     [Fact]
     public void DriveFileSystem_StillHoldsNothingThatNeedsReleasing()
     {
-        // Disposal is a no-op only because the Drive boundary owns no
-        // connection. If that ever changes, this fails and the provider must
-        // release it exactly once.
+        // Each Drive operation owns its own short-lived authenticated context,
+        // so the boundary holds no connection. The provider disposes a
+        // disposable file system, but the Drive boundary reaches it inside the
+        // retry wrapper, which forwards no disposal; if this ever changes, this
+        // fails so the release is wired through.
         Assert.False(
             typeof(GoogleDriveRemoteFileSystem).IsAssignableTo(typeof(IDisposable)));
         Assert.False(
@@ -177,11 +179,21 @@ public sealed class GoogleDriveSyncProviderTests
     [Fact]
     public void Wrapper_HoldsNothingButTheSharedEngine()
     {
-        FieldInfo[] fields = typeof(GoogleDriveSyncProvider).GetFields(
+        // No Google SDK type, credential, or token field: the wrapper holds
+        // the neutral remote boundary, the engine, its name, root, and
+        // disposed flag.
+        FieldInfo[] fields = typeof(EngineSyncProvider).GetFields(
             BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
 
         Assert.Equal(
-            new[] { typeof(bool), typeof(string), typeof(SyncEngine) },
+            new[]
+            {
+                typeof(bool),
+                typeof(IRemoteFileSystem),
+                typeof(string),
+                typeof(string),
+                typeof(SyncEngine)
+            },
             fields.Select(field => field.FieldType)
                 .OrderBy(type => type.Name, StringComparer.Ordinal)
                 .ToArray());
@@ -190,7 +202,7 @@ public sealed class GoogleDriveSyncProviderTests
     [Fact]
     public void Wrapper_DeclaresNoOperationBeyondTheProviderContract()
     {
-        string[] declared = typeof(GoogleDriveSyncProvider)
+        string[] declared = typeof(EngineSyncProvider)
             .GetMethods(BindingFlags.Instance | BindingFlags.DeclaredOnly |
                         BindingFlags.Public | BindingFlags.NonPublic)
             .Select(method => method.Name)
@@ -212,7 +224,10 @@ public sealed class GoogleDriveSyncProviderTests
     private static ISyncProvider Provider(
         IRemoteFileSystem remote,
         ITransferHistoryRepository? historyRepository = null) =>
-        new GoogleDriveSyncProvider(
+        // Built exactly as GoogleDriveSyncProviderFactory builds it.
+        new EngineSyncProvider(
+            "Google Drive",
+            remote.DisplayRoot,
             remote,
             new EmptyBackupHistoryService(),
             historyRepository ?? new RecordingHistoryRepository());

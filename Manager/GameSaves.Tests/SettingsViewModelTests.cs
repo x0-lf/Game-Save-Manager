@@ -156,7 +156,6 @@ namespace GameSaves.Tests
             viewModel.IsCustomAccentSelected = true;
 
             Assert.Equal("#10B981", viewModel.AccentTheme);
-            Assert.True(viewModel.IsCustomAccentValid);
             Assert.False(viewModel.HasCustomAccentValidationMessage);
             Assert.NotNull(viewModel.CustomAccentPreviewBrush);
         }
@@ -171,7 +170,6 @@ namespace GameSaves.Tests
             viewModel.CustomAccentHex = "8B5CF6";
 
             Assert.Equal("#8B5CF6", viewModel.AccentTheme);
-            Assert.True(viewModel.IsCustomAccentValid);
             Assert.False(viewModel.HasCustomAccentValidationMessage);
             Assert.Contains("WCAG AA", viewModel.CustomAccentContrastRatioText);
         }
@@ -185,7 +183,6 @@ namespace GameSaves.Tests
             viewModel.AccentTheme = AppUiSettings.AccentTeal;
             viewModel.CustomAccentHex = "#invalid";
 
-            Assert.False(viewModel.IsCustomAccentValid);
             Assert.True(viewModel.HasCustomAccentValidationMessage);
             Assert.Equal("Enter a valid hex code (e.g. #3B82F6)", viewModel.CustomAccentValidationMessage);
             Assert.Equal(AppUiSettings.AccentTeal, viewModel.AccentTheme);
@@ -203,9 +200,60 @@ namespace GameSaves.Tests
             Assert.True(viewModel.IsCustomAccentSelected);
             Assert.Equal("#F59E0B", viewModel.AccentTheme);
             Assert.Equal("#F59E0B", viewModel.CustomAccentHex);
-            Assert.True(viewModel.IsCustomAccentValid);
+            Assert.False(viewModel.HasCustomAccentValidationMessage);
             Assert.NotNull(viewModel.CustomAccentPreviewBrush);
             Assert.Contains("WCAG AA", viewModel.CustomAccentContrastRatioText);
+        }
+
+        [Fact]
+        public void TypingAShortHexCode_AppliesItWithoutRewritingTheText()
+        {
+            string path = _temp.GetPath("short-hex.json");
+            SettingsViewModel viewModel = CreateViewModel(path);
+            viewModel.IsCustomAccentSelected = true;
+
+            viewModel.CustomAccentHex = "#3B8";
+
+            Assert.Equal("#33BB88", viewModel.AccentTheme);
+            Assert.Equal("#3B8", viewModel.CustomAccentHex);
+        }
+
+        [Fact]
+        public void SettingACustomHexWhileAPresetIsSelected_SwitchesTheEditorToIt()
+        {
+            string path = _temp.GetPath("hex-from-preset.json");
+            SettingsViewModel viewModel = CreateViewModel(path);
+            viewModel.CustomAccentHex = "#10B981";
+
+            viewModel.AccentTheme = "#3B82F6";
+
+            Assert.True(viewModel.IsCustomAccentSelected);
+            Assert.Equal("#3B82F6", viewModel.CustomAccentHex);
+            Assert.Equal("#3B82F6", new UiSettingsStore(path).Load().AccentTheme);
+        }
+
+        [Fact]
+        public void SettingsView_CommitsTheHexEditorOnceAndOnlyWhileCustomIsSelected()
+        {
+            string xaml = System.IO.File.ReadAllText(FindSettingsView());
+
+            Assert.Contains(
+                "Text=\"{Binding CustomAccentHex, Mode=TwoWay, UpdateSourceTrigger=LostFocus}\"",
+                xaml);
+            Assert.Contains("IsEnabled=\"{Binding IsCustomAccentSelected}\"", xaml);
+            Assert.DoesNotContain("Custom accent validation error", xaml);
+        }
+
+        private static string FindSettingsView()
+        {
+            var directory = new System.IO.DirectoryInfo(AppContext.BaseDirectory);
+            while (directory is not null &&
+                   !System.IO.File.Exists(System.IO.Path.Combine(directory.FullName, "Manager.sln")))
+            {
+                directory = directory.Parent;
+            }
+
+            return System.IO.Path.Combine(directory!.FullName, "GameSaves.App", "Views", "SettingsView.axaml");
         }
 
         [Fact]
@@ -1122,7 +1170,7 @@ namespace GameSaves.Tests
                             ? "Available"
                             : descriptor.UnavailableMessage ?? "Not implemented")),
                 viewModel.ProviderStatuses.Select(row => (row.Name, row.Status)));
-            Assert.Equal(5, viewModel.ProviderStatuses.Count);
+            Assert.Equal(4, viewModel.ProviderStatuses.Count);
         }
 
         // A8 Data locations: every surfaced path is the exact file the

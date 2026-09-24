@@ -1,6 +1,6 @@
 using GameSaves.Core.Platform;
 using GameSaves.Core.Transfers;
-using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace GameSaves.Infrastructure.Transfers
 {
@@ -8,6 +8,13 @@ namespace GameSaves.Infrastructure.Transfers
     {
         private readonly IAppDatabasePathProvider _databasePathProvider;
         private readonly IBackupMetadataReader _metadataReader;
+        private int _purgeDone;
+
+        private static readonly Regex WorkingDirectoryName =
+            new(@"^\.(staging|export|download)_[0-9a-f]{32}$", RegexOptions.CultureInvariant);
+
+        private static readonly Regex ExportTempFileName =
+            new(@"^\.export_[0-9a-f]{32}\.tmp$", RegexOptions.CultureInvariant);
 
         public BackupHistoryService(
             IAppDatabasePathProvider databasePathProvider,
@@ -46,27 +53,29 @@ namespace GameSaves.Infrastructure.Transfers
             TimeSpan age = olderThan ?? TimeSpan.FromHours(1);
             DateTimeOffset cutoff = DateTimeOffset.UtcNow - age;
 
-            // Delete orphaned temporary directories: .staging_*, .export_*, .download_*
+            // Delete orphaned working directories. Only the exact names the writers
+            // generate (".staging_" / ".export_" / ".download_" + Guid "N") qualify: a
+            // prefix match would also take an imported run that happens to be called
+            // ".staging_backup". Another app instance or the CLI may be mid-import, and a
+            // directory's own write time stops moving once its children exist, so a
+            // candidate is stale only when nothing anywhere inside it was written recently.
             try
             {
                 foreach (string dir in Directory.EnumerateDirectories(basePath, ".*"))
                 {
-                    string name = Path.GetFileName(dir);
-                    if (name.StartsWith(".staging_", StringComparison.OrdinalIgnoreCase) ||
-                        name.StartsWith(".export_", StringComparison.OrdinalIgnoreCase) ||
-                        name.StartsWith(".download_", StringComparison.OrdinalIgnoreCase))
+                    if (!WorkingDirectoryName.IsMatch(Path.GetFileName(dir)))
+                        continue;
+
+                    try
                     {
-                        try
+                        if (NewestWriteTimeUtc(dir) < cutoff.UtcDateTime)
                         {
-                            if (Directory.GetLastWriteTimeUtc(dir) < cutoff.UtcDateTime)
-                            {
-                                Directory.Delete(dir, recursive: true);
-                            }
+                            Directory.Delete(dir, recursive: true);
                         }
-                        catch
-                        {
-                            // Best effort
-                        }
+                    }
+                    catch
+                    {
+                        // Best effort; an unreadable tree is left alone.
                     }
                 }
             }
@@ -80,6 +89,9 @@ namespace GameSaves.Infrastructure.Transfers
             {
                 foreach (string file in Directory.EnumerateFiles(basePath, ".export_*.tmp"))
                 {
+                    if (!ExportTempFileName.IsMatch(Path.GetFileName(file)))
+                        continue;
+
                     try
                     {
                         if (File.GetLastWriteTimeUtc(file) < cutoff.UtcDateTime)
@@ -99,6 +111,28 @@ namespace GameSaves.Infrastructure.Transfers
             }
         }
 
+        private static DateTime NewestWriteTimeUtc(string directory)
+        {
+            DateTime newest = Directory.GetLastWriteTimeUtc(directory);
+            var walk = new EnumerationOptions
+            {
+                RecurseSubdirectories = true,
+                AttributesToSkip = FileAttributes.ReparsePoint,
+                IgnoreInaccessible = false
+            };
+
+            foreach (FileSystemInfo entry in new DirectoryInfo(directory).EnumerateFileSystemInfos("*", walk))
+            {
+                // The enumeration's cached time comes from the directory entry, which
+                // can lag behind a file still open for writing.
+                entry.Refresh();
+                if (entry.LastWriteTimeUtc > newest)
+                    newest = entry.LastWriteTimeUtc;
+            }
+
+            return newest;
+        }
+
         private List<TransferBackupRunInfo> GetRuns(CancellationToken cancellationToken)
         {
             var runs = new List<TransferBackupRunInfo>();
@@ -108,7 +142,10 @@ namespace GameSaves.Infrastructure.Transfers
             if (!Directory.Exists(basePath))
                 return runs;
 
-            PurgeStaleWorkingDirectories();
+            // Listing history is a read. Orphan cleanup rides along once per service
+            // instance (effectively once per process), not on every refresh.
+            if (Interlocked.Exchange(ref _purgeDone, 1) == 0)
+                PurgeStaleWorkingDirectories();
 
             // Enumerate folder runs. The import, export and download paths stage work
             // in dot-prefixed siblings inside this base; a staged run carries a real

@@ -21,7 +21,7 @@ namespace GameSaves.External
 
             steamAppId = steamAppId.Trim();
 
-            if (!steamAppId.All(char.IsDigit))
+            if (!PcgwHarvester.IsAppId(steamAppId))
                 return null;
 
             Console.WriteLine($"Resolving PCGamingWiki page for Steam AppID {steamAppId} using Cargo API...");
@@ -140,7 +140,7 @@ namespace GameSaves.External
             return raw
                 .Split(new[] { ',', ';', ' ', '\n', '\r', '\t' }, StringSplitOptions.RemoveEmptyEntries)
                 .Select(value => value.Trim())
-                .Where(value => value.All(char.IsDigit))
+                .Where(PcgwHarvester.IsAppId)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
         }

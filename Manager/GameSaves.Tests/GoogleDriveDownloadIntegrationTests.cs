@@ -213,12 +213,9 @@ public sealed class GoogleDriveDownloadIntegrationTests
         Assert.Equal(3, bytes);
         Assert.True(new SyncProviderCatalog()
             .GetDescriptor(SyncProviderKind.GoogleDrive).IsImplemented);
-        // Milestone T added the wrapper itself, so the surviving invariant is
-        // that it stays internal and unactivated, not that it is absent.
-        Type wrapper = Assert.Single(
-            typeof(GoogleDriveRemoteFileSystem).Assembly.GetTypes(),
-            type => type.Name == "GoogleDriveSyncProvider");
-        Assert.False(wrapper.IsPublic);
+        // Drive is served by the shared engine wrapper, so the surviving
+        // invariant is that the wrapper stays internal.
+        Assert.False(typeof(EngineSyncProvider).IsPublic);
         Assert.True(new SyncProviderCatalog()
             .GetDescriptor(SyncProviderKind.GoogleDrive).IsImplemented);
         // Milestone U added the factory case itself, so the surviving

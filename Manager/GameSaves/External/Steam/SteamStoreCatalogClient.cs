@@ -170,7 +170,7 @@ namespace GameSaves.External.Steam
             {
                 string? appId = GetString(app, "appid");
 
-                if (string.IsNullOrWhiteSpace(appId) || !appId.All(char.IsDigit))
+                if (!PcgwHarvester.IsAppId(appId))
                     continue;
 
                 string name = GetString(app, "name")?.Trim() ?? string.Empty;

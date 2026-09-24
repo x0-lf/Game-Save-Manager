@@ -23,7 +23,6 @@ public sealed class ThrottlingDiagnosticsTests
             Attempt: 1,
             MaxAttempts: 4,
             Delay: TimeSpan.FromSeconds(2),
-            IsServerInstructed: true,
             Exception: new InvalidOperationException("HTTP 429 Too Many Requests"),
             IsRateLimited: true);
 
@@ -33,7 +32,6 @@ public sealed class ThrottlingDiagnosticsTests
         Assert.Equal(1, started.Attempt);
         Assert.Equal(4, started.MaxAttempts);
         Assert.Equal(TimeSpan.FromSeconds(2), started.Delay);
-        Assert.True(started.IsServerInstructed);
         Assert.True(started.IsRateLimited);
 
         notifier.NotifyBackoffEnded(args);
@@ -70,48 +68,52 @@ public sealed class ThrottlingDiagnosticsTests
         Assert.Equal(1, started.Attempt);
         Assert.Equal(RetryingRemoteFileSystem.DefaultMaxAttempts, started.MaxAttempts);
         Assert.Equal(TimeSpan.FromSeconds(1), started.Delay);
-        Assert.False(started.IsServerInstructed);
         Assert.False(started.IsRateLimited);
     }
 
-    [Fact]
-    public async Task RetryingRemoteFileSystem_DetectsRateLimitingOnRateLimitExceptions()
+    // Rate limiting comes only from the backend's typed predicate. Without
+    // one nothing is rate limited, whatever the message text says.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task RetryingRemoteFileSystem_ReportsRateLimitingOnlyFromThePredicate(bool rateLimited)
     {
-        var inner = new RetryingRemoteFileSystemTests.ScriptedRemoteFileSystem
-        {
-            FailuresBeforeSuccess = 1,
-            ExceptionFactory = _ => new ScriptedRateLimitException("Google.GoogleApiException: rateLimitExceeded (429)")
-        };
-        var delay = new RecordingDelayProvider();
+        var inner = new RetryingRemoteFileSystemTests.ScriptedRemoteFileSystem { FailuresBeforeSuccess = 1 };
         var notifier = new RetryBackoffNotifier();
-
         var startedEvents = new List<RetryBackoffEventArgs>();
         notifier.BackoffStarted += (_, e) => startedEvents.Add(e);
 
         var remote = new RetryingRemoteFileSystem(
             inner,
-            delay,
-            isRetryable: ex => ex is ScriptedRateLimitException,
-            backoffNotifier: notifier);
+            new RecordingDelayProvider(),
+            isRetryable: ex => ex is RetryingRemoteFileSystemTests.ScriptedFailureException,
+            backoffNotifier: notifier,
+            isRateLimited: rateLimited ? _ => true : null);
 
         await remote.ListRunFolderNamesAsync();
 
-        Assert.Single(startedEvents);
-        Assert.True(startedEvents[0].IsRateLimited);
+        Assert.Equal(rateLimited, Assert.Single(startedEvents).IsRateLimited);
     }
 
+    // Observers only watch: a subscriber that throws must not change the
+    // transfer's outcome, and BackoffEnded must still follow BackoffStarted.
     [Fact]
-    public void IsRateLimitException_IdentifiesRateLimitingPatterns()
+    public async Task RetryingRemoteFileSystem_AThrowingSubscriber_StillEndsTheBackoff()
     {
-        Assert.True(SyncViewModel.IsRateLimitException(new Exception("429 Too Many Requests")));
-        Assert.True(SyncViewModel.IsRateLimitException(new Exception("userRateLimitExceeded")));
-        Assert.True(SyncViewModel.IsRateLimitException(new Exception("rateLimitExceeded")));
-        Assert.True(SyncViewModel.IsRateLimitException(new RateLimitCarrierException(TimeSpan.FromSeconds(10))));
-        Assert.True(SyncViewModel.IsRateLimitException(new Exception("Wrapper", new Exception("Status 429"))));
+        var inner = new RetryingRemoteFileSystemTests.ScriptedRemoteFileSystem { FailuresBeforeSuccess = 1 };
+        var notifier = new RetryBackoffNotifier();
+        int ended = 0;
+        notifier.BackoffStarted += (_, _) => throw new InvalidOperationException("subscriber");
+        notifier.BackoffEnded += (_, _) => ended++;
 
-        Assert.False(SyncViewModel.IsRateLimitException(new FileNotFoundException("File not found")));
-        Assert.False(SyncViewModel.IsRateLimitException(new InvalidOperationException("Generic error")));
-        Assert.False(SyncViewModel.IsRateLimitException(null));
+        var remote = new RetryingRemoteFileSystem(
+            inner,
+            new RecordingDelayProvider(),
+            isRetryable: ex => ex is RetryingRemoteFileSystemTests.ScriptedFailureException,
+            backoffNotifier: notifier);
+
+        Assert.Equal(new[] { "run-one" }, await remote.ListRunFolderNamesAsync());
+        Assert.Equal(1, ended);
     }
 
     [Fact]
@@ -131,7 +133,6 @@ public sealed class ThrottlingDiagnosticsTests
     {
         var notifier = new RetryBackoffNotifier();
         var detector = new StubGoogleDriveDesktopDetector(
-            isInstalled: true,
             mountedPath: @"G:\My Drive",
             defaultSyncFolder: @"G:\My Drive\GameSaves");
 
@@ -144,7 +145,6 @@ public sealed class ThrottlingDiagnosticsTests
             Attempt: 1,
             MaxAttempts: 4,
             Delay: TimeSpan.FromSeconds(5),
-            IsServerInstructed: false,
             Exception: new Exception("429 Too Many Requests"),
             IsRateLimited: true);
 
@@ -152,7 +152,8 @@ public sealed class ThrottlingDiagnosticsTests
 
         Assert.True(vm.IsRetrying);
         Assert.True(vm.IsRateLimited);
-        Assert.Contains("Retrying attempt 1/4", vm.RetryCountdownText);
+        // Attempt 1 failed; the countdown is for attempt 2.
+        Assert.Contains("Retrying attempt 2/4", vm.RetryCountdownText);
         Assert.Contains("Rate limited", vm.RetryCountdownText);
 
         notifier.NotifyBackoffEnded(args);
@@ -165,7 +166,6 @@ public sealed class ThrottlingDiagnosticsTests
     public void SyncViewModel_SwitchToGoogleDriveDesktop_SwitchesToLocalFolderAndSuggestedPath()
     {
         var detector = new StubGoogleDriveDesktopDetector(
-            isInstalled: true,
             mountedPath: @"G:\My Drive",
             defaultSyncFolder: @"G:\My Drive\GameSaves");
 
@@ -186,14 +186,13 @@ public sealed class ThrottlingDiagnosticsTests
 
     [Theory]
     [InlineData(@"G:\My Drive\GameSaves", true)]
-    [InlineData(@"G:\", true)]
-    [InlineData(@"G:\OtherFolder", true)]
-    [InlineData(@"C:\Users\Alice\Google Drive\GameSaves", true)]
+    [InlineData(@"G:\", false)]
+    [InlineData(@"G:\OtherFolder", false)]
+    [InlineData(@"C:\Users\Alice\Google Drive\GameSaves", false)]
     [InlineData(@"D:\Backups\NormalFolder", false)]
     public void IsTargetingGoogleDriveDesktop_EvaluatesMountedDrivePaths(string path, bool expected)
     {
         var detector = new StubGoogleDriveDesktopDetector(
-            isInstalled: true,
             mountedPath: @"G:\My Drive",
             defaultSyncFolder: @"G:\My Drive\GameSaves");
 
@@ -202,6 +201,39 @@ public sealed class ThrottlingDiagnosticsTests
         vm.RemoteRootPath = path;
 
         Assert.Equal(expected, vm.IsTargetingGoogleDriveDesktop);
+    }
+
+    // The banner text is Google-specific and must not follow the user to
+    // another provider or survive a profile switch.
+    [Fact]
+    public void RateLimitBanner_IsClearedWhenTheProviderChanges()
+    {
+        SyncViewModel vm = CreateViewModel();
+        vm.SelectedProviderKind = SyncProviderKind.GoogleDrive;
+        vm.IsRateLimited = true;
+        Assert.True(vm.ShowGoogleDriveDesktopPromotion);
+
+        vm.SelectedProviderKind = SyncProviderKind.Sftp;
+
+        Assert.False(vm.IsRateLimited);
+        Assert.False(vm.ShowGoogleDriveDesktopPromotion);
+    }
+
+    // Without a detected Drive mount there is nothing to switch to: a plain
+    // folder would receive the backups and nothing would upload them.
+    [Fact]
+    public void SwitchToGoogleDriveDesktop_WithoutDetectedMount_IsDisabledAndChangesNothing()
+    {
+        SyncViewModel vm = CreateViewModel(
+            detector: new StubGoogleDriveDesktopDetector(mountedPath: null, defaultSyncFolder: null));
+        vm.SelectedProviderKind = SyncProviderKind.GoogleDrive;
+
+        Assert.False(vm.CanSwitchToGoogleDriveDesktop);
+
+        vm.SwitchToGoogleDriveDesktop();
+
+        Assert.Equal(SyncProviderKind.GoogleDrive, vm.SelectedProviderKind);
+        Assert.Contains("not detected", vm.StatusMessage);
     }
 
     private static SyncViewModel CreateViewModel(
@@ -228,21 +260,12 @@ public sealed class ThrottlingDiagnosticsTests
     }
 
     private sealed class StubGoogleDriveDesktopDetector(
-        bool isInstalled,
         string? mountedPath,
         string? defaultSyncFolder)
         : IGoogleDriveDesktopDetector
     {
-        public bool IsInstalled { get; } = isInstalled;
         public string? MountedDrivePath { get; } = mountedPath;
         public string? DefaultSyncFolderPath { get; } = defaultSyncFolder;
     }
 
-    private sealed class ScriptedRateLimitException(string message) : Exception(message);
-
-    private sealed class RateLimitCarrierException(TimeSpan retryAfterDelay)
-        : Exception("Rate limited with carrier"), IRetryDelayCarrier
-    {
-        public TimeSpan? RetryAfterDelay { get; } = retryAfterDelay;
-    }
 }

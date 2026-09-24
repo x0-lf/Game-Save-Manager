@@ -171,15 +171,17 @@ namespace GameSaves.Infrastructure.Sync
                         remotePathName = $"{name}{ext}";
                     }
 
-                    string statusText = "Copy to the sync folder";
                     if (localIsContainer && !_remote.SupportsArchiveContainers)
                     {
-                        statusText = "Cannot upload: remote location does not support archive containers";
+                        // Left out of the plan, as a name collision is: planning
+                        // an upload that execution must refuse would count it,
+                        // enable Sync and end every run with an error.
                         warnings.Add(new TransferPreviewWarning(
                             "LocalContainerUnsupported",
                             $"Backup run \"{name}\" is a compressed container, but this sync location cannot store containers. " +
                             "It cannot be uploaded to this location. Import the run locally first to sync it as a folder.",
                             TransferWarningSeverity.Warning));
+                        continue;
                     }
 
                     items.Add(new SyncItem(
@@ -192,7 +194,7 @@ namespace GameSaves.Infrastructure.Sync
                         GameName: localRun.Manifest.Game,
                         FileCount: localRun.Manifest.FileCount,
                         TotalBytes: localRun.Manifest.TotalBytes,
-                        StatusText: statusText));
+                        StatusText: "Copy to the sync folder"));
                 }
                 else if (!hasLocal && hasRemote)
                 {
@@ -522,9 +524,12 @@ namespace GameSaves.Infrastructure.Sync
                 return RecordAndBuild(plan, options, results, warnings, startedUtc);
             }
 
+            HashSet<string>? onlyRunNames = options.OnlyRunNames is null
+                ? null
+                : new HashSet<string>(options.OnlyRunNames, StringComparer.OrdinalIgnoreCase);
+
             bool IsSelected(SyncItem item) =>
-                options.OnlyRunNames is null ||
-                options.OnlyRunNames.Contains(item.RunName, StringComparer.OrdinalIgnoreCase);
+                onlyRunNames is null || onlyRunNames.Contains(item.RunName);
 
             var progressState = new ProgressState
             {
@@ -721,7 +726,7 @@ namespace GameSaves.Infrastructure.Sync
                             manifestJson,
                             cancellationToken);
 
-                        return new SyncItemResult(item, bytes, SyncItemStatus.Uploaded, null, Verification: VerificationStrength.Copied);
+                        return new SyncItemResult(item, bytes, SyncItemStatus.Uploaded, null);
                     }
                     finally
                     {
@@ -777,11 +782,14 @@ namespace GameSaves.Infrastructure.Sync
                         ReportProgress(options, progressState, item.RunName, relative);
                     }
 
-                    return new SyncItemResult(item, bytes, SyncItemStatus.Uploaded, null, Verification: VerificationStrength.Copied);
+                    return new SyncItemResult(item, bytes, SyncItemStatus.Uploaded, null);
                 }
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
+                // Only the user's cancellation ends the run. An HTTP timeout
+                // also arrives as OperationCanceledException, with the token
+                // live; it is a failed item, recorded like any other.
                 throw;
             }
             catch (Exception ex)
@@ -887,7 +895,7 @@ namespace GameSaves.Infrastructure.Sync
                                 $"Archive container import failed: {importResult.Message}");
                         }
 
-                        return new SyncItemResult(item, bytes, SyncItemStatus.Downloaded, null, Verification: VerificationStrength.Copied);
+                        return new SyncItemResult(item, bytes, SyncItemStatus.Downloaded, null);
                     }
                     finally
                     {
@@ -980,11 +988,14 @@ namespace GameSaves.Infrastructure.Sync
                             rewritten,
                             new JsonSerializerOptions { WriteIndented = true }));
 
-                    return new SyncItemResult(item, bytes, SyncItemStatus.Downloaded, null, Verification: VerificationStrength.Copied);
+                    return new SyncItemResult(item, bytes, SyncItemStatus.Downloaded, null);
                 }
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
+                // Only the user's cancellation ends the run. An HTTP timeout
+                // also arrives as OperationCanceledException, with the token
+                // live; it is a failed item, recorded like any other.
                 throw;
             }
             catch (Exception ex)
@@ -1144,8 +1155,11 @@ namespace GameSaves.Infrastructure.Sync
                         new JsonSerializerOptions { WriteIndented = true }),
                     cancellationToken);
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
+                // Only the user's cancellation ends the run. An HTTP timeout
+                // also arrives as OperationCanceledException, with the token
+                // live; it is a failed item, recorded like any other.
                 throw;
             }
             catch (Exception ex)

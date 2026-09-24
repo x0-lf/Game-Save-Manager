@@ -2,17 +2,16 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.Linq;
 
 namespace GameSaves.App.Common;
 
 /// <summary>
 /// Reusable generic pagination controller for collections, providing preset
-/// and custom page sizing, bounds clamping, sorting/filtering integration,
-/// and accessible navigation commands.
+/// and custom page sizing, bounds clamping, sorting integration, and
+/// accessible navigation commands.
 /// </summary>
-public partial class PaginationController<T> : ObservableObject
+public class PaginationController<T> : ObservableObject
 {
     public const string CustomPageSizeOption = "Custom";
 
@@ -26,7 +25,7 @@ public partial class PaginationController<T> : ObservableObject
     ];
 
     private List<T> _allItems = [];
-    private List<T> _filteredAndSortedItems = [];
+    private List<T> _sortedItems = [];
 
     private int _currentPage = 1;
     private int _pageSize = 20;
@@ -38,13 +37,15 @@ public partial class PaginationController<T> : ObservableObject
     private bool _isCustomPageSize;
     private string _itemName = "item";
     private string _pluralItemName = "items";
-    private Func<T, bool>? _filterPredicate;
     private Func<IEnumerable<T>, IEnumerable<T>>? _sortFunction;
 
-    public ObservableCollection<T> CurrentPageItems { get; } = [];
+    // One instance for the controller's lifetime; every page change replaces
+    // its content with a single Reset.
+    public BulkObservableCollection<T> CurrentPageItems { get; } = [];
 
     public IReadOnlyList<string> PageSizeOptions => PresetPageSizeOptions;
 
+    /// <summary>True while <see cref="CurrentPageItems"/> is being replaced.</summary>
     public bool IsPaging { get; private set; }
 
     public event EventHandler? PageChanged;
@@ -73,17 +74,9 @@ public partial class PaginationController<T> : ObservableObject
         }
     }
 
-    public int CurrentPage
-    {
-        get => _currentPage;
-        set => GoToPage(value);
-    }
+    public int CurrentPage => _currentPage;
 
-    public int PageSize
-    {
-        get => _pageSize;
-        set => SetPageSize(value);
-    }
+    public int PageSize => _pageSize;
 
     public string SelectedPageSizeOption
     {
@@ -97,19 +90,13 @@ public partial class PaginationController<T> : ObservableObject
             {
                 _selectedPageSizeOption = CustomPageSizeOption;
                 IsCustomPageSize = true;
-                if (_customPageSize > 0)
-                {
-                    ApplyPageSize(_customPageSize);
-                }
+                OnPropertyChanged(nameof(SelectedPageSizeOption));
+                ApplyPageSize(_customPageSize);
             }
             else if (int.TryParse(value, out int parsed) && parsed > 0)
             {
-                _selectedPageSizeOption = parsed.ToString();
-                IsCustomPageSize = false;
-                ApplyPageSize(parsed);
+                SetPageSize(parsed);
             }
-
-            OnPropertyChanged(nameof(SelectedPageSizeOption));
         }
     }
 
@@ -119,43 +106,19 @@ public partial class PaginationController<T> : ObservableObject
         private set => SetProperty(ref _isCustomPageSize, value);
     }
 
-    public int CustomPageSize
-    {
-        get => _customPageSize;
-        set
-        {
-            if (value <= 0)
-                return;
-
-            if (SetProperty(ref _customPageSize, value))
-            {
-                _customPageSizeText = value.ToString();
-                OnPropertyChanged(nameof(CustomPageSizeText));
-
-                if (IsCustomPageSize)
-                {
-                    ApplyPageSize(value);
-                }
-            }
-        }
-    }
-
     public string CustomPageSizeText
     {
         get => _customPageSizeText;
         set
         {
-            if (SetProperty(ref _customPageSizeText, value))
+            if (SetProperty(ref _customPageSizeText, value) &&
+                int.TryParse(value, out int parsed) && parsed > 0)
             {
-                if (int.TryParse(value, out int parsed) && parsed > 0)
-                {
-                    _customPageSize = parsed;
-                    OnPropertyChanged(nameof(CustomPageSize));
+                _customPageSize = parsed;
 
-                    if (IsCustomPageSize)
-                    {
-                        ApplyPageSize(parsed);
-                    }
+                if (IsCustomPageSize)
+                {
+                    ApplyPageSize(parsed);
                 }
             }
         }
@@ -186,9 +149,10 @@ public partial class PaginationController<T> : ObservableObject
 
             int start = (CurrentPage - 1) * PageSize + 1;
             int end = Math.Min(CurrentPage * PageSize, TotalItemCount);
+            string noun = TotalItemCount == 1 ? ItemName : PluralItemName;
             return start == end
-                ? $"Showing {start} of {TotalItemCount} {ItemName}"
-                : $"Showing {start}–{end} of {TotalItemCount} {PluralItemName}";
+                ? $"Showing {start} of {TotalItemCount} {noun}"
+                : $"Showing {start}–{end} of {TotalItemCount} {noun}";
         }
     }
 
@@ -207,22 +171,23 @@ public partial class PaginationController<T> : ObservableObject
         LastPageCommand = new RelayCommand(LastPage, () => HasNextPage);
     }
 
+    /// <summary>
+    /// True when a list control's null selection for <paramref name="item"/>
+    /// only means the item is not on the visible page (or the page is being
+    /// swapped), so a view model should keep its selection rather than clear it.
+    /// </summary>
+    public bool IsOffPage(T item) => IsPaging || !CurrentPageItems.Contains(item);
+
     public void SetSource(IEnumerable<T>? items)
     {
         _allItems = items?.ToList() ?? [];
-        RefreshFilteredAndSorted(resetToFirstPage: false);
+        RefreshSorted();
     }
 
-    public void ApplyFilter(Func<T, bool>? filterPredicate, bool resetToFirstPage = true)
-    {
-        _filterPredicate = filterPredicate;
-        RefreshFilteredAndSorted(resetToFirstPage);
-    }
-
-    public void ApplySort(Func<IEnumerable<T>, IEnumerable<T>>? sortFunction, bool resetToFirstPage = false)
+    public void ApplySort(Func<IEnumerable<T>, IEnumerable<T>>? sortFunction)
     {
         _sortFunction = sortFunction;
-        RefreshFilteredAndSorted(resetToFirstPage);
+        RefreshSorted();
     }
 
     public void SetPageSize(int size)
@@ -242,7 +207,6 @@ public partial class PaginationController<T> : ObservableObject
             IsCustomPageSize = true;
             _customPageSize = size;
             _customPageSizeText = sizeStr;
-            OnPropertyChanged(nameof(CustomPageSize));
             OnPropertyChanged(nameof(CustomPageSizeText));
         }
 
@@ -271,48 +235,20 @@ public partial class PaginationController<T> : ObservableObject
         }
     }
 
-    public void NextPage()
-    {
-        if (HasNextPage)
-        {
-            GoToPage(CurrentPage + 1);
-        }
-    }
+    public void NextPage() => GoToPage(CurrentPage + 1);
 
-    public void PreviousPage()
-    {
-        if (HasPreviousPage)
-        {
-            GoToPage(CurrentPage - 1);
-        }
-    }
+    public void PreviousPage() => GoToPage(CurrentPage - 1);
 
     public void FirstPage() => GoToPage(1);
 
     public void LastPage() => GoToPage(TotalPages);
 
-    private void RefreshFilteredAndSorted(bool resetToFirstPage)
+    private void RefreshSorted()
     {
-        IEnumerable<T> items = _allItems;
-
-        if (_filterPredicate is not null)
-        {
-            items = items.Where(_filterPredicate);
-        }
-
-        if (_sortFunction is not null)
-        {
-            items = _sortFunction(items);
-        }
-
-        _filteredAndSortedItems = items.ToList();
-        TotalItemCount = _filteredAndSortedItems.Count;
-
-        if (resetToFirstPage)
-        {
-            _currentPage = 1;
-            OnPropertyChanged(nameof(CurrentPage));
-        }
+        _sortedItems = _sortFunction is null
+            ? _allItems
+            : _sortFunction(_allItems).ToList();
+        TotalItemCount = _sortedItems.Count;
 
         RecalculatePagesAndRefresh();
     }
@@ -326,38 +262,24 @@ public partial class PaginationController<T> : ObservableObject
             _currentPage = TotalPages;
             OnPropertyChanged(nameof(CurrentPage));
         }
-        else if (_currentPage < 1)
-        {
-            _currentPage = 1;
-            OnPropertyChanged(nameof(CurrentPage));
-        }
 
         UpdatePageSlice();
     }
 
     private void UpdatePageSlice()
     {
-        var slice = _filteredAndSortedItems
-            .Skip((CurrentPage - 1) * PageSize)
-            .Take(PageSize)
-            .ToList();
-
         IsPaging = true;
         try
         {
-            CurrentPageItems.Clear();
-            foreach (T item in slice)
-            {
-                CurrentPageItems.Add(item);
-            }
+            CurrentPageItems.ReplaceAll(_sortedItems
+                .Skip((CurrentPage - 1) * PageSize)
+                .Take(PageSize));
         }
         finally
         {
             IsPaging = false;
         }
 
-        OnPropertyChanged(nameof(HasPreviousPage));
-        OnPropertyChanged(nameof(HasNextPage));
         OnPropertyChanged(nameof(PageSummaryText));
         OnPropertyChanged(nameof(PageNumberText));
 

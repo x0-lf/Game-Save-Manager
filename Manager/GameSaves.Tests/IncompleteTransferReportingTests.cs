@@ -61,6 +61,22 @@ public sealed class IncompleteTransferReportingTests
         Assert.Empty(workspace.Remote.Uploaded);
     }
 
+    // HttpClient reports a timeout as a cancellation while the user's token
+    // is still live. That is a failed item, recorded like any other; it must
+    // not abort the run as "cancelled by you" and lose the history row.
+    [Fact]
+    public async Task AnHttpTimeout_IsAFailedItemNotAUserCancellation()
+    {
+        using var workspace = new PartialUploadWorkspace(
+            failOn: "first.dat",
+            failure: new TaskCanceledException("timed out", new TimeoutException()));
+
+        SyncResult result = await workspace.RunAsync();
+
+        Assert.Equal(SyncItemStatus.Failed, Assert.Single(result.Items).Status);
+        Assert.True(result.HasErrors);
+    }
+
     [Fact]
     public async Task AnIncompleteRun_IsNotACleanResult()
     {
@@ -126,9 +142,9 @@ public sealed class IncompleteTransferReportingTests
     {
         private readonly TemporaryDirectory _root = new();
 
-        public PartialUploadWorkspace(string failOn)
+        public PartialUploadWorkspace(string failOn, Exception? failure = null)
         {
-            Remote = new FailingRemoteFileSystem(failOn);
+            Remote = new FailingRemoteFileSystem(failOn, failure);
 
             string runRoot = Path.Combine(_root.Path, "backups", PartialRun);
             Directory.CreateDirectory(runRoot);
@@ -167,7 +183,7 @@ public sealed class IncompleteTransferReportingTests
     /// An empty remote that records every upload and throws on one chosen file
     /// name. Deletions are recorded too, so a test can prove none happened.
     /// </summary>
-    private sealed class FailingRemoteFileSystem(string failOn) : IRemoteFileSystem
+    private sealed class FailingRemoteFileSystem(string failOn, Exception? failure) : IRemoteFileSystem
     {
         public List<string> Uploaded { get; } = [];
 
@@ -184,7 +200,7 @@ public sealed class IncompleteTransferReportingTests
             CancellationToken cancellationToken = default)
         {
             if (relativeRemotePath.EndsWith(failOn, StringComparison.Ordinal))
-                throw new IOException("The synthetic remote refused this file.");
+                throw failure ?? new IOException("The synthetic remote refused this file.");
 
             Uploaded.Add(relativeRemotePath);
             return Task.FromResult(4L);

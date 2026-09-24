@@ -199,7 +199,9 @@ public sealed class GoogleDriveSyncProviderCancellationTests
         IRemoteFileSystem remote,
         IBackupHistoryService? history = null,
         ITransferHistoryRepository? historyRepository = null) =>
-        new GoogleDriveSyncProvider(
+        new EngineSyncProvider(
+            "Google Drive",
+            remote.DisplayRoot,
             remote,
             history ?? new EmptyBackupHistoryService(),
             historyRepository ?? new RecordingHistoryRepository());

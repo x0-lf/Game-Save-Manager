@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Text.Json;
 
 namespace GameSaves.External.Http
@@ -43,81 +44,6 @@ namespace GameSaves.External.Http
             _httpClient.Timeout = TimeSpan.FromSeconds(60);
         }
 
-        public async Task<Uri?> GetFinalUriWithHeadAsync(
-            string url,
-            CancellationToken cancellationToken = default)
-        {
-            string currentUrl = url;
-
-            for (int redirectCount = 0; redirectCount < 10; redirectCount++)
-            {
-                using var request = new HttpRequestMessage(HttpMethod.Head, currentUrl);
-
-                HttpResponseMessage response = await SendOnceWithRetriesAsync(
-                    request,
-                    cancellationToken);
-
-                if (response.StatusCode == HttpStatusCode.NotFound)
-                {
-                    response.Dispose();
-                    return null;
-                }
-
-                if (!IsRedirect(response.StatusCode))
-                {
-                    string body = await response.Content.ReadAsStringAsync(cancellationToken);
-
-                    if (response.StatusCode == HttpStatusCode.NotFound)
-                    {
-                        response.Dispose();
-                        return null;
-                    }
-
-                    EnsureSuccessOrThrow(response, body, currentUrl);
-
-                    Uri? finalUri = response.RequestMessage?.RequestUri;
-                    response.Dispose();
-                    return finalUri;
-                }
-
-                Uri? location = response.Headers.Location;
-
-                if (location is null)
-                {
-                    response.Dispose();
-                    return null;
-                }
-
-                Uri nextUri = location.IsAbsoluteUri
-                    ? location
-                    : new Uri(new Uri(currentUrl), location);
-
-                Console.WriteLine($"HTTP HEAD redirect: {currentUrl} -> {nextUri}");
-
-                response.Dispose();
-                currentUrl = nextUri.ToString();
-            }
-
-            throw new HttpRequestException($"Too many redirects while requesting {url}");
-        }
-
-        public async Task<Uri?> GetFinalUriAsync(
-            string url,
-            CancellationToken cancellationToken = default)
-        {
-            using HttpResponseMessage response = await SendFollowingRedirectsAsync(
-                url,
-                cancellationToken);
-
-            if (response.StatusCode == HttpStatusCode.NotFound)
-                return null;
-
-            string body = await response.Content.ReadAsStringAsync(cancellationToken);
-            EnsureSuccessOrThrow(response, body, url);
-
-            return response.RequestMessage?.RequestUri;
-        }
-
         public async Task<JsonDocument> GetJsonAsync(
             string url,
             CancellationToken cancellationToken = default)
@@ -146,21 +72,6 @@ namespace GameSaves.External.Http
                     $"Body preview: {preview}",
                     ex);
             }
-        }
-
-        public async Task<string> GetStringAsync(
-            string url,
-            CancellationToken cancellationToken = default)
-        {
-            using HttpResponseMessage response = await SendFollowingRedirectsAsync(
-                url,
-                cancellationToken);
-
-            string body = await response.Content.ReadAsStringAsync(cancellationToken);
-
-            EnsureSuccessOrThrow(response, body, url);
-
-            return body;
         }
 
         private async Task<HttpResponseMessage> SendFollowingRedirectsAsync(
@@ -227,7 +138,11 @@ namespace GameSaves.External.Http
 
                 if (IsRetryable(response.StatusCode) && attempt < _options.MaxRetries)
                 {
-                    TimeSpan? retryAfter = response.Headers.RetryAfter?.Delta;
+                    // Retry-After is either a delay or an HTTP date; a date already in the past means "now".
+                    RetryConditionHeaderValue? header = response.Headers.RetryAfter;
+                    TimeSpan? retryAfter = header?.Delta ?? (header?.Date - DateTimeOffset.UtcNow);
+                    if (retryAfter < TimeSpan.Zero)
+                        retryAfter = TimeSpan.Zero;
                     response.Dispose();
 
                     await DelayForRetryAsync(retryAfter, attempt, cancellationToken);

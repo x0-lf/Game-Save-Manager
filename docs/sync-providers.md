@@ -8,18 +8,18 @@ the shared invariants are defined in the [safety model](safety-model.md).
 
 | Behavior | Local Folder | SFTP | Google Drive | WebDAV | OneDrive | MEGA |
 | --- | --- | --- | --- | --- | --- | --- |
-| Available | Yes | Yes | Yes | No | Yes | Yes |
-| Authentication | Filesystem access | Password or private key over SSH | System-browser OAuth with PKCE | Not implemented | System-browser OAuth with PKCE (`Files.ReadWrite.AppFolder`) | Email + password key derivation with optional TOTP 2FA |
-| Secret storage | None | Password and passphrase are session-only | OAuth token in protected secret store | None | OAuth token in protected secret store (DPAPI) | Session token and master key in protected secret store (DPAPI) |
-| Folder selection | Native local folder picker or typed path | Typed remote path | Creates or discovers one app folder; no arbitrary picker | Unavailable | Sandboxed application folder (`drive/special/approot`); no arbitrary picker | Dedicated app root folder (`GameSave Manager Backups`); no arbitrary picker |
-| Connection/status check | Yes | Yes | Yes | Blocked | Yes | Yes |
-| Quota display | No | No | No current UI | No | Yes (Total, Used, Remaining) | Yes (Total, Used, Remaining) |
+| Available | Yes | Yes | Yes | No | Yes, with a developer-supplied client ID | No (withdrawn) |
+| Authentication | Filesystem access | Password or private key over SSH | System-browser OAuth with PKCE | Not implemented | System-browser OAuth with PKCE and `state` (`Files.ReadWrite.AppFolder`) | Not implemented |
+| Secret storage | None | Password and passphrase are session-only | OAuth token in protected secret store | None | OAuth token in protected secret store (DPAPI) | None |
+| Folder selection | Native local folder picker or typed path | Typed remote path | Creates or discovers one app folder; no arbitrary picker | Unavailable | Sandboxed application folder (`drive/special/approot`); no arbitrary picker | Unavailable |
+| Connection/status check | Yes | Yes | Yes | Blocked | Yes | Blocked |
+| Quota display | No | No | No current UI | No | Yes (used and total) | No |
 | Open-location control | Opens local folder | No | Opens the app folder in the browser | No | No | No |
-| Upload backup runs | Yes | Yes | Yes | No | Yes | Yes (chunked with AES-128-CTR and MAC) |
-| Download backup runs | Yes | Yes | Yes | No | Yes | Yes (streaming decryption) |
-| Overwrite runs | Never | Never | Never | N/A | Never | Never (create-only guard) |
-| Delete runs | Never | Never | Never | N/A | Never | Never (zero deletion) |
-| Provider-specific tests | Shared engine and UI coverage | Shared engine coverage; provider seam gap | Extensive deterministic coverage and recorded live acceptance | Availability guards | Extensive deterministic coverage (offline mocks for Graph API & OAuth) | Extensive deterministic coverage (MegaSyncProviderTests & MegaSpikeTests offline doubles) |
+| Upload backup runs | Yes | Yes | Yes | No | Yes (upload sessions above 4 MiB) | No |
+| Download backup runs | Yes | Yes | Yes | No | Yes | No |
+| Overwrite runs | Never | Never | Never | N/A | Never (enforced server-side) | N/A |
+| Delete runs | Never | Never | Never | N/A | Never | N/A |
+| Provider-specific tests | Shared engine and UI coverage | Shared engine coverage over an injectable remote seam | Extensive deterministic coverage and recorded live acceptance | Availability guards | Deterministic coverage through stub HTTP handlers (Graph and OAuth) | Availability guards |
 
 The capability catalog describes intended provider potential. The live UI is
 narrower: Google Drive does not currently display quota or offer arbitrary
@@ -65,9 +65,9 @@ fingerprint for explicit trust; later changes fail until the stored host key is
 deliberately forgotten. The connection check does not copy data.
 
 The shared engine, path-containment fixes, and UI behavior have deterministic
-coverage. The SFTP provider still constructs its concrete connection and lacks
-an injectable remote seam, so its upload/download paths do not have isolated
-provider-level behavioral tests. This is MAINT-001 in the [roadmap](ROADMAP.md).
+coverage. Since MAINT-001 the SFTP provider runs the shared engine over an
+injectable remote file system, so its upload and download paths are tested
+against an in-memory double.
 
 ## Google Drive
 
@@ -120,8 +120,11 @@ the location could not be opened and does nothing else.
 
 Google Drive uploads and downloads stream data, preserve shared engine ordering,
 report progress, support cancellation, and use bounded retries for classified
-transient failures. Server `Retry-After` instructions are not consumed; see
-MAINT-003. The real shape of quota and forced network failures was not produced
+transient failures: rate limiting and temporary unavailability only; permanent
+states such as a missing client configuration are not retried. Server
+`Retry-After` instructions are not consumed for Drive: the Google client does
+not surface the header to the failure mapper, and the MAINT-003 attempt to
+capture it never delivered and was removed. The real shape of quota and forced network failures was not produced
 during live acceptance, so the deterministic mapper coverage has not been
 confirmed against those two real error shapes. This affects retry classification,
 not the create-only/no-delete data policy.
@@ -136,80 +139,69 @@ the source of current provider status.
 Microsoft OneDrive requests sandboxed permissions via Microsoft Graph:
 
 ```text
-Files.ReadWrite.AppFolder offline_access
+Files.ReadWrite.AppFolder offline_access User.Read
 ```
+
+No client ID ships with the App. A developer registers a Microsoft application
+(public client, redirect `http://localhost`, personal Microsoft accounts, which
+is the `/consumers` endpoint) and puts its application (client) ID in the
+`GAMESAVES_ONEDRIVE_CLIENT_ID` environment variable, process or user scope.
+Without a valid GUID there, OneDrive reports that it is not configured and
+Connect is not offered.
 
 ### Safety & Sandboxing Invariants
 
-1. **Sandboxed App Folder:** All sync operations strictly target the sandboxed
+1. **Sandboxed App Folder:** All sync operations target the sandboxed
    application folder (`drive/special/approot`). The application never requests broad
-   Drive scopes (`Files.ReadWrite`, `Files.ReadWrite.All`) and has zero visibility into
-   the user's personal documents, photos, or other OneDrive content.
-2. **Interactive OAuth with PKCE:** Authentication uses the system browser, loopback
-   redirect listener (`http://localhost:<port>/`), and PKCE (Proof Key for Code Exchange)
-   with code verifier and challenge.
-3. **Protected Secret Storage:** OAuth tokens (access token and refresh token) are
-   encrypted at rest via Windows DPAPI through `ISecretStore` under profile-scoped keys
-   `SecretKey(remoteProfileId, SecretNames.OneDriveTokenData)`.
-4. **Automatic Token Refresh:** Access tokens are automatically refreshed within 5
-   minutes of expiry using the stored refresh token.
-5. **Create-Only Uploads:** Backup runs are uploaded strictly in create-only mode.
-   Existing remote files are never overwritten; `manifest.json` is always uploaded last
-   to prevent incomplete runs from being identified as valid backups.
-6. **Zero Deletion:** Synchronization never deletes existing local or remote runs.
-   A same-name run with different contents is treated as an immutable conflict and left untouched.
-7. **Archive Containers Supported:** Like Local Folder and SFTP, OneDrive supports
-   compressed `.zip` backup archives (`SupportsArchiveContainers => true`).
-8. **Storage Quota & Health:** Live storage quota is fetched from Microsoft Graph
-   `/me/drive` (`total`, `used`, `remaining` bytes) and displayed directly in the UI,
-   with a low-storage warning when remaining quota falls below 10%.
+   Drive scopes (`Files.ReadWrite`, `Files.ReadWrite.All`) and has no visibility into
+   the user's other OneDrive content. Saved scopes outside the three above are refused.
+2. **Interactive OAuth with PKCE:** Authentication uses the system browser, a
+   loopback listener on a free port, PKCE, and a random `state` that the callback
+   must return. A callback on the wrong path or with the wrong state is refused and
+   the listener keeps waiting, for at most five minutes. The page shown to the
+   browser is static; nothing from the callback is echoed back.
+3. **Protected Secret Storage:** OAuth tokens are encrypted at rest via Windows
+   DPAPI through `ISecretStore` under `SecretKey(remoteProfileId, SecretNames.OneDriveTokenData)`.
+   A token that cannot be stored fails the connect before the profile is changed.
+   Token records mask their values in `ToString()`.
+4. **Token Refresh:** Access tokens are refreshed within 5 minutes of expiry.
+   Only an `invalid_grant` answer asks the user to reconnect; any other refresh
+   failure is reported as the service being unavailable.
+5. **Create-Only Uploads:** Uploads ask Graph to fail on a name conflict
+   (`@microsoft.graph.conflictBehavior=fail`), and a 409 becomes the create-only
+   refusal, so a file that appears between preview and upload is never replaced.
+   Files over 4 MiB use an upload session in 10 MiB chunks; the chunk requests go
+   to the session URL without the bearer token. `manifest.json` is uploaded last.
+6. **Zero Deletion:** Synchronization never deletes local or remote runs. Only
+   `.gamesave-sync/sync-log.json` may be replaced. A partial download created by a
+   failed call is removed so a retry can create it again; existing local files are
+   never opened for writing.
+7. **Archive Containers Supported:** Like Local Folder and SFTP, OneDrive stores
+   `.zip` and `.7z` backup archives.
+8. **Paging and Retries:** Folder listings follow every `@odata.nextLink` page
+   (only links on the Graph host are followed). HTTP 429, 5xx, network errors and
+   timeouts are retried with bounded backoff, honouring a `Retry-After` that fits
+   the retry budget.
+9. **No account data in history:** The remote root recorded in plans and
+   history is the constant `OneDrive: AppRoot (GameSave Manager)`, never the
+   account email. Error messages are fixed sentences without response bodies.
+10. **Quota is informational:** The Sync page shows used and total storage after
+    a connect. A full drive no longer blocks validation; an upload that does not
+    fit fails like any other failed item.
 
-## MEGA (OBS-012 Spike & OBS-013 Full Delivery)
+## MEGA
 
-Task `OBS-012` established the architectural spike, cryptographic guarantees, and licensing decisions, and task `OBS-013` (PROVIDER-008) delivered the production MEGA cloud sync provider (`MegaRemoteFileSystem`, `MegaSyncProvider`, `MegaSyncProviderFactory`, and UI integration):
+MEGA is catalogued but not available. The first client (OBS-012/OBS-013) did
+not implement MEGA's login or encryption protocol: its key derivation and
+upload path did not match MEGA's, downloads were not decrypted, and quota read
+fields MEGA does not return. It could not work against a real account, and
+every connect attempt sent a weak password verifier to MEGA's servers. It was
+withdrawn rather than left offering a Connect button that could never succeed.
 
-### 1. Dependency & Licensing Evaluation
-
-- **Option A (External `MegaApiClient`):** The widely known third-party library `MegaApiClient`
-  is MIT licensed, but depends on `Newtonsoft.Json` and legacy cryptographic abstractions.
-  Adopting it would introduce external dependency bloat, transitive package complexity, and
-  potential friction with GSM's trimmed .NET 10 `System.Text.Json` architecture.
-- **Option B (Native Internal Client `IMegaApiClient` / `MegaApiClient` — Selected):**
-  GSM implements a clean, native internal client using built-in .NET 10 primitives
-  (`System.Security.Cryptography`, `System.Text.Json`, `HttpClient`). This achieves:
-  * Zero new third-party dependencies and zero license/copyleft contamination.
-  * Direct high-performance crypto (`Aes`, `Rfc2898DeriveBytes.Pbkdf2`, `HMACSHA256`).
-  * 100% deterministic testability with injectable `HttpMessageHandler` doubles without live network requirements.
-
-### 2. Cryptographic & Protocol Architecture
-
-1. **Key Derivation:** Client derives a 128-bit master password key using PBKDF2 with SHA-512
-   and email salt (`Rfc2898DeriveBytes.Pbkdf2`), and computes user hash `uh` for session negotiation.
-2. **Master Key Decryption:** Upon successful session exchange (`{"a": "us"}`), the encrypted
-   master key `k` is decrypted using the derived password AES key.
-3. **Two-Factor Authentication (TOTP):** If an account has 2FA enabled, MEGA returns error `-26`
-   (`EMFAREQUIRED`). The client detects this condition (`MegaAuthenticationStatus.TwoFactorRequired`)
-   and prompts for the 6-digit TOTP pin (`mfa`).
-4. **Chunked Uploads with CBC-MAC:** Files are uploaded in standard MEGA chunks (128 KB doubling
-   up to 1 MB) with AES-128-CTR streaming encryption and running CBC-MAC checksum calculation.
-5. **Node Attributes Encryption:** Folder and file names are serialized into JSON attributes
-   prefixed with `MEGA{"n":"name"}`, padded, and encrypted with AES-128-CBC.
-
-### 3. Safety & Secret Protection Invariants
-
-1. **DPAPI Secret Protection:** Session tokens and derived master keys are stored encrypted at rest
-   via Windows DPAPI through `ISecretStore` under `SecretKey(profileId, SecretNames.MegaSessionData)`.
-2. **Zero Plaintext Secret Exposure:** `MegaSessionToken.ToString()` strictly masks session tokens
-   (`***`) and completely omits master key bytes to prevent accidental credential leakage in logs or diagnostics.
-3. **Dedicated Root Folder:** Synchronizations strictly target a dedicated application folder
-   (`GameSave Manager Backups`) inside the user's cloud drive root (`MegaNodeType.Root`).
-4. **Create-Only Upload Guard:** `MegaRemoteFileSystemSpike.UploadRunAsync` verifies that a run with
-   the requested name does not exist prior to initiating upload. Existing runs cannot be overwritten.
-5. **Manifest-Last Placement:** All payload files are uploaded before `manifest.json`. An interrupted
-   upload leaves an incomplete run that is ignored rather than misidentified as a valid backup.
-6. **Zero Deletion:** Sync operations never call node deletion on existing backup runs.
-7. **Storage Quota Inspection:** Live quota is queried via `{"a": "uq", "strg": 1}` (`mpos` used bytes,
-   `msto` total bytes), with remaining capacity calculated and a warning triggered when free space is under 10%.
+The `SyncProviderKind.Mega` value stays because it is persisted. A saved MEGA
+profile loads as unavailable, the same way a WebDAV profile does. A future
+implementation must use MEGA's real protocol and must never persist
+password-derived key material.
 
 ## Performance choices
 

@@ -1,9 +1,7 @@
-using CommunityToolkit.Mvvm.ComponentModel;
+using GameSaves.App.Common;
 using GameSaves.Core.Transfers;
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
-using System.Linq;
 
 namespace GameSaves.App.Models
 {
@@ -11,59 +9,29 @@ namespace GameSaves.App.Models
     /// Coordinates hierarchical save file trees, deferred node expansion, and flattened
     /// visible rows for virtualized DataGrid / ListBox rendering at 60 FPS.
     /// </summary>
-    public sealed partial class SaveFileHierarchyController : ObservableObject
+    public sealed class SaveFileHierarchyController
     {
-        [ObservableProperty]
-        [NotifyPropertyChangedFor(nameof(TotalSizeDisplay))]
-        [NotifyPropertyChangedFor(nameof(IsEmpty))]
-        private int totalFileCount;
+        // The last verification results for this tree, applied again to every
+        // file that is created later by expanding its folder.
+        private IReadOnlyDictionary<string, bool>? _fileResults;
 
-        [ObservableProperty]
-        [NotifyPropertyChangedFor(nameof(TotalSizeDisplay))]
-        private long totalSizeBytes;
+        public List<SaveFileTreeNodeViewModel> RootNodes { get; private set; } = [];
 
-        [ObservableProperty]
-        [NotifyPropertyChangedFor(nameof(IsEmpty))]
-        private int rootCount;
+        public BulkObservableCollection<SaveFileTreeNodeViewModel> VisibleRows { get; } = [];
 
-        public ObservableCollection<SaveFileTreeNodeViewModel> RootNodes { get; } = new();
+        public void LoadItems(IEnumerable<TransferOverwriteBackupItem> items) =>
+            ApplyRoots(LazyFileTreeBuilder.BuildFromBackupItems(items));
 
-        public ObservableCollection<SaveFileTreeNodeViewModel> VisibleRows { get; } = new();
+        public void LoadFromDescriptors(IEnumerable<SaveFileItemDescriptor> items) =>
+            ApplyRoots(LazyFileTreeBuilder.Build(items));
 
-        public bool IsEmpty => RootNodes.Count == 0;
-
-        public string TotalSizeDisplay => SaveFileTreeNodeViewModel.FormatBytes(TotalSizeBytes);
-
-        public void LoadItems(IEnumerable<TransferOverwriteBackupItem> items)
-        {
-            ArgumentNullException.ThrowIfNull(items);
-
-            var roots = LazyFileTreeBuilder.BuildFromBackupItems(items);
-            ApplyRoots(roots);
-        }
-
-        public void LoadFromDescriptors(IEnumerable<SaveFileItemDescriptor> items)
-        {
-            ArgumentNullException.ThrowIfNull(items);
-
-            var roots = LazyFileTreeBuilder.Build(items);
-            ApplyRoots(roots);
-        }
-
-        public void Clear()
-        {
-            RootNodes.Clear();
-            VisibleRows.Clear();
-            TotalFileCount = 0;
-            TotalSizeBytes = 0;
-            RootCount = 0;
-        }
+        public void Clear() => ApplyRoots([]);
 
         public void ToggleExpand(SaveFileTreeNodeViewModel node)
         {
             ArgumentNullException.ThrowIfNull(node);
 
-            if (!node.IsDirectory || !node.HasChildren)
+            if (!node.IsDirectory)
                 return;
 
             int index = VisibleRows.IndexOf(node);
@@ -72,28 +40,20 @@ namespace GameSaves.App.Models
 
             if (node.IsExpanded)
             {
-                // Collapse: remove all currently visible descendants
+                // Collapse: remove all currently visible descendants, from the
+                // back so no removal shifts the rows still to be removed.
                 node.IsExpanded = false;
 
-                int removeCount = 0;
-                for (int i = index + 1; i < VisibleRows.Count; i++)
-                {
-                    if (VisibleRows[i].Depth > node.Depth)
-                        removeCount++;
-                    else
-                        break;
-                }
+                int end = index + 1;
+                while (end < VisibleRows.Count && VisibleRows[end].Depth > node.Depth)
+                    end++;
 
-                for (int i = 0; i < removeCount; i++)
-                {
-                    VisibleRows.RemoveAt(index + 1);
-                }
+                for (int i = end - 1; i > index; i--)
+                    VisibleRows.RemoveAt(i);
             }
             else
             {
-                // Expand: ensure immediate children are instantiated and insert them
-                node.IsExpanded = true;
-                node.EnsureChildrenLoaded();
+                Expand(node);
 
                 var toInsert = new List<SaveFileTreeNodeViewModel>();
                 CollectVisibleDescendants(node, toInsert);
@@ -107,21 +67,23 @@ namespace GameSaves.App.Models
 
         public void ExpandAll()
         {
-            VisibleRows.Clear();
+            var rows = new List<SaveFileTreeNodeViewModel>();
             foreach (SaveFileTreeNodeViewModel root in RootNodes)
             {
-                ExpandRecursively(root, VisibleRows);
+                ExpandRecursively(root, rows);
             }
+
+            VisibleRows.ReplaceAll(rows);
         }
 
         public void CollapseAll()
         {
-            VisibleRows.Clear();
             foreach (SaveFileTreeNodeViewModel root in RootNodes)
             {
                 CollapseRecursively(root);
-                VisibleRows.Add(root);
             }
+
+            VisibleRows.ReplaceAll(RootNodes);
         }
 
         public void UpdateVerification(IReadOnlyDictionary<string, bool>? fileResults)
@@ -129,29 +91,45 @@ namespace GameSaves.App.Models
             if (fileResults is null || fileResults.Count == 0)
                 return;
 
-            UpdateVerificationRecursive(RootNodes, fileResults);
+            _fileResults = fileResults;
+            ApplyVerification(RootNodes);
         }
 
         private void ApplyRoots(List<SaveFileTreeNodeViewModel> roots)
         {
-            RootNodes.Clear();
-            VisibleRows.Clear();
+            _fileResults = null;
+            RootNodes = roots;
+            VisibleRows.ReplaceAll(roots);
+        }
 
-            long bytesAcc = 0;
-            int filesAcc = 0;
+        // Expanding loads the folder's children the first time; those new
+        // nodes pick up any verification that already ran.
+        private void Expand(SaveFileTreeNodeViewModel node)
+        {
+            bool wasLoaded = node.IsChildrenLoaded;
+            node.IsExpanded = true;
 
-            foreach (SaveFileTreeNodeViewModel root in roots)
+            if (!wasLoaded)
+                ApplyVerification(node.Children);
+        }
+
+        private void ApplyVerification(IEnumerable<SaveFileTreeNodeViewModel> nodes)
+        {
+            if (_fileResults is null)
+                return;
+
+            foreach (SaveFileTreeNodeViewModel node in nodes)
             {
-                RootNodes.Add(root);
-                VisibleRows.Add(root);
-
-                bytesAcc += root.SizeBytes;
-                filesAcc += root.FileCount;
+                if (node.IsFile)
+                {
+                    if (_fileResults.TryGetValue(node.FullPath, out bool matched))
+                        node.IsVerified = matched;
+                }
+                else if (node.IsChildrenLoaded)
+                {
+                    ApplyVerification(node.Children);
+                }
             }
-
-            TotalSizeBytes = bytesAcc;
-            TotalFileCount = filesAcc;
-            RootCount = RootNodes.Count;
         }
 
         private static void CollectVisibleDescendants(
@@ -162,7 +140,7 @@ namespace GameSaves.App.Models
             {
                 destination.Add(child);
 
-                if (child.IsDirectory && child.IsExpanded && child.IsChildrenLoaded)
+                if (child.IsDirectory && child.IsExpanded)
                 {
                     CollectVisibleDescendants(child, destination);
                 }
@@ -171,14 +149,13 @@ namespace GameSaves.App.Models
 
         private void ExpandRecursively(
             SaveFileTreeNodeViewModel node,
-            ICollection<SaveFileTreeNodeViewModel> destination)
+            List<SaveFileTreeNodeViewModel> destination)
         {
             destination.Add(node);
 
-            if (node.IsDirectory && node.HasChildren)
+            if (node.IsDirectory)
             {
-                node.IsExpanded = true;
-                node.EnsureChildrenLoaded();
+                Expand(node);
 
                 foreach (SaveFileTreeNodeViewModel child in node.Children)
                 {
@@ -187,40 +164,15 @@ namespace GameSaves.App.Models
             }
         }
 
-        private void CollapseRecursively(SaveFileTreeNodeViewModel node)
+        private static void CollapseRecursively(SaveFileTreeNodeViewModel node)
         {
             if (node.IsDirectory)
             {
                 node.IsExpanded = false;
 
-                if (node.IsChildrenLoaded)
+                foreach (SaveFileTreeNodeViewModel child in node.Children)
                 {
-                    foreach (SaveFileTreeNodeViewModel child in node.Children)
-                    {
-                        CollapseRecursively(child);
-                    }
-                }
-            }
-        }
-
-        private void UpdateVerificationRecursive(
-            IEnumerable<SaveFileTreeNodeViewModel> nodes,
-            IReadOnlyDictionary<string, bool> fileResults)
-        {
-            foreach (SaveFileTreeNodeViewModel node in nodes)
-            {
-                if (node.IsFile)
-                {
-                    if (fileResults.TryGetValue(node.RelativePath, out bool matched) ||
-                        fileResults.TryGetValue(node.FullPath, out matched) ||
-                        fileResults.TryGetValue(node.Name, out matched))
-                    {
-                        node.IsVerified = matched;
-                    }
-                }
-                else if (node.IsChildrenLoaded)
-                {
-                    UpdateVerificationRecursive(node.Children, fileResults);
+                    CollapseRecursively(child);
                 }
             }
         }

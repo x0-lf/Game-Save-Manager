@@ -11,9 +11,16 @@ namespace GameSaves.Infrastructure.Data
 
         private readonly IReadOnlyList<ISchemaMigration> _migrations;
 
-        public SchemaMigrator(IEnumerable<ISchemaMigration>? migrations = null)
+        public SchemaMigrator()
+            : this(GetDefaultMigrations())
         {
-            _migrations = (migrations ?? GetDefaultMigrations())
+        }
+
+        // Internal on purpose: a DI container resolves IEnumerable<ISchemaMigration>
+        // to an empty sequence, and a migrator built that way migrates nothing.
+        internal SchemaMigrator(IEnumerable<ISchemaMigration> migrations)
+        {
+            _migrations = migrations
                 .OrderBy(m => m.Version)
                 .ToList();
         }
@@ -23,7 +30,8 @@ namespace GameSaves.Infrastructure.Data
             new V001__BaselineSchema(),
             new V002__ReviewColumnsAndProvenance(),
             new V003__SyncAndSecretStorage(),
-            new V004__CatalogAndMappingIndexes()
+            new V004__CatalogAndMappingIndexes(),
+            new V005__DropDuplicateTransferItemsIndex()
         ];
 
         public MigrationPlan Plan(string databasePath)
@@ -33,31 +41,21 @@ namespace GameSaves.Infrastructure.Data
 
             bool integrityPassed = VerifyIntegrity(databasePath, out string integrityMessage);
 
-            int currentVersion = 0;
-            IReadOnlyList<SchemaMigrationRecord> applied = Array.Empty<SchemaMigrationRecord>();
+            // A file that fails the integrity check has no trustworthy history;
+            // the failed check is the answer the caller needs.
+            IReadOnlyList<SchemaMigrationRecord> applied = integrityPassed
+                ? GetAppliedMigrations(databasePath)
+                : Array.Empty<SchemaMigrationRecord>();
 
-            if (File.Exists(databasePath))
-            {
-                applied = GetAppliedMigrations(databasePath);
-                currentVersion = applied.Count > 0 ? applied.Max(m => m.Id) : 0;
-            }
+            int currentVersion = applied.Count > 0 ? applied.Max(m => m.Id) : 0;
 
-            var appliedNames = new HashSet<string>(applied.Select(a => a.Name), StringComparer.OrdinalIgnoreCase);
-
-            var pending = _migrations
-                .Where(m => m.Version > currentVersion || !appliedNames.Contains(m.Name))
+            var pending = GetPending(applied.Select(a => a.Id).ToHashSet())
                 .Select(m => new SchemaMigrationInfo(m.Version, m.Name, m.Description))
                 .ToList();
 
-            int targetVersion = _migrations.Count > 0 ? _migrations.Max(m => m.Version) : currentVersion;
-
-            string? plannedBackupPath = null;
-            if (pending.Count > 0 && File.Exists(databasePath))
-            {
-                string dbDir = Path.GetDirectoryName(databasePath) ?? ".";
-                string timestamp = DateTimeOffset.UtcNow.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
-                plannedBackupPath = Path.Combine(dbDir, "backups", $"gamesave-pre-migration-{timestamp}-v{targetVersion}.db");
-            }
+            int targetVersion = _migrations.Count > 0
+                ? Math.Max(currentVersion, _migrations.Max(m => m.Version))
+                : currentVersion;
 
             return new MigrationPlan(
                 DatabasePath: databasePath,
@@ -66,10 +64,12 @@ namespace GameSaves.Infrastructure.Data
                 PendingMigrations: pending,
                 IntegrityCheckPassed: integrityPassed,
                 IntegrityMessage: integrityMessage,
-                PlannedBackupPath: plannedBackupPath);
+                PlannedBackupDirectory: pending.Count > 0 && File.Exists(databasePath)
+                    ? GetBackupDirectory(databasePath)
+                    : null);
         }
 
-        public MigrationExecutionResult Migrate(string databasePath, bool forceBackup = false)
+        public MigrationExecutionResult Migrate(string databasePath)
         {
             if (string.IsNullOrWhiteSpace(databasePath))
                 throw new ArgumentException("Database path is required.", nameof(databasePath));
@@ -79,170 +79,146 @@ namespace GameSaves.Infrastructure.Data
                 Directory.CreateDirectory(directory);
 
             bool fileExisted = File.Exists(databasePath);
+            int previousVersion = 0;
+            string? backupPath = null;
 
-            // Step 1: Pre-flight integrity check
             if (fileExisted)
             {
+                // Read the history first: the integrity check and the snapshot are
+                // only worth their cost when there is something to apply, and this
+                // runs on every application start.
+                try
+                {
+                    IReadOnlyList<SchemaMigrationRecord> applied = GetAppliedMigrations(databasePath);
+                    previousVersion = applied.Count > 0 ? applied.Max(m => m.Id) : 0;
+
+                    if (GetPending(applied.Select(a => a.Id).ToHashSet()).Count == 0)
+                    {
+                        return new MigrationExecutionResult(
+                            Success: true,
+                            PreviousVersion: previousVersion,
+                            CurrentVersion: previousVersion,
+                            AppliedMigrations: Array.Empty<string>(),
+                            PreMigrationBackupPath: null,
+                            RolledBack: false,
+                            ErrorMessage: null);
+                    }
+                }
+                catch (SqliteException ex) when (IsLockOrBusyError(ex))
+                {
+                    return Failed(previousVersion, null, rolledBack: false, LockedMessage);
+                }
+                catch (SqliteException)
+                {
+                    // Unreadable history: the integrity check below says why.
+                }
+
                 if (!VerifyIntegrity(databasePath, out string integrityError))
                 {
-                    return new MigrationExecutionResult(
-                        Success: false,
-                        PreviousVersion: 0,
-                        CurrentVersion: 0,
-                        AppliedMigrations: Array.Empty<string>(),
-                        PreMigrationBackupPath: null,
-                        RolledBack: false,
-                        ErrorMessage: $"Cannot migrate database: integrity check failed with '{integrityError}'.");
+                    return Failed(
+                        previousVersion,
+                        null,
+                        rolledBack: false,
+                        $"Cannot migrate database: integrity check failed with '{integrityError}'.");
                 }
-            }
 
-            // Step 2: Determine applied & pending migrations
-            IReadOnlyList<SchemaMigrationRecord> appliedRecords = fileExisted
-                ? GetAppliedMigrations(databasePath)
-                : Array.Empty<SchemaMigrationRecord>();
-
-            int previousVersion = appliedRecords.Count > 0 ? appliedRecords.Max(m => m.Id) : 0;
-            var appliedNames = new HashSet<string>(appliedRecords.Select(a => a.Name), StringComparer.OrdinalIgnoreCase);
-
-            var pending = _migrations
-                .Where(m => m.Version > previousVersion || !appliedNames.Contains(m.Name))
-                .OrderBy(m => m.Version)
-                .ToList();
-
-            // Step 3: No-op if already up to date
-            if (pending.Count == 0 && !forceBackup)
-            {
-                return new MigrationExecutionResult(
-                    Success: true,
-                    PreviousVersion: previousVersion,
-                    CurrentVersion: previousVersion,
-                    AppliedMigrations: Array.Empty<string>(),
-                    PreMigrationBackupPath: null,
-                    RolledBack: false,
-                    ErrorMessage: null);
-            }
-
-            // Step 4: Create pre-migration backup if file exists and migrations pending
-            string? backupPath = null;
-            if (fileExisted && (pending.Count > 0 || forceBackup))
-            {
                 try
                 {
                     backupPath = Backup(databasePath);
                 }
                 catch (Exception ex)
                 {
-                    return new MigrationExecutionResult(
-                        Success: false,
-                        PreviousVersion: previousVersion,
-                        CurrentVersion: previousVersion,
-                        AppliedMigrations: Array.Empty<string>(),
-                        PreMigrationBackupPath: null,
-                        RolledBack: false,
-                        ErrorMessage: $"Pre-migration database backup failed: {ex.Message}. Migration refused for safety.");
+                    return Failed(
+                        previousVersion,
+                        null,
+                        rolledBack: false,
+                        $"Pre-migration database backup failed: {ex.Message}. Migration refused for safety.");
                 }
             }
 
-            // Step 5: Execute pending migrations within transactions
             var connectionString = new SqliteConnectionStringBuilder
             {
                 DataSource = databasePath,
                 ForeignKeys = true
             }.ToString();
 
-            var appliedNamesList = new List<string>();
-            int currentVersion = previousVersion;
+            var appliedNames = new List<string>();
+            ISchemaMigration? current = null;
+            SqliteTransaction? transaction = null;
+
+            using var connection = new SqliteConnection(connectionString);
 
             try
             {
-                using var connection = new SqliteConnection(connectionString);
                 connection.Open();
 
-                EnsureSchemaMigrationsTable(connection);
+                // One BEGIN IMMEDIATE transaction for every pending migration: the
+                // history is re-read under the write lock, so two processes starting
+                // together cannot both apply a migration, and the schema either
+                // reaches the target version or stays exactly where it was.
+                transaction = connection.BeginTransaction();
 
-                foreach (ISchemaMigration migration in pending)
+                EnsureSchemaMigrationsTable(connection, transaction);
+                HashSet<int> appliedIds = ReadAppliedIds(connection, transaction);
+                previousVersion = appliedIds.Count > 0 ? appliedIds.Max() : 0;
+                int currentVersion = previousVersion;
+
+                foreach (ISchemaMigration migration in GetPending(appliedIds))
                 {
-                    using var transaction = connection.BeginTransaction();
-                    try
-                    {
-                        migration.Up(connection, transaction);
-                        RecordMigration(connection, transaction, migration);
-                        transaction.Commit();
+                    current = migration;
+                    migration.Up(connection, transaction);
+                    RecordMigration(connection, transaction, migration);
 
-                        appliedNamesList.Add(migration.Name);
-                        currentVersion = Math.Max(currentVersion, migration.Version);
-                    }
-                    catch (Exception ex)
-                    {
-                        try { transaction.Rollback(); } catch { }
-                        connection.Close();
-                        SqliteConnection.ClearPool(connection);
-
-                        bool restored = false;
-                        string? restoreError = null;
-
-                        if (!string.IsNullOrWhiteSpace(backupPath) && File.Exists(backupPath))
-                        {
-                            try
-                            {
-                                File.Copy(backupPath, databasePath, overwrite: true);
-                                restored = true;
-                            }
-                            catch (Exception copyEx)
-                            {
-                                restoreError = copyEx.Message;
-                            }
-                        }
-
-                        return new MigrationExecutionResult(
-                            Success: false,
-                            PreviousVersion: previousVersion,
-                            CurrentVersion: previousVersion,
-                            AppliedMigrations: appliedNamesList,
-                            PreMigrationBackupPath: backupPath,
-                            RolledBack: restored,
-                            ErrorMessage: $"Migration '{migration.Name}' (v{migration.Version}) failed: {ex.Message}. " +
-                                (restored
-                                    ? "Pre-migration database snapshot was restored successfully."
-                                    : $"Warning: snapshot restore failed ({restoreError})."));
-                    }
+                    appliedNames.Add(migration.Name);
+                    currentVersion = Math.Max(currentVersion, migration.Version);
                 }
-            }
-            catch (SqliteException ex) when (IsLockOrBusyError(ex))
-            {
+
+                current = null;
+                transaction.Commit();
+
                 return new MigrationExecutionResult(
-                    Success: false,
+                    Success: true,
                     PreviousVersion: previousVersion,
-                    CurrentVersion: previousVersion,
-                    AppliedMigrations: appliedNamesList,
+                    CurrentVersion: currentVersion,
+                    AppliedMigrations: appliedNames,
                     PreMigrationBackupPath: backupPath,
                     RolledBack: false,
-                    ErrorMessage: "Database is locked by another process (SQLITE_BUSY / SQLITE_LOCKED). Please close running instances of GameSave Manager and retry.");
+                    ErrorMessage: null);
             }
-
-            // Clean up older backups
-            if (!string.IsNullOrWhiteSpace(backupPath))
+            catch (Exception ex)
             {
-                PruneOldBackups(Path.GetDirectoryName(backupPath)!);
-            }
+                // Nothing commits once the transaction has begun and failed: if the
+                // explicit rollback throws too, SQLite rolls back when the
+                // connection closes.
+                bool rolledBack = transaction is not null;
+                try
+                {
+                    transaction?.Rollback();
+                }
+                catch (Exception)
+                {
+                }
 
-            return new MigrationExecutionResult(
-                Success: true,
-                PreviousVersion: previousVersion,
-                CurrentVersion: currentVersion,
-                AppliedMigrations: appliedNamesList,
-                PreMigrationBackupPath: backupPath,
-                RolledBack: false,
-                ErrorMessage: null);
+                string message = ex is SqliteException sqlite && IsLockOrBusyError(sqlite)
+                    ? LockedMessage
+                    : current is null
+                        ? $"Schema migration failed: {ex.Message}. No migration was applied."
+                        : $"Migration '{current.Name}' (v{current.Version}) failed: {ex.Message}. No migration was applied.";
+
+                return Failed(previousVersion, backupPath, rolledBack, message);
+            }
+            finally
+            {
+                transaction?.Dispose();
+            }
         }
 
-        public string Backup(string databasePath, string? destinationDirectory = null)
+        public string Backup(string databasePath)
         {
             if (!File.Exists(databasePath))
                 throw new FileNotFoundException($"Database file not found: {databasePath}", databasePath);
 
-            string dbDir = Path.GetDirectoryName(databasePath) ?? ".";
-            string backupDir = destinationDirectory ?? Path.Combine(dbDir, "backups");
+            string backupDir = GetBackupDirectory(databasePath);
             Directory.CreateDirectory(backupDir);
 
             string timestamp = DateTimeOffset.UtcNow.ToString("yyyyMMdd-HHmmss-fff", CultureInfo.InvariantCulture);
@@ -262,8 +238,13 @@ namespace GameSaves.Infrastructure.Data
                 sourceConn.Open();
                 destConn.Open();
                 sourceConn.BackupDatabase(destConn);
-                destConn.Close();
-                SqliteConnection.ClearPool(destConn);
+
+                // The snapshot is a schema recovery point, not a credential store:
+                // keeping the DPAPI-protected OAuth tokens in up to ten copies would
+                // mean deleting a remote profile no longer removes its secrets.
+                using var scrub = destConn.CreateCommand();
+                scrub.CommandText = "DROP TABLE IF EXISTS protected_sync_secrets; VACUUM;";
+                scrub.ExecuteNonQuery();
             }
 
             PruneOldBackups(backupDir);
@@ -320,41 +301,57 @@ namespace GameSaves.Infrastructure.Data
             var results = new List<SchemaMigrationRecord>();
             var builder = new SqliteConnectionStringBuilder { DataSource = databasePath };
 
-            try
+            using var connection = new SqliteConnection(builder.ToString());
+            connection.Open();
+
+            if (!TableExists(connection, "schema_migrations"))
+                return Array.Empty<SchemaMigrationRecord>();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = "SELECT id, name, applied_utc FROM schema_migrations ORDER BY id ASC;";
+
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
             {
-                using var connection = new SqliteConnection(builder.ToString());
-                connection.Open();
+                // CURRENT_TIMESTAMP is UTC without an offset.
+                DateTimeOffset appliedUtc = DateTimeOffset.Parse(
+                    reader.GetString(2),
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
 
-                if (!TableExists(connection, "schema_migrations"))
-                    return Array.Empty<SchemaMigrationRecord>();
-
-                using var command = connection.CreateCommand();
-                command.CommandText = "SELECT id, name, applied_utc FROM schema_migrations ORDER BY id ASC;";
-
-                using var reader = command.ExecuteReader();
-                while (reader.Read())
-                {
-                    int id = reader.GetInt32(0);
-                    string name = reader.GetString(1);
-                    string appliedUtcText = reader.GetString(2);
-                    DateTimeOffset appliedUtc = DateTimeOffset.TryParse(appliedUtcText, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var dto)
-                        ? dto
-                        : DateTimeOffset.UtcNow;
-
-                    results.Add(new SchemaMigrationRecord(id, name, appliedUtc));
-                }
-            }
-            catch (Exception)
-            {
-                // Fallback on table error
+                results.Add(new SchemaMigrationRecord(reader.GetInt32(0), reader.GetString(1), appliedUtc));
             }
 
             return results;
         }
 
-        private static void EnsureSchemaMigrationsTable(SqliteConnection connection)
+        private const string LockedMessage =
+            "Database is locked by another process (SQLITE_BUSY / SQLITE_LOCKED). Please close running instances of GameSave Manager and retry.";
+
+        private static MigrationExecutionResult Failed(
+            int previousVersion,
+            string? backupPath,
+            bool rolledBack,
+            string? errorMessage) =>
+            new(
+                Success: false,
+                PreviousVersion: previousVersion,
+                CurrentVersion: previousVersion,
+                AppliedMigrations: Array.Empty<string>(),
+                PreMigrationBackupPath: backupPath,
+                RolledBack: rolledBack,
+                ErrorMessage: errorMessage);
+
+        private List<ISchemaMigration> GetPending(HashSet<int> appliedVersions) =>
+            _migrations.Where(m => !appliedVersions.Contains(m.Version)).ToList();
+
+        private static string GetBackupDirectory(string databasePath) =>
+            Path.Combine(Path.GetDirectoryName(databasePath) ?? ".", "backups");
+
+        private static void EnsureSchemaMigrationsTable(SqliteConnection connection, SqliteTransaction transaction)
         {
             using var command = connection.CreateCommand();
+            command.Transaction = transaction;
             command.CommandText = """
             CREATE TABLE IF NOT EXISTS schema_migrations (
                 id INTEGER PRIMARY KEY,
@@ -363,6 +360,20 @@ namespace GameSaves.Infrastructure.Data
             );
             """;
             command.ExecuteNonQuery();
+        }
+
+        private static HashSet<int> ReadAppliedIds(SqliteConnection connection, SqliteTransaction transaction)
+        {
+            using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = "SELECT id FROM schema_migrations;";
+
+            var ids = new HashSet<int>();
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+                ids.Add(reader.GetInt32(0));
+
+            return ids;
         }
 
         private static void RecordMigration(
@@ -374,10 +385,7 @@ namespace GameSaves.Infrastructure.Data
             command.Transaction = transaction;
             command.CommandText = """
             INSERT INTO schema_migrations (id, name, applied_utc)
-            VALUES ($id, $name, CURRENT_TIMESTAMP)
-            ON CONFLICT (id) DO UPDATE SET
-                name = excluded.name,
-                applied_utc = excluded.applied_utc;
+            VALUES ($id, $name, CURRENT_TIMESTAMP);
             """;
             command.Parameters.AddWithValue("$id", migration.Version);
             command.Parameters.AddWithValue("$name", migration.Name);

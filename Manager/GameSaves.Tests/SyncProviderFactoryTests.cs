@@ -4,6 +4,7 @@ using GameSaves.Core.Sync;
 using GameSaves.Core.Transfers;
 using GameSaves.Infrastructure.DependencyInjection;
 using GameSaves.Infrastructure.GoogleDrive;
+using GameSaves.Infrastructure.OneDrive;
 using GameSaves.Infrastructure.Sync;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -34,7 +35,7 @@ public sealed class SyncProviderFactoryTests
         using ISyncProvider provider =
             Factory(backups.Path).CreateLocalFolderProvider(remote.Path);
 
-        Assert.IsType<LocalFolderSyncProvider>(provider);
+        Assert.IsType<EngineSyncProvider>(provider);
         Assert.Equal("Local folder", provider.ProviderName);
         Assert.Equal(remote.Path, provider.RemoteRoot);
     }
@@ -62,7 +63,7 @@ public sealed class SyncProviderFactoryTests
         using ISyncProvider provider =
             Factory(backups.Path).CreateSftpProvider(SftpSettings());
 
-        Assert.IsType<SftpSyncProvider>(provider);
+        Assert.IsType<EngineSyncProvider>(provider);
         Assert.Equal("SFTP", provider.ProviderName);
         Assert.Equal(
             "sftp://backup-user@sftp.example.invalid:2222/gamesave-sync",
@@ -174,6 +175,11 @@ public sealed class SyncProviderFactoryTests
         // account.
         Assert.Throws<ArgumentException>(
             () => factory.CreateGoogleDriveProvider(Guid.Empty));
+
+        // The OneDrive factory is a required dependency, so the OneDrive case
+        // reaches it rather than failing as unconfigured.
+        Assert.Throws<ArgumentException>(
+            () => factory.CreateOneDriveProvider(Guid.Empty));
     }
 
     [Fact]
@@ -352,7 +358,8 @@ public sealed class SyncProviderFactoryTests
                 repository,
                 new RecordingRemoteFileSystemFactory(),
                 new RootedBackupHistoryService(backupBasePath),
-                new RecordingHistoryRepository()));
+                new RecordingHistoryRepository()),
+            new UnusedOneDriveSyncProviderFactory());
     }
 
     /// <summary>
@@ -442,4 +449,14 @@ public sealed class SyncProviderFactoryTests
             }
         }
     }
+}
+
+/// <summary>
+/// Fills SyncProviderFactory's required OneDrive dependency in tests that never
+/// reach the OneDrive case.
+/// </summary>
+internal sealed class UnusedOneDriveSyncProviderFactory : IOneDriveSyncProviderFactory
+{
+    public ISyncProvider Create(Guid remoteProfileId) =>
+        throw new InvalidOperationException("This test does not use OneDrive.");
 }

@@ -72,22 +72,37 @@ namespace GameSaves
                     break;
 
                 case "migrate":
-                    string targetMigrateDb = args.Length >= 2 ? args[1] : dbPath;
-                    RunMigrate(targetMigrateDb);
-                    break;
-
                 case "migrate-status":
-                    string targetStatusDb = args.Length >= 2 ? args[1] : dbPath;
-                    RunMigrateStatus(targetStatusDb);
-                    break;
-
                 case "migrate-dry-run":
-                    string targetDryRunDb = args.Length >= 2 ? args[1] : dbPath;
-                    RunMigrateDryRun(targetDryRunDb);
+                    // An option such as --help is not a database path: `migrate`
+                    // would create a database file of that name.
+                    if (args.Length >= 2 && args[1].StartsWith('-'))
+                    {
+                        UsageError($"Usage: {command} [dbPath]");
+                        return;
+                    }
+
+                    string targetDb = args.Length >= 2 ? args[1] : dbPath;
+                    if (command == "migrate")
+                        RunMigrate(targetDb);
+                    else if (command == "migrate-status")
+                        RunMigrateStatus(targetDb);
+                    else
+                        RunMigrateDryRun(targetDb);
                     break;
 
                 case "seed-curated":
-                    SeedCurated(args, dbPath);
+                    if (args.Length >= 2)
+                    {
+                        // Only the bundled dataset is seeded as Approved. An external
+                        // file goes through the validated, explicit import path.
+                        UsageError(
+                            "Usage: seed-curated",
+                            "To add mappings from a file, use: import <file.json> [--approve]");
+                        return;
+                    }
+
+                    SeedCurated(dbPath);
                     break;
 
                 case "import":
@@ -239,7 +254,11 @@ namespace GameSaves
                 Console.Error.WriteLine($"Migration failed: {result.ErrorMessage}");
                 if (result.RolledBack)
                 {
-                    Console.WriteLine("Database rollback succeeded. Database restored from pre-migration backup.");
+                    Console.WriteLine($"All pending migrations were rolled back; the database schema is unchanged at version {result.CurrentVersion}.");
+                }
+                if (!string.IsNullOrWhiteSpace(result.PreMigrationBackupPath))
+                {
+                    Console.WriteLine($"Pre-migration snapshot (manual recovery point, without stored sync secrets): {result.PreMigrationBackupPath}");
                 }
                 Environment.ExitCode = 1;
                 return;
@@ -259,7 +278,7 @@ namespace GameSaves
                 }
                 if (!string.IsNullOrWhiteSpace(result.PreMigrationBackupPath))
                 {
-                    Console.WriteLine($"Pre-migration backup snapshot saved: {result.PreMigrationBackupPath}");
+                    Console.WriteLine($"Pre-migration snapshot saved (without stored sync secrets): {result.PreMigrationBackupPath}");
                 }
             }
         }
@@ -299,6 +318,8 @@ namespace GameSaves
 
             MigrationPlan plan = migrator.Plan(dbPath);
             Console.WriteLine($"Integrity check: {(plan.IntegrityCheckPassed ? "OK" : $"FAILED ({plan.IntegrityMessage})")}");
+            if (!plan.IntegrityCheckPassed)
+                Environment.ExitCode = 1;
             Console.WriteLine($"Current version: {plan.CurrentVersion}");
             Console.WriteLine($"Target version: {plan.TargetVersion}");
 
@@ -313,39 +334,20 @@ namespace GameSaves
                 {
                     Console.WriteLine($"  - [{pending.Version}] {pending.Name}: {pending.Description}");
                 }
-                if (!string.IsNullOrWhiteSpace(plan.PlannedBackupPath))
+                if (!string.IsNullOrWhiteSpace(plan.PlannedBackupDirectory))
                 {
-                    Console.WriteLine($"Planned pre-migration backup path: {plan.PlannedBackupPath}");
+                    Console.WriteLine($"A pre-migration snapshot would be written to: {plan.PlannedBackupDirectory}");
                 }
             }
         }
 
-        private static void SeedCurated(string[] args, string dbPath)
+        private static void SeedCurated(string dbPath)
         {
             var database = new SavePathDatabase(dbPath);
             database.Initialize();
 
-            var seeder = new CuratedMappingSeeder();
-            CuratedSeedResult result;
-
-            if (args.Length >= 2)
-            {
-                string customJsonPath = args[1];
-                if (!File.Exists(customJsonPath))
-                {
-                    UsageError($"Curated seed file not found: {customJsonPath}");
-                    return;
-                }
-
-                string jsonContent = File.ReadAllText(customJsonPath);
-                result = seeder.Seed(dbPath, jsonContent);
-                Console.WriteLine($"Seeded curated mappings from external file: {customJsonPath}");
-            }
-            else
-            {
-                result = seeder.Seed(dbPath);
-                Console.WriteLine("Seeded curated mappings from bundled assembly seed dataset.");
-            }
+            CuratedSeedResult result = new CuratedMappingSeeder().Seed(dbPath);
+            Console.WriteLine("Seeded curated mappings from bundled assembly seed dataset.");
 
             Console.WriteLine($"Database: {dbPath}");
             Console.WriteLine($"Summary: {result.TotalProcessed} processed — {result.Inserted} inserted, {result.Updated} updated, {result.Unchanged} unchanged, {result.SkippedUserOverrides} user overrides preserved.");
@@ -357,16 +359,17 @@ namespace GameSaves
             database.Initialize();
 
             var service = new MappingImportService();
-            var options = new MappingImportOptions
-            {
-                AutoApprove = autoApprove,
-                DefaultSourceName = "JsonImport"
-            };
+            var options = new MappingImportOptions { AutoApprove = autoApprove };
 
             MappingImportReport report = service.ImportFile(dbPath, jsonPath, options);
+            int written = report.MappingsInserted + report.MappingsUpdated;
 
             Console.WriteLine($"Imported from: {jsonPath}");
-            Console.WriteLine($"Status: {(autoApprove ? "Approved and enabled" : "Pending review (disabled by default)")}");
+            Console.WriteLine(autoApprove
+                ? $"Status: {written} mapping(s) written as Approved and enabled (explicit --approve)."
+                : $"Status: {written} mapping(s) written as Pending review (disabled until approved).");
+            if (!report.Success)
+                Console.WriteLine($"{report.Errors.Count} item(s) were rejected and not imported; see the errors below.");
             Console.WriteLine($"Database: {dbPath}");
             Console.WriteLine();
             Console.WriteLine(report.FormatSummary());
@@ -436,9 +439,6 @@ namespace GameSaves
 
         private static void RunTracklist(string[] args, string dbPath)
         {
-            var database = new SavePathDatabase(dbPath);
-            database.Initialize();
-
             string? outputPath = null;
             TracklistExportFormat? format = null;
             bool installedOnly = false;
@@ -452,62 +452,107 @@ namespace GameSaves
             {
                 string arg = args[i];
 
-                if (arg.Equals("-o", StringComparison.OrdinalIgnoreCase) || arg.Equals("--output", StringComparison.OrdinalIgnoreCase))
+                string? NextValue()
                 {
                     if (i + 1 < args.Length)
-                        outputPath = args[++i];
+                        return args[++i];
+
+                    UsageError($"Missing value for tracklist option {arg}.");
+                    return null;
                 }
-                else if (arg.Equals("-f", StringComparison.OrdinalIgnoreCase) || arg.Equals("--format", StringComparison.OrdinalIgnoreCase))
+
+                switch (arg.ToLowerInvariant())
                 {
-                    if (i + 1 < args.Length)
-                    {
-                        string fmt = args[++i].ToLowerInvariant();
-                        format = fmt switch
+                    case "-o":
+                    case "--output":
+                        if ((outputPath = NextValue()) is null)
+                            return;
+                        break;
+
+                    case "-f":
+                    case "--format":
+                        string? fmt = NextValue();
+                        if (fmt is null)
+                            return;
+
+                        format = fmt.ToLowerInvariant() switch
                         {
                             "csv" => TracklistExportFormat.Csv,
                             "json" => TracklistExportFormat.Json,
                             _ => null
                         };
-                    }
-                }
-                else if (arg.Equals("-i", StringComparison.OrdinalIgnoreCase) || arg.Equals("--installed-only", StringComparison.OrdinalIgnoreCase))
-                {
-                    installedOnly = true;
-                }
-                else if (arg.Equals("--status", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (i + 1 < args.Length)
-                    {
-                        string s = args[++i];
-                        if (Enum.TryParse<MissingTitleResearchStatus>(s, ignoreCase: true, out var parsedStatus))
+
+                        if (format is null)
+                        {
+                            UsageError($"Invalid --format \"{fmt}\": expected json or csv.");
+                            return;
+                        }
+                        break;
+
+                    case "-i":
+                    case "--installed-only":
+                        installedOnly = true;
+                        break;
+
+                    case "--status":
+                        string? status = NextValue();
+                        if (status is null)
+                            return;
+
+                        if (status.Equals("all", StringComparison.OrdinalIgnoreCase))
+                        {
+                            statusFilter = null;
+                        }
+                        else if (Enum.TryParse(status, ignoreCase: true, out MissingTitleResearchStatus parsedStatus) &&
+                                 Enum.IsDefined(parsedStatus))
                         {
                             statusFilter = parsedStatus;
                         }
-                        else if (!s.Equals("all", StringComparison.OrdinalIgnoreCase))
+                        else
                         {
-                            Console.WriteLine($"Unknown status filter: {s}. Valid: Unresearched, InReview, NoSaveLocation, All");
+                            UsageError($"Invalid --status \"{status}\": expected Unresearched, InReview, NoSaveLocation or All.");
+                            return;
                         }
-                    }
-                }
-                else if (arg.Equals("-p", StringComparison.OrdinalIgnoreCase) || arg.Equals("--min-priority", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (i + 1 < args.Length)
-                        minPriority = args[++i];
-                }
-                else if (arg.Equals("-n", StringComparison.OrdinalIgnoreCase) || arg.Equals("--limit", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (i + 1 < args.Length && int.TryParse(args[++i], out int l))
-                        limit = l;
-                }
-                else if (arg.Equals("--platform", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (i + 1 < args.Length)
-                        platform = args[++i];
-                }
-                else if (arg.Equals("-c", StringComparison.OrdinalIgnoreCase) || arg.Equals("--candidates", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (i + 1 < args.Length)
-                        candidatesPath = args[++i];
+                        break;
+
+                    case "-p":
+                    case "--min-priority":
+                        if ((minPriority = NextValue()) is null)
+                            return;
+
+                        if (!new[] { "High", "Normal", "Low" }.Contains(minPriority, StringComparer.OrdinalIgnoreCase))
+                        {
+                            UsageError($"Invalid --min-priority \"{minPriority}\": expected High, Normal or Low.");
+                            return;
+                        }
+                        break;
+
+                    case "-n":
+                    case "--limit":
+                        string? limitText = NextValue();
+                        if (limitText is null || !TryReadCountArgument(limitText, "limit", out int parsedLimit))
+                            return;
+
+                        limit = parsedLimit;
+                        break;
+
+                    case "--platform":
+                        string? platformText = NextValue();
+                        if (platformText is null)
+                            return;
+
+                        platform = platformText;
+                        break;
+
+                    case "-c":
+                    case "--candidates":
+                        if ((candidatesPath = NextValue()) is null)
+                            return;
+                        break;
+
+                    default:
+                        UsageError($"Unknown tracklist argument \"{arg}\". Run 'help' for the list of tracklist options.");
+                        return;
                 }
             }
 
@@ -523,16 +568,23 @@ namespace GameSaves
             List<MissingTitleCandidate>? candidates = null;
             if (!string.IsNullOrWhiteSpace(candidatesPath))
             {
-                if (File.Exists(candidatesPath))
-                {
-                    candidates = LoadCandidatesFromFile(candidatesPath);
-                }
-                else
+                if (!File.Exists(candidatesPath))
                 {
                     UsageError($"Candidates file not found: {candidatesPath}");
                     return;
                 }
+
+                if (!TryReadAppIds(candidatesPath, File.ReadAllText(candidatesPath), out List<string> candidateIds))
+                    return;
+
+                // Titles come from the catalog in the database; the file only supplies AppIDs.
+                candidates = candidateIds
+                    .Select(appId => new MissingTitleCandidate(appId, Title: string.Empty))
+                    .ToList();
             }
+
+            var database = new SavePathDatabase(dbPath);
+            database.Initialize();
 
             var options = new TracklistOptions(
                 IncludeInstalledOnly: installedOnly,
@@ -582,63 +634,20 @@ namespace GameSaves
             }
         }
 
-        private static List<MissingTitleCandidate> LoadCandidatesFromFile(string path)
+        private static bool TryReadAppIds(string source, string content, out List<string> appIds)
         {
-            var results = new List<MissingTitleCandidate>();
-            string extension = Path.GetExtension(path);
-
-            if (extension.Equals(".json", StringComparison.OrdinalIgnoreCase))
+            try
             {
-                try
-                {
-                    string json = File.ReadAllText(path);
-                    using var doc = System.Text.Json.JsonDocument.Parse(json);
-                    if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Array)
-                    {
-                        foreach (var el in doc.RootElement.EnumerateArray())
-                        {
-                            string? appId = null;
-                            string? title = null;
-                            if (el.TryGetProperty("steamAppId", out var p1) || el.TryGetProperty("steam_app_id", out p1) || el.TryGetProperty("appId", out p1))
-                                appId = p1.ValueKind == System.Text.Json.JsonValueKind.Number ? p1.GetInt64().ToString() : p1.GetString();
-                            if (el.TryGetProperty("title", out var p2) || el.TryGetProperty("gameName", out p2) || el.TryGetProperty("game_name", out p2))
-                                title = p2.GetString();
-
-                            if (!string.IsNullOrWhiteSpace(appId))
-                            {
-                                results.Add(new MissingTitleCandidate(
-                                    SteamAppId: appId.Trim(),
-                                    Title: string.IsNullOrWhiteSpace(title) ? $"App {appId}" : title.Trim()));
-                            }
-                        }
-                    }
-                }
-                catch
-                {
-                    // Fall back to plain text reading
-                }
+                appIds = PcgwHarvester.ReadAppIds(content);
+                return true;
             }
-
-            if (results.Count == 0)
+            catch (InvalidDataException ex)
             {
-                // Plain text: one AppID per line or "AppId,Title"
-                foreach (string line in File.ReadAllLines(path))
-                {
-                    if (string.IsNullOrWhiteSpace(line) || line.TrimStart().StartsWith("#"))
-                        continue;
-
-                    string[] parts = line.Split(new[] { ',', '\t', ';' }, 2, StringSplitOptions.TrimEntries);
-                    string appId = parts[0];
-                    string title = parts.Length > 1 ? parts[1] : $"App {appId}";
-
-                    if (!string.IsNullOrWhiteSpace(appId) && appId.All(char.IsDigit))
-                    {
-                        results.Add(new MissingTitleCandidate(appId, title));
-                    }
-                }
+                Console.Error.WriteLine($"Error: {source}: {ex.Message}");
+                Environment.ExitCode = 1;
+                appIds = new List<string>();
+                return false;
             }
-
-            return results;
         }
 
         private static async Task RunAiDetectPaths(string[] args, string dbPath)
@@ -657,8 +666,13 @@ namespace GameSaves
 
                 if (arg.Equals("-o", StringComparison.OrdinalIgnoreCase) || arg.Equals("--output", StringComparison.OrdinalIgnoreCase))
                 {
-                    if (i + 1 < args.Length)
-                        outputPath = args[++i];
+                    if (i + 1 >= args.Length)
+                    {
+                        UsageError($"Missing value for ai-detect option {arg}.");
+                        return;
+                    }
+
+                    outputPath = args[++i];
                 }
                 else if (arg.Equals("--save-db", StringComparison.OrdinalIgnoreCase))
                 {
@@ -676,7 +690,7 @@ namespace GameSaves
                     Console.WriteLine();
                     Console.WriteLine("Arguments:");
                     Console.WriteLine("  <game-directory>          Path to the game installation folder to inspect");
-                    Console.WriteLine("  [steam-app-id]            Optional Steam AppID associated with the game");
+                    Console.WriteLine("  [steam-app-id]            Steam AppID of the game (required with --output or --save-db)");
                     Console.WriteLine("  [game-name]               Optional game title (inferred from folder or engine if omitted)");
                     Console.WriteLine();
                     Console.WriteLine("Options:");
@@ -685,7 +699,12 @@ namespace GameSaves
                     Console.WriteLine("  --offline                 Force offline heuristic detection (skip AI completion query)");
                     return;
                 }
-                else if (!arg.StartsWith("-", StringComparison.Ordinal))
+                else if (arg.StartsWith("-", StringComparison.Ordinal))
+                {
+                    UsageError($"Unknown ai-detect option \"{arg}\". Run 'ai-detect --help' for usage.");
+                    return;
+                }
+                else
                 {
                     switch (positionalIndex)
                     {
@@ -698,6 +717,9 @@ namespace GameSaves
                         case 2:
                             gameName = arg;
                             break;
+                        default:
+                            UsageError($"Unexpected ai-detect argument \"{arg}\". Quote a game name that contains spaces.");
+                            return;
                     }
                     positionalIndex++;
                 }
@@ -712,6 +734,16 @@ namespace GameSaves
                 Console.WriteLine("Example:");
                 Console.WriteLine(@"  dotnet run -- ai-detect-paths ""C:\Games\MyGame"" 123456 ""My Game"" --output savepaths.json");
                 Environment.ExitCode = ExitCodeUsage;
+                return;
+            }
+
+            // Stored and exported candidates are keyed by AppID; filing them under a typo or
+            // under a made-up placeholder would attach them to the wrong game.
+            if ((saveDb || outputPath is not null || steamAppId is not null) && !PcgwHarvester.IsAppId(steamAppId))
+            {
+                UsageError(steamAppId is null
+                    ? "A numeric Steam AppID is required with --save-db or --output."
+                    : $"Invalid Steam AppID \"{steamAppId}\": expected digits only.");
                 return;
             }
 
@@ -737,7 +769,7 @@ namespace GameSaves
                 Console.WriteLine($"Specified Game Name : {gameName}");
 
             AiDetectionResult result;
-            int importedCount = 0;
+            int submittedCount = 0;
 
             if (saveDb)
             {
@@ -745,7 +777,7 @@ namespace GameSaves
                 database.Initialize();
                 var tuple = await database.DetectAndImportSavePathsAsync(request, service);
                 result = tuple.Result;
-                importedCount = tuple.ImportedCount;
+                submittedCount = tuple.ImportedCount;
             }
             else
             {
@@ -801,8 +833,8 @@ namespace GameSaves
             if (saveDb)
             {
                 Console.WriteLine();
-                Console.WriteLine($"Imported {importedCount} candidate mappings directly to database: {dbPath}");
-                Console.WriteLine("Mappings are saved with status 'Pending' and disabled. Run 'approve-app' or review via UI to activate.");
+                Console.WriteLine($"Submitted {submittedCount} candidate mapping(s) for import into database: {dbPath}");
+                Console.WriteLine("Mappings are saved with status 'Pending' and disabled. Review each candidate and run 'approve-mapping <id>' (or use the UI) to activate the correct one.");
             }
         }
 
@@ -995,13 +1027,22 @@ namespace GameSaves
             string userAgent = args[3];
 
             int maxTitles = 0;
-            if (args.Length >= 5)
-                int.TryParse(args[4], out maxTitles);
+            if (args.Length >= 5 && !TryReadCountArgument(args[4], "max titles", out maxTitles))
+                return;
 
             if (!File.Exists(tracklistPath))
             {
                 Console.Error.WriteLine($"Error: Tracklist file not found: {tracklistPath}");
                 Environment.ExitCode = 1;
+                return;
+            }
+
+            if (!TryReadAppIds(tracklistPath, File.ReadAllText(tracklistPath), out List<string> appIds))
+                return;
+
+            if (appIds.Count == 0)
+            {
+                UsageError($"No valid numeric Steam AppIDs were found in {tracklistPath}.");
                 return;
             }
 
@@ -1016,12 +1057,11 @@ namespace GameSaves
                 DatabasePath = dbPath,
                 OutputRoot = outputRoot,
                 UserAgent = userAgent,
-                TracklistPath = tracklistPath,
+                SteamAppIds = appIds,
                 RequestsPerMinute = 20,
                 PauseEveryRequests = 20,
                 PauseEveryRequestsDuration = TimeSpan.FromMinutes(1),
-                MaxTitlesToProcess = maxTitles,
-                ImportExtractedMappingsDisabled = true
+                MaxTitlesToProcess = maxTitles
             };
 
             var harvester = new PcgwHarvester(options);
@@ -1050,11 +1090,21 @@ namespace GameSaves
             string outputRoot = args[1];
             string userAgent = args[2];
 
-            List<string> appIds = ReadAppIdsFromArguments(args.Skip(3).ToArray());
+            var appIds = new List<string>();
+            foreach (string value in args.Skip(3))
+            {
+                string content = File.Exists(value) ? File.ReadAllText(value) : value;
+                if (!TryReadAppIds(value, content, out List<string> valueIds))
+                    return;
+
+                appIds.AddRange(valueIds);
+            }
+
+            appIds = appIds.Distinct(StringComparer.Ordinal).ToList();
 
             if (appIds.Count == 0)
             {
-                Console.WriteLine("No valid numeric Steam AppIDs were provided.");
+                UsageError("No valid numeric Steam AppIDs were provided.");
                 return;
             }
 
@@ -1067,8 +1117,7 @@ namespace GameSaves
                 RequestsPerMinute = 20,
                 PauseEveryRequests = 20,
                 PauseEveryRequestsDuration = TimeSpan.FromMinutes(1),
-                MaxTitlesToProcess = 0,
-                ImportExtractedMappingsDisabled = true
+                MaxTitlesToProcess = 0
             };
 
             var harvester = new PcgwHarvester(options);
@@ -1096,8 +1145,8 @@ namespace GameSaves
 
             int maxGames = 0;
 
-            if (args.Length >= 4)
-                int.TryParse(args[3], out maxGames);
+            if (args.Length >= 4 && !TryReadCountArgument(args[3], "max games", out maxGames))
+                return;
 
             var discoveryService = new SteamDiscoveryService();
 
@@ -1117,8 +1166,7 @@ namespace GameSaves
 
             List<string> appIds = discovery.Games
                 .Select(game => game.AppId)
-                .Where(appId => !string.IsNullOrWhiteSpace(appId))
-                .Where(appId => appId.All(char.IsDigit))
+                .Where(PcgwHarvester.IsAppId)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(appId => int.TryParse(appId, out int parsed) ? parsed : int.MaxValue)
                 .ToList();
@@ -1137,8 +1185,7 @@ namespace GameSaves
                 RequestsPerMinute = 20,
                 PauseEveryRequests = 20,
                 PauseEveryRequestsDuration = TimeSpan.FromMinutes(1),
-                MaxTitlesToProcess = 0,
-                ImportExtractedMappingsDisabled = true
+                MaxTitlesToProcess = 0
             };
 
             var harvester = new PcgwHarvester(options);
@@ -1148,121 +1195,23 @@ namespace GameSaves
             PrintPcgwHarvestResult(result, appIds.Count);
         }
 
-        private static List<string> ReadAppIdsFromArguments(string[] values)
-        {
-            var appIds = new List<string>();
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-            foreach (string value in values)
-            {
-                if (string.IsNullOrWhiteSpace(value))
-                    continue;
-
-                if (File.Exists(value))
-                {
-                    string fileText = File.ReadAllText(value);
-                    AddAppIdsFromText(fileText, appIds, seen);
-                    continue;
-                }
-
-                AddAppIdsFromText(value, appIds, seen);
-            }
-
-            return appIds;
-        }
-
-        private static void AddAppIdsFromText(
-            string text,
-            List<string> appIds,
-            HashSet<string> seen)
-        {
-            string[] parts = text.Split(
-                new[]
-                {
-            '\r',
-            '\n',
-            ',',
-            ';',
-            ' ',
-            '\t'
-                },
-                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-
-            foreach (string part in parts)
-            {
-                string cleaned = part.Trim();
-
-                if (string.IsNullOrWhiteSpace(cleaned))
-                    continue;
-
-                if (cleaned.StartsWith("#", StringComparison.Ordinal))
-                    continue;
-
-                if (!cleaned.All(char.IsDigit))
-                    continue;
-
-                if (seen.Add(cleaned))
-                    appIds.Add(cleaned);
-            }
-        }
-
         private static void PrintPcgwHarvestResult(
             PcgwHarvestResult result,
             int appIdsRequested)
         {
+            // A run in which every title failed did no useful work; say so and fail the command.
+            bool allFailed = result.TitlesProcessed == 0 && result.TitlesFailed > 0;
+
             Console.WriteLine();
-            Console.WriteLine("PCGamingWiki harvest finished:");
+            Console.WriteLine(allFailed ? "PCGamingWiki harvest failed: no title could be harvested." : "PCGamingWiki harvest finished:");
             Console.WriteLine($" - AppIDs requested: {appIdsRequested}");
             Console.WriteLine($" - Titles processed: {result.TitlesProcessed}");
             Console.WriteLine($" - Titles failed/missing: {result.TitlesFailed}");
             Console.WriteLine($" - Mappings extracted: {result.MappingsExtracted}");
+
+            if (allFailed)
+                Environment.ExitCode = 1;
         }
-
-        //private static async Task RunPcgwHarvest(string[] args, string dbPath)
-        //{
-        //    if (args.Length < 3)
-        //    {
-        //        Console.WriteLine("Usage:");
-        //        Console.WriteLine("  pcgw-harvest <output-root> <user-agent> [max-titles]");
-        //        Console.WriteLine();
-        //        Console.WriteLine("Example:");
-        //        Console.WriteLine("  dotnet run -- pcgw-harvest External/Titles \"SteamSaveManagerHarvester/0.1 (https://example.org/SteamSaveManager; you@example.org) .NET/10\" 100");
-        //        return;
-        //    }
-
-        //    string outputRoot = args[1];
-        //    string userAgent = args[2];
-
-        //    int maxTitles = 0;
-
-        //    if (args.Length >= 4)
-        //        int.TryParse(args[3], out maxTitles);
-
-        //    var options = new PcgwHarvestOptions
-        //    {
-        //        DatabasePath = dbPath,
-        //        OutputRoot = outputRoot,
-        //        UserAgent = userAgent,
-        //        RequestsPerMinute = 20,
-        //        PauseEveryRequests = 100,
-        //        PauseEveryRequestsDuration = TimeSpan.FromMinutes(1),
-        //        CargoPageSize = 500,
-        //        MaxTitlesToProcess = maxTitles,
-        //        RefreshTitleIndex = true,
-        //        ImportExtractedMappingsDisabled = true
-        //    };
-
-        //    var harvester = new PcgwHarvester(options);
-
-        //    PcgwHarvestResult result = await harvester.HarvestAsync();
-
-        //    Console.WriteLine();
-        //    Console.WriteLine("PCGamingWiki harvest finished:");
-        //    Console.WriteLine($" - Titles indexed: {result.TitlesIndexed}");
-        //    Console.WriteLine($" - Titles processed: {result.TitlesProcessed}");
-        //    Console.WriteLine($" - Titles failed: {result.TitlesFailed}");
-        //    Console.WriteLine($" - Mappings extracted: {result.MappingsExtracted}");
-        //}
 
         private static void RunDiscoveryTest(bool useDeepFallbackScan)
         {
@@ -1518,7 +1467,7 @@ namespace GameSaves
             Console.WriteLine("  migrate [dbPath]");
             Console.WriteLine("  migrate-status [dbPath]");
             Console.WriteLine("  migrate-dry-run [dbPath]");
-            Console.WriteLine("  seed-curated [custom-seed.json]");
+            Console.WriteLine("  seed-curated");
             Console.WriteLine("  import <savepaths.json> [--approve]");
             Console.WriteLine("  approve-mapping <id> [notes]");
             Console.WriteLine("  approve-app <steamAppId> [notes]");

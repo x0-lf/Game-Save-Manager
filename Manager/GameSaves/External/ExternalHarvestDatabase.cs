@@ -22,16 +22,6 @@ namespace GameSaves.External
             _connectionString = builder.ToString();
         }
 
-        public void Initialize()
-        {
-            using var connection = new SqliteConnection(_connectionString);
-            connection.Open();
-
-            using var command = connection.CreateCommand();
-            command.CommandText = ExternalHarvestSchema.CreateSchemaSql;
-            command.ExecuteNonQuery();
-        }
-
         public long StartHarvestRun(string outputRoot, int requestsPerMinute)
         {
             using var connection = new SqliteConnection(_connectionString);

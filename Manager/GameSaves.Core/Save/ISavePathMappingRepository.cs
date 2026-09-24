@@ -17,8 +17,6 @@ namespace GameSaves.Core.Save
 
         int CountApprovedMappings(string platform);
 
-        int CountCuratedMappings(string platform);
-
         int CountNeedsFixMappings(string platform);
 
         int CountPendingMappings(string platform);

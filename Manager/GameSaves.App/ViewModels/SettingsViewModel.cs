@@ -32,18 +32,17 @@ namespace GameSaves.App.ViewModels
         [ObservableProperty]
         private string themeChoice;
 
+        /// <summary>What the custom accent editor starts from before any colour was chosen.</summary>
+        internal const string DefaultCustomAccentHex = "#3B82F6";
+
         // One of the AppUiSettings accent constants, or a custom hex string.
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(IsCustomAccentSelected))]
         private string accentTheme;
 
+        // What the user typed; committed to AccentTheme once, when it is valid.
         [ObservableProperty]
-        private bool isCustomAccentSelected;
-
-        [ObservableProperty]
-        private string customAccentHex = "#3B82F6";
-
-        [ObservableProperty]
-        private bool isCustomAccentValid = true;
+        private string customAccentHex = DefaultCustomAccentHex;
 
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(HasCustomAccentValidationMessage))]
@@ -215,24 +214,13 @@ namespace GameSaves.App.ViewModels
             WorkspaceLayouts.CollectionChanged += OnWorkspaceLayoutsChanged;
 
             themeChoice = settings.ThemeChoice;
+            // The store already replaced anything that is neither a preset nor
+            // a valid hex, so the accent is one or the other here.
             accentTheme = settings.AccentTheme;
-            if (AppUiSettings.IsPresetAccent(accentTheme))
-            {
-                isCustomAccentSelected = false;
-                customAccentHex = "#3B82F6";
-            }
-            else if (ThemeService.TryParseHexColor(accentTheme, out Color customColor))
-            {
-                isCustomAccentSelected = true;
-                customAccentHex = $"#{customColor.R:X2}{customColor.G:X2}{customColor.B:X2}";
-            }
-            else
-            {
-                accentTheme = AppUiSettings.DefaultAccentTheme;
-                isCustomAccentSelected = false;
-                customAccentHex = "#3B82F6";
-            }
-            UpdateCustomAccentState(customAccentHex, applyIfSelected: false);
+            customAccentHex = ThemeService.TryParseHexColor(accentTheme, out Color customColor)
+                ? ThemeService.ToHex(customColor)
+                : DefaultCustomAccentHex;
+            UpdateCustomAccentState(customAccentHex);
             windowOpacity = settings.Transparency.Window;
             cardOpacity = settings.Transparency.Card;
             insetOpacity = settings.Transparency.Inset;
@@ -331,16 +319,6 @@ namespace GameSaves.App.ViewModels
         public bool IsWindowOpacityInert =>
             HighContrast || IsWindowMaterialSelected;
 
-        /// <summary>Ordered accent choices for the appearance picker.</summary>
-        public static IReadOnlyList<string> AccentChoices { get; } = new[]
-        {
-            AppUiSettings.AccentIndigo,
-            AppUiSettings.AccentTeal,
-            AppUiSettings.AccentRose,
-            AppUiSettings.AccentAmber,
-            AppUiSettings.AccentViolet,
-        };
-
         // Owned by InstalledGamesViewModel so the table and the Settings
         // page edit the same live options.
         public InstalledGamesViewModel InstalledGames { get; }
@@ -414,78 +392,67 @@ namespace GameSaves.App.ViewModels
             if (!AppUiSettings.IsAccentTheme(value))
                 return;
 
-            bool isPreset = AppUiSettings.IsPresetAccent(value);
-            if (isPreset)
+            // Mirror a custom accent into the editor only when it is a different
+            // colour: "#3B8" and "#33BB88" are the same colour, and rewriting the
+            // text the user is typing would make a six-digit code untypable.
+            if (ThemeService.TryParseHexColor(value, out Color parsed) &&
+                !(ThemeService.TryParseHexColor(CustomAccentHex, out Color current) && current == parsed))
             {
-                if (IsCustomAccentSelected)
-                    IsCustomAccentSelected = false;
-            }
-            else
-            {
-                if (!IsCustomAccentSelected)
-                    IsCustomAccentSelected = true;
-
-                if (ThemeService.TryParseHexColor(value, out Color parsed))
-                {
-                    string normalized = $"#{parsed.R:X2}{parsed.G:X2}{parsed.B:X2}";
-                    if (!string.Equals(CustomAccentHex, normalized, StringComparison.OrdinalIgnoreCase))
-                    {
-                        CustomAccentHex = normalized;
-                    }
-                }
+                CustomAccentHex = ThemeService.ToHex(parsed);
             }
 
             SaveAndApply(settings => settings with { AccentTheme = value });
         }
 
-        partial void OnIsCustomAccentSelectedChanged(bool value)
+        /// <summary>
+        /// The Custom radio. Derived from the accent itself, so it can never
+        /// disagree with it; checking it applies the editor's colour, and
+        /// unchecking is left to the preset radio that was checked instead.
+        /// </summary>
+        public bool IsCustomAccentSelected
         {
-            if (value)
+            get => !AppUiSettings.IsPresetAccent(AccentTheme);
+            set
             {
-                if (ThemeService.TryParseHexColor(CustomAccentHex, out Color color))
-                {
-                    string normalized = $"#{color.R:X2}{color.G:X2}{color.B:X2}";
-                    if (AccentTheme != normalized)
-                        AccentTheme = normalized;
-                }
-                else
-                {
-                    CustomAccentHex = "#3B82F6";
-                    AccentTheme = "#3B82F6";
-                }
+                if (!value || IsCustomAccentSelected)
+                    return;
+
+                AccentTheme = ThemeService.TryParseHexColor(CustomAccentHex, out Color color)
+                    ? ThemeService.ToHex(color)
+                    : DefaultCustomAccentHex;
             }
         }
 
         partial void OnCustomAccentHexChanged(string value)
         {
-            UpdateCustomAccentState(value, applyIfSelected: IsCustomAccentSelected);
+            UpdateCustomAccentState(value);
+
+            if (IsCustomAccentSelected &&
+                ThemeService.TryParseHexColor(value, out Color color) &&
+                !(ThemeService.TryParseHexColor(AccentTheme, out Color applied) && applied == color))
+            {
+                AccentTheme = ThemeService.ToHex(color);
+            }
         }
 
-        private void UpdateCustomAccentState(string hexInput, bool applyIfSelected)
+        private void UpdateCustomAccentState(string hexInput)
         {
             if (ThemeService.TryParseHexColor(hexInput, out Color color))
             {
-                IsCustomAccentValid = true;
                 CustomAccentValidationMessage = string.Empty;
                 CustomAccentPreviewBrush = new ImmutableSolidColorBrush(color);
 
-                Color primaryButton = ThemeService.ClampLightnessForContrast(color, Colors.White, 4.5);
-                double contrast = ThemeService.CalculateContrastRatio(primaryButton, Colors.White);
-                CustomAccentContrastRatioText = $"Contrast: {contrast:F1}:1 (WCAG AA)";
-
-                if (applyIfSelected && IsCustomAccentSelected)
-                {
-                    string normalized = $"#{color.R:X2}{color.G:X2}{color.B:X2}";
-                    if (AccentTheme != normalized)
-                    {
-                        AccentTheme = normalized;
-                    }
-                }
+                // Measured on the colours the palette actually paints: the
+                // accent text on each variant's surface.
+                string hex = ThemeService.ToHex(color);
+                double dark = ThemeService.AccentTextContrast(hex, isDark: true);
+                double light = ThemeService.AccentTextContrast(hex, isDark: false);
+                CustomAccentContrastRatioText =
+                    $"Accent text contrast: {dark:F1}:1 dark, {light:F1}:1 light (WCAG AA)";
             }
             else
             {
-                IsCustomAccentValid = false;
-                CustomAccentValidationMessage = "Enter a valid hex code (e.g. #3B82F6)";
+                CustomAccentValidationMessage = $"Enter a valid hex code (e.g. {DefaultCustomAccentHex})";
                 CustomAccentContrastRatioText = string.Empty;
             }
         }

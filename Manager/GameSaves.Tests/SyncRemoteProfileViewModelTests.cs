@@ -392,14 +392,6 @@ public sealed class SyncRemoteProfileViewModelTests
             return Create("OneDrive", "OneDrive");
         }
 
-        public Guid? LastMegaProfileId { get; private set; }
-
-        public ISyncProvider CreateMegaProvider(Guid remoteProfileId)
-        {
-            LastMegaProfileId = remoteProfileId;
-            return Create("MEGA", "MEGA");
-        }
-
         public void ForgetSftpHostKey(string host, int port)
         {
         }

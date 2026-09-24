@@ -19,8 +19,9 @@ namespace GameSaves.App.ViewModels
         private readonly IInstalledGameSaveStatusService _statusService;
         private readonly IUiSettingsStore? _uiSettingsStore;
         private bool _initialized;
-        private bool _isBulkLoading;
         private InstalledGameRowViewModel? _selectedGame;
+        private string? _sortMemberPath;
+        private bool _sortAscending;
 
         [ObservableProperty]
         private bool isLoading;
@@ -33,19 +34,16 @@ namespace GameSaves.App.ViewModels
             get => _selectedGame;
             set
             {
-                if (value is null && _selectedGame is not null && Games.Contains(_selectedGame))
-                {
-                    if (Pagination.IsPaging || !Pagination.CurrentPageItems.Contains(_selectedGame))
-                    {
-                        return;
-                    }
-                }
+                // A list control writes null when the selected game is merely on
+                // another page; the selection itself is kept.
+                if (value is null && _selectedGame is not null && Games.Contains(_selectedGame) && Pagination.IsOffPage(_selectedGame))
+                    return;
 
                 SetProperty(ref _selectedGame, value);
             }
         }
 
-        public ObservableCollection<InstalledGameRowViewModel> Games { get; } = new();
+        public BulkObservableCollection<InstalledGameRowViewModel> Games { get; } = new();
 
         public PaginationController<InstalledGameRowViewModel> Pagination { get; } = new()
         {
@@ -72,14 +70,6 @@ namespace GameSaves.App.ViewModels
             Pagination.PageChanged += (_, _) =>
             {
                 OnPropertyChanged(nameof(SelectedGame));
-            };
-
-            Games.CollectionChanged += (_, _) =>
-            {
-                if (!_isBulkLoading)
-                {
-                    Pagination.SetSource(Games);
-                }
             };
 
             AppUiSettings settings = uiSettingsStore?.Load() ?? AppUiSettings.Default;
@@ -142,19 +132,7 @@ namespace GameSaves.App.ViewModels
                 IReadOnlyList<InstalledGameSaveStatus> statuses =
                     await _statusService.GetInstalledGameStatusesAsync();
 
-                _isBulkLoading = true;
-                try
-                {
-                    Games.Clear();
-
-                    foreach (InstalledGameSaveStatus status in statuses)
-                        Games.Add(new InstalledGameRowViewModel(status));
-                }
-                finally
-                {
-                    _isBulkLoading = false;
-                }
-
+                Games.ReplaceAll(statuses.Select(status => new InstalledGameRowViewModel(status)));
                 Pagination.SetSource(Games);
 
                 SelectedGame =
@@ -176,6 +154,18 @@ namespace GameSaves.App.ViewModels
             {
                 IsLoading = false;
             }
+        }
+
+        /// <summary>
+        /// A column header click: ascending on a new column, the other
+        /// direction on the column already sorted. The whole library is
+        /// sorted, not just the page the grid shows.
+        /// </summary>
+        public void ToggleSort(string sortMemberPath)
+        {
+            _sortAscending = sortMemberPath != _sortMemberPath || !_sortAscending;
+            _sortMemberPath = sortMemberPath;
+            SortBy(sortMemberPath, _sortAscending);
         }
 
         public void SortBy(string? sortMemberPath, bool? ascending)

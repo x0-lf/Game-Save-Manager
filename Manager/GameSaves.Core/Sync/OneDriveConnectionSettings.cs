@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -12,15 +13,21 @@ namespace GameSaves.Core.Sync
 
         public static readonly string DefaultScopes = $"{AppFolder} {OfflineAccess} {UserRead}";
 
+        private static readonly string[] AllowedScopes = [AppFolder, OfflineAccess, UserRead];
+
         public static string ValidateRequestedScope(string? requestedScope)
         {
             if (string.IsNullOrWhiteSpace(requestedScope))
                 return AppFolder;
 
-            if (!requestedScope.Contains(AppFolder, StringComparison.OrdinalIgnoreCase))
+            // Every requested scope must be one of the three this app asks for;
+            // a broader scope beside the app folder must not slip through.
+            string[] scopes = requestedScope.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (!scopes.Contains(AppFolder, StringComparer.OrdinalIgnoreCase) ||
+                !scopes.All(scope => AllowedScopes.Contains(scope, StringComparer.OrdinalIgnoreCase)))
             {
                 throw new ArgumentException(
-                    $"The requested Microsoft OneDrive authorization scope must include '{AppFolder}'.",
+                    $"The requested Microsoft OneDrive authorization scope must include '{AppFolder}' and may only add '{OfflineAccess}' and '{UserRead}'.",
                     nameof(requestedScope));
             }
 
@@ -72,76 +79,6 @@ namespace GameSaves.Core.Sync
         ReauthenticationRequired = 6,
         Unavailable = 7,
         Failed = 8
-    }
-
-    /// <summary>
-    /// Pure runtime view of Microsoft OneDrive connection metadata. It never owns or
-    /// exposes OAuth token contents, and is not persisted as profile truth.
-    /// </summary>
-    public sealed record OneDriveConnectionSettings
-    {
-        public OneDriveConnectionSettings(
-            Guid remoteProfileId,
-            string? accountDisplayName,
-            string? accountEmail,
-            string? rootFolderId,
-            string? rootFolderDisplayName,
-            string requestedScope,
-            OneDriveConnectionStatus connectionStatus,
-            bool hasStoredToken,
-            OneDriveQuotaInfo? quota = null)
-        {
-            if (remoteProfileId == Guid.Empty)
-            {
-                throw new ArgumentException(
-                    "A non-empty remote profile ID is required.",
-                    nameof(remoteProfileId));
-            }
-
-            RemoteProfileId = remoteProfileId;
-            AccountDisplayName = string.IsNullOrWhiteSpace(accountDisplayName) ? null : accountDisplayName.Trim();
-            AccountEmail = string.IsNullOrWhiteSpace(accountEmail) ? null : accountEmail.Trim();
-            RootFolderId = string.IsNullOrWhiteSpace(rootFolderId) ? null : rootFolderId.Trim();
-            RootFolderDisplayName = string.IsNullOrWhiteSpace(rootFolderDisplayName) ? null : rootFolderDisplayName.Trim();
-            RequestedScope = OneDriveAuthorizationScopes.ValidateRequestedScope(requestedScope);
-            ConnectionStatus = connectionStatus;
-            HasStoredToken = hasStoredToken;
-            Quota = quota;
-        }
-
-        public Guid RemoteProfileId { get; }
-
-        public string? AccountDisplayName { get; }
-
-        public string? AccountEmail { get; }
-
-        public string? RootFolderId { get; }
-
-        public string? RootFolderDisplayName { get; }
-
-        public string RequestedScope { get; }
-
-        public OneDriveConnectionStatus ConnectionStatus { get; }
-
-        public bool HasStoredToken { get; }
-
-        public OneDriveQuotaInfo? Quota { get; }
-
-        public bool IsConnected =>
-            ConnectionStatus == OneDriveConnectionStatus.Connected;
-
-        public static OneDriveConnectionSettings Disconnected(
-            Guid remoteProfileId,
-            string requestedScope = OneDriveAuthorizationScopes.AppFolder) =>
-            new(
-                remoteProfileId,
-                accountDisplayName: null,
-                accountEmail: null,
-                rootFolderId: null,
-                rootFolderDisplayName: null,
-                requestedScope,
-                OneDriveConnectionStatus.Disconnected,
-                hasStoredToken: false);
     }
 
     /// <summary>

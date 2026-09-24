@@ -64,6 +64,11 @@ materials and keeps every surface opaque. Remote sessions, older Windows
 versions, power settings, and Windows composition policy can affect support;
 that is a platform fallback, not evidence of save-data corruption.
 
+A custom accent accepts `#RGB` or `#RRGGBB` and applies when focus leaves the
+box; the box is enabled only while Custom is selected. The App adjusts the
+accent's lightness so accent text keeps at least 4.5:1 contrast on dark cards
+and on the light page, and the readout reports both ratios.
+
 ![Appearance preferences and custom accents](images/08-settings-appearance.png)
 
 ## Transfer profiles
@@ -109,6 +114,11 @@ Existing files are skipped by default. An explicitly enabled restore overwrite
 first backs up the current target. Hash-mismatched or missing backup files are
 not restored.
 
+Runs start as unverified. Verify hashes the run's payload against its manifest
+and shows Payload verified, Payload mismatch, or Payload missing; selecting
+another run cancels a check in progress and leaves the badge unchanged. The
+file tree starts at each file's original location.
+
 ZIP export creates a self-contained archive. Import validates extraction,
 rewrites manifest paths to the imported location, and never overwrites an
 existing run. Cleanup is the only user-backup deletion feature; its exact
@@ -118,8 +128,8 @@ boundary is owned by the [safety model](safety-model.md).
 
 ## Sync
 
-Select a saved or unsaved remote profile, configure Local Folder, SFTP, or
-Google Drive, and run Check Connection & Sync Status. Saving or selecting a
+Select a saved or unsaved remote profile, configure Local Folder, SFTP,
+Google Drive, or OneDrive, and run Check Connection & Sync Status. Saving or selecting a
 profile does not connect, preview, or sync.
 
 Both endpoints are named before any preview runs: the local backup base, and

@@ -158,6 +158,49 @@ namespace GameSaves.Tests
         }
 
         [Fact]
+        public void Fingerprinter_UserDataFolderAlone_DoesNotHideGodotMarkers()
+        {
+            var fingerprinter = new GameEngineFingerprinter();
+            var relativePaths = new List<string>
+            {
+                "user_data/",
+                "user_data/slot1.sav",
+                "project.godot"
+            };
+
+            EngineFingerprintResult result = fingerprinter.Detect(relativePaths);
+
+            Assert.Equal(GameEngineKind.Godot, result.Engine);
+        }
+
+        [Fact]
+        public async Task DetectSavePathsAsync_UnityAppInfoWithTraversalNames_NeverProposesTraversal()
+        {
+            string tempDir = Path.Combine(Path.GetTempPath(), "gsm_test_unity_evil_" + Guid.NewGuid().ToString("N"), "EvilGame");
+            try
+            {
+                Directory.CreateDirectory(Path.Combine(tempDir, "EvilGame_Data"));
+                File.WriteAllText(Path.Combine(tempDir, "UnityPlayer.dll"), "unity");
+                File.WriteAllText(Path.Combine(tempDir, "EvilGame_Data", "app.info"), "..\\..\\Roaming\r\n..\\..\\Evil\r\n");
+
+                var service = new AiPatternDetectorService();
+                AiDetectionResult result = await service.DetectSavePathsAsync(
+                    new AiDetectionRequest(tempDir, SteamAppId: "123456", OfflineOnly: true));
+
+                Assert.Equal(GameEngineKind.Unity, result.DetectedEngine);
+                Assert.NotEmpty(result.Proposals);
+                Assert.DoesNotContain(result.Proposals, p => p.PathTemplate.Contains("..", StringComparison.Ordinal));
+                Assert.Contains(result.Proposals, p => p.PathTemplate == @"%LOCALAPPDATA%\EvilGame");
+            }
+            finally
+            {
+                string parent = Path.GetDirectoryName(tempDir)!;
+                if (Directory.Exists(parent))
+                    Directory.Delete(parent, recursive: true);
+            }
+        }
+
+        [Fact]
         public void Fingerprinter_ReturnsCustom_WhenNoKnownSignaturesExist()
         {
             var fingerprinter = new GameEngineFingerprinter();
@@ -178,32 +221,74 @@ namespace GameSaves.Tests
         #region Tree Sanitizer Tests
 
         [Fact]
-        public void Sanitizer_ScrubsCurrentUserAndRedactsSensitiveFiles()
+        public void Sanitizer_ExcludesSecretFilesAndScrubsPersonalIdentifiersFromTheTree()
         {
             string tempDir = Path.Combine(Path.GetTempPath(), "gsm_test_sanitizer_" + Guid.NewGuid().ToString("N"));
             try
             {
+                string userFolder = $"Profile_{Environment.UserName}_Saves";
                 Directory.CreateDirectory(Path.Combine(tempDir, "config"));
-                Directory.CreateDirectory(Path.Combine(tempDir, "user_data"));
+                Directory.CreateDirectory(Path.Combine(tempDir, userFolder));
 
                 File.WriteAllText(Path.Combine(tempDir, "game.exe"), "exe");
                 File.WriteAllText(Path.Combine(tempDir, ".env"), "SECRET=12345");
                 File.WriteAllText(Path.Combine(tempDir, "credentials.json"), "{\"token\":\"abc\"}");
                 File.WriteAllText(Path.Combine(tempDir, "id_rsa"), "private key");
+                File.WriteAllText(Path.Combine(tempDir, "server.pem"), "cert");
                 File.WriteAllText(Path.Combine(tempDir, "config", "settings.ini"), "volume=100");
+                File.WriteAllText(Path.Combine(tempDir, "config", "76561197960287930.sav"), "steam id");
+                File.WriteAllText(Path.Combine(tempDir, "config", "player@example.com.cfg"), "mail");
 
                 var sanitizer = new DirectoryTreeSanitizer();
                 SanitizedTreeResult result = sanitizer.Sanitize(tempDir);
 
-                // Sensitive files must be scrubbed / excluded
+                // Secret files are excluded entirely, not listed under a redacted name.
                 Assert.DoesNotContain(".env", result.FormattedTree);
-                Assert.DoesNotContain("credentials.json", result.FormattedTree);
+                Assert.DoesNotContain("credentials", result.FormattedTree);
                 Assert.DoesNotContain("id_rsa", result.FormattedTree);
+                Assert.DoesNotContain(".pem", result.FormattedTree);
+                Assert.DoesNotContain("REDACTED", result.FormattedTree);
+                Assert.DoesNotContain(result.RelativePaths, p => p.Contains("id_rsa", StringComparison.Ordinal));
 
-                // Normal game files must be present
+                // Personal identifiers never reach the prompt text, even inside longer names.
+                Assert.DoesNotContain(Environment.UserName, result.FormattedTree, StringComparison.OrdinalIgnoreCase);
+                Assert.Contains("Profile_[USERNAME]_Saves", result.FormattedTree);
+                Assert.DoesNotContain("76561197960287930", result.FormattedTree);
+                Assert.DoesNotContain("player@example.com", result.FormattedTree);
+
+                // Local-only relative paths are left intact for fingerprinting.
+                Assert.Contains(userFolder + "/", result.RelativePaths);
+
                 Assert.Contains("game.exe", result.FormattedTree);
                 Assert.Contains("settings.ini", result.FormattedTree);
-                Assert.True(result.TotalFilesFound > 0);
+                Assert.Equal(4, result.TotalFilesFound);
+                Assert.Equal(2, result.TotalDirectoriesFound);
+            }
+            finally
+            {
+                if (Directory.Exists(tempDir))
+                    Directory.Delete(tempDir, recursive: true);
+            }
+        }
+
+        [Fact]
+        public void Sanitizer_ListsRootFilesBeforeSubfoldersSpendTheEntryBudget()
+        {
+            string tempDir = Path.Combine(Path.GetTempPath(), "gsm_test_budget_" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                for (int i = 0; i < 5; i++)
+                {
+                    Directory.CreateDirectory(Path.Combine(tempDir, $"Assets{i}"));
+                    File.WriteAllText(Path.Combine(tempDir, $"Assets{i}", "data.bin"), "x");
+                }
+
+                File.WriteAllText(Path.Combine(tempDir, "Game.rgss3a"), "rpg maker archive");
+
+                SanitizedTreeResult result = new DirectoryTreeSanitizer().Sanitize(tempDir, maxDepth: 3, maxEntries: 4);
+
+                Assert.Contains("Game.rgss3a", result.RelativePaths);
+                Assert.Equal(4, result.TotalFilesFound + result.TotalDirectoriesFound);
             }
             finally
             {
@@ -225,7 +310,7 @@ namespace GameSaves.Tests
                 File.WriteAllText(Path.Combine(tempDir, "root.txt"), "root");
 
                 var sanitizer = new DirectoryTreeSanitizer();
-                SanitizedTreeResult result = sanitizer.Sanitize(tempDir, maxDepth: 2, maxFiles: 10);
+                SanitizedTreeResult result = sanitizer.Sanitize(tempDir, maxDepth: 2, maxEntries: 10);
 
                 Assert.Contains("root.txt", result.FormattedTree);
                 Assert.DoesNotContain("deep.txt", result.FormattedTree);
@@ -337,7 +422,7 @@ namespace GameSaves.Tests
                 string mockResponse = @"[
                     {
                         ""pathTemplate"": ""%APPDATA%\\CustomGame\\Saves"",
-                        ""pathKind"": ""SaveDirectory"",
+                        ""pathKind"": ""Directory"",
                         ""platform"": ""windows"",
                         ""confidence"": ""High"",
                         ""rationale"": ""Config files point to roaming profile saves"",
@@ -390,6 +475,77 @@ namespace GameSaves.Tests
             }
         }
 
+        [Fact]
+        public async Task DetectSavePathsAsync_MaliciousAiCompletion_MergesNoAiProposals()
+        {
+            string tempDir = Path.Combine(Path.GetTempPath(), "gsm_test_ai_evil_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempDir);
+            try
+            {
+                File.WriteAllText(Path.Combine(tempDir, "game.exe"), "bin");
+
+                string unsafeProposals = """
+                [
+                  { "pathTemplate": "C:\\Windows\\System32", "pathKind": "Directory" },
+                  { "pathTemplate": "%APPDATA%\\..\\..\\Windows\\System32", "pathKind": "Directory" },
+                  { "pathTemplate": "\\\\server\\share\\saves", "pathKind": "Directory" },
+                  { "pathTemplate": "%APPDATA%\\Game\\C:\\x", "pathKind": "Directory" },
+                  { "pathTemplate": "%APPDATA%", "pathKind": "Directory" },
+                  { "pathTemplate": "%APPDATA%\\Game\\Saves", "pathKind": "Registry" }
+                ]
+                """;
+
+                string flood = "[" + string.Join(",", Enumerable.Repeat(
+                    """{ "pathTemplate": "%APPDATA%\\Flood\\Saves", "pathKind": "Directory" }""", 1000)) + "]";
+
+                foreach (string completion in new[] { unsafeProposals, flood })
+                {
+                    var service = new AiPatternDetectorService(new MockAiCompletionClient(completion));
+                    AiDetectionResult result = await service.DetectSavePathsAsync(
+                        new AiDetectionRequest(tempDir, SteamAppId: "4242", GameName: "SafeGame"));
+
+                    Assert.True(result.IsOfflineHeuristic);
+                    Assert.DoesNotContain(result.Proposals, p => p.IsAiProposal);
+                    Assert.All(service.ToImportItems(result), item =>
+                    {
+                        Assert.StartsWith("Engine-heuristic candidate", item.Notes);
+                        Assert.DoesNotContain("AI-assisted", item.Notes);
+                    });
+                }
+            }
+            finally
+            {
+                if (Directory.Exists(tempDir))
+                    Directory.Delete(tempDir, recursive: true);
+            }
+        }
+
+        [Fact]
+        public async Task DetectSavePathsAsync_WhenCancelledDuringAiQuery_PropagatesCancellation()
+        {
+            string tempDir = Path.Combine(Path.GetTempPath(), "gsm_test_ai_cancel_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempDir);
+            try
+            {
+                using var cts = new CancellationTokenSource();
+                var mockAi = new MockAiCompletionClient((_, _) =>
+                {
+                    cts.Cancel();
+                    throw new OperationCanceledException(cts.Token);
+                });
+
+                var service = new AiPatternDetectorService(mockAi);
+
+                await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                    service.DetectSavePathsAsync(new AiDetectionRequest(tempDir, GameName: "CancelGame"), cts.Token));
+            }
+            finally
+            {
+                if (Directory.Exists(tempDir))
+                    Directory.Delete(tempDir, recursive: true);
+            }
+        }
+
         #endregion
 
         #region Trust & Safety Invariants Tests
@@ -413,7 +569,8 @@ namespace GameSaves.Tests
                         Confidence: DetectionConfidence.High,
                         Engine: GameEngineKind.Unity,
                         Rationale: "Standard Unity path",
-                        Priority: 80)
+                        Priority: 80,
+                        IsAiProposal: true)
                 },
                 SanitizedDirectoryTree: "game.exe",
                 ModelVersion: "gpt-mock",
@@ -472,6 +629,35 @@ namespace GameSaves.Tests
             Assert.Equal("54321", item.SteamAppId);
             Assert.Equal("AI-PatternDetector", item.SourceName);
             Assert.Contains("Pending human review", item.Notes);
+            Assert.StartsWith("Engine-heuristic candidate", item.Notes);
+            Assert.DoesNotContain("AI-assisted", item.Notes);
+            Assert.DoesNotContain("fedcba98", item.Notes);
+        }
+
+        [Fact]
+        public void ToImportItems_WithoutNumericAppId_RefusesToInventOne()
+        {
+            var result = new AiDetectionResult(
+                GameDirectory: @"C:\Games\Test",
+                SteamAppId: null,
+                GameName: "NoAppId",
+                DetectedEngine: GameEngineKind.Custom,
+                EngineConfidence: DetectionConfidence.Low,
+                EngineEvidence: new List<string>(),
+                Proposals: new List<AiCandidateProposal>
+                {
+                    new(@"%LOCALAPPDATA%\NoAppId", "windows", "Directory", DetectionConfidence.Medium, GameEngineKind.Custom, "Fallback")
+                },
+                SanitizedDirectoryTree: "game.exe",
+                ModelVersion: "offline-heuristic",
+                PromptHash: "0011223344556677",
+                GeneratedUtc: DateTimeOffset.UtcNow,
+                IsOfflineHeuristic: true);
+
+            var service = new AiPatternDetectorService();
+
+            Assert.Throws<InvalidOperationException>(() => service.ToImportItems(result));
+            Assert.Throws<InvalidOperationException>(() => service.ToImportDocument(result));
         }
 
         [Fact]

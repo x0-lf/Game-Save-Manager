@@ -100,6 +100,8 @@ public sealed class GoogleDriveSyncProviderFactoryTests
         using ISyncProvider provider = factory.Create(ProfileId);
 
         Assert.Equal("Google Drive", provider.ProviderName);
+        // The root is the file system's sanitized display root and nothing else.
+        Assert.Equal(fileSystems.FileSystem.DisplayRoot, provider.RemoteRoot);
         Assert.Equal(ProfileId, Assert.Single(fileSystems.RequestedProfileIds));
     }
 
@@ -326,7 +328,8 @@ public sealed class GoogleDriveSyncProviderFactoryTests
                 RepositoryWith(UsableProfile()),
                 fileSystems,
                 new EmptyBackupHistoryService(),
-                new RecordingHistoryRepository()));
+                new RecordingHistoryRepository()),
+            new UnusedOneDriveSyncProviderFactory());
 
         using ISyncProvider provider = core.CreateGoogleDriveProvider(ProfileId);
 
@@ -416,7 +419,8 @@ public sealed class GoogleDriveSyncProviderFactoryTests
             new RecordingHistoryRepository(),
             new TestDatabasePathProvider(
                 Path.Combine(Path.GetTempPath(), "gamesaves-u4.db")),
-            Factory(repository));
+            Factory(repository),
+            new UnusedOneDriveSyncProviderFactory());
 
     private static GoogleDriveSyncProviderFactory Factory(
         ISyncRemoteProfileRepository repository) =>

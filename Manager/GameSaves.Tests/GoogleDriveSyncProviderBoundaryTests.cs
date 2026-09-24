@@ -161,7 +161,7 @@ public sealed class GoogleDriveSyncProviderBoundaryTests
     public void TheProviderSurfaceExposesOnlyCoreTypes()
     {
         Assembly core = typeof(ISyncProvider).Assembly;
-        IEnumerable<Type> surface = typeof(GoogleDriveSyncProvider)
+        IEnumerable<Type> surface = typeof(EngineSyncProvider)
             .GetMethods(BindingFlags.Instance | BindingFlags.DeclaredOnly |
                         BindingFlags.Public | BindingFlags.NonPublic)
             .SelectMany(method =>
@@ -243,7 +243,9 @@ public sealed class GoogleDriveSyncProviderBoundaryTests
     private static ISyncProvider Provider(
         IRemoteFileSystem remote,
         IBackupHistoryService? history = null) =>
-        new GoogleDriveSyncProvider(
+        new EngineSyncProvider(
+            "Google Drive",
+            remote.DisplayRoot,
             remote,
             history ?? new EmptyBackupHistoryService(),
             new RecordingHistoryRepository());

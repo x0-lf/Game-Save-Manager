@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using GameSaves.App.Common;
 using GameSaves.Core.Transfers;
 using System;
 
@@ -10,10 +11,6 @@ namespace GameSaves.App.Models
         [NotifyPropertyChangedFor(nameof(VerificationDisplay))]
         [NotifyPropertyChangedFor(nameof(VerificationDetail))]
         [NotifyPropertyChangedFor(nameof(VerificationGlyph))]
-        [NotifyPropertyChangedFor(nameof(IsPayloadVerified))]
-        [NotifyPropertyChangedFor(nameof(IsManifestMatch))]
-        [NotifyPropertyChangedFor(nameof(IsSidecarMatch))]
-        [NotifyPropertyChangedFor(nameof(IsVerificationFailed))]
         private VerificationStrength verification;
 
         public BackupRunRowViewModel(TransferBackupRunInfo run)
@@ -45,6 +42,7 @@ namespace GameSaves.App.Models
             VerificationStrength.SidecarManifestMatch => "Sidecar manifest match",
             VerificationStrength.PayloadMismatch => "Payload mismatch",
             VerificationStrength.ManifestMismatch => "Manifest mismatch",
+            VerificationStrength.MissingLocally => "Payload missing",
             VerificationStrength.Copied => "Copied (unverified)",
             _ => "Unverified"
         };
@@ -54,7 +52,9 @@ namespace GameSaves.App.Models
             VerificationStrength.PayloadVerified => "✓✓",
             VerificationStrength.ManifestMatch => "✓",
             VerificationStrength.SidecarManifestMatch => "⚠",
-            VerificationStrength.PayloadMismatch or VerificationStrength.ManifestMismatch => "✕",
+            VerificationStrength.PayloadMismatch
+                or VerificationStrength.ManifestMismatch
+                or VerificationStrength.MissingLocally => "✕",
             _ => "◷"
         };
 
@@ -70,15 +70,12 @@ namespace GameSaves.App.Models
                 "One or more payload files in this backup do not match their recorded SHA-256 hashes (possible corruption or tampering).",
             VerificationStrength.ManifestMismatch =>
                 "The backup manifest is corrupt, incomplete, or conflicts with the catalog.",
+            VerificationStrength.MissingLocally =>
+                "The payload files of this backup could not be found on this computer, so they cannot be restored or verified.",
             VerificationStrength.Copied =>
                 "This backup was copied or created, but neither its manifest nor its payload bytes have been verified yet.",
             _ => "No verification has been performed for this backup."
         };
-
-        public bool IsPayloadVerified => Verification == VerificationStrength.PayloadVerified;
-        public bool IsManifestMatch => Verification == VerificationStrength.ManifestMatch;
-        public bool IsSidecarMatch => Verification == VerificationStrength.SidecarManifestMatch;
-        public bool IsVerificationFailed => Verification is VerificationStrength.PayloadMismatch or VerificationStrength.ManifestMismatch;
 
         public string GameName => Run.Manifest.Game;
 
@@ -92,7 +89,7 @@ namespace GameSaves.App.Models
 
         public int FileCount => Run.Manifest.FileCount;
 
-        public string TotalSizeDisplay => FormatBytes(Run.Manifest.TotalBytes);
+        public string TotalSizeDisplay => ByteSize.Format(Run.Manifest.TotalBytes);
 
         public string BackupRootPath => Run.BackupRootPath;
 
@@ -100,25 +97,5 @@ namespace GameSaves.App.Models
             $"{StartedDisplay} — {GameName} ({SteamAppId}) — {FileCount} file(s), {TotalSizeDisplay}";
 
         public override string ToString() => ListDisplay;
-
-        private static string FormatBytes(long bytes)
-        {
-            if (bytes < 1024)
-                return $"{bytes} B";
-
-            double kb = bytes / 1024.0;
-
-            if (kb < 1024)
-                return $"{kb:0.##} KB";
-
-            double mb = kb / 1024.0;
-
-            if (mb < 1024)
-                return $"{mb:0.##} MB";
-
-            double gb = mb / 1024.0;
-
-            return $"{gb:0.##} GB";
-        }
     }
 }

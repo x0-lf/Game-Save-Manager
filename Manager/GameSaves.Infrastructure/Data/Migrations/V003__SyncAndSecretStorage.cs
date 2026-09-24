@@ -80,7 +80,7 @@ namespace GameSaves.Infrastructure.Data.Migrations
                 backup_file TEXT NULL
             );
 
-            CREATE INDEX IF NOT EXISTS idx_transfer_items_run
+            CREATE INDEX IF NOT EXISTS idx_transfer_items_run_id
                 ON transfer_items (run_id);
 
             CREATE TABLE IF NOT EXISTS manual_backup_presets (

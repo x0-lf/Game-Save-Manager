@@ -1,3 +1,4 @@
+using GameSaves.App.Common;
 using GameSaves.Core.Transfers;
 
 namespace GameSaves.App.Models
@@ -36,7 +37,7 @@ namespace GameSaves.App.Models
 
         public long TotalBytes => Item.TotalBytes;
 
-        public string TotalSizeDisplay => FormatBytes(TotalBytes);
+        public string TotalSizeDisplay => ByteSize.Format(TotalBytes);
 
         public string MappingTemplate => Item.MappingTemplate ?? string.Empty;
 
@@ -45,25 +46,5 @@ namespace GameSaves.App.Models
         public string ActionText => Item.ActionText;
 
         public TransferConflictStatus ConflictStatus => Item.ConflictStatus;
-
-        private static string FormatBytes(long bytes)
-        {
-            if (bytes < 1024)
-                return $"{bytes} B";
-
-            double kb = bytes / 1024.0;
-
-            if (kb < 1024)
-                return $"{kb:0.##} KB";
-
-            double mb = kb / 1024.0;
-
-            if (mb < 1024)
-                return $"{mb:0.##} MB";
-
-            double gb = mb / 1024.0;
-
-            return $"{gb:0.##} GB";
-        }
     }
 }

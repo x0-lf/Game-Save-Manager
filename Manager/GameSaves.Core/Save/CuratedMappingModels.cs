@@ -1,8 +1,9 @@
 namespace GameSaves.Core.Save
 {
+    // The embedded JSON also carries schemaVersion, exportedUtc and, per entry,
+    // sourceName and reviewStatus for human readers. The seeder ignores them:
+    // every seeded row is 'CuratedSeed', Approved and enabled by definition.
     public sealed record CuratedMappingSeedDocument(
-        int SchemaVersion,
-        DateTimeOffset ExportedUtc,
         IReadOnlyList<CuratedMappingEntry> Mappings);
 
     public sealed record CuratedMappingEntry(
@@ -11,12 +12,10 @@ namespace GameSaves.Core.Save
         string Platform,
         string PathTemplate,
         string PathKind,
-        string SourceName,
         string? SourceUrl,
         string? SourceLicense,
         string? Notes,
-        int Priority = 100,
-        string ReviewStatus = "Approved");
+        int Priority = 100);
 
     public sealed record CuratedSeedResult(
         int TotalProcessed,

@@ -14,7 +14,7 @@ namespace GameSaves.Tests;
 /// <summary>
 /// Verifies the SFTP injectable remote boundary seam (MAINT-001).
 /// Tests deterministic upload, download, conflict, cancellation, disposal,
-/// and factory delegation without requiring a live SSH server.
+/// and factory construction without requiring a live SSH server.
 /// </summary>
 public sealed class SftpSyncProviderTests
 {
@@ -278,33 +278,12 @@ public sealed class SftpSyncProviderTests
     public void Dispose_WhenOwningFileSystem_DisposesUnderlyingFileSystem()
     {
         var fakeRemote = new FakeSftpRemoteFileSystem();
-        var provider = new SftpSyncProvider(
-            SftpSettings(),
-            fakeRemote,
-            new EmptyBackupHistoryService(),
-            new RecordingHistoryRepository(),
-            ownsFileSystem: true);
+        var provider = CreateProvider(fakeRemote);
 
         Assert.False(fakeRemote.IsDisposed);
         provider.Dispose();
         Assert.True(fakeRemote.IsDisposed);
         Assert.Equal(1, fakeRemote.DisposeCount);
-    }
-
-    [Fact]
-    public void Dispose_WhenNotOwningFileSystem_DoesNotDisposeUnderlyingFileSystem()
-    {
-        var fakeRemote = new FakeSftpRemoteFileSystem();
-        var provider = new SftpSyncProvider(
-            SftpSettings(),
-            fakeRemote,
-            new EmptyBackupHistoryService(),
-            new RecordingHistoryRepository(),
-            ownsFileSystem: false);
-
-        provider.Dispose();
-        Assert.False(fakeRemote.IsDisposed);
-        Assert.Equal(0, fakeRemote.DisposeCount);
     }
 
     [Fact]
@@ -351,57 +330,6 @@ public sealed class SftpSyncProviderTests
     }
 
     [Fact]
-    public void SyncProviderFactory_CreateSftpProvider_WorksWithDirectOverload()
-    {
-        using var temp = new TemporaryDirectory();
-        var backupHistory = CreateBackupHistory(temp);
-        var historyRepo = new RecordingHistoryRepository();
-        var fakeRemote = new FakeSftpRemoteFileSystem();
-
-        var factory = new SyncProviderFactory(
-            backupHistory,
-            historyRepo,
-            new TestDatabasePathProvider(temp.GetPath("app.db")),
-            new GoogleDriveSyncProviderFactory(
-                new InMemorySyncRemoteProfileRepository(),
-                new RecordingRemoteFileSystemFactory(),
-                backupHistory,
-                historyRepo));
-
-        using ISyncProvider provider = factory.CreateSftpProvider(SftpSettings(), fakeRemote);
-
-        Assert.IsType<SftpSyncProvider>(provider);
-        Assert.Equal("SFTP", provider.ProviderName);
-        Assert.Equal(DefaultSftpRoot, provider.RemoteRoot);
-    }
-
-    [Fact]
-    public void SyncProviderFactory_CreateSftpProvider_WorksWithFactoryDelegate()
-    {
-        using var temp = new TemporaryDirectory();
-        var backupHistory = CreateBackupHistory(temp);
-        var historyRepo = new RecordingHistoryRepository();
-        var fakeRemote = new FakeSftpRemoteFileSystem();
-
-        var factory = new SyncProviderFactory(
-            backupHistory,
-            historyRepo,
-            new TestDatabasePathProvider(temp.GetPath("app.db")),
-            new GoogleDriveSyncProviderFactory(
-                new InMemorySyncRemoteProfileRepository(),
-                new RecordingRemoteFileSystemFactory(),
-                backupHistory,
-                historyRepo),
-            sftpFileSystemFactory: (settings, knownHosts) => fakeRemote);
-
-        using ISyncProvider provider = factory.CreateSftpProvider(SftpSettings());
-
-        Assert.IsType<SftpSyncProvider>(provider);
-        Assert.Equal("SFTP", provider.ProviderName);
-        Assert.Equal(DefaultSftpRoot, provider.RemoteRoot);
-    }
-
-    [Fact]
     public void SyncProviderFactory_CreateSftpProvider_DefaultCreatesRealProviderWithoutConnecting()
     {
         using var temp = new TemporaryDirectory();
@@ -416,11 +344,12 @@ public sealed class SftpSyncProviderTests
                 new InMemorySyncRemoteProfileRepository(),
                 new RecordingRemoteFileSystemFactory(),
                 backupHistory,
-                historyRepo));
+                historyRepo),
+            new UnusedOneDriveSyncProviderFactory());
 
         using ISyncProvider provider = factory.CreateSftpProvider(SftpSettings());
 
-        Assert.IsType<SftpSyncProvider>(provider);
+        Assert.IsType<EngineSyncProvider>(provider);
         Assert.Equal("SFTP", provider.ProviderName);
         Assert.Equal(DefaultSftpRoot, provider.RemoteRoot);
     }
@@ -440,7 +369,8 @@ public sealed class SftpSyncProviderTests
                 new InMemorySyncRemoteProfileRepository(),
                 new RecordingRemoteFileSystemFactory(),
                 backupHistory,
-                historyRepo));
+                historyRepo),
+            new UnusedOneDriveSyncProviderFactory());
 
         // Must succeed without throwing
         factory.ForgetSftpHostKey("sftp.example.invalid", 2222);
@@ -450,17 +380,19 @@ public sealed class SftpSyncProviderTests
     // Test Helpers & Test Double
     // -------------------------------------------------------------------------
 
-    private static SftpSyncProvider CreateProvider(
+    // The same construction SyncProviderFactory.CreateSftpProvider performs,
+    // with the fake in place of the real SftpRemoteFileSystem.
+    private static EngineSyncProvider CreateProvider(
         FakeSftpRemoteFileSystem remote,
         IBackupHistoryService? backupHistory = null,
         ITransferHistoryRepository? historyRepository = null)
     {
-        return new SftpSyncProvider(
-            SftpSettings(),
+        return new EngineSyncProvider(
+            "SFTP",
+            SftpSettings().DisplayRoot,
             remote,
             backupHistory ?? new EmptyBackupHistoryService(),
-            historyRepository ?? new RecordingHistoryRepository(),
-            ownsFileSystem: true);
+            historyRepository ?? new RecordingHistoryRepository());
     }
 
     private static BackupHistoryService CreateBackupHistory(TemporaryDirectory temp)

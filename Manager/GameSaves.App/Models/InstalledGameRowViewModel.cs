@@ -1,4 +1,5 @@
-﻿using GameSaves.Core.Save;
+﻿using GameSaves.App.Common;
+using GameSaves.Core.Save;
 using GameSaves.Core.Steam;
 
 namespace GameSaves.App.Models
@@ -52,7 +53,7 @@ namespace GameSaves.App.Models
 
         public long TotalBytes { get; }
 
-        public string TotalSizeDisplay => FormatBytes(TotalBytes);
+        public string TotalSizeDisplay => ByteSize.Format(TotalBytes);
 
         public string Status { get; }
 
@@ -77,26 +78,6 @@ namespace GameSaves.App.Models
         public override string ToString()
         {
             return ComboDisplay;
-        }
-
-        private static string FormatBytes(long bytes)
-        {
-            if (bytes < 1024)
-                return $"{bytes} B";
-
-            double kb = bytes / 1024.0;
-
-            if (kb < 1024)
-                return $"{kb:0.##} KB";
-
-            double mb = kb / 1024.0;
-
-            if (mb < 1024)
-                return $"{mb:0.##} MB";
-
-            double gb = mb / 1024.0;
-
-            return $"{gb:0.##} GB";
         }
     }
 }

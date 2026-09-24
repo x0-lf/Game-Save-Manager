@@ -39,18 +39,14 @@ namespace GameSaves.Core.Save
 
     public sealed record MappingImportOptions(
         bool AutoApprove = false,
-        bool ForceReviewStatus = false,
-        string DefaultSourceName = "JsonImport",
-        bool UpdateExistingTitles = false);
+        string DefaultSourceName = "JsonImport");
 
     public sealed record MappingImportReport(
         int TotalItemsProcessed,
         int MappingsInserted,
         int MappingsUpdated,
         int MappingsUnchanged,
-        int MappingsSkippedDuplicate,
         int TitlesInserted,
-        int TitlesUpdated,
         int TitlesSkippedDuplicate,
         IReadOnlyList<MappingImportError> Errors)
     {
@@ -60,8 +56,8 @@ namespace GameSaves.Core.Save
         {
             var sb = new System.Text.StringBuilder();
             sb.AppendLine($"Import Summary: {TotalItemsProcessed} item(s) processed.");
-            sb.AppendLine($"Mappings: {MappingsInserted} inserted, {MappingsUpdated} updated, {MappingsUnchanged} unchanged, {MappingsSkippedDuplicate} duplicates skipped.");
-            sb.AppendLine($"Titles: {TitlesInserted} inserted, {TitlesUpdated} updated, {TitlesSkippedDuplicate} duplicates skipped.");
+            sb.AppendLine($"Mappings: {MappingsInserted} inserted, {MappingsUpdated} updated, {MappingsUnchanged} unchanged.");
+            sb.AppendLine($"Titles: {TitlesInserted} inserted, {TitlesSkippedDuplicate} already present.");
             if (Errors.Count > 0)
             {
                 sb.AppendLine($"Errors ({Errors.Count}):");

@@ -50,19 +50,6 @@ namespace GameSaves.Infrastructure.GoogleDrive
 
         public bool WasAuthenticationRefreshed { get; }
 
-        private TimeSpan? _lastObservedRetryDelay;
-
-        public TimeSpan? ConsumeRetryDelay() =>
-            Interlocked.Exchange(ref _lastObservedRetryDelay, null);
-
-        public Google.Apis.Http.IConfigurableHttpClientInitializer CreateHttpClientInitializer(
-            GameSaves.Core.Sync.IUtcClock? clock = null) =>
-            new GoogleDriveObservedHttpClientInitializer(
-                Credential,
-                new GoogleDriveRetryAfterHandler(
-                    clock,
-                    delay => _lastObservedRetryDelay = delay));
-
         internal bool IsDisposed { get; private set; }
 
         public Task CommitTokenAsync(CancellationToken cancellationToken = default) =>

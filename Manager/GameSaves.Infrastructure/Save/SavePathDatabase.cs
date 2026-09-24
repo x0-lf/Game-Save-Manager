@@ -5,7 +5,6 @@ using GameSaves.Infrastructure.Catalog;
 using GameSaves.Infrastructure.Data;
 using Microsoft.Data.Sqlite;
 using System.Collections.Concurrent;
-using System.Text.Json;
 
 namespace GameSaves.Infrastructure.Save
 {
@@ -30,35 +29,16 @@ namespace GameSaves.Infrastructure.Save
             _connectionString = builder.ToString();
         }
 
-        public string DatabasePath => _databasePath;
-
-        public CuratedSeedResult SeedCuratedMappings(ICuratedMappingSeeder? seeder = null)
-        {
-            seeder ??= new CuratedMappingSeeder();
-            return seeder.Seed(_databasePath);
-        }
-
-        public MigrationExecutionResult MigrateSchema(ISchemaMigrator? migrator = null)
-        {
-            migrator ??= new SchemaMigrator();
-            return migrator.Migrate(_databasePath);
-        }
-
+        /// <summary>
+        /// Brings the schema to the current version. Throws when migration fails,
+        /// so no caller carries on against a database it cannot trust.
+        /// </summary>
         public void Initialize()
         {
-            MigrateSchema();
-        }
+            MigrationExecutionResult result = new SchemaMigrator().Migrate(_databasePath);
 
-        public MappingImportReport ImportWithReport(string jsonPath, MappingImportOptions? options = null)
-        {
-            var service = new MappingImportService();
-            return service.ImportFile(_databasePath, jsonPath, options);
-        }
-
-        public MappingImportReport ImportJsonWithReport(string jsonContent, MappingImportOptions? options = null)
-        {
-            var service = new MappingImportService();
-            return service.ImportJson(_databasePath, jsonContent, options);
+            if (!result.Success)
+                throw new SqliteException(result.ErrorMessage, 1);
         }
 
         public MissingTitlesTracklist GenerateTracklist(
@@ -106,31 +86,11 @@ namespace GameSaves.Infrastructure.Save
             return (result, items.Count);
         }
 
-        public void ImportMappingsFromJson(string jsonPath)
-        {
-            ImportMappingsFromJson(jsonPath, enabled: false, reviewStatus: "Pending");
-        }
-
-        public void ImportMappingsFromJson(
-            string jsonPath,
-            bool enabled,
-            string reviewStatus = "Pending")
-        {
-            string json = File.ReadAllText(jsonPath);
-
-            var items = JsonSerializer.Deserialize<List<SavePathImportItem>>(
-                json,
-                new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                });
-
-            if (items is null || items.Count == 0)
-                return;
-
-            ImportMappings(items, enabled: enabled, reviewStatus: reviewStatus);
-        }
-
+        /// <summary>
+        /// Writes harvested or detected candidates through the shared mapping
+        /// write path. Candidates that fail validation (unknown platform or path
+        /// kind, an AppID that is not one) are skipped rather than stored.
+        /// </summary>
         public void ImportMappings(
             IEnumerable<SavePathImportItem> items,
             bool enabled = false,
@@ -138,91 +98,33 @@ namespace GameSaves.Infrastructure.Save
         {
             using var connection = new SqliteConnection(_connectionString);
             connection.Open();
-            EnsureReviewColumns(connection);
 
             using var transaction = connection.BeginTransaction();
+            using var writer = new SavePathMappingWriter(
+                connection,
+                transaction,
+                reviewStatus,
+                enabled,
+                defaultSourceName: "Unspecified");
 
+            int index = 0;
             foreach (SavePathImportItem item in items)
             {
-                using var command = connection.CreateCommand();
-                command.Transaction = transaction;
+                index++;
+                var entry = new MappingImportEntry(
+                    item.SteamAppId,
+                    item.GameName,
+                    item.Platform,
+                    item.PathTemplate,
+                    item.PathKind,
+                    item.SourceName,
+                    item.SourceUrl,
+                    item.SourceLicense,
+                    item.Notes,
+                    item.Priority);
 
-                command.CommandText = """
-                INSERT INTO save_path_mappings (
-                    steam_app_id,
-                    game_name,
-                    platform,
-                    path_template,
-                    path_kind,
-                    source_name,
-                    source_url,
-                    source_license,
-                    notes,
-                    priority,
-                    enabled,
-                    review_status,
-                    updated_utc
-                )
-                VALUES (
-                    $steam_app_id,
-                    $game_name,
-                    $platform,
-                    $path_template,
-                    $path_kind,
-                    $source_name,
-                    $source_url,
-                    $source_license,
-                    $notes,
-                    $priority,
-                    $enabled,
-                    $review_status,
-                    CURRENT_TIMESTAMP
-                )
-                ON CONFLICT (steam_app_id, platform, path_template)
-                DO UPDATE SET
-                    game_name = excluded.game_name,
-                    path_kind = excluded.path_kind,
-                    source_name = excluded.source_name,
-                    source_url = excluded.source_url,
-                    source_license = excluded.source_license,
-                    notes = excluded.notes,
-                    priority = excluded.priority,
-                    -- An import that explicitly approves must reach rows that already
-                    -- exist, or the caller is told the mapping was approved when it
-                    -- was not. Otherwise the previous review stands, except when the
-                    -- import changes how the path is used: that invalidates the
-                    -- review it was granted under, so it returns to Pending.
-                    review_status = CASE
-                        WHEN $force_review = 1 THEN excluded.review_status
-                        WHEN save_path_mappings.path_kind <> excluded.path_kind THEN 'Pending'
-                        ELSE save_path_mappings.review_status
-                    END,
-                    enabled = CASE
-                        WHEN $force_review = 1 THEN excluded.enabled
-                        WHEN save_path_mappings.path_kind <> excluded.path_kind THEN 0
-                        ELSE save_path_mappings.enabled
-                    END,
-                    updated_utc = CURRENT_TIMESTAMP;
-                """;
-
-                command.Parameters.AddWithValue("$steam_app_id", item.SteamAppId);
-                command.Parameters.AddWithValue("$game_name", ToDbValue(item.GameName));
-                command.Parameters.AddWithValue("$platform", item.Platform);
-                command.Parameters.AddWithValue("$path_template", item.PathTemplate);
-                command.Parameters.AddWithValue("$path_kind", item.PathKind);
-                command.Parameters.AddWithValue("$source_name", item.SourceName);
-                command.Parameters.AddWithValue("$source_url", ToDbValue(item.SourceUrl));
-                command.Parameters.AddWithValue("$source_license", ToDbValue(item.SourceLicense));
-                command.Parameters.AddWithValue("$notes", ToDbValue(item.Notes));
-                command.Parameters.AddWithValue("$priority", item.Priority);
-                command.Parameters.AddWithValue("$enabled", enabled ? 1 : 0);
-                string effectiveReviewStatus = string.IsNullOrWhiteSpace(reviewStatus) ? "Pending" : reviewStatus;
-                command.Parameters.AddWithValue("$review_status", effectiveReviewStatus);
-                command.Parameters.AddWithValue(
-                    "$force_review",
-                    effectiveReviewStatus.Equals("Pending", StringComparison.OrdinalIgnoreCase) ? 0 : 1);
-
-                command.ExecuteNonQuery();
+                if (SavePathMappingWriter.Validate(index, entry, out MappingImportEntry valid) is null)
+                    writer.Write(valid);
             }
 
             transaction.Commit();
@@ -243,7 +145,6 @@ namespace GameSaves.Infrastructure.Save
 
             using var connection = new SqliteConnection(_connectionString);
             connection.Open();
-            EnsureReviewColumns(connection);
 
             using var command = connection.CreateCommand();
 
@@ -319,7 +220,6 @@ namespace GameSaves.Infrastructure.Save
         {
             using var connection = new SqliteConnection(_connectionString);
             connection.Open();
-            EnsureReviewColumns(connection);
 
             using var command = connection.CreateCommand();
             command.CommandText = """
@@ -351,7 +251,6 @@ namespace GameSaves.Infrastructure.Save
         {
             using var connection = new SqliteConnection(_connectionString);
             connection.Open();
-            EnsureReviewColumns(connection);
 
             using var command = connection.CreateCommand();
             command.CommandText = """
@@ -378,7 +277,6 @@ namespace GameSaves.Infrastructure.Save
         {
             using var connection = new SqliteConnection(_connectionString);
             connection.Open();
-            EnsureReviewColumns(connection);
 
             using var command = connection.CreateCommand();
             if (trustLegacyEnabledAsApproved)
@@ -593,83 +491,22 @@ namespace GameSaves.Infrastructure.Save
             return DateTimeOffset.TryParse(text, out DateTimeOffset dto) ? dto : null;
         }
 
-        // The review columns are added once per database file. This used to run on
-        // every call that opened a connection - three PRAGMA queries, a DDL statement
-        // and a full-table UPDATE that takes a write lock - which meant a read of one
-        // game's mappings wrote to the database, once per installed game.
+        // Kept for code outside the mapping layer that still opens raw
+        // connections. The review columns belong to schema migration V002, so
+        // this only makes sure the file has been migrated, once per path.
         private static readonly ConcurrentDictionary<string, bool> MigratedDatabases =
             new(StringComparer.OrdinalIgnoreCase);
 
         public static void EnsureReviewColumns(SqliteConnection connection)
         {
-            string databaseKey = connection.DataSource ?? string.Empty;
+            string databasePath = connection.DataSource ?? string.Empty;
 
-            if (MigratedDatabases.ContainsKey(databaseKey))
+            if (databasePath.Length == 0 || MigratedDatabases.ContainsKey(databasePath))
                 return;
 
-            EnsureReviewColumnsCore(connection);
+            new SavePathDatabase(databasePath).Initialize();
 
-            MigratedDatabases[databaseKey] = true;
-        }
-
-        private static void EnsureReviewColumnsCore(SqliteConnection connection)
-        {
-            EnsureColumn(connection, "save_path_mappings", "review_status", "TEXT NOT NULL DEFAULT 'Pending'");
-            EnsureColumn(connection, "save_path_mappings", "reviewed_utc", "TEXT NULL");
-            EnsureColumn(connection, "save_path_mappings", "review_notes", "TEXT NULL");
-
-            using var indexCommand = connection.CreateCommand();
-            indexCommand.CommandText = """
-            CREATE INDEX IF NOT EXISTS idx_save_path_mappings_review_status
-                ON save_path_mappings (source_name, review_status, enabled);
-            """;
-            indexCommand.ExecuteNonQuery();
-
-            using var migrateCommand = connection.CreateCommand();
-            migrateCommand.CommandText = """
-            UPDATE save_path_mappings
-            SET review_status = 'Pending'
-            WHERE review_status IS NULL;
-            """;
-            migrateCommand.ExecuteNonQuery();
-        }
-
-        private static void EnsureColumn(
-            SqliteConnection connection,
-            string tableName,
-            string columnName,
-            string columnDefinition)
-        {
-            if (ColumnExists(connection, tableName, columnName))
-                return;
-
-            using var command = connection.CreateCommand();
-            command.CommandText = $"""
-            ALTER TABLE {tableName}
-            ADD COLUMN {columnName} {columnDefinition};
-            """;
-            command.ExecuteNonQuery();
-        }
-
-        private static bool ColumnExists(
-            SqliteConnection connection,
-            string tableName,
-            string columnName)
-        {
-            using var command = connection.CreateCommand();
-            command.CommandText = $"PRAGMA table_info({tableName});";
-
-            using var reader = command.ExecuteReader();
-
-            while (reader.Read())
-            {
-                string name = reader.GetString(reader.GetOrdinal("name"));
-
-                if (string.Equals(name, columnName, StringComparison.OrdinalIgnoreCase))
-                    return true;
-            }
-
-            return false;
+            MigratedDatabases[databasePath] = true;
         }
     }
 }

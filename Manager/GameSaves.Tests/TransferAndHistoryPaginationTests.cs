@@ -335,9 +335,91 @@ public sealed class TransferAndHistoryPaginationTests
     // =========================================================================
 
     [Theory]
-    [InlineData("Manager/GameSaves.App/Views/SyncView.axaml")]
     [InlineData("Manager/GameSaves.App/Views/BackupHistoryView.axaml")]
     [InlineData("Manager/GameSaves.App/Views/TransferHistoryView.axaml")]
+    [InlineData("Manager/GameSaves.App/Views/InstalledGamesView.axaml")]
+    public void Views_UseTheSharedPaginationBar(string relativePath)
+    {
+        string content = File.ReadAllText(Path.Combine(GetSolutionRoot(), relativePath));
+
+        Assert.Contains("ItemsSource=\"{Binding Pagination.CurrentPageItems}\"", content);
+        Assert.Contains("<views:PaginationBar", content);
+        Assert.Contains("DataContext=\"{Binding Pagination}\"", content);
+        Assert.DoesNotContain("{Binding Pagination.PageSummaryText}", content);
+    }
+
+    [Fact]
+    public void PaginationBar_BindsTheControllerAndWrapsInsteadOfClipping()
+    {
+        string content = File.ReadAllText(Path.Combine(
+            GetSolutionRoot(), "Manager/GameSaves.App/Views/PaginationBar.axaml"));
+
+        Assert.Contains("<WrapPanel", content);
+        Assert.Contains("{Binding PageSummaryText}", content);
+        Assert.Contains("{Binding PageSizeOptions}", content);
+        Assert.Contains("{Binding SelectedPageSizeOption}", content);
+        Assert.Contains("{Binding CustomPageSizeText}", content);
+        Assert.Contains("{Binding FirstPageCommand}", content);
+        Assert.Contains("{Binding PreviousPageCommand}", content);
+        Assert.Contains("{Binding PageNumberText}", content);
+        Assert.Contains("{Binding NextPageCommand}", content);
+        Assert.Contains("{Binding LastPageCommand}", content);
+        Assert.Contains("AutomationProperties.Name=\"Next page\"", content);
+        Assert.DoesNotContain("Height=\"32\"", content);
+    }
+
+    [Fact]
+    public async Task BackupHistoryViewModel_ListWritingNullForAnOffPageRun_KeepsTheSelection()
+    {
+        var runs = Enumerable.Range(1, 12).Select(i => CreateBackupRun($"run-{i:D2}", $"Game {i}")).ToList();
+        var vm = CreateBackupHistoryViewModel(new FakeBackupHistoryService(runs));
+        await vm.InitializeAsync();
+        vm.Pagination.SetPageSize(5);
+
+        BackupRunRowViewModel selected = vm.Pagination.CurrentPageItems[1];
+        vm.SelectedRun = selected;
+        vm.Pagination.NextPage();
+
+        vm.SelectedRun = null; // what the ListBox does when the row leaves the page
+
+        Assert.Same(selected, vm.SelectedRun);
+    }
+
+    [Fact]
+    public async Task BackupHistoryViewModel_DeselectingAnOnPageRun_ClearsTheSelection()
+    {
+        var runs = Enumerable.Range(1, 12).Select(i => CreateBackupRun($"run-{i:D2}", $"Game {i}")).ToList();
+        var vm = CreateBackupHistoryViewModel(new FakeBackupHistoryService(runs));
+        await vm.InitializeAsync();
+        vm.Pagination.SetPageSize(5);
+
+        vm.SelectedRun = vm.Pagination.CurrentPageItems[1];
+
+        vm.SelectedRun = null; // Ctrl+click on the visible, selected row
+
+        Assert.Null(vm.SelectedRun);
+    }
+
+    [Fact]
+    public async Task TransferHistoryViewModel_FailedRefresh_LeavesNoStaleRowsOnThePage()
+    {
+        var repo = new FakeTransferHistoryRepository(
+            Enumerable.Range(1, 5).Select(i => CreateTransferRun(i, $"Game {i}")).ToList());
+        var vm = CreateTransferHistoryViewModel(repo);
+        await vm.InitializeAsync();
+        Assert.Equal(5, vm.Pagination.CurrentPageItems.Count);
+
+        repo.Fail = true;
+        await vm.RefreshRunsCommand.ExecuteAsync(null);
+
+        Assert.Empty(vm.Runs);
+        Assert.Empty(vm.Pagination.CurrentPageItems);
+        Assert.Null(vm.SelectedRun);
+        Assert.StartsWith("Failed to read run history", vm.StatusMessage);
+    }
+
+    [Theory]
+    [InlineData("Manager/GameSaves.App/Views/SyncView.axaml")]
     public void Views_ContainPaginationBindings_WithoutDirectHeightOverrides(string relativePath)
     {
         string fullPath = Path.Combine(GetSolutionRoot(), relativePath);
@@ -488,7 +570,6 @@ public sealed class TransferAndHistoryPaginationTests
         public ISyncProvider CreateSftpProvider(SftpConnectionSettings settings) => provider;
         public ISyncProvider CreateGoogleDriveProvider(Guid remoteProfileId) => provider;
         public ISyncProvider CreateOneDriveProvider(Guid remoteProfileId) => provider;
-        public ISyncProvider CreateMegaProvider(Guid remoteProfileId) => provider;
         public void ForgetSftpHostKey(string host, int port) { }
     }
 
@@ -621,8 +702,10 @@ public sealed class TransferAndHistoryPaginationTests
     {
         public long RecordRun(TransferRunRecord record) => 1;
 
+        public bool Fail { get; set; }
+
         public IReadOnlyList<TransferRunInfo> GetRecentRuns(int limit) =>
-            runs.Take(limit).ToList();
+            Fail ? throw new IOException("database locked") : runs.Take(limit).ToList();
 
         public IReadOnlyList<TransferRunItemRecord> GetRunItems(long runId) => [];
 

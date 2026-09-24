@@ -306,10 +306,33 @@ public sealed class ManifestPathContainmentTests
     [InlineData(@"C:\Program Files (x86)\Steam\userdata\12345\remote\save.dat")]
     [InlineData(@"C:\Program Files\GOG Galaxy\Games\Witcher\saves\slot1.sav")]
     [InlineData(@"C:\Program Files\Epic Games\GameTitle\saves\game.sav")]
+    [InlineData(@"C:\Program Files (x86)\GOG Games\Witcher\saves\slot1.sav")]
+    [InlineData(@"C:\Program Files\SteamLibrary\steamapps\common\Portal\save.dat")]
     public void IsAcceptableRestoreTarget_AcceptsGamingPathsUnderProgramFiles(string target)
     {
         Assert.True(BackupRestoreService.IsAcceptableRestoreTarget(target, out string? rejection));
         Assert.Null(rejection);
+    }
+
+    [Theory]
+    [InlineData(@"C:\Program Files\EvilApp\games\payload.dll")]
+    [InlineData(@"C:\Program Files\EvilApp\userdata\payload.dll")]
+    [InlineData(@"C:\Program Files\Common Files\games\payload.dll")]
+    [InlineData(@"C:\Program Files\Common Files\steamapps\common\payload.dll")]
+    [InlineData(@"C:\Program Files (x86)\SomeTool\Steam\payload.dll")]
+    public void IsAcceptableRestoreTarget_RejectsGamingLookalikesUnderProgramFiles(string target)
+    {
+        Assert.False(BackupRestoreService.IsAcceptableRestoreTarget(target, out string? rejection));
+        Assert.Contains("Program Files", rejection);
+    }
+
+    [Theory]
+    [InlineData(@"C:\Users\someone-else\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\evil.bat")]
+    [InlineData(@"D:\Profiles\other\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\evil.lnk")]
+    public void IsAcceptableRestoreTarget_RejectsAnyProfilesStartMenu(string target)
+    {
+        Assert.False(BackupRestoreService.IsAcceptableRestoreTarget(target, out string? rejection));
+        Assert.Contains("Start Menu", rejection);
     }
 
     // -------------------------------------------------------------------

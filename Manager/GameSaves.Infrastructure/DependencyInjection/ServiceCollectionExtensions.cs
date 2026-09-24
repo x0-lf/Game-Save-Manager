@@ -13,7 +13,6 @@ using GameSaves.Infrastructure.Platform;
 using GameSaves.Infrastructure.Profiles;
 using GameSaves.Infrastructure.GoogleDrive;
 using GameSaves.Infrastructure.OneDrive;
-using GameSaves.Infrastructure.Mega;
 using GameSaves.Infrastructure.Registry;
 using GameSaves.Infrastructure.Save;
 using GameSaves.Infrastructure.Secrets;
@@ -26,23 +25,25 @@ namespace GameSaves.Infrastructure.DependencyInjection
 {
     public static class ServiceCollectionExtensions
     {
+        // The decorator gets no migrator from the container on purpose: it
+        // builds the default one. Internal so a test can run this exact wiring
+        // against a temporary database path.
+        internal static IAppDatabasePathProvider CreateDatabasePathProvider(
+            IServiceProvider provider,
+            IAppDatabasePathProvider inner) =>
+            new SchemaInitializingAppDatabasePathProvider(
+                inner,
+                provider.GetRequiredService<ICuratedMappingSeeder>());
+
         public static IServiceCollection AddGameSavesInfrastructure(
             this IServiceCollection services)
         {
-            services.AddSingleton<ISchemaMigrator, SchemaMigrator>();
             services.AddSingleton<ICuratedMappingSeeder, CuratedMappingSeeder>();
-            services.AddSingleton<IMappingImportService, MappingImportService>();
-            services.AddSingleton<ITracklistGeneratorService, TracklistGeneratorService>();
-            services.AddSingleton<IAiPatternDetectorService, AiPatternDetectorService>();
 
             // Wrapped so the schema is guaranteed before the first connection;
             // the desktop app has no other bootstrap path. See the decorator.
-            // Under DATA-002 and DATA-003, migrations and curated mappings are seeded on database initialization.
             services.AddSingleton<IAppDatabasePathProvider>(provider =>
-                new SchemaInitializingAppDatabasePathProvider(
-                    new DefaultAppDatabasePathProvider(),
-                    provider.GetRequiredService<ICuratedMappingSeeder>(),
-                    provider.GetRequiredService<ISchemaMigrator>()));
+                CreateDatabasePathProvider(provider, new DefaultAppDatabasePathProvider()));
             services.AddSingleton<ICurrentPlatformProvider, CurrentPlatformProvider>();
 
             services.AddSingleton<ISteamRootLocator, RegistrySteamLocator>();
@@ -73,8 +74,7 @@ namespace GameSaves.Infrastructure.DependencyInjection
                     provider.GetRequiredService<ITransferHistoryRepository>(),
                     provider.GetRequiredService<IAppDatabasePathProvider>(),
                     provider.GetRequiredService<IGoogleDriveSyncProviderFactory>(),
-                    provider.GetRequiredService<IOneDriveSyncProviderFactory>(),
-                    provider.GetService<IMegaSyncProviderFactory>()));
+                    provider.GetRequiredService<IOneDriveSyncProviderFactory>()));
             services.AddSingleton<IUtcClock, SystemUtcClock>();
 
             // Registered beside the clock and for the same reason: so a test
@@ -278,13 +278,7 @@ namespace GameSaves.Infrastructure.DependencyInjection
             services.AddSingleton<OneDriveOAuthService>();
             services.AddSingleton<IOneDriveOAuthService>(provider =>
                 provider.GetRequiredService<OneDriveOAuthService>());
-            services.AddSingleton<IOneDriveRemoteFileSystemFactory, OneDriveRemoteFileSystemFactory>();
             services.AddSingleton<IOneDriveSyncProviderFactory, OneDriveSyncProviderFactory>();
-
-            services.AddSingleton<IMegaApiClient, MegaApiClient>();
-            services.AddSingleton<IMegaSessionService, MegaSessionService>();
-            services.AddSingleton<IMegaRemoteFileSystemFactory, MegaRemoteFileSystemFactory>();
-            services.AddSingleton<IMegaSyncProviderFactory, MegaSyncProviderFactory>();
 
             return services;
         }

@@ -1,4 +1,3 @@
-using GameSaves.Core.Sync;
 using GameSaves.Infrastructure.GoogleDrive;
 
 namespace GameSaves.Tests;
@@ -6,77 +5,37 @@ namespace GameSaves.Tests;
 public sealed class GoogleDriveDesktopDetectorTests
 {
     [Fact]
-    public void MountedDrivePath_WhenDefaultMyDriveExists_ReturnsDefaultMyDrive()
+    public void MountedDrivePath_WhenDriveFsVolumeHasMyDrive_ReturnsMyDrive()
     {
         var detector = new GoogleDriveDesktopDetector(
-            getDrives: () => [],
+            getDrives: () => [(@"C:\", "NTFS", "Windows"), (@"G:\", "DriveFS", "")],
             directoryExists: path => path == @"G:\My Drive");
 
         Assert.Equal(@"G:\My Drive", detector.MountedDrivePath);
-        Assert.True(detector.IsInstalled);
         Assert.Equal(@"G:\My Drive\GameSaves", detector.DefaultSyncFolderPath);
     }
 
     [Fact]
-    public void MountedDrivePath_WhenDefaultGExists_ReturnsDefaultG()
+    public void MountedDrivePath_WhenVolumeIsLabelledGoogleDrive_ReturnsItsRoot()
     {
         var detector = new GoogleDriveDesktopDetector(
-            getDrives: () => [],
-            directoryExists: path => path == @"G:\");
-
-        Assert.Equal(@"G:\", detector.MountedDrivePath);
-        Assert.True(detector.IsInstalled);
-        Assert.Equal(@"G:\GameSaves", detector.DefaultSyncFolderPath);
-    }
-
-    [Fact]
-    public void MountedDrivePath_WhenUserHomeFolderExists_ReturnsUserHomeGoogleDrive()
-    {
-        string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        string expected = Path.Combine(userProfile, "Google Drive");
-
-        var detector = new GoogleDriveDesktopDetector(
-            getDrives: () => [],
-            directoryExists: path => path.Equals(expected, StringComparison.OrdinalIgnoreCase));
-
-        Assert.Equal(expected, detector.MountedDrivePath);
-        Assert.True(detector.IsInstalled);
-        Assert.Equal(Path.Combine(expected, "GameSaves"), detector.DefaultSyncFolderPath);
-    }
-
-    [Fact]
-    public void MountedDrivePath_WhenNoDriveOrFolderExists_ReturnsNull()
-    {
-        var detector = new GoogleDriveDesktopDetector(
-            getDrives: () => [],
+            getDrives: () => [(@"H:\", "FAT32", "Google Drive")],
             directoryExists: _ => false);
+
+        Assert.Equal(@"H:\", detector.MountedDrivePath);
+    }
+
+    // A USB stick or second disk on G:, or a leftover "Google Drive" folder,
+    // is not a Drive mount: nothing uploads what is written there.
+    [Fact]
+    public void MountedDrivePath_IgnoresPlainGDriveAndLegacyHomeFolder()
+    {
+        var detector = new GoogleDriveDesktopDetector(
+            getDrives: () => [(@"G:\", "NTFS", "USB")],
+            directoryExists: _ => true);
 
         Assert.Null(detector.MountedDrivePath);
         Assert.Null(detector.DefaultSyncFolderPath);
-    }
-
-    [Fact]
-    public void IsInstalled_WhenMarkerDirectoryExists_ReturnsTrueEvenIfUnmounted()
-    {
-        string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        string markerDir = Path.Combine(localAppData, "Google", "DriveFS");
-
-        var detector = new GoogleDriveDesktopDetector(
-            getDrives: () => [],
-            directoryExists: path => path.Equals(markerDir, StringComparison.OrdinalIgnoreCase));
-
-        Assert.Null(detector.MountedDrivePath);
-        Assert.True(detector.IsInstalled);
-    }
-
-    [Fact]
-    public void IsInstalled_WhenNeitherMountedNorMarkerExists_ReturnsFalse()
-    {
-        var detector = new GoogleDriveDesktopDetector(
-            getDrives: () => [],
-            directoryExists: _ => false);
-
-        Assert.False(detector.IsInstalled);
     }
 
     [Fact]
@@ -87,7 +46,25 @@ public sealed class GoogleDriveDesktopDetectorTests
             directoryExists: _ => false);
 
         Assert.Null(detector.MountedDrivePath);
-        Assert.False(detector.IsInstalled);
+    }
+
+    [Fact]
+    public void MountedDrivePath_ProbesTheDisksOnlyOnce()
+    {
+        int scans = 0;
+        var detector = new GoogleDriveDesktopDetector(
+            getDrives: () =>
+            {
+                scans++;
+                return [(@"G:\", "DriveFS", "")];
+            },
+            directoryExists: _ => false);
+
+        _ = detector.MountedDrivePath;
+        _ = detector.DefaultSyncFolderPath;
+        _ = detector.MountedDrivePath;
+
+        Assert.Equal(1, scans);
     }
 
     [Fact]
@@ -96,7 +73,6 @@ public sealed class GoogleDriveDesktopDetectorTests
         var detector = new GoogleDriveDesktopDetector();
 
         // Must evaluate properties without throwing exceptions on any environment
-        _ = detector.IsInstalled;
         _ = detector.MountedDrivePath;
         _ = detector.DefaultSyncFolderPath;
     }

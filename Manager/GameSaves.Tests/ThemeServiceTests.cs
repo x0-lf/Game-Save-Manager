@@ -139,11 +139,23 @@ namespace GameSaves.Tests
         }
 
         [Theory]
+        [MemberData(nameof(EdgeCaseCustomAccents))]
+        public void CustomHexAccent_AccentTextMeetsWcagAaOnItsSurfaces(string hex)
+        {
+            double dark = ThemeService.CalculateContrastRatio(
+                ThemeService.GetPalette(hex, isDark: true).Accent, Color.Parse("#1D1F27"));
+            double light = ThemeService.CalculateContrastRatio(
+                ThemeService.GetPalette(hex, isDark: false).Accent, Color.Parse("#F4F5F8"));
+
+            Assert.True(dark >= 4.5, $"Dark accent for {hex} on #1D1F27 was {dark:F2}:1");
+            Assert.True(light >= 4.5, $"Light accent for {hex} on #F4F5F8 was {light:F2}:1");
+        }
+
+        [Theory]
         [InlineData("#3B82F6")]
         [InlineData("3B82F6")]
         [InlineData("#36F")]
         [InlineData("36F")]
-        [InlineData("#FF3B82F6")]
         public void TryParseHexColor_ParsesValidHexFormats(string input)
         {
             Assert.True(ThemeService.TryParseHexColor(input, out Color color));
@@ -155,6 +167,8 @@ namespace GameSaves.Tests
         [InlineData("#xyz")]
         [InlineData("12")]
         [InlineData("#12345")]
+        [InlineData("#FF3B82F6")] // #AARRGGBB: an accent is opaque
+        [InlineData("#36F8")]     // #ARGB
         [InlineData("")]
         [InlineData("   ")]
         [InlineData(null)]

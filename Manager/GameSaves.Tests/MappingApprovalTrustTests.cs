@@ -1,4 +1,5 @@
 using GameSaves.Core.Save;
+using GameSaves.Infrastructure.Data;
 using GameSaves.Infrastructure.Save;
 using Microsoft.Data.Sqlite;
 using System.Text.Json;
@@ -17,7 +18,7 @@ public sealed class MappingApprovalTrustTests : IDisposable
     }
 
     [Fact]
-    public void ImportMappingsFromJson_DefaultsToPendingAndDisabled()
+    public void ImportFile_OfHarvesterOutput_DefaultsToPendingAndDisabled()
     {
         string dbPath = _temp.GetPath("import_test.db");
         var database = new SavePathDatabase(dbPath);
@@ -38,10 +39,13 @@ public sealed class MappingApprovalTrustTests : IDisposable
                 Notes: "Harvested automatically",
                 Priority: 100)
         };
+        // The harvester writes savepaths.extracted.json with PascalCase names.
         File.WriteAllText(jsonPath, JsonSerializer.Serialize(candidates));
 
         // Act
-        database.ImportMappingsFromJson(jsonPath);
+        MappingImportReport report = new MappingImportService().ImportFile(dbPath, jsonPath);
+        Assert.True(report.Success);
+        Assert.Equal(1, report.MappingsInserted);
 
         // Assert
         var repo = new SqliteSavePathMappingRepository(dbPath);
@@ -218,7 +222,8 @@ public sealed class MappingApprovalTrustTests : IDisposable
             command.ExecuteNonQuery();
         }
 
-        // Opening through repository prepares review columns and migrates nulls to 'Pending'
+        // Schema migration V002 adds the review columns and migrates nulls to 'Pending'
+        Assert.True(new SchemaMigrator().Migrate(dbPath).Success);
         var repo = new SqliteSavePathMappingRepository(dbPath);
 
         // Legacy enabled row with no review status must NOT be treated as approved!
@@ -356,5 +361,60 @@ public sealed class MappingApprovalTrustTests : IDisposable
             Assert.Equal("Approved", m.ReviewStatus);
             Assert.Equal("Batch approved", m.ReviewNotes);
         });
+    }
+
+    [Fact]
+    public void ImportMappings_SkipsCandidatesThatFailValidation()
+    {
+        string dbPath = MigratedDatabase.Create(_temp, "invalid_candidates.db");
+        var database = new SavePathDatabase(dbPath);
+
+        SavePathImportItem Candidate(string appId, string platform, string kind, string path) =>
+            new(appId, "Game", platform, path, kind, "PCGamingWiki-AutoExtracted", null, null, null, 80);
+
+        database.ImportMappings(new[]
+        {
+            Candidate("400", "windows", "SaveDirectory", "%APPDATA%/A"),
+            Candidate("400", "gameboy", "Directory", "%APPDATA%/B"),
+            Candidate("0", "windows", "Directory", "%APPDATA%/C"),
+            Candidate("My Game", "windows", "Directory", "%APPDATA%/D"),
+            Candidate("400", "windows", "Directory", "%APPDATA%/E\0"),
+            Candidate("400", "Windows", "glob", "%APPDATA%/F/*.sav")
+        }, enabled: false, reviewStatus: "Pending");
+
+        // Only the valid candidate lands, with its platform and kind in canonical form.
+        SavePathMapping only = Assert.Single(
+            new SqliteSavePathMappingRepository(dbPath).GetMappingsForApp("400", "windows", includeDisabled: true));
+        Assert.Equal("%APPDATA%/F/*.sav", only.PathTemplate);
+        Assert.Equal(SavePathKind.Glob, only.PathKind);
+        Assert.Equal(1, MigratedDatabase.Scalar(dbPath, "SELECT COUNT(*) FROM save_path_mappings;"));
+    }
+
+    [Fact]
+    public void HarvestReimport_OverAnApprovedCuratedRow_LeavesItUntouched()
+    {
+        string dbPath = MigratedDatabase.Create(_temp, "harvest_over_curated.db");
+        new CuratedMappingSeeder().Seed(dbPath);
+        var database = new SavePathDatabase(dbPath);
+        SavePathMapping before = Assert.Single(database.GetApprovedMappingsForApp("220", "windows"));
+
+        database.ImportMappings(new[]
+        {
+            new SavePathImportItem(
+                "220",
+                "Half-Life 2 (wiki)",
+                "windows",
+                before.PathTemplate,
+                "File",
+                "PCGamingWiki-AutoExtracted",
+                "https://www.pcgamingwiki.com/wiki/Half-Life_2",
+                "CC-BY-NC-SA",
+                "Auto-extracted",
+                80)
+        }, enabled: false, reviewStatus: "Pending");
+
+        SavePathMapping after = Assert.Single(database.GetApprovedMappingsForApp("220", "windows"));
+        Assert.Equal(before, after);
+        Assert.Equal(CuratedMappingSeeder.CuratedSourceName, after.SourceName);
     }
 }

@@ -9,7 +9,6 @@ namespace GameSaves.Core.Sync
         ClientConfigurationMissing = 4,
         ProfileNotFound = 5,
         WrongProviderKind = 6,
-        SettingsInvalid = 7,
         SecretStoreUnavailable = 8,
         TokenCorrupted = 9,
         ReauthenticationRequired = 10,
@@ -32,27 +31,18 @@ namespace GameSaves.Core.Sync
     {
         public const string ClientIdMissing = "OneDriveOAuthClientIdMissing";
         public const string ClientIdInvalid = "OneDriveOAuthClientIdInvalid";
-        public const string InvalidClient = "OneDriveOAuthInvalidClient";
         public const string Cancelled = "OneDriveOAuthCancelled";
         public const string Denied = "OneDriveOAuthDenied";
-        public const string PolicyDenied = "OneDriveOAuthPolicyDenied";
         public const string BrowserFailed = "OneDriveOAuthBrowserFailed";
         public const string CallbackFailed = "OneDriveOAuthCallbackFailed";
-        public const string RedirectMismatch = "OneDriveOAuthRedirectMismatch";
-        public const string NetworkFailed = "OneDriveOAuthNetworkFailed";
         public const string TokenExchangeFailed = "OneDriveOAuthTokenExchangeFailed";
         public const string TokenStoreUnavailable = "OneDriveOAuthTokenStoreUnavailable";
         public const string TokenCorrupted = "OneDriveOAuthTokenCorrupted";
         public const string RefreshFailed = "OneDriveOAuthRefreshFailed";
         public const string ReauthenticationRequired = "OneDriveOAuthReauthenticationRequired";
-        public const string AuthorizationRevoked = "OneDriveOAuthAuthorizationRevoked";
-        public const string RevokedTokenCleanupFailed = "OneDriveOAuthRevokedTokenCleanupFailed";
         public const string AccountLookupFailed = "OneDriveOAuthAccountLookupFailed";
-        public const string DriveUnavailable = "OneDriveOAuthDriveUnavailable";
         public const string ProfileNotFound = "OneDriveOAuthProfileNotFound";
         public const string WrongProviderKind = "OneDriveOAuthWrongProviderKind";
-        public const string SettingsInvalid = "OneDriveOAuthSettingsInvalid";
-        public const string OperationInProgress = "OneDriveOAuthOperationInProgress";
         public const string Failed = "OneDriveOAuthFailed";
     }
 
@@ -63,8 +53,7 @@ namespace GameSaves.Core.Sync
         ProfileNotFound = 2,
         WrongProviderKind = 3,
         SecretStoreUnavailable = 4,
-        CleanupFailed = 5,
-        Failed = 6
+        CleanupFailed = 5
     }
 
     public static class OneDriveDisconnectionErrorCodes
@@ -73,7 +62,6 @@ namespace GameSaves.Core.Sync
         public const string WrongProviderKind = "OneDriveDisconnectWrongProviderKind";
         public const string SecretStoreUnavailable = "OneDriveDisconnectSecretStoreUnavailable";
         public const string CleanupFailed = "OneDriveDisconnectCleanupFailed";
-        public const string Failed = "OneDriveDisconnectFailed";
     }
 
     /// <summary>

@@ -133,90 +133,8 @@
                     </ListBox.ItemTemplate>
                     </ListBox>
 
-                    <!-- Bottom pagination bar -->
-                    <Border Grid.Row="1"
-                            BorderThickness="0,1,0,0"
-                            BorderBrush="{DynamicResource SubtleBorderBrush}"
-                            Background="{DynamicResource InsetBackgroundBrush}"
-                            Padding="12,8">
-                        <Grid ColumnDefinitions="Auto,*,Auto">
-                            <!-- Left: Page summary text -->
-                            <TextBlock Grid.Column="0"
-                                       Text="{Binding Pagination.PageSummaryText}"
-                                       Foreground="{DynamicResource SecondaryTextBrush}"
-                                       FontSize="{DynamicResource FontSizeBody}"
-                                       VerticalAlignment="Center" />
-
-                            <!-- Right: Page size selector and page navigation -->
-                            <StackPanel Grid.Column="2"
-                                        Orientation="Horizontal"
-                                        VerticalAlignment="Center"
-                                        Spacing="12">
-                                <!-- Page size selector -->
-                                <StackPanel Orientation="Horizontal"
-                                            VerticalAlignment="Center"
-                                            Spacing="6">
-                                    <TextBlock Text="Page size:"
-                                               Foreground="{DynamicResource SecondaryTextBrush}"
-                                               FontSize="{DynamicResource FontSizeBody}"
-                                               VerticalAlignment="Center" />
-                                    <ComboBox ItemsSource="{Binding Pagination.PageSizeOptions}"
-                                              SelectedItem="{Binding Pagination.SelectedPageSizeOption}"
-                                              ToolTip.Tip="Select page size"
-                                              AutomationProperties.Name="Page size selector"
-                                              MinWidth="72"
-                                              VerticalAlignment="Center" />
-                                    <TextBox Text="{Binding Pagination.CustomPageSizeText}"
-                                             IsVisible="{Binding Pagination.IsCustomPageSize}"
-                                             PlaceholderText="Size"
-                                             ToolTip.Tip="Enter custom page size (positive integer)"
-                                             AutomationProperties.Name="Custom page size input"
-                                             Width="60"
-                                             VerticalAlignment="Center" />
-                                </StackPanel>
-
-                                <!-- Navigation buttons -->
-                                <StackPanel Orientation="Horizontal"
-                                            VerticalAlignment="Center"
-                                            Spacing="4">
-                                    <Button Command="{Binding Pagination.FirstPageCommand}"
-                                            ToolTip.Tip="First page"
-                                            AutomationProperties.Name="First page"
-                                            Content="«"
-                                            Width="32"
-                                            HorizontalContentAlignment="Center"
-                                            VerticalContentAlignment="Center" />
-                                    <Button Command="{Binding Pagination.PreviousPageCommand}"
-                                            ToolTip.Tip="Previous page"
-                                            AutomationProperties.Name="Previous page"
-                                            Content="‹"
-                                            Width="32"
-                                            HorizontalContentAlignment="Center"
-                                            VerticalContentAlignment="Center" />
-                                    <TextBlock Text="{Binding Pagination.PageNumberText}"
-                                               Foreground="{DynamicResource PrimaryTextBrush}"
-                                               FontSize="{DynamicResource FontSizeBody}"
-                                               FontWeight="Medium"
-                                               VerticalAlignment="Center"
-                                               Margin="8,0" />
-                                    <Button Command="{Binding Pagination.NextPageCommand}"
-                                            ToolTip.Tip="Next page"
-                                            AutomationProperties.Name="Next page"
-                                            Content="›"
-                                            Width="32"
-                                            HorizontalContentAlignment="Center"
-                                            VerticalContentAlignment="Center" />
-                                    <Button Command="{Binding Pagination.LastPageCommand}"
-                                            ToolTip.Tip="Last page"
-                                            AutomationProperties.Name="Last page"
-                                            Content="»"
-                                            Width="32"
-                                            HorizontalContentAlignment="Center"
-                                            VerticalContentAlignment="Center" />
-                                </StackPanel>
-                            </StackPanel>
-                        </Grid>
-                    </Border>
+                    <views:PaginationBar Grid.Row="1"
+                                         DataContext="{Binding Pagination}" />
                 </Grid>
             </wsp:WorkspacePanel>
 
@@ -236,6 +154,11 @@
                         <TextBlock Text="Select a backup run to enable restore."
                                    IsVisible="{Binding SelectedRun, Converter={x:Static ObjectConverters.IsNull}}"
                                    Foreground="{DynamicResource MutedTextBrush}"
+                                   FontSize="{DynamicResource FontSizeBody}"
+                                   TextWrapping="Wrap" />
+
+                        <TextBlock Text="{Binding SelectedRun.ListDisplay, StringFormat='Selected run: {0}'}"
+                                   Foreground="{DynamicResource PrimaryTextBrush}"
                                    FontSize="{DynamicResource FontSizeBody}"
                                    TextWrapping="Wrap" />
 
@@ -333,9 +256,9 @@
                 </Panel>
             </wsp:WorkspacePanel>
 
-            <!-- The file list is the panel that absorbs the centre's slack, so
-                 it scrolls inside itself rather than pushing the panels below
-                 it off the page. -->
+            <!-- The file list is a content-height panel like the rest of the
+                 centre stack: it grows with the run's files and the page
+                 scrolls. Only the run list on the left fills its region. -->
             <wsp:WorkspacePanel PanelKey="backups.files"
                                 Classes="table"
                                 IsVisible="{Binding !!Runs.Count}"
@@ -369,7 +292,6 @@
 
                         <Button Content="Verify payload integrity"
                                 Command="{Binding VerifySelectedRunCommand}"
-                                IsEnabled="{Binding CanVerifySelectedRun}"
                                 VerticalAlignment="Center"
                                 ToolTip.Tip="Reads all payload files in this backup run and verifies them byte-for-byte against their SHA-256 hashes." />
                     </StackPanel>
@@ -393,7 +315,6 @@
                     <!-- Flat Table View with Virtualized DataGrid -->
                     <DataGrid x:Name="BackupFilesGrid"
                               Grid.Row="1"
-                              Classes="installedGamesTable"
                               ItemsSource="{Binding RunItems}"
                               AutoGenerateColumns="False"
                               IsReadOnly="True"
@@ -468,7 +389,6 @@
                     <!-- Hierarchical Tree View with Virtualized DataGrid and Deferred Expansion -->
                     <DataGrid x:Name="BackupTreeGrid"
                               Grid.Row="1"
-                              Classes="installedGamesTable"
                               ItemsSource="{Binding FileTree.VisibleRows}"
                               AutoGenerateColumns="False"
                               IsReadOnly="True"
@@ -496,16 +416,17 @@
                                             <Button Background="Transparent"
                                                     BorderThickness="0"
                                                     Padding="2,0"
-                                                    MinWidth="20"
-                                                    MinHeight="20"
+                                                    MinWidth="24"
+                                                    MinHeight="24"
                                                     VerticalAlignment="Center"
                                                     IsVisible="{Binding IsDirectory}"
-                                                    Command="{Binding $parent[UserControl].((vm:BackupHistoryViewModel)DataContext).ToggleTreeNodeCommand}"
+                                                    Command="{Binding $parent[DataGrid].((vm:BackupHistoryViewModel)DataContext).ToggleTreeNodeCommand}"
                                                     CommandParameter="{Binding}"
+                                                    AutomationProperties.Name="{Binding Name, StringFormat='Expand or collapse {0}'}"
                                                     ToolTip.Tip="Expand or collapse folder">
                                                 <TextBlock Text="{Binding ExpanderGlyph}"
                                                            FontFamily="Consolas,monospace"
-                                                           FontSize="10"
+                                                           FontSize="{DynamicResource FontSizeMicro}"
                                                            Foreground="{DynamicResource AccentBrush}" />
                                             </Button>
                                             <TextBlock Text="   "
@@ -703,6 +624,11 @@
                         </StackPanel>
                     </StackPanel>
 
+                    <TextBlock Text="{Binding SelectedRun.ListDisplay, StringFormat='Selected run: {0}', FallbackValue='No run selected.'}"
+                               Foreground="{DynamicResource PrimaryTextBrush}"
+                               FontSize="{DynamicResource FontSizeBody}"
+                               TextWrapping="Wrap" />
+
                     <StackPanel Orientation="Horizontal"
                                 Spacing="10">
                         <Button Content="Export Selected Run..."
@@ -740,6 +666,11 @@
                                FontSize="{DynamicResource FontSizeBody}"
                                FontWeight="Bold"
                                Margin="0,4,0,0" />
+
+                    <TextBlock Text="{Binding SelectedRun.ListDisplay, StringFormat='Selected run: {0}', FallbackValue='No run selected.'}"
+                               Foreground="{DynamicResource PrimaryTextBrush}"
+                               FontSize="{DynamicResource FontSizeBody}"
+                               TextWrapping="Wrap" />
 
                     <CheckBox Content="I understand this permanently deletes the selected backup run"
                               IsChecked="{Binding ConfirmDeleteRun}"

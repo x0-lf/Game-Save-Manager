@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using GameSaves.App.Common;
 using GameSaves.App.Models;
 using GameSaves.Core.Transfers;
 using System;
@@ -307,7 +308,7 @@ namespace GameSaves.App.ViewModels
                     Warnings.Add(new TransferWarningRowViewModel(warning));
 
                 TotalFiles = plan.TotalFiles;
-                TotalSizeDisplay = FormatBytes(plan.TotalBytes);
+                TotalSizeDisplay = ByteSize.Format(plan.TotalBytes);
                 BlockedItemCount = plan.BlockedItems.Count;
                 CanExecuteCopy = ComputeCanExecuteCopy(plan);
 
@@ -381,7 +382,7 @@ namespace GameSaves.App.ViewModels
 
                 FilesCopied = result.FilesCopied;
                 FilesSkipped = result.FilesSkipped;
-                BytesCopiedDisplay = FormatBytes(result.BytesCopied);
+                BytesCopiedDisplay = ByteSize.Format(result.BytesCopied);
                 FilesBackedUp = result.FilesBackedUp;
                 BackupLocationMessage = result.BackupRootPath is null
                     ? ""
@@ -415,26 +416,6 @@ namespace GameSaves.App.ViewModels
             TotalSizeDisplay = "0 B";
             BlockedItemCount = 0;
             CanExecuteCopy = false;
-        }
-
-        private static string FormatBytes(long bytes)
-        {
-            if (bytes < 1024)
-                return $"{bytes} B";
-
-            double kb = bytes / 1024.0;
-
-            if (kb < 1024)
-                return $"{kb:0.##} KB";
-
-            double mb = kb / 1024.0;
-
-            if (mb < 1024)
-                return $"{mb:0.##} MB";
-
-            double gb = mb / 1024.0;
-
-            return $"{gb:0.##} GB";
         }
     }
 }

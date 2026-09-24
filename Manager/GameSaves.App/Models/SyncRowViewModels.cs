@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using GameSaves.App.Common;
 using GameSaves.Core.Sync;
 using GameSaves.Core.Transfers;
 using System;
@@ -157,25 +158,7 @@ namespace GameSaves.App.Models
             return exists ? path! : $"{path} (not created yet)";
         }
 
-        internal static string FormatBytes(long bytes)
-        {
-            if (bytes < 1024)
-                return $"{bytes} B";
-
-            double kb = bytes / 1024.0;
-
-            if (kb < 1024)
-                return $"{kb:0.##} KB";
-
-            double mb = kb / 1024.0;
-
-            if (mb < 1024)
-                return $"{mb:0.##} MB";
-
-            double gb = mb / 1024.0;
-
-            return $"{gb:0.##} GB";
-        }
+        internal static string FormatBytes(long bytes) => ByteSize.Format(bytes);
     }
 
     /// <summary>
@@ -197,8 +180,6 @@ namespace GameSaves.App.Models
         [NotifyPropertyChangedFor(nameof(IsWarningState))]
         [NotifyPropertyChangedFor(nameof(IsDangerState))]
         [NotifyPropertyChangedFor(nameof(IsVerified))]
-        [NotifyPropertyChangedFor(nameof(IsSidecarMatch))]
-        [NotifyPropertyChangedFor(nameof(IsPayloadVerified))]
         private SyncVerificationState verification = SyncVerificationState.NotRequested;
 
         public SyncItemResultRowViewModel(
@@ -210,20 +191,8 @@ namespace GameSaves.App.Models
                 ? "the remote"
                 : remoteLabel;
 
-            verification = result.Verification switch
-            {
-                VerificationStrength.SidecarManifestMatch => SyncVerificationState.SidecarManifestMatch,
-                VerificationStrength.ManifestMatch => SyncVerificationState.ManifestMatch,
-                VerificationStrength.PayloadVerified => SyncVerificationState.PayloadVerified,
-                VerificationStrength.ManifestMismatch => SyncVerificationState.ContentMismatch,
-                VerificationStrength.PayloadMismatch => SyncVerificationState.PayloadMismatch,
-                VerificationStrength.EndpointUnavailable => SyncVerificationState.EndpointUnavailable,
-                VerificationStrength.MissingLocally => SyncVerificationState.MissingLocally,
-                VerificationStrength.MissingRemotely => SyncVerificationState.MissingRemotely,
-                VerificationStrength.MissingBothSides => SyncVerificationState.MissingBothSides,
-                VerificationStrength.Cancelled => SyncVerificationState.Cancelled,
-                _ => SyncVerificationState.NotRequested
-            };
+            // A finished copy is only a copy. Its verification state comes
+            // from the post-sync re-read, never from the transfer itself.
         }
 
         public SyncItemResult Result { get; }
@@ -245,10 +214,6 @@ namespace GameSaves.App.Models
         public bool IsVerified => Verification is SyncVerificationState.ManifestMatch or
                                                  SyncVerificationState.SidecarManifestMatch or
                                                  SyncVerificationState.PayloadVerified;
-
-        public bool IsSidecarMatch => Verification == SyncVerificationState.SidecarManifestMatch;
-
-        public bool IsPayloadVerified => Verification == SyncVerificationState.PayloadVerified;
 
         /// <summary>
         /// Accessible non-color glyph for WCAG 2.x AA compliance.

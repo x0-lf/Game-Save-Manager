@@ -732,6 +732,34 @@ public sealed class SyncDirectionAndPresenceTests
             viewModel.VerificationStatusMessage);
     }
 
+    // Settings changed while the check was reading: its plan describes an
+    // endpoint that is gone and must not come back as the current plan.
+    [Fact]
+    public async Task ACheckOvertakenBySettingsChanges_DoesNotRestoreItsPlan()
+    {
+        var provider = new ScriptedSyncProvider
+        {
+            Plan = PlanOf(UploadItem("run-a")),
+            Result = ResultOf(UploadItem("run-a"), SyncItemStatus.Uploaded)
+        };
+
+        SyncViewModel viewModel = CreateViewModel(provider);
+        await viewModel.PreviewBothDirectionsCommand.ExecuteAsync(null);
+        provider.Plan = PlanOf(InSyncItem("run-a"));
+        viewModel.ConfirmSync = true;
+        await viewModel.ExecuteSyncCommand.ExecuteAsync(null);
+
+        provider.PreviewGate = new TaskCompletionSource();
+        Task check = viewModel.VerifyLastSyncCommand.ExecuteAsync(null);
+
+        viewModel.UploadEnabled = !viewModel.UploadEnabled;
+        provider.PreviewGate.SetResult();
+        await check;
+
+        Assert.Empty(viewModel.Items);
+        Assert.False(viewModel.CanExecuteSync);
+    }
+
     [Fact]
     public async Task RevalidationRefreshesThePlan_WithoutErasingTheExecutionResult()
     {
@@ -1023,8 +1051,6 @@ public sealed class SyncDirectionAndPresenceTests
 
         public ISyncProvider CreateOneDriveProvider(Guid remoteProfileId) => _provider;
 
-        public ISyncProvider CreateMegaProvider(Guid remoteProfileId) => _provider;
-
         public void ForgetSftpHostKey(string host, int port)
         {
         }
@@ -1054,20 +1080,25 @@ public sealed class SyncDirectionAndPresenceTests
 
         public Exception? PreviewFailure { get; set; }
 
+        public TaskCompletionSource? PreviewGate { get; set; }
+
         public List<SyncOptions> PreviewOptions { get; } = new();
 
         public List<SyncOptions> ExecuteOptions { get; } = new();
 
-        public Task<SyncPlan> CreatePreviewAsync(
+        public async Task<SyncPlan> CreatePreviewAsync(
             SyncOptions options,
             CancellationToken cancellationToken = default)
         {
             PreviewOptions.Add(options);
 
+            if (PreviewGate is not null)
+                await PreviewGate.Task;
+
             if (PreviewFailure is not null)
                 throw PreviewFailure;
 
-            return Task.FromResult(Plan);
+            return Plan;
         }
 
         public Task<SyncResult> ExecuteAsync(

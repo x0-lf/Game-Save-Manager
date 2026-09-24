@@ -33,7 +33,7 @@ public sealed class SyncProviderCapabilityTests
     }
 
     [Fact]
-    public void LocalFolderSftpGoogleDriveOneDriveAndMega_AreImplemented()
+    public void LocalFolderSftpGoogleDriveAndOneDrive_AreImplemented()
     {
         Assert.Equal(
             new[]
@@ -41,8 +41,7 @@ public sealed class SyncProviderCapabilityTests
                 SyncProviderKind.LocalFolder,
                 SyncProviderKind.Sftp,
                 SyncProviderKind.GoogleDrive,
-                SyncProviderKind.OneDrive,
-                SyncProviderKind.Mega
+                SyncProviderKind.OneDrive
             },
             _catalog.GetAll()
                 .Where(descriptor => descriptor.IsImplemented)
@@ -55,14 +54,13 @@ public sealed class SyncProviderCapabilityTests
                 SyncProviderKind.LocalFolder,
                 SyncProviderKind.Sftp,
                 SyncProviderKind.GoogleDrive,
-                SyncProviderKind.OneDrive,
-                SyncProviderKind.Mega
+                SyncProviderKind.OneDrive
             },
             viewModel.ProviderOptions.Select(option => option.Kind));
 
         Assert.True(_catalog.GetDescriptor(SyncProviderKind.GoogleDrive).IsConfigurationAvailable);
         Assert.True(_catalog.GetDescriptor(SyncProviderKind.OneDrive).IsConfigurationAvailable);
-        Assert.True(_catalog.GetDescriptor(SyncProviderKind.Mega).IsConfigurationAvailable);
+        Assert.False(_catalog.GetDescriptor(SyncProviderKind.Mega).IsConfigurationAvailable);
         Assert.False(_catalog.GetDescriptor(SyncProviderKind.WebDav).IsConfigurationAvailable);
     }
 
@@ -119,13 +117,13 @@ public sealed class SyncProviderCapabilityTests
             new SyncProviderCapabilities(
                 RequiresInteractiveLogin: true,
                 RequiresServerCredentials: false,
-                SupportsResumableUpload: true,
+                SupportsResumableUpload: false,
                 SupportsRemoteQuota: true,
-                SupportsRemoteFolderSelection: true,
+                SupportsRemoteFolderSelection: false,
                 SupportsPersistentAuthentication: true,
                 SupportsConnectionTesting: true,
                 SupportsLogout: true,
-                SupportsOpenRemoteLocation: true),
+                SupportsOpenRemoteLocation: false),
             descriptor.Capabilities);
     }
 
@@ -151,20 +149,29 @@ public sealed class SyncProviderCapabilityTests
     }
 
     [Fact]
-    public void MegaCapabilities_AreImplementedAndAvailable()
+    public void Mega_IsCataloguedButUnavailable()
     {
         SyncProviderDescriptor descriptor =
             _catalog.GetDescriptor(SyncProviderKind.Mega);
 
-        Assert.True(descriptor.IsImplemented);
-        Assert.True(descriptor.IsConfigurationAvailable);
-        Assert.Null(descriptor.UnavailableMessage);
+        Assert.False(descriptor.IsImplemented);
+        Assert.False(descriptor.IsConfigurationAvailable);
+        Assert.Equal("MEGA sync is not implemented yet.", descriptor.UnavailableMessage);
+
+        // A saved MEGA profile (kind 5 is persisted) must load as unavailable,
+        // not as corrupted and not as a usable profile.
+        SyncRemoteProfileSettingsReadResult read =
+            new SyncRemoteProfileSettingsSerializer(_catalog)
+                .Deserialize(SyncProviderKind.Mega, 1, "{\"schemaVersion\":1}");
+        Assert.Null(read.Settings);
+        Assert.Equal(descriptor.UnavailableMessage, read.Error);
+
         Assert.Equal(
             new SyncProviderCapabilities(
                 RequiresInteractiveLogin: false,
                 RequiresServerCredentials: true,
-                SupportsResumableUpload: true,
-                SupportsRemoteQuota: true,
+                SupportsResumableUpload: false,
+                SupportsRemoteQuota: false,
                 SupportsRemoteFolderSelection: false,
                 SupportsPersistentAuthentication: true,
                 SupportsConnectionTesting: true,
@@ -226,12 +233,6 @@ public sealed class SyncProviderCapabilityTests
                 SupportsConnectionTesting: true,
                 SupportsLogout: true,
                 SupportsOpenRemoteLocation: true),
-            descriptor.Capabilities);
-
-        // The same record OneDrive still declares, which is what "unchanged by
-        // activation" means: the flags describe the provider, not its state.
-        Assert.Equal(
-            _catalog.GetDescriptor(SyncProviderKind.OneDrive).Capabilities,
             descriptor.Capabilities);
     }
 

@@ -77,7 +77,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
     /// trusted Infrastructure consumers for display, but is deliberately
     /// omitted from warnings and diagnostic formatting.
     /// </summary>
-    internal sealed class GoogleDriveRemoteValidationResult : IRetryDelayCarrier
+    internal sealed class GoogleDriveRemoteValidationResult
     {
         internal GoogleDriveRemoteValidationResult(
             GoogleDriveRemoteValidationStatus status,
@@ -86,8 +86,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
             bool retryable,
             string? rootDisplayName,
             bool wasAuthenticationRefreshed,
-            bool cacheInvalidated,
-            TimeSpan? retryAfterDelay = null)
+            bool cacheInvalidated)
         {
             if (!Enum.IsDefined(status))
                 throw new ArgumentOutOfRangeException(nameof(status));
@@ -117,7 +116,6 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 : rootDisplayName;
             WasAuthenticationRefreshed = wasAuthenticationRefreshed;
             CacheInvalidated = cacheInvalidated;
-            RetryAfterDelay = retryAfterDelay;
         }
 
         public GoogleDriveRemoteValidationStatus Status { get; }
@@ -134,14 +132,11 @@ namespace GameSaves.Infrastructure.GoogleDrive
 
         public bool CacheInvalidated { get; }
 
-        public TimeSpan? RetryAfterDelay { get; }
-
         public string ToSafeDiagnosticString() =>
             $"Google Drive remote validation: status={Status}; " +
             $"retryable={Retryable}; " +
             $"authenticationRefreshed={WasAuthenticationRefreshed}; " +
-            $"cacheInvalidated={CacheInvalidated}" +
-            (RetryAfterDelay.HasValue ? $"; retryAfter={RetryAfterDelay.Value.TotalSeconds}s" : string.Empty);
+            $"cacheInvalidated={CacheInvalidated}";
 
         internal GoogleDriveRemoteValidationResult WithRuntimeState(
             bool wasAuthenticationRefreshed,
@@ -153,8 +148,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 Retryable,
                 RootDisplayName,
                 wasAuthenticationRefreshed,
-                cacheInvalidated,
-                RetryAfterDelay);
+                cacheInvalidated);
 
         public override string ToString() => ToSafeDiagnosticString();
     }
@@ -170,8 +164,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
             GoogleDriveRemoteValidationStatus status,
             string? rootDisplayName = null,
             bool wasAuthenticationRefreshed = false,
-            bool cacheInvalidated = false,
-            TimeSpan? retryAfterDelay = null)
+            bool cacheInvalidated = false)
         {
             ValidationDefinition definition = Definition(status);
             return new GoogleDriveRemoteValidationResult(
@@ -181,8 +174,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 definition.Retryable,
                 rootDisplayName,
                 wasAuthenticationRefreshed,
-                cacheInvalidated,
-                retryAfterDelay);
+                cacheInvalidated);
         }
 
         public static GoogleDriveRemoteValidationResult FromSessionFailure(
@@ -238,15 +230,13 @@ namespace GameSaves.Infrastructure.GoogleDrive
             return FromApiFailure(
                 details.Failure,
                 rootDisplayName,
-                cacheInvalidated,
-                details.RetryAfterDelay);
+                cacheInvalidated);
         }
 
         public static GoogleDriveRemoteValidationResult FromApiFailure(
             GoogleDriveApiFailure failure,
             string? rootDisplayName = null,
-            bool cacheInvalidated = false,
-            TimeSpan? retryAfterDelay = null)
+            bool cacheInvalidated = false)
         {
             if (!Enum.IsDefined(failure))
                 throw new ArgumentOutOfRangeException(nameof(failure));
@@ -271,7 +261,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 _ => GoogleDriveRemoteValidationStatus.Failed
             };
 
-            return FromStatus(status, rootDisplayName, cacheInvalidated: cacheInvalidated, retryAfterDelay: retryAfterDelay);
+            return FromStatus(status, rootDisplayName, cacheInvalidated: cacheInvalidated);
         }
 
         public static GoogleDriveRemoteValidationResult FromObjectResolution(

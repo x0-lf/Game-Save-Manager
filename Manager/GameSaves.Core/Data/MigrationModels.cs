@@ -17,7 +17,7 @@ namespace GameSaves.Core.Data
         IReadOnlyList<SchemaMigrationInfo> PendingMigrations,
         bool IntegrityCheckPassed,
         string? IntegrityMessage,
-        string? PlannedBackupPath);
+        string? PlannedBackupDirectory);
 
     public sealed record MigrationExecutionResult(
         bool Success,
@@ -32,9 +32,9 @@ namespace GameSaves.Core.Data
     {
         MigrationPlan Plan(string databasePath);
 
-        MigrationExecutionResult Migrate(string databasePath, bool forceBackup = false);
+        MigrationExecutionResult Migrate(string databasePath);
 
-        string Backup(string databasePath, string? destinationDirectory = null);
+        string Backup(string databasePath);
 
         bool VerifyIntegrity(string databasePath, out string message);
 

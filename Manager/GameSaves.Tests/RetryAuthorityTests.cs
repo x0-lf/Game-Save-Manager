@@ -47,39 +47,29 @@ public sealed class RetryAuthorityTests
     }
 
     [Fact]
-    public void ServerSuppliedRetryInstruction_IsCapturedAndReachesDecorator()
+    public void ServerSuppliedRetryInstruction_IsHonouredOnlyWhereItIsCarried()
     {
-        // MAINT-003: Server-supplied retry instruction (Retry-After header) is
-        // observed via GoogleDriveRetryAfterObserver attached to HTTP handlers across
-        // all Drive service constructions. It is mapped to IRetryDelayCarrier on
-        // GoogleDriveApiException, GoogleDriveRemoteValidationResult, and
-        // GoogleDriveRemoteOperationException, and honoured by RetryingRemoteFileSystem.
-        string[] driveMentions = DriveSources()
-            .Where(source =>
-                source.Text.Contains("RetryAfter", StringComparison.OrdinalIgnoreCase) ||
-                source.Text.Contains("Retry-After", StringComparison.OrdinalIgnoreCase))
-            .Select(source => source.Name)
-            .OrderBy(name => name, StringComparer.Ordinal)
-            .ToArray();
+        // Google Drive does not capture Retry-After: the header never reaches
+        // the failure mapper (an AsyncLocal attempt at it never delivered and
+        // was removed). The provider-neutral decorator honours a delay only
+        // when the failing exception itself carries one, which OneDrive's
+        // client does. When Drive gains a real capture path, add it here.
+        static bool Mentions(string text) =>
+            text.Contains("RetryAfter", StringComparison.OrdinalIgnoreCase) ||
+            text.Contains("Retry-After", StringComparison.OrdinalIgnoreCase);
 
-        string[] syncMentions = SyncSources()
-            .Where(source =>
-                source.Text.Contains("RetryAfter", StringComparison.OrdinalIgnoreCase) ||
-                source.Text.Contains("Retry-After", StringComparison.OrdinalIgnoreCase))
-            .Select(source => source.Name)
-            .OrderBy(name => name, StringComparer.Ordinal)
-            .ToArray();
+        Assert.DoesNotContain(DriveSources(), source => Mentions(source.Text));
+        Assert.Equal(
+            new[] { "RetryingRemoteFileSystem.cs" },
+            SyncSources().Where(source => Mentions(source.Text)).Select(source => source.Name));
 
-        // Pin the exact files participating in Retry-After capture and propagation:
-        Assert.Contains("GoogleDriveRetryAfterObserver.cs", driveMentions);
-        Assert.Contains("GoogleDriveApiFailure.cs", driveMentions);
-        Assert.Contains("GoogleDriveRemoteValidation.cs", driveMentions);
-        Assert.Contains("GoogleDriveRemoteOperationContext.cs", driveMentions);
-        Assert.Contains("GoogleInstalledAppAuthorizer.cs", driveMentions);
-
-        // Pin the exact files participating in Retry-After parsing and retry backoff:
-        Assert.Contains("HttpRetryAfterParser.cs", syncMentions);
-        Assert.Contains("RetryingRemoteFileSystem.cs", syncMentions);
+        // Non-vacuity: the same scan does find the retry that exists, so an
+        // empty result above is an absence rather than a scan that reads
+        // nothing.
+        Assert.Contains(
+            SyncSources(),
+            source => source.Text.Contains(
+                "RetryingRemoteFileSystem", StringComparison.Ordinal));
     }
 
     private static int Occurrences(string text, string value)

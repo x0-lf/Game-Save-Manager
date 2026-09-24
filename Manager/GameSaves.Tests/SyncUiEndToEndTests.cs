@@ -21,7 +21,7 @@ namespace GameSaves.Tests;
 /// Milestone V live acceptance ever drove it, and that was a one-off manual run.
 ///
 /// These tests drive the real <see cref="SyncProviderFactory"/> and the real
-/// <see cref="LocalFolderSyncProvider"/> against temporary directories the test
+/// local-folder provider it builds against temporary directories the test
 /// creates and deletes. Nothing outside those directories is read or written,
 /// and no network, account, or SSH server is involved.
 /// </summary>
@@ -63,7 +63,7 @@ public sealed class SyncUiEndToEndTests
         // else, so none of this could pass against it.
         Assert.Equal(
             "Local folder",
-            Assert.IsType<LocalFolderSyncProvider>(
+            Assert.IsType<EngineSyncProvider>(
                 workspace.Factory.CreateLocalFolderProvider(workspace.RemoteRoot))
                 .ProviderName);
 
@@ -264,8 +264,8 @@ public sealed class SyncUiEndToEndTests
         await viewModel.ExecuteSyncCommand.ExecuteAsync(null);
 
         // Bytes on the far side, exactly as the Local Folder task asserts. The
-        // wrapper is the real GoogleDriveSyncProvider, built by the real
-        // internal factory from the saved profile.
+        // wrapper is the real shared provider, built by the real internal
+        // Google Drive factory from the saved profile.
         Assert.Equal(
             Workspace.PayloadFor(LocalOnlyRun),
             File.ReadAllText(workspace.RemotePayload(LocalOnlyRun)));
@@ -634,7 +634,7 @@ public sealed class SyncUiEndToEndTests
         using ISyncProvider provider =
             workspace.Factory.CreateSftpProvider(SftpSettings());
 
-        SftpSyncProvider sftp = Assert.IsType<SftpSyncProvider>(provider);
+        EngineSyncProvider sftp = Assert.IsType<EngineSyncProvider>(provider);
 
         Assert.Equal("SFTP", sftp.ProviderName);
         Assert.Equal(SftpSettings().DisplayRoot, sftp.RemoteRoot);
@@ -649,10 +649,10 @@ public sealed class SyncUiEndToEndTests
     [Fact]
     public void TheSftpProvider_HasSeamForAHermeticRemoteFileSystem()
     {
-        // Rewritten for MAINT-001: SftpSyncProvider now accepts an injectable
-        // IRemoteFileSystem seam, enabling deterministic transfer testing
-        // without a live SSH server.
-        ConstructorInfo[] constructors = typeof(SftpSyncProvider).GetConstructors(
+        // The SFTP provider is the shared EngineSyncProvider, whose non-public
+        // constructor takes any IRemoteFileSystem, so a test can hand it a fake
+        // and transfer deterministically without a live SSH server.
+        ConstructorInfo[] constructors = typeof(EngineSyncProvider).GetConstructors(
             BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
 
         Assert.All(constructors, c => Assert.False(c.IsPublic));
@@ -671,18 +671,20 @@ public sealed class SyncUiEndToEndTests
         // SyncRemotePathTraversalTests. Rather than restate those assertions,
         // pin the structural fact that makes citing them valid: the SFTP
         // provider really does run on that engine.
-        FieldInfo[] fields = typeof(SftpSyncProvider).GetFields(
-            BindingFlags.Instance | BindingFlags.NonPublic);
+        using var workspace = new Workspace();
+        using ISyncProvider sftp = workspace.Factory.CreateSftpProvider(SftpSettings());
+        using ISyncProvider local =
+            workspace.Factory.CreateLocalFolderProvider(workspace.RemoteRoot);
 
-        Assert.Contains(fields, field => field.FieldType == typeof(SyncEngine));
-
-        // And so does the provider this milestone has been driving, which is
-        // why the end-to-end coverage above transfers to SFTP the moment a
-        // seam exists.
         Assert.Contains(
-            typeof(LocalFolderSyncProvider).GetFields(
+            Assert.IsType<EngineSyncProvider>(sftp).GetType().GetFields(
                 BindingFlags.Instance | BindingFlags.NonPublic),
             field => field.FieldType == typeof(SyncEngine));
+
+        // And it is the same wrapper as the provider this milestone has been
+        // driving, which is why the end-to-end coverage above transfers to
+        // SFTP.
+        Assert.Same(local.GetType(), sftp.GetType());
     }
 
     [Fact]
@@ -796,7 +798,8 @@ public sealed class SyncUiEndToEndTests
                     // own surface.
                     _driveFileSystems,
                     new WorkspaceHistoryService(LocalBase),
-                    History));
+                    History),
+                new UnusedOneDriveSyncProviderFactory());
         }
 
         /// <summary>

@@ -115,7 +115,8 @@
                               RowHeight="44"
                               Background="Transparent"
                               BorderThickness="0"
-                              ColumnReordered="OnColumnReordered">
+                              ColumnReordered="OnColumnReordered"
+                              Sorting="OnGamesGridSorting">
 
                         <DataGrid.Columns>
                             <DataGridTemplateColumn Header="Game"
@@ -140,6 +141,7 @@
                             <DataGridTextColumn Header="AppID"
                                                 Tag="appId"
                                                 Binding="{Binding AppId}"
+                                                SortMemberPath="AppId"
                                                 Width="80"
                                                 MinWidth="80"
                                                 Foreground="{DynamicResource MutedTextBrush}"
@@ -321,91 +323,8 @@
                         </views:EmptyState.ActionContent>
                     </views:EmptyState>
 
-                    <!-- Bottom pagination bar -->
-                    <Border Grid.Row="1"
-                            BorderThickness="0,1,0,0"
-                            BorderBrush="{DynamicResource SubtleBorderBrush}"
-                            Background="{DynamicResource InsetBackgroundBrush}"
-                            Padding="16,8"
-                            IsVisible="{Binding !!Games.Count}">
-                        <Grid ColumnDefinitions="Auto,*,Auto">
-                            <!-- Left: Page summary text -->
-                            <TextBlock Grid.Column="0"
-                                       Text="{Binding Pagination.PageSummaryText}"
-                                       Foreground="{DynamicResource SecondaryTextBrush}"
-                                       FontSize="{DynamicResource FontSizeBody}"
-                                       VerticalAlignment="Center" />
-
-                            <!-- Right: Page size selector and page navigation -->
-                            <StackPanel Grid.Column="2"
-                                        Orientation="Horizontal"
-                                        VerticalAlignment="Center"
-                                        Spacing="16">
-                                <!-- Page size selector -->
-                                <StackPanel Orientation="Horizontal"
-                                            VerticalAlignment="Center"
-                                            Spacing="6">
-                                    <TextBlock Text="Page size:"
-                                               Foreground="{DynamicResource SecondaryTextBrush}"
-                                               FontSize="{DynamicResource FontSizeBody}"
-                                               VerticalAlignment="Center" />
-                                    <ComboBox ItemsSource="{Binding Pagination.PageSizeOptions}"
-                                              SelectedItem="{Binding Pagination.SelectedPageSizeOption}"
-                                              ToolTip.Tip="Select page size"
-                                              AutomationProperties.Name="Page size selector"
-                                              MinWidth="72"
-                                              VerticalAlignment="Center" />
-                                    <TextBox Text="{Binding Pagination.CustomPageSizeText}"
-                                             IsVisible="{Binding Pagination.IsCustomPageSize}"
-                                             PlaceholderText="Size"
-                                             ToolTip.Tip="Enter custom page size (positive integer)"
-                                             AutomationProperties.Name="Custom page size input"
-                                             Width="60"
-                                             VerticalAlignment="Center" />
-                                </StackPanel>
-
-                                <!-- Navigation buttons -->
-                                <StackPanel Orientation="Horizontal"
-                                            VerticalAlignment="Center"
-                                            Spacing="4">
-                                    <Button Command="{Binding Pagination.FirstPageCommand}"
-                                            ToolTip.Tip="First page"
-                                            AutomationProperties.Name="First page"
-                                            Content="«"
-                                            Width="32"
-                                            HorizontalContentAlignment="Center"
-                                            VerticalContentAlignment="Center" />
-                                    <Button Command="{Binding Pagination.PreviousPageCommand}"
-                                            ToolTip.Tip="Previous page"
-                                            AutomationProperties.Name="Previous page"
-                                            Content="‹"
-                                            Width="32"
-                                            HorizontalContentAlignment="Center"
-                                            VerticalContentAlignment="Center" />
-                                    <TextBlock Text="{Binding Pagination.PageNumberText}"
-                                               Foreground="{DynamicResource PrimaryTextBrush}"
-                                               FontSize="{DynamicResource FontSizeBody}"
-                                               FontWeight="Medium"
-                                               VerticalAlignment="Center"
-                                               Margin="8,0" />
-                                    <Button Command="{Binding Pagination.NextPageCommand}"
-                                            ToolTip.Tip="Next page"
-                                            AutomationProperties.Name="Next page"
-                                            Content="›"
-                                            Width="32"
-                                            HorizontalContentAlignment="Center"
-                                            VerticalContentAlignment="Center" />
-                                    <Button Command="{Binding Pagination.LastPageCommand}"
-                                            ToolTip.Tip="Last page"
-                                            AutomationProperties.Name="Last page"
-                                            Content="»"
-                                            Width="32"
-                                            HorizontalContentAlignment="Center"
-                                            VerticalContentAlignment="Center" />
-                                </StackPanel>
-                            </StackPanel>
-                        </Grid>
-                    </Border>
+                    <views:PaginationBar Grid.Row="1"
+                                         DataContext="{Binding Pagination}" />
                 </Grid>
             </wsp:WorkspacePanel>
 

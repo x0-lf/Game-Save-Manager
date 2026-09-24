@@ -84,10 +84,6 @@ namespace GameSaves.Core.Transfers
         int TotalFiles = 0,
         IReadOnlyDictionary<string, bool>? FileResults = null)
     {
-        public bool IsSuccess => Strength is VerificationStrength.PayloadVerified or
-                                              VerificationStrength.ManifestMatch or
-                                              VerificationStrength.SidecarManifestMatch;
-
         public static VerificationStrengthResult Success(
             VerificationStrength strength,
             int verifiedFiles,

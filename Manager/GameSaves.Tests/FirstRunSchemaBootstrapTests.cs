@@ -1,3 +1,5 @@
+using GameSaves.Core.Data;
+using GameSaves.Infrastructure.Data;
 using GameSaves.Infrastructure.Platform;
 using GameSaves.Infrastructure.Save;
 using Microsoft.Data.Sqlite;
@@ -59,6 +61,40 @@ namespace GameSaves.Tests
             Assert.Equal(first, second);
             var repository = new SqliteSavePathMappingRepository(second);
             Assert.Equal(0, repository.CountNeedsFixMappings("windows"));
+        }
+
+        [Fact]
+        public void AFailedMigration_Throws_AndTheNextCallRetries()
+        {
+            string databasePath = _temp.GetPath("retry.db");
+            var migrator = new FailOnceMigrator();
+            var provider = new SchemaInitializingAppDatabasePathProvider(
+                new TestDatabasePathProvider(databasePath),
+                migrator: migrator);
+
+            SqliteException ex = Assert.Throws<SqliteException>(() => provider.GetDatabasePath());
+            Assert.Contains("simulated", ex.Message);
+
+            Assert.Equal(databasePath, provider.GetDatabasePath());
+            Assert.Equal(2, migrator.Calls);
+            Assert.Equal(0, new SqliteSavePathMappingRepository(databasePath).CountApprovedMappings("windows"));
+        }
+
+        private sealed class FailOnceMigrator : ISchemaMigrator
+        {
+            private readonly SchemaMigrator _real = new();
+
+            public int Calls { get; private set; }
+
+            public MigrationExecutionResult Migrate(string databasePath) =>
+                ++Calls == 1
+                    ? new MigrationExecutionResult(false, 0, 0, Array.Empty<string>(), null, false, "simulated failure")
+                    : _real.Migrate(databasePath);
+
+            public MigrationPlan Plan(string databasePath) => _real.Plan(databasePath);
+            public string Backup(string databasePath) => _real.Backup(databasePath);
+            public bool VerifyIntegrity(string databasePath, out string message) => _real.VerifyIntegrity(databasePath, out message);
+            public IReadOnlyList<SchemaMigrationRecord> GetAppliedMigrations(string databasePath) => _real.GetAppliedMigrations(databasePath);
         }
     }
 }

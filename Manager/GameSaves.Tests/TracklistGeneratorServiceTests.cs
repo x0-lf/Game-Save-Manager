@@ -368,6 +368,82 @@ namespace GameSaves.Tests
             Assert.False(item.IsInstalled);
         }
 
+        [Fact]
+        public void GenerateTracklist_TitleWithOnlyRejectedOrDisabledMappings_IsUnresearched()
+        {
+            string dbPath = _temp.GetPath("rejected_only.db");
+            new SavePathDatabase(dbPath).Initialize();
+
+            InsertMapping(dbPath, "100", "Rejected Game", "windows", "%APPDATA%/Wrong", "Rejected", enabled: false);
+            InsertMapping(dbPath, "200", "Disabled Game", "windows", "%APPDATA%/Off", "Approved", enabled: false);
+
+            MissingTitlesTracklist tracklist = new TracklistGeneratorService().GenerateTracklist(
+                dbPath,
+                new List<MissingTitleCandidate> { new("100", "Rejected Game"), new("200", "Disabled Game") });
+
+            Assert.Equal(0, tracklist.InReviewCount);
+            Assert.Equal(2, tracklist.UnresearchedCount);
+            Assert.All(tracklist.Items, item => Assert.Equal(MissingTitleResearchStatus.Unresearched, item.ResearchStatus));
+        }
+
+        [Fact]
+        public void GenerateTracklist_CandidateWithoutTitle_UsesTheCatalogTitle()
+        {
+            string dbPath = _temp.GetPath("catalog_title.db");
+            new SavePathDatabase(dbPath).Initialize();
+
+            using (var conn = new SqliteConnection($"Data Source={dbPath}"))
+            {
+                conn.Open();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = "INSERT INTO game_titles (steam_app_id, title, source_name) VALUES ('777', 'Catalog Name', 'Steam');";
+                cmd.ExecuteNonQuery();
+            }
+
+            MissingTitlesTracklist tracklist = new TracklistGeneratorService().GenerateTracklist(
+                dbPath,
+                new List<MissingTitleCandidate> { new("777", string.Empty), new("778", string.Empty) });
+
+            Assert.Equal("Catalog Name", tracklist.Items.Single(i => i.SteamAppId == "777").Title);
+            Assert.Equal("App 778", tracklist.Items.Single(i => i.SteamAppId == "778").Title);
+        }
+
+        [Fact]
+        public void GenerateTracklist_UnreadableDatabase_ThrowsInsteadOfReportingEveryTitleMissing()
+        {
+            string dbPath = _temp.GetPath("corrupt.db");
+            File.WriteAllText(dbPath, "this is not a SQLite database, just some text that is long enough");
+
+            Assert.Throws<SqliteException>(() => new TracklistGeneratorService().GenerateTracklist(
+                dbPath,
+                new List<MissingTitleCandidate> { new("100", "Any Game") }));
+        }
+
+        [Fact]
+        public void ExportCsv_NeutralizesSpreadsheetFormulasAndUsesCrlf()
+        {
+            var tracklist = new MissingTitlesTracklist(
+                GeneratedUtc: DateTimeOffset.UtcNow,
+                TotalReconciled: 2,
+                TotalCovered: 0,
+                TotalMissing: 2,
+                UnresearchedCount: 2,
+                InReviewCount: 0,
+                NoSaveLocationCount: 0,
+                Items: new List<MissingTitleEntry>
+                {
+                    new("100", "=HYPERLINK(\"http://evil.example\",\"Click\")", "https://store.steampowered.com/app/100", MissingTitleResearchStatus.Unresearched, "Normal", false, 0, DateTimeOffset.UtcNow),
+                    new("200", "@SUM(A1)", "https://store.steampowered.com/app/200", MissingTitleResearchStatus.Unresearched, "Normal", false, 0, DateTimeOffset.UtcNow, Notes: "-2+3")
+                });
+
+            string csv = new TracklistGeneratorService().ExportCsv(tracklist);
+
+            Assert.Contains("100,\"'=HYPERLINK(\"\"http://evil.example\"\",\"\"Click\"\")\",", csv);
+            Assert.Contains("200,'@SUM(A1),", csv);
+            Assert.EndsWith(",'-2+3\r\n", csv);
+            Assert.DoesNotContain("\n", csv.Replace("\r\n", string.Empty));
+        }
+
         private static void InsertMapping(
             string dbPath,
             string appId,

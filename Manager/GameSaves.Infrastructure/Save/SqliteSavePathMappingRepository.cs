@@ -29,7 +29,7 @@ namespace GameSaves.Infrastructure.Save
 
             var results = new List<SavePathMapping>();
 
-            using var connection = OpenConnectionAndPrepareReviewColumns();
+            using var connection = OpenConnection();
             using var command = connection.CreateCommand();
 
             command.CommandText = """
@@ -85,7 +85,7 @@ namespace GameSaves.Infrastructure.Save
 
             var results = new List<SavePathMapping>();
 
-            using var connection = OpenConnectionAndPrepareReviewColumns();
+            using var connection = OpenConnection();
 
             using var command = connection.CreateCommand();
 
@@ -153,7 +153,7 @@ namespace GameSaves.Infrastructure.Save
             if (requestedAppIds.Count == 0)
                 return results;
 
-            using var connection = OpenConnectionAndPrepareReviewColumns();
+            using var connection = OpenConnection();
 
             foreach (string appId in requestedAppIds)
             {
@@ -200,13 +200,6 @@ namespace GameSaves.Infrastructure.Save
                 "enabled = 1 AND COALESCE(review_status, '') = 'Approved'");
         }
 
-        public int CountCuratedMappings(string platform)
-        {
-            return CountMappingsBySql(
-                platform,
-                $"source_name = '{CuratedMappingSeeder.CuratedSourceName}'");
-        }
-
         public int CountNeedsFixMappings(string platform)
         {
             return CountMappingsBySql(
@@ -225,7 +218,7 @@ namespace GameSaves.Infrastructure.Save
             string platform,
             string conditionSql)
         {
-            using var connection = OpenConnectionAndPrepareReviewColumns();
+            using var connection = OpenConnection();
 
             using var command = connection.CreateCommand();
             command.CommandText = $"""
@@ -240,12 +233,13 @@ namespace GameSaves.Infrastructure.Save
             return Convert.ToInt32(command.ExecuteScalar() ?? 0);
         }
 
-        private SqliteConnection OpenConnectionAndPrepareReviewColumns()
+        // The schema, review columns included, is migrated before this
+        // repository is reached: the DI graph resolves the database path
+        // through SchemaInitializingAppDatabasePathProvider.
+        private SqliteConnection OpenConnection()
         {
             var connection = new SqliteConnection(_connectionString);
             connection.Open();
-
-            SavePathDatabase.EnsureReviewColumns(connection);
 
             return connection;
         }

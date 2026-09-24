@@ -1,7 +1,7 @@
-using GameSaves.Core.Catalog;
 using GameSaves.Core.Save;
 using GameSaves.External.Http;
 using GameSaves.Infrastructure.Save;
+using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -10,12 +10,9 @@ namespace GameSaves.External
 {
     public sealed class PcgwHarvester
     {
-        private static readonly JsonSerializerOptions JsonOptions = new()
-        {
-            PropertyNameCaseInsensitive = true,
-            ReadCommentHandling = JsonCommentHandling.Skip,
-            AllowTrailingCommas = true
-        };
+        private static readonly JsonSerializerOptions IndentedJson = new() { WriteIndented = true };
+
+        private static readonly char[] AppIdSeparators = { ',', ';', ' ', '\t' };
 
         private readonly PcgwHarvestOptions _options;
         private readonly ExternalHarvestDatabase _externalDatabase;
@@ -43,20 +40,16 @@ namespace GameSaves.External
         public async Task<PcgwHarvestResult> HarvestAsync(
             CancellationToken cancellationToken = default)
         {
-            _externalDatabase.Initialize();
+            // The schema migrations create game_titles and the external_* harvest tables.
             _savePathDatabase.Initialize();
 
             Directory.CreateDirectory(_options.OutputRoot);
             Directory.CreateDirectory(Path.Combine(_options.OutputRoot, "index"));
 
-            var (appIds, knownTitles) = ResolveHarvestTargets(_options, _savePathDatabase);
+            if (_options.SteamAppIds.Count == 0)
+                throw new InvalidOperationException("No Steam AppIDs were provided to the PCGamingWiki harvester.");
 
-            bool hadAnyInputs = (_options.Tracklist is not null) ||
-                                !string.IsNullOrWhiteSpace(_options.TracklistPath) ||
-                                (_options.SteamAppIds is not null && _options.SteamAppIds.Count > 0);
-
-            if (!hadAnyInputs)
-                throw new InvalidOperationException("No Steam AppIDs or tracklist were provided to the PCGamingWiki harvester.");
+            List<string> appIds = ResolveHarvestTargets(_options);
 
             if (appIds.Count == 0)
             {
@@ -102,13 +95,10 @@ namespace GameSaves.External
 
                         _externalDatabase.UpsertPcgwTitle(title);
 
-                        string? knownTitle = knownTitles.GetValueOrDefault(appId);
-
                         int extractedForTitle = await HarvestOneTitleAsync(
                             apiClient,
                             title,
                             requestedSteamAppId: appId,
-                            fallbackTitle: knownTitle,
                             cancellationToken);
 
                         titlesProcessed++;
@@ -117,19 +107,21 @@ namespace GameSaves.External
                         Console.WriteLine(
                             $"[{titlesProcessed + titlesFailed}/{appIds.Count}] {title.PageName} ({appId}): {extractedForTitle} mapping(s)");
                     }
-                    catch (OperationCanceledException)
+                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                     {
                         stoppedReason = "Cancelled";
                         throw;
                     }
                     catch (Exception ex)
                     {
+                        // An HttpClient timeout surfaces as TaskCanceledException without our token
+                        // being cancelled: it is a failure of this title, not a request to stop.
                         titlesFailed++;
                         Console.WriteLine($"FAILED AppID {appId}: {ex.Message}");
                     }
                 }
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
                 stoppedReason = "Cancelled";
             }
@@ -151,238 +143,131 @@ namespace GameSaves.External
                 mappingsExtracted);
         }
 
-        public static (List<string> AppIds, Dictionary<string, string> KnownTitles) ResolveHarvestTargets(
-            PcgwHarvestOptions options,
-            SavePathDatabase? savePathDatabase = null)
+        public static List<string> ResolveHarvestTargets(PcgwHarvestOptions options)
         {
-            var appIds = new List<string>();
-            var knownTitles = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            IEnumerable<string> appIds = options.SteamAppIds
+                .Select(id => id?.Trim() ?? string.Empty)
+                .Where(IsAppId)
+                .Distinct(StringComparer.Ordinal);
 
-            // 1. Direct Tracklist instance
-            if (options.Tracklist is not null)
-            {
-                foreach (MissingTitleEntry entry in options.Tracklist.Items)
-                {
-                    if (string.IsNullOrWhiteSpace(entry.SteamAppId))
-                        continue;
-
-                    string cleaned = entry.SteamAppId.Trim();
-                    if (!cleaned.All(char.IsDigit))
-                        continue;
-
-                    if (seen.Add(cleaned))
-                    {
-                        appIds.Add(cleaned);
-                        if (!string.IsNullOrWhiteSpace(entry.Title))
-                            knownTitles[cleaned] = entry.Title;
-                    }
-                }
-            }
-
-            // 2. Tracklist file path
-            if (!string.IsNullOrWhiteSpace(options.TracklistPath))
-            {
-                if (!File.Exists(options.TracklistPath))
-                    throw new FileNotFoundException($"Tracklist file not found: {options.TracklistPath}", options.TracklistPath);
-
-                string content = File.ReadAllText(options.TracklistPath);
-                bool parsedJson = false;
-
-                string trimmed = content.TrimStart();
-                if (trimmed.StartsWith("{", StringComparison.Ordinal) || trimmed.StartsWith("[", StringComparison.Ordinal))
-                {
-                    try
-                    {
-                        using var doc = JsonDocument.Parse(content);
-                        if (doc.RootElement.ValueKind == JsonValueKind.Object)
-                        {
-                            if (doc.RootElement.TryGetProperty("items", out JsonElement itemsElement) ||
-                                doc.RootElement.TryGetProperty("Items", out itemsElement))
-                            {
-                                var items = JsonSerializer.Deserialize<List<MissingTitleEntry>>(itemsElement.GetRawText(), JsonOptions);
-                                if (items is not null)
-                                {
-                                    foreach (var entry in items)
-                                    {
-                                        string cleaned = entry.SteamAppId?.Trim() ?? string.Empty;
-                                        if (cleaned.Length > 0 && cleaned.All(char.IsDigit) && seen.Add(cleaned))
-                                        {
-                                            appIds.Add(cleaned);
-                                            if (!string.IsNullOrWhiteSpace(entry.Title))
-                                                knownTitles[cleaned] = entry.Title;
-                                        }
-                                    }
-                                    parsedJson = true;
-                                }
-                            }
-                        }
-                        else if (doc.RootElement.ValueKind == JsonValueKind.Array)
-                        {
-                            try
-                            {
-                                var items = JsonSerializer.Deserialize<List<MissingTitleEntry>>(content, JsonOptions);
-                                if (items is not null && items.Count > 0 && !string.IsNullOrWhiteSpace(items[0].SteamAppId))
-                                {
-                                    foreach (var entry in items)
-                                    {
-                                        string cleaned = entry.SteamAppId?.Trim() ?? string.Empty;
-                                        if (cleaned.Length > 0 && cleaned.All(char.IsDigit) && seen.Add(cleaned))
-                                        {
-                                            appIds.Add(cleaned);
-                                            if (!string.IsNullOrWhiteSpace(entry.Title))
-                                                knownTitles[cleaned] = entry.Title;
-                                        }
-                                    }
-                                    parsedJson = true;
-                                }
-                            }
-                            catch
-                            {
-                                // Try array of string appids
-                            }
-
-                            if (!parsedJson)
-                            {
-                                var strings = JsonSerializer.Deserialize<List<string>>(content, JsonOptions);
-                                if (strings is not null)
-                                {
-                                    foreach (var str in strings)
-                                    {
-                                        string cleaned = str?.Trim() ?? string.Empty;
-                                        if (cleaned.Length > 0 && cleaned.All(char.IsDigit) && seen.Add(cleaned))
-                                        {
-                                            appIds.Add(cleaned);
-                                        }
-                                    }
-                                    parsedJson = true;
-                                }
-                            }
-                        }
-                    }
-                    catch
-                    {
-                        // Fall back to CSV/plain text parsing
-                    }
-                }
-
-                if (!parsedJson)
-                {
-                    AddAppIdsFromTextOrCsv(content, appIds, knownTitles, seen);
-                }
-            }
-
-            // 3. Raw SteamAppIds in options
-            if (options.SteamAppIds is not null)
-            {
-                foreach (string rawId in options.SteamAppIds)
-                {
-                    if (string.IsNullOrWhiteSpace(rawId))
-                        continue;
-
-                    string cleaned = rawId.Trim();
-                    if (cleaned.All(char.IsDigit) && seen.Add(cleaned))
-                    {
-                        appIds.Add(cleaned);
-                    }
-                }
-            }
-
-            // 4. Filter existing in database if requested
-            if (options.SkipExistingInDatabase && savePathDatabase is not null)
-            {
-                var filtered = new List<string>();
-                foreach (string appId in appIds)
-                {
-                    var existing = savePathDatabase.GetMappingsForApp(appId, "windows", includeDisabled: true, onlyApproved: false);
-                    if (existing.Count == 0)
-                    {
-                        filtered.Add(appId);
-                    }
-                }
-                appIds = filtered;
-            }
-
-            // 5. Max titles to process
-            if (options.MaxTitlesToProcess > 0)
-            {
-                appIds = appIds.Take(options.MaxTitlesToProcess).ToList();
-            }
-
-            return (appIds, knownTitles);
+            return options.MaxTitlesToProcess > 0
+                ? appIds.Take(options.MaxTitlesToProcess).ToList()
+                : appIds.ToList();
         }
 
-        private static void AddAppIdsFromTextOrCsv(
-            string content,
-            List<string> appIds,
-            Dictionary<string, string> knownTitles,
-            HashSet<string> seen)
+        public static bool IsAppId([NotNullWhen(true)] string? value) =>
+            !string.IsNullOrEmpty(value) && value.All(char.IsAsciiDigit);
+
+        /// <summary>
+        /// Reads Steam AppIDs from a tracklist export (JSON or CSV with a SteamAppId column)
+        /// or from plain text holding one or more AppIDs per line.
+        /// </summary>
+        /// <exception cref="InvalidDataException">The content looks like JSON but is not a readable AppID list.</exception>
+        public static List<string> ReadAppIds(string content)
         {
+            var appIds = new List<string>();
+            string trimmed = content.TrimStart();
+
+            if (trimmed.StartsWith('{') || trimmed.StartsWith('['))
+            {
+                // Never fall back to scanning a JSON document for digits: that harvests every
+                // bare number in it ("totalReconciled": 220) while skipping the quoted AppIDs.
+                ReadJsonAppIds(content, appIds);
+                return appIds.Distinct(StringComparer.Ordinal).ToList();
+            }
+
             string[] lines = content.Split(new[] { "\r\n", "\n", "\r" }, StringSplitOptions.RemoveEmptyEntries);
-            if (lines.Length == 0)
-                return;
 
-            string firstLine = lines[0].Trim();
-            if (firstLine.Contains("steamappid", StringComparison.OrdinalIgnoreCase))
+            int appIdColumn = lines.Length == 0
+                ? -1
+                : Array.FindIndex(
+                    lines[0].Split(','),
+                    header => header.Trim().Trim('"').Equals("SteamAppId", StringComparison.OrdinalIgnoreCase));
+
+            if (appIdColumn >= 0)
             {
-                // RFC 4180 / CSV format with header
-                string[] headers = firstLine.Split(',');
-                int appIdCol = -1;
-                int titleCol = -1;
-
-                for (int i = 0; i < headers.Length; i++)
+                foreach (string line in lines.Skip(1))
                 {
-                    string h = headers[i].Trim().Trim('"');
-                    if (h.Equals("SteamAppId", StringComparison.OrdinalIgnoreCase))
-                        appIdCol = i;
-                    else if (h.Equals("Title", StringComparison.OrdinalIgnoreCase))
-                        titleCol = i;
-                }
-
-                if (appIdCol >= 0)
-                {
-                    for (int i = 1; i < lines.Length; i++)
+                    string[] columns = line.Split(',');
+                    if (columns.Length > appIdColumn)
                     {
-                        string line = lines[i].Trim();
-                        if (string.IsNullOrWhiteSpace(line))
-                            continue;
-
-                        string[] cols = line.Split(',');
-                        if (cols.Length > appIdCol)
-                        {
-                            string rawId = cols[appIdCol].Trim().Trim('"');
-                            if (rawId.All(char.IsDigit) && rawId.Length > 0 && seen.Add(rawId))
-                            {
-                                appIds.Add(rawId);
-                                if (titleCol >= 0 && cols.Length > titleCol)
-                                {
-                                    string title = cols[titleCol].Trim().Trim('"');
-                                    if (!string.IsNullOrWhiteSpace(title))
-                                        knownTitles[rawId] = title;
-                                }
-                            }
-                        }
+                        string value = columns[appIdColumn].Trim().Trim('"');
+                        if (IsAppId(value))
+                            appIds.Add(value);
                     }
-                    return;
                 }
             }
-
-            // Plain text with space/newline/comma-separated AppIDs
-            string[] parts = content.Split(
-                new[] { '\r', '\n', ',', ';', ' ', '\t' },
-                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-
-            foreach (string part in parts)
+            else
             {
-                string cleaned = part.Trim();
-                if (cleaned.StartsWith("#", StringComparison.Ordinal))
-                    continue;
-
-                if (cleaned.All(char.IsDigit) && cleaned.Length > 0 && seen.Add(cleaned))
+                foreach (string line in lines)
                 {
-                    appIds.Add(cleaned);
+                    string[] tokens = line.Split('#')[0].Split(
+                        AppIdSeparators,
+                        StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+                    // "413150, Portal 2" is an AppID followed by a title: only the first token
+                    // counts, so the 2 in the title is not harvested as an AppID.
+                    if (tokens.All(IsAppId))
+                        appIds.AddRange(tokens);
+                    else if (tokens.Length > 0 && IsAppId(tokens[0]))
+                        appIds.Add(tokens[0]);
                 }
             }
+
+            return appIds.Distinct(StringComparer.Ordinal).ToList();
+        }
+
+        private static void ReadJsonAppIds(string content, List<string> appIds)
+        {
+            try
+            {
+                using JsonDocument document = JsonDocument.Parse(
+                    content,
+                    new JsonDocumentOptions
+                    {
+                        CommentHandling = JsonCommentHandling.Skip,
+                        AllowTrailingCommas = true
+                    });
+
+                JsonElement items = document.RootElement.ValueKind == JsonValueKind.Object
+                    ? GetPropertyIgnoreCase(document.RootElement, "items")
+                    : document.RootElement;
+
+                if (items.ValueKind != JsonValueKind.Array)
+                    throw new InvalidDataException("Expected a JSON array of AppIDs or an object with an \"items\" array.");
+
+                foreach (JsonElement item in items.EnumerateArray())
+                {
+                    JsonElement value = item.ValueKind == JsonValueKind.Object
+                        ? GetPropertyIgnoreCase(item, "steamAppId")
+                        : item;
+
+                    string? text = value.ValueKind switch
+                    {
+                        JsonValueKind.String => value.GetString()?.Trim(),
+                        JsonValueKind.Number => value.GetRawText(),
+                        _ => null
+                    };
+
+                    if (IsAppId(text))
+                        appIds.Add(text);
+                }
+            }
+            catch (JsonException ex)
+            {
+                throw new InvalidDataException($"The AppID list looks like JSON but could not be parsed: {ex.Message}", ex);
+            }
+        }
+
+        private static JsonElement GetPropertyIgnoreCase(JsonElement element, string name)
+        {
+            foreach (JsonProperty property in element.EnumerateObject())
+            {
+                if (property.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+                    return property.Value;
+            }
+
+            return default;
         }
 
         private async Task WriteAppIdInputIndexAsync(
@@ -394,12 +279,7 @@ namespace GameSaves.External
                 "index",
                 "steam-appids.input.json");
 
-            string json = JsonSerializer.Serialize(
-                appIds,
-                new JsonSerializerOptions
-                {
-                    WriteIndented = true
-                });
+            string json = JsonSerializer.Serialize(appIds, IndentedJson);
 
             await File.WriteAllTextAsync(indexPath, json, cancellationToken);
         }
@@ -408,7 +288,6 @@ namespace GameSaves.External
             IPcgwApiClient apiClient,
             PcgwTitle title,
             string requestedSteamAppId,
-            string? fallbackTitle,
             CancellationToken cancellationToken)
         {
             string titleDirectory = GetTitleDirectory(title);
@@ -427,10 +306,9 @@ namespace GameSaves.External
 
             await File.WriteAllTextAsync(rawPath, wikitext, cancellationToken);
 
-            string rawSha256 = ComputeSha256(wikitext);
+            string rawSha256 = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(wikitext)));
 
             string effectiveGameName = title.DisplayTitle
-                ?? fallbackTitle
                 ?? title.PageName.Replace('_', ' ');
 
             var extractionTitle = new PcgwTitle(
@@ -444,12 +322,7 @@ namespace GameSaves.External
                 extractionTitle,
                 wikitext);
 
-            string extractedJson = JsonSerializer.Serialize(
-                extracted,
-                new JsonSerializerOptions
-                {
-                    WriteIndented = true
-                });
+            string extractedJson = JsonSerializer.Serialize(extracted, IndentedJson);
 
             await File.WriteAllTextAsync(extractedJsonPath, extractedJson, cancellationToken);
 
@@ -469,12 +342,7 @@ namespace GameSaves.External
                 HarvestedUtc = DateTime.UtcNow
             };
 
-            string metadataJson = JsonSerializer.Serialize(
-                metadata,
-                new JsonSerializerOptions
-                {
-                    WriteIndented = true
-                });
+            string metadataJson = JsonSerializer.Serialize(metadata, IndentedJson);
 
             await File.WriteAllTextAsync(metadataPath, metadataJson, cancellationToken);
 
@@ -503,13 +371,6 @@ namespace GameSaves.External
             return Path.Combine(
                 _options.OutputRoot,
                 $"{title.PageId}-{safeName}");
-        }
-
-        private static string ComputeSha256(string value)
-        {
-            byte[] bytes = Encoding.UTF8.GetBytes(value);
-            byte[] hash = SHA256.HashData(bytes);
-            return Convert.ToHexString(hash);
         }
 
         private static string MakeSafePathPart(string value)

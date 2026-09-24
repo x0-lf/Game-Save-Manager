@@ -137,12 +137,13 @@ public sealed class DelayProviderTests
             .ToArray()!;
 
         // The declaration, the implementation, the registration, the one
-        // decorator that waits, and the one factory that supplies it.
+        // decorator that waits, and the two factories that supply it.
         Assert.Equal(
             new[]
             {
                 "GoogleDriveRemoteFileSystem.cs",
                 "IDelayProvider.cs",
+                "OneDriveSyncProviderFactory.cs",
                 "RetryingRemoteFileSystem.cs",
                 "ServiceCollectionExtensions.cs",
                 "SystemDelayProvider.cs"

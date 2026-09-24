@@ -388,7 +388,6 @@ internal sealed class EmptyMappingRepository : ISavePathMappingRepository
         string platform) => new Dictionary<string, SavePathMappingStatus>();
 
     public int CountApprovedMappings(string platform) => 0;
-    public int CountCuratedMappings(string platform) => 0;
     public int CountNeedsFixMappings(string platform) => 0;
     public int CountPendingMappings(string platform) => 0;
 }

@@ -1,10 +1,13 @@
 using GameSaves.Core.Data;
 using GameSaves.Core.Platform;
+using GameSaves.Core.Save;
 using GameSaves.Infrastructure.Data;
 using GameSaves.Infrastructure.Data.Migrations;
+using GameSaves.Infrastructure.DependencyInjection;
 using GameSaves.Infrastructure.Platform;
 using GameSaves.Infrastructure.Save;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.DependencyInjection;
 using System.Data.Common;
 using Xunit;
 
@@ -30,8 +33,8 @@ namespace GameSaves.Tests
 
             Assert.True(result.Success);
             Assert.Equal(0, result.PreviousVersion);
-            Assert.Equal(4, result.CurrentVersion);
-            Assert.Equal(4, result.AppliedMigrations.Count);
+            Assert.Equal(5, result.CurrentVersion);
+            Assert.Equal(5, result.AppliedMigrations.Count);
             Assert.False(result.RolledBack);
             Assert.Null(result.ErrorMessage);
 
@@ -53,10 +56,12 @@ namespace GameSaves.Tests
             Assert.True(IndexExists(dbPath, "idx_game_titles_source"));
             Assert.True(IndexExists(dbPath, "idx_save_path_mappings_source_enabled"));
             Assert.True(IndexExists(dbPath, "idx_save_path_mappings_review_status"));
+            Assert.True(IndexExists(dbPath, "idx_transfer_items_run_id"));
+            Assert.False(IndexExists(dbPath, "idx_transfer_items_run"));
 
             // Verify schema_migrations rows
             IReadOnlyList<SchemaMigrationRecord> applied = migrator.GetAppliedMigrations(dbPath);
-            Assert.Equal(4, applied.Count);
+            Assert.Equal(5, applied.Count);
             Assert.Equal(1, applied[0].Id);
             Assert.Equal("V001__BaselineSchema", applied[0].Name);
             Assert.Equal(2, applied[1].Id);
@@ -65,6 +70,12 @@ namespace GameSaves.Tests
             Assert.Equal("V003__SyncAndSecretStorage", applied[2].Name);
             Assert.Equal(4, applied[3].Id);
             Assert.Equal("V004__CatalogAndMappingIndexes", applied[3].Name);
+            Assert.Equal(5, applied[4].Id);
+            Assert.Equal("V005__DropDuplicateTransferItemsIndex", applied[4].Name);
+
+            // CURRENT_TIMESTAMP is UTC; it must not be read back as local time.
+            Assert.Equal(TimeSpan.Zero, applied[0].AppliedUtc.Offset);
+            Assert.InRange(applied[0].AppliedUtc, DateTimeOffset.UtcNow.AddMinutes(-5), DateTimeOffset.UtcNow.AddMinutes(5));
         }
 
         [Fact]
@@ -75,12 +86,12 @@ namespace GameSaves.Tests
 
             MigrationExecutionResult firstRun = migrator.Migrate(dbPath);
             Assert.True(firstRun.Success);
-            Assert.Equal(4, firstRun.CurrentVersion);
+            Assert.Equal(5, firstRun.CurrentVersion);
 
             MigrationExecutionResult secondRun = migrator.Migrate(dbPath);
             Assert.True(secondRun.Success);
-            Assert.Equal(4, secondRun.PreviousVersion);
-            Assert.Equal(4, secondRun.CurrentVersion);
+            Assert.Equal(5, secondRun.PreviousVersion);
+            Assert.Equal(5, secondRun.CurrentVersion);
             Assert.Empty(secondRun.AppliedMigrations);
             Assert.Null(secondRun.PreMigrationBackupPath);
             Assert.False(secondRun.RolledBack);
@@ -107,14 +118,14 @@ namespace GameSaves.Tests
             Assert.True(initialResult.Success);
             Assert.Equal(1, initialResult.CurrentVersion);
 
-            // Second migration with full suite (V001 - V004)
+            // Second migration with the full suite
             var fullMigrator = new SchemaMigrator();
             MigrationExecutionResult updateResult = fullMigrator.Migrate(dbPath);
 
             Assert.True(updateResult.Success);
             Assert.Equal(1, updateResult.PreviousVersion);
-            Assert.Equal(4, updateResult.CurrentVersion);
-            Assert.Equal(3, updateResult.AppliedMigrations.Count);
+            Assert.Equal(5, updateResult.CurrentVersion);
+            Assert.Equal(4, updateResult.AppliedMigrations.Count);
             Assert.NotNull(updateResult.PreMigrationBackupPath);
             Assert.True(File.Exists(updateResult.PreMigrationBackupPath));
         }
@@ -137,14 +148,15 @@ namespace GameSaves.Tests
 
             Assert.Equal(dbPath, plan.DatabasePath);
             Assert.Equal(1, plan.CurrentVersion);
-            Assert.Equal(4, plan.TargetVersion);
+            Assert.Equal(5, plan.TargetVersion);
             Assert.True(plan.IntegrityCheckPassed);
             Assert.Equal("ok", plan.IntegrityMessage);
-            Assert.Equal(3, plan.PendingMigrations.Count);
+            Assert.Equal(4, plan.PendingMigrations.Count);
             Assert.Equal("V002__ReviewColumnsAndProvenance", plan.PendingMigrations[0].Name);
             Assert.Equal("V003__SyncAndSecretStorage", plan.PendingMigrations[1].Name);
             Assert.Equal("V004__CatalogAndMappingIndexes", plan.PendingMigrations[2].Name);
-            Assert.NotNull(plan.PlannedBackupPath);
+            Assert.Equal("V005__DropDuplicateTransferItemsIndex", plan.PendingMigrations[3].Name);
+            Assert.Equal(Path.Combine(Path.GetDirectoryName(dbPath)!, "backups"), plan.PlannedBackupDirectory);
         }
 
         [Fact]
@@ -161,7 +173,7 @@ namespace GameSaves.Tests
             var fullMigrator = new SchemaMigrator();
             MigrationPlan plan = fullMigrator.Plan(dbPath);
 
-            Assert.Equal(3, plan.PendingMigrations.Count);
+            Assert.Equal(4, plan.PendingMigrations.Count);
 
             // Verify database was NOT changed
             IReadOnlyList<SchemaMigrationRecord> applied = fullMigrator.GetAppliedMigrations(dbPath);
@@ -171,7 +183,7 @@ namespace GameSaves.Tests
         }
 
         [Fact]
-        public void Migrate_WhenMigrationFails_RollsBackTransactionAndRestoresPreMigrationSnapshot()
+        public void Migrate_WhenMigrationFails_RollsBackTheTransaction_AndKeepsTheSnapshotOnlyForRecovery()
         {
             string dbPath = _temp.GetPath("rollback_test.db");
 
@@ -214,7 +226,7 @@ namespace GameSaves.Tests
             Assert.NotNull(failResult.PreMigrationBackupPath);
             Assert.True(File.Exists(failResult.PreMigrationBackupPath));
 
-            // 3. Verify canary record is intact and database restored to version 1
+            // 3. Verify canary record is intact and the database is still at version 1
             Assert.Equal(1, GetRowCount(dbPath, "save_path_mappings"));
             IReadOnlyList<SchemaMigrationRecord> applied = failingMigrator.GetAppliedMigrations(dbPath);
             Assert.Single(applied);
@@ -268,9 +280,6 @@ namespace GameSaves.Tests
                 Thread.Sleep(10); // Ensure timestamp divergence
             }
 
-            // Force migration/prune preserves at most DefaultBackupRetentionCount
-            migrator.Migrate(dbPath, forceBackup: true);
-
             var prunedFiles = Directory.GetFiles(backupDir, "gamesave-pre-migration-*.db");
             Assert.True(prunedFiles.Length <= SchemaMigrator.DefaultBackupRetentionCount,
                 $"Expected at most {SchemaMigrator.DefaultBackupRetentionCount} backups, but found {prunedFiles.Length}.");
@@ -291,7 +300,7 @@ namespace GameSaves.Tests
 
             // Database should be fully migrated and seeded
             IReadOnlyList<SchemaMigrationRecord> applied = migrator.GetAppliedMigrations(dbPath);
-            Assert.Equal(4, applied.Count);
+            Assert.Equal(5, applied.Count);
 
             var repository = new SqliteSavePathMappingRepository(dbPath);
             Assert.True(repository.CountApprovedMappings("windows") > 0);
@@ -307,9 +316,108 @@ namespace GameSaves.Tests
 
             var migrator = new SchemaMigrator();
             IReadOnlyList<SchemaMigrationRecord> applied = migrator.GetAppliedMigrations(dbPath);
-            Assert.Equal(4, applied.Count);
+            Assert.Equal(5, applied.Count);
             Assert.True(TableExists(dbPath, "schema_migrations"));
             Assert.True(TableExists(dbPath, "sync_remote_profiles"));
+        }
+
+        [Fact]
+        public void Migrate_AppliesPendingMigrationsAllOrNothing()
+        {
+            string dbPath = _temp.GetPath("all_or_nothing.db");
+            Assert.True(new SchemaMigrator(new ISchemaMigration[] { new V001__BaselineSchema() }).Migrate(dbPath).Success);
+
+            var migrator = new SchemaMigrator(new ISchemaMigration[]
+            {
+                new V001__BaselineSchema(),
+                new TestCreateTableMigration(2, "V002__CreatesTableX", "x_table"),
+                new TestFailingMigration(3, "V003__IntentionalFailure", "Fails after V002 succeeded.")
+            });
+
+            MigrationExecutionResult result = migrator.Migrate(dbPath);
+
+            Assert.False(result.Success);
+            Assert.True(result.RolledBack);
+            Assert.Equal(1, result.PreviousVersion);
+            Assert.Equal(1, result.CurrentVersion);
+            Assert.Empty(result.AppliedMigrations);
+            Assert.False(TableExists(dbPath, "x_table"));
+
+            IReadOnlyList<SchemaMigrationRecord> applied = migrator.GetAppliedMigrations(dbPath);
+            Assert.Equal(new[] { 1 }, applied.Select(a => a.Id));
+        }
+
+        [Fact]
+        public void Migrate_DecidesPendingByVersion_SoARenamedMigrationIsNotRunAgain()
+        {
+            string dbPath = _temp.GetPath("renamed.db");
+            Assert.True(new SchemaMigrator(new ISchemaMigration[] { new V001__BaselineSchema() }).Migrate(dbPath).Success);
+
+            var renamed = new SchemaMigrator(new ISchemaMigration[]
+            {
+                new TestFailingMigration(1, "V001__RenamedBaseline", "Same version, new name.")
+            });
+
+            MigrationExecutionResult result = renamed.Migrate(dbPath);
+
+            Assert.True(result.Success);
+            Assert.Empty(result.AppliedMigrations);
+            Assert.Equal("V001__BaselineSchema", Assert.Single(renamed.GetAppliedMigrations(dbPath)).Name);
+        }
+
+        [Fact]
+        public void Backup_Snapshot_DoesNotKeepProtectedSyncSecrets()
+        {
+            string dbPath = _temp.GetPath("secrets.db");
+            var migrator = new SchemaMigrator();
+            Assert.True(migrator.Migrate(dbPath).Success);
+
+            using (var conn = new SqliteConnection($"Data Source={dbPath}"))
+            {
+                conn.Open();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = """
+                INSERT INTO protected_sync_secrets (owner_id, secret_name, protection_scheme, format_version, protected_payload, created_utc, updated_utc)
+                VALUES ('profile', 'refresh-token', 'dpapi', 1, X'01020304', 'now', 'now');
+                """;
+                cmd.ExecuteNonQuery();
+            }
+
+            string snapshot = migrator.Backup(dbPath);
+
+            Assert.False(TableExists(snapshot, "protected_sync_secrets"));
+            Assert.True(TableExists(snapshot, "save_path_mappings"));
+            Assert.Equal(1, GetRowCount(dbPath, "protected_sync_secrets"));
+        }
+
+        [Fact]
+        public void SavePathDatabase_Initialize_ThrowsWhenMigrationFails()
+        {
+            string dbPath = _temp.GetPath("init_corrupt.db");
+            File.WriteAllBytes(dbPath, new byte[] { 0x47, 0x41, 0x52, 0x42, 0x41, 0x47, 0x45, 0x00, 0x11, 0x22 });
+
+            SqliteException ex = Assert.Throws<SqliteException>(() => new SavePathDatabase(dbPath).Initialize());
+            Assert.Contains("integrity check failed", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public void TheRealDiRegistration_MigratesTheDatabase_WithoutRelyingOnTheSeeder()
+        {
+            string dbPath = _temp.GetPath("di_bootstrap.db");
+            var services = new ServiceCollection();
+            services.AddGameSavesInfrastructure();
+            // The seeder used to migrate as a side effect, hiding that the
+            // container-built migrator had no migrations at all.
+            services.AddSingleton<ICuratedMappingSeeder>(new NoOpSeeder());
+
+            using ServiceProvider provider = services.BuildServiceProvider();
+            IAppDatabasePathProvider pathProvider = ServiceCollectionExtensions.CreateDatabasePathProvider(
+                provider,
+                new CustomPathProvider(dbPath));
+
+            Assert.Equal(dbPath, pathProvider.GetDatabasePath());
+            Assert.Empty(new SchemaMigrator().Plan(dbPath).PendingMigrations);
+            Assert.True(TableExists(dbPath, "save_path_mappings"));
         }
 
         private static bool TableExists(string dbPath, string tableName)
@@ -346,6 +454,29 @@ namespace GameSaves.Tests
             private readonly string _path;
             public CustomPathProvider(string path) => _path = path;
             public string GetDatabasePath() => _path;
+        }
+
+        private sealed class NoOpSeeder : ICuratedMappingSeeder
+        {
+            public CuratedSeedResult Seed(string databasePath) => new(0, 0, 0, 0, 0);
+            public CuratedSeedResult Seed(string databasePath, CuratedMappingSeedDocument document) => new(0, 0, 0, 0, 0);
+            public CuratedMappingSeedDocument LoadCuratedSeed() => new(Array.Empty<CuratedMappingEntry>());
+            public CuratedMappingSeedDocument ParseSeedDocument(string jsonContent) => new(Array.Empty<CuratedMappingEntry>());
+        }
+
+        private sealed class TestCreateTableMigration(int version, string name, string table) : ISchemaMigration
+        {
+            public int Version => version;
+            public string Name => name;
+            public string Description => $"Creates {table}.";
+
+            public void Up(DbConnection connection, DbTransaction transaction)
+            {
+                using var command = connection.CreateCommand();
+                command.Transaction = transaction;
+                command.CommandText = $"CREATE TABLE {table} (id INTEGER PRIMARY KEY);";
+                command.ExecuteNonQuery();
+            }
         }
 
         private sealed class TestFailingMigration : ISchemaMigration

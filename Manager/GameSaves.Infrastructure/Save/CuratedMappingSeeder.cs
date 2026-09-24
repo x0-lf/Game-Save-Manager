@@ -23,12 +23,6 @@ namespace GameSaves.Infrastructure.Save
             return Seed(databasePath, document);
         }
 
-        public CuratedSeedResult Seed(string databasePath, string jsonContent)
-        {
-            CuratedMappingSeedDocument document = ParseSeedDocument(jsonContent);
-            return Seed(databasePath, document);
-        }
-
         public CuratedMappingSeedDocument LoadCuratedSeed()
         {
             Assembly assembly = typeof(CuratedMappingSeeder).Assembly;
@@ -69,6 +63,8 @@ namespace GameSaves.Infrastructure.Save
             return document;
         }
 
+        // Expects a migrated database: the App's database path decorator and the
+        // CLI commands migrate before they seed.
         public CuratedSeedResult Seed(string databasePath, CuratedMappingSeedDocument document)
         {
             if (string.IsNullOrWhiteSpace(databasePath))
@@ -77,13 +73,6 @@ namespace GameSaves.Infrastructure.Save
             if (document?.Mappings is null || document.Mappings.Count == 0)
                 return new CuratedSeedResult(0, 0, 0, 0, 0);
 
-            string? directory = Path.GetDirectoryName(databasePath);
-            if (!string.IsNullOrWhiteSpace(directory))
-                Directory.CreateDirectory(directory);
-
-            var db = new SavePathDatabase(databasePath);
-            db.Initialize();
-
             var builder = new SqliteConnectionStringBuilder
             {
                 DataSource = databasePath
@@ -91,109 +80,182 @@ namespace GameSaves.Infrastructure.Save
 
             using var connection = new SqliteConnection(builder.ToString());
             connection.Open();
-            SavePathDatabase.EnsureReviewColumns(connection);
+
+            // This runs on every application start, where normally nothing has
+            // changed. A read-only pass decides that without taking the write
+            // lock, which another process may hold for a long time.
+            (CuratedSeedResult result, bool writesNeeded) = Apply(connection, transaction: null, document);
+
+            if (!writesNeeded)
+                return result;
 
             using var transaction = connection.BeginTransaction();
+            (result, _) = Apply(connection, transaction, document);
+            transaction.Commit();
+
+            return result;
+        }
+
+        // With no transaction nothing is written: the pass only reports what a
+        // write pass would do.
+        private static (CuratedSeedResult Result, bool WritesNeeded) Apply(
+            SqliteConnection connection,
+            SqliteTransaction? transaction,
+            CuratedMappingSeedDocument document)
+        {
+            bool write = transaction is not null;
+
+            using var selectMapping = CreateCommand(connection, transaction, """
+            SELECT
+                id,
+                game_name,
+                path_kind,
+                source_name,
+                source_url,
+                source_license,
+                notes,
+                priority,
+                enabled,
+                COALESCE(review_status, 'Pending') AS review_status
+            FROM save_path_mappings
+            WHERE steam_app_id = $steam_app_id
+              AND platform = $platform
+              AND path_template = $path_template;
+            """, "$steam_app_id", "$platform", "$path_template");
+
+            using var insertMapping = CreateCommand(connection, transaction, """
+            INSERT INTO save_path_mappings (
+                steam_app_id,
+                game_name,
+                platform,
+                path_template,
+                path_kind,
+                source_name,
+                source_url,
+                source_license,
+                notes,
+                priority,
+                enabled,
+                review_status,
+                review_notes,
+                reviewed_utc,
+                created_utc,
+                updated_utc
+            )
+            VALUES (
+                $steam_app_id,
+                $game_name,
+                $platform,
+                $path_template,
+                $path_kind,
+                $source_name,
+                $source_url,
+                $source_license,
+                $notes,
+                $priority,
+                1,
+                'Approved',
+                'Curated project seed distribution',
+                CURRENT_TIMESTAMP,
+                CURRENT_TIMESTAMP,
+                CURRENT_TIMESTAMP
+            );
+            """, "$steam_app_id", "$game_name", "$platform", "$path_template", "$path_kind", "$source_name", "$source_url", "$source_license", "$notes", "$priority");
+
+            using var updateMapping = CreateCommand(connection, transaction, """
+            UPDATE save_path_mappings
+            SET game_name = $game_name,
+                path_kind = $path_kind,
+                source_url = $source_url,
+                source_license = $source_license,
+                notes = $notes,
+                priority = $priority,
+                updated_utc = CURRENT_TIMESTAMP
+            WHERE id = $id;
+            """, "$id", "$game_name", "$path_kind", "$source_url", "$source_license", "$notes", "$priority");
+
+            // A title another source owns is left alone, and an unchanged
+            // curated title is not rewritten.
+            using var upsertTitle = CreateCommand(connection, transaction, """
+            INSERT INTO game_titles (
+                steam_app_id,
+                title,
+                platform_hint,
+                source_name,
+                source_url,
+                source_license,
+                notes,
+                first_seen_utc,
+                last_updated_utc
+            )
+            VALUES (
+                $steam_app_id,
+                $title,
+                $platform,
+                $source_name,
+                $source_url,
+                $source_license,
+                'Curated project seed game title',
+                CURRENT_TIMESTAMP,
+                CURRENT_TIMESTAMP
+            )
+            ON CONFLICT (steam_app_id) DO UPDATE SET
+                title = excluded.title,
+                last_updated_utc = CURRENT_TIMESTAMP
+            WHERE game_titles.source_name = $source_name
+              AND game_titles.title IS NOT excluded.title;
+            """, "$steam_app_id", "$title", "$platform", "$source_name", "$source_url", "$source_license");
+
+            using var titleIsCurrent = CreateCommand(connection, transaction, """
+            SELECT COUNT(*)
+            FROM game_titles
+            WHERE steam_app_id = $steam_app_id
+              AND (source_name IS NOT $source_name OR title IS $title);
+            """, "$steam_app_id", "$title", "$source_name");
 
             int inserted = 0;
             int updated = 0;
             int unchanged = 0;
             int skippedOverrides = 0;
+            bool titleWritesNeeded = false;
 
             foreach (CuratedMappingEntry entry in document.Mappings)
             {
-                // Ensure game_titles is populated or maintained
-                UpsertGameTitle(connection, transaction, entry);
+                object sourceUrl = ToDbValue(entry.SourceUrl);
+                object sourceLicense = ToDbValue(entry.SourceLicense);
 
-                // Check existing save_path_mapping
-                using var selectCmd = connection.CreateCommand();
-                selectCmd.Transaction = transaction;
-                selectCmd.CommandText = """
-                SELECT
-                    id,
-                    game_name,
-                    path_kind,
-                    source_name,
-                    source_url,
-                    source_license,
-                    notes,
-                    priority,
-                    enabled,
-                    COALESCE(review_status, 'Pending') AS review_status,
-                    review_notes
-                FROM save_path_mappings
-                WHERE steam_app_id = $steam_app_id
-                  AND platform = $platform
-                  AND path_template = $path_template;
-                """;
-                selectCmd.Parameters.AddWithValue("$steam_app_id", entry.SteamAppId);
-                selectCmd.Parameters.AddWithValue("$platform", entry.Platform);
-                selectCmd.Parameters.AddWithValue("$path_template", entry.PathTemplate);
+                if (!string.IsNullOrWhiteSpace(entry.GameName))
+                {
+                    if (write)
+                    {
+                        Bind(upsertTitle, entry.SteamAppId, entry.GameName, entry.Platform, CuratedSourceName, sourceUrl, sourceLicense);
+                        upsertTitle.ExecuteNonQuery();
+                    }
+                    else
+                    {
+                        Bind(titleIsCurrent, entry.SteamAppId, entry.GameName, CuratedSourceName);
+                        titleWritesNeeded |= Convert.ToInt64(titleIsCurrent.ExecuteScalar()) == 0;
+                    }
+                }
 
-                using var reader = selectCmd.ExecuteReader();
+                Bind(selectMapping, entry.SteamAppId, entry.Platform, entry.PathTemplate);
+                using var reader = selectMapping.ExecuteReader();
+
                 if (!reader.Read())
                 {
                     reader.Close();
 
-                    // Row does not exist -> Insert new curated mapping as Approved & Enabled
-                    using var insertCmd = connection.CreateCommand();
-                    insertCmd.Transaction = transaction;
-                    insertCmd.CommandText = """
-                    INSERT INTO save_path_mappings (
-                        steam_app_id,
-                        game_name,
-                        platform,
-                        path_template,
-                        path_kind,
-                        source_name,
-                        source_url,
-                        source_license,
-                        notes,
-                        priority,
-                        enabled,
-                        review_status,
-                        review_notes,
-                        reviewed_utc,
-                        created_utc,
-                        updated_utc
-                    )
-                    VALUES (
-                        $steam_app_id,
-                        $game_name,
-                        $platform,
-                        $path_template,
-                        $path_kind,
-                        $source_name,
-                        $source_url,
-                        $source_license,
-                        $notes,
-                        $priority,
-                        1,
-                        'Approved',
-                        'Curated project seed distribution',
-                        CURRENT_TIMESTAMP,
-                        CURRENT_TIMESTAMP,
-                        CURRENT_TIMESTAMP
-                    );
-                    """;
+                    // Row does not exist -> insert the curated mapping as Approved & Enabled.
+                    if (write)
+                    {
+                        Bind(insertMapping, entry.SteamAppId, ToDbValue(entry.GameName), entry.Platform, entry.PathTemplate, entry.PathKind, CuratedSourceName, sourceUrl, sourceLicense, ToDbValue(entry.Notes), entry.Priority);
+                        insertMapping.ExecuteNonQuery();
+                    }
 
-                    insertCmd.Parameters.AddWithValue("$steam_app_id", entry.SteamAppId);
-                    insertCmd.Parameters.AddWithValue("$game_name", ToDbValue(entry.GameName));
-                    insertCmd.Parameters.AddWithValue("$platform", entry.Platform);
-                    insertCmd.Parameters.AddWithValue("$path_template", entry.PathTemplate);
-                    insertCmd.Parameters.AddWithValue("$path_kind", entry.PathKind);
-                    insertCmd.Parameters.AddWithValue("$source_name", CuratedSourceName);
-                    insertCmd.Parameters.AddWithValue("$source_url", ToDbValue(entry.SourceUrl));
-                    insertCmd.Parameters.AddWithValue("$source_license", ToDbValue(entry.SourceLicense));
-                    insertCmd.Parameters.AddWithValue("$notes", ToDbValue(entry.Notes));
-                    insertCmd.Parameters.AddWithValue("$priority", entry.Priority);
-
-                    insertCmd.ExecuteNonQuery();
                     inserted++;
                     continue;
                 }
 
-                // Row exists
                 long existingId = reader.GetInt64(0);
                 string? existingGameName = reader.IsDBNull(1) ? null : reader.GetString(1);
                 string existingPathKind = reader.GetString(2);
@@ -233,96 +295,52 @@ namespace GameSaves.Infrastructure.Save
                     !string.Equals(existingNotes, entry.Notes, StringComparison.Ordinal) ||
                     existingPriority != entry.Priority;
 
-                if (metadataChanged)
-                {
-                    using var updateCmd = connection.CreateCommand();
-                    updateCmd.Transaction = transaction;
-                    updateCmd.CommandText = """
-                    UPDATE save_path_mappings
-                    SET game_name = $game_name,
-                        path_kind = $path_kind,
-                        source_url = $source_url,
-                        source_license = $source_license,
-                        notes = $notes,
-                        priority = $priority,
-                        updated_utc = CURRENT_TIMESTAMP
-                    WHERE id = $id;
-                    """;
-
-                    updateCmd.Parameters.AddWithValue("$id", existingId);
-                    updateCmd.Parameters.AddWithValue("$game_name", ToDbValue(entry.GameName));
-                    updateCmd.Parameters.AddWithValue("$path_kind", entry.PathKind);
-                    updateCmd.Parameters.AddWithValue("$source_url", ToDbValue(entry.SourceUrl));
-                    updateCmd.Parameters.AddWithValue("$source_license", ToDbValue(entry.SourceLicense));
-                    updateCmd.Parameters.AddWithValue("$notes", ToDbValue(entry.Notes));
-                    updateCmd.Parameters.AddWithValue("$priority", entry.Priority);
-
-                    updateCmd.ExecuteNonQuery();
-                    updated++;
-                }
-                else
+                if (!metadataChanged)
                 {
                     unchanged++;
+                    continue;
                 }
+
+                if (write)
+                {
+                    Bind(updateMapping, existingId, ToDbValue(entry.GameName), entry.PathKind, sourceUrl, sourceLicense, ToDbValue(entry.Notes), entry.Priority);
+                    updateMapping.ExecuteNonQuery();
+                }
+
+                updated++;
             }
 
-            transaction.Commit();
-
-            return new CuratedSeedResult(
+            var result = new CuratedSeedResult(
                 document.Mappings.Count,
                 inserted,
                 updated,
                 unchanged,
                 skippedOverrides);
+
+            return (result, titleWritesNeeded || inserted > 0 || updated > 0);
         }
 
-        private static void UpsertGameTitle(
+        // Commands are prepared once per pass and re-bound for every entry.
+        private static SqliteCommand CreateCommand(
             SqliteConnection connection,
-            SqliteTransaction transaction,
-            CuratedMappingEntry entry)
+            SqliteTransaction? transaction,
+            string sql,
+            params string[] parameterNames)
         {
-            if (string.IsNullOrWhiteSpace(entry.GameName))
-                return;
+            SqliteCommand command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = sql;
 
-            using var titleCmd = connection.CreateCommand();
-            titleCmd.Transaction = transaction;
-            titleCmd.CommandText = """
-            INSERT INTO game_titles (
-                steam_app_id,
-                title,
-                platform_hint,
-                source_name,
-                source_url,
-                source_license,
-                notes,
-                first_seen_utc,
-                last_updated_utc
-            )
-            VALUES (
-                $steam_app_id,
-                $title,
-                $platform,
-                $source_name,
-                $source_url,
-                $source_license,
-                'Curated project seed game title',
-                CURRENT_TIMESTAMP,
-                CURRENT_TIMESTAMP
-            )
-            ON CONFLICT (steam_app_id) DO UPDATE SET
-                title = excluded.title,
-                last_updated_utc = CURRENT_TIMESTAMP
-            WHERE game_titles.source_name = $source_name;
-            """;
+            foreach (string name in parameterNames)
+                command.Parameters.AddWithValue(name, DBNull.Value);
 
-            titleCmd.Parameters.AddWithValue("$steam_app_id", entry.SteamAppId);
-            titleCmd.Parameters.AddWithValue("$title", entry.GameName);
-            titleCmd.Parameters.AddWithValue("$platform", entry.Platform);
-            titleCmd.Parameters.AddWithValue("$source_name", CuratedSourceName);
-            titleCmd.Parameters.AddWithValue("$source_url", ToDbValue(entry.SourceUrl));
-            titleCmd.Parameters.AddWithValue("$source_license", ToDbValue(entry.SourceLicense));
+            return command;
+        }
 
-            titleCmd.ExecuteNonQuery();
+        private static void Bind(SqliteCommand command, params object[] values)
+        {
+            for (int i = 0; i < values.Length; i++)
+                command.Parameters[i].Value = values[i];
         }
 
         private static object ToDbValue(string? value)

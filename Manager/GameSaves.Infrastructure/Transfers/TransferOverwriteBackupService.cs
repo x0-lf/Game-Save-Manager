@@ -1,6 +1,5 @@
 using GameSaves.Core.Platform;
 using GameSaves.Core.Transfers;
-using System.Security.Cryptography;
 using System.Text.Json;
 
 namespace GameSaves.Infrastructure.Transfers
@@ -107,7 +106,7 @@ namespace GameSaves.Infrastructure.Transfers
                         OriginalFile: targetFile,
                         BackupFile: backupFile,
                         Bytes: new FileInfo(backupFile).Length,
-                        Sha256: ComputeSha256(backupFile),
+                        Sha256: Sha256Hasher.HashFile(backupFile),
                         BackedUpUtc: DateTimeOffset.UtcNow,
                         RelativePath: relativePath);
 
@@ -176,13 +175,6 @@ namespace GameSaves.Infrastructure.Transfers
                     driveFolder = "Unrooted";
 
                 return Path.Combine(driveFolder, withoutRoot);
-            }
-
-            private static string ComputeSha256(string filePath)
-            {
-                using FileStream stream = File.OpenRead(filePath);
-                byte[] hash = SHA256.HashData(stream);
-                return Convert.ToHexString(hash);
             }
         }
     }

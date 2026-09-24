@@ -363,7 +363,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
             new GoogleDriveTextCreationClient(new DriveService(
                 new BaseClientService.Initializer
                 {
-                    HttpClientInitializer = credential.CreateHttpClientInitializer(),
+                    HttpClientInitializer = credential.Credential,
                     ApplicationName = GoogleDriveRequestContract.ApplicationName,
 
                     // Retry lives in exactly one place, RetryingRemoteFileSystem. The

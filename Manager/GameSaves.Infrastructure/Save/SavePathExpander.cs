@@ -1,11 +1,12 @@
 ﻿using GameSaves.Core.Steam;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 
 using GameSaves.Core.Profiles;
 
 namespace GameSaves.Infrastructure.Save
 {
-    public sealed class SavePathExpander
+    public sealed partial class SavePathExpander
     {
         public IEnumerable<string> ExpandCandidatePaths(
             string pathTemplate,
@@ -47,6 +48,13 @@ namespace GameSaves.Infrastructure.Save
             expanded = ExpandTilde(expanded);
             expanded = Environment.ExpandEnvironmentVariables(expanded);
 
+            // A token nothing resolved must not become a path: GetFullPath would
+            // turn "{SteamRoot}\x" into "<current directory>\{SteamRoot}\x", and a
+            // relative leftover ("$HOME/...", "\saves" from an empty install
+            // path) would land on the current drive.
+            if (!Path.IsPathFullyQualified(expanded) || UnresolvedTokenPattern().IsMatch(expanded))
+                yield break;
+
             foreach (string candidate in ExpandWildcards(expanded))
             {
                 if (TryNormalize(candidate, out string normalized))
@@ -67,7 +75,9 @@ namespace GameSaves.Infrastructure.Save
                 ["{AppData}"] = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                 ["{LocalAppData}"] = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 ["{ProgramData}"] = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-                ["{Documents}"] = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)
+                ["{Documents}"] = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                // The default location; .NET has no SpecialFolder for it.
+                ["{SavedGames}"] = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Saved Games")
             };
 
             foreach (var replacement in replacements)
@@ -89,11 +99,14 @@ namespace GameSaves.Infrastructure.Save
             SteamGame game,
             string? steamRoot)
         {
-            value = value.Replace("{AppId}", game.AppId, StringComparison.OrdinalIgnoreCase);
-            value = value.Replace("{GameName}", game.Name, StringComparison.OrdinalIgnoreCase);
-            value = value.Replace("{LibraryRoot}", game.LibraryPath, StringComparison.OrdinalIgnoreCase);
-            value = value.Replace("{GameInstallPath}", game.GamePath, StringComparison.OrdinalIgnoreCase);
-            value = value.Replace("{InstallDir}", game.InstallDirectory, StringComparison.OrdinalIgnoreCase);
+            // An empty value (a game that is not installed has no GamePath)
+            // leaves the token in place, so the candidate is rejected instead of
+            // "{GameInstallPath}\saves" turning into "\saves" on the current drive.
+            value = ReplaceIfKnown(value, "{AppId}", game.AppId);
+            value = ReplaceIfKnown(value, "{GameName}", game.Name);
+            value = ReplaceIfKnown(value, "{LibraryRoot}", game.LibraryPath);
+            value = ReplaceIfKnown(value, "{GameInstallPath}", game.GamePath);
+            value = ReplaceIfKnown(value, "{InstallDir}", game.InstallDirectory);
 
             if (!string.IsNullOrWhiteSpace(steamRoot))
             {
@@ -103,6 +116,15 @@ namespace GameSaves.Infrastructure.Save
 
             return value;
         }
+
+        private static string ReplaceIfKnown(string value, string token, string? replacement) =>
+            string.IsNullOrWhiteSpace(replacement)
+                ? value
+                : value.Replace(token, replacement, StringComparison.OrdinalIgnoreCase);
+
+        // {Token} (letters only, so a "{GUID}" folder name is not one) or %VAR%.
+        [GeneratedRegex(@"\{[A-Za-z]+\}|%[A-Za-z_][A-Za-z0-9_()]*%")]
+        private static partial Regex UnresolvedTokenPattern();
 
         private static string ExpandTilde(string value)
         {

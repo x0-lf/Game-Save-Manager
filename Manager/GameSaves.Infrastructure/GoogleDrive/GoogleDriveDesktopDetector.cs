@@ -3,103 +3,85 @@ using GameSaves.Core.Sync;
 namespace GameSaves.Infrastructure.GoogleDrive
 {
     /// <summary>
-    /// Detects whether Google Drive for Desktop is installed and locates any mounted
-    /// virtual drives or sync folders (e.g. "G:\My Drive").
+    /// Locates the virtual drive mounted by Google Drive for Desktop (for
+    /// example "G:\My Drive"). Only a volume the client itself identifies,
+    /// by its DriveFS file system or its "Google Drive" label, counts: a bare
+    /// G: drive or a leftover "Google Drive" folder may be a USB stick or a
+    /// plain local folder that nothing uploads, and pointing backups there
+    /// would be a false off-site claim.
     /// </summary>
     public sealed class GoogleDriveDesktopDetector : IGoogleDriveDesktopDetector
     {
-        private readonly Func<IEnumerable<DriveInfo>> _getDrives;
+        private readonly Func<IEnumerable<(string Root, string Format, string Label)>> _getDrives;
         private readonly Func<string, bool> _directoryExists;
 
+        // ponytail: detected once per process. The path is read on the UI
+        // thread for every keystroke in the folder box, and a dead mapped
+        // drive can block each probe for the SMB timeout. Mounting Drive
+        // later needs an app restart to be noticed.
+        private readonly Lazy<string?> _mountedDrivePath;
+
         public GoogleDriveDesktopDetector(
-            Func<IEnumerable<DriveInfo>>? getDrives = null,
+            Func<IEnumerable<(string Root, string Format, string Label)>>? getDrives = null,
             Func<string, bool>? directoryExists = null)
         {
-            _getDrives = getDrives ?? (() => DriveInfo.GetDrives());
+            _getDrives = getDrives ?? ReadReadyDrives;
             _directoryExists = directoryExists ?? Directory.Exists;
+            _mountedDrivePath = new Lazy<string?>(DetectMountedPath);
         }
 
-        public bool IsInstalled => DetectMountedPath() is not null || DetectInstalledMarker();
+        public string? MountedDrivePath => _mountedDrivePath.Value;
 
-        public string? MountedDrivePath => DetectMountedPath();
-
-        public string? DefaultSyncFolderPath
-        {
-            get
-            {
-                string? mounted = MountedDrivePath;
-                return mounted is not null ? Path.Combine(mounted, "GameSaves") : null;
-            }
-        }
+        public string? DefaultSyncFolderPath =>
+            MountedDrivePath is { } mounted ? Path.Combine(mounted, "GameSaves") : null;
 
         private string? DetectMountedPath()
         {
             try
             {
-                // 1. Check known default mount paths on Windows
-                string defaultMyDrive = @"G:\My Drive";
-                if (_directoryExists(defaultMyDrive))
-                    return defaultMyDrive;
-
-                string defaultG = @"G:\";
-                if (_directoryExists(defaultG))
-                    return defaultG;
-
-                // 2. Enumerate system drives looking for Google Drive / DriveFS
-                foreach (DriveInfo drive in _getDrives())
+                foreach ((string root, string format, string label) in _getDrives())
                 {
-                    if (!drive.IsReady)
+                    bool isDriveFs = string.Equals(format, "DriveFS", StringComparison.OrdinalIgnoreCase);
+                    bool hasDriveLabel = label.Contains("Google Drive", StringComparison.OrdinalIgnoreCase);
+
+                    if (!isDriveFs && !hasDriveLabel)
                         continue;
 
-                    bool isDriveFs = string.Equals(drive.DriveFormat, "DriveFS", StringComparison.OrdinalIgnoreCase);
-                    bool hasDriveLabel = !string.IsNullOrWhiteSpace(drive.VolumeLabel) &&
-                        drive.VolumeLabel.Contains("Google Drive", StringComparison.OrdinalIgnoreCase);
-
-                    if (isDriveFs || hasDriveLabel)
-                    {
-                        string root = drive.RootDirectory.FullName;
-                        string candidateMyDrive = Path.Combine(root, "My Drive");
-                        if (_directoryExists(candidateMyDrive))
-                            return candidateMyDrive;
-
-                        return root;
-                    }
-                }
-
-                // 3. User home folder fallback
-                string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-                if (!string.IsNullOrWhiteSpace(userProfile))
-                {
-                    string userGoogleDrive = Path.Combine(userProfile, "Google Drive");
-                    if (_directoryExists(userGoogleDrive))
-                        return userGoogleDrive;
+                    string myDrive = Path.Combine(root, "My Drive");
+                    return _directoryExists(myDrive) ? myDrive : root;
                 }
             }
             catch
             {
-                // File-system and drive inspection is best-effort and must never throw.
+                // Drive inspection is best-effort and must never throw.
             }
 
             return null;
         }
 
-        private bool DetectInstalledMarker()
+        private static IEnumerable<(string Root, string Format, string Label)> ReadReadyDrives()
         {
-            try
+            foreach (DriveInfo drive in DriveInfo.GetDrives())
             {
-                string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-                if (!string.IsNullOrWhiteSpace(localAppData))
-                {
-                    string driveFsDir = Path.Combine(localAppData, "Google", "DriveFS");
-                    if (_directoryExists(driveFsDir))
-                        return true;
-                }
-            }
-            catch
-            {
-            }
+                (string, string, string)? entry = null;
 
-            return false;
+                // One unreadable drive (a disconnected share, an ejected card)
+                // must not end the scan for the others.
+                try
+                {
+                    if (drive.IsReady)
+                        entry = (drive.RootDirectory.FullName, drive.DriveFormat, drive.VolumeLabel ?? "");
+                }
+                catch (IOException)
+                {
+                }
+                catch (UnauthorizedAccessException)
+                {
+                }
+
+                if (entry is { } value)
+                    yield return value;
+            }
         }
     }
 }

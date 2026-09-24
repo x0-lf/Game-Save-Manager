@@ -23,7 +23,6 @@ namespace GameSaves.Tests
             CuratedMappingSeedDocument document = seeder.LoadCuratedSeed();
 
             Assert.NotNull(document);
-            Assert.True(document.SchemaVersion >= 1, "SchemaVersion must be at least 1.");
             Assert.NotNull(document.Mappings);
             Assert.True(document.Mappings.Count >= 20, $"Expected at least 20 curated mappings, but found {document.Mappings.Count}.");
 
@@ -33,8 +32,6 @@ namespace GameSaves.Tests
                 Assert.False(string.IsNullOrWhiteSpace(mapping.GameName), "GameName must not be empty.");
                 Assert.Equal("windows", mapping.Platform);
                 Assert.False(string.IsNullOrWhiteSpace(mapping.PathTemplate), "PathTemplate must not be empty.");
-                Assert.Equal(CuratedMappingSeeder.CuratedSourceName, mapping.SourceName);
-                Assert.Equal("Approved", mapping.ReviewStatus);
                 Assert.True(mapping.Priority > 0, "Priority must be positive.");
             }
         }
@@ -42,7 +39,7 @@ namespace GameSaves.Tests
         [Fact]
         public void Seed_IntoEmptyDatabase_PopulatesApprovedMappingsAndGameTitles()
         {
-            string dbPath = _temp.GetPath("empty_seed.db");
+            string dbPath = MigratedDatabase.Create(_temp, "empty_seed.db");
             var seeder = new CuratedMappingSeeder();
             CuratedMappingSeedDocument seedDoc = seeder.LoadCuratedSeed();
 
@@ -56,7 +53,7 @@ namespace GameSaves.Tests
 
             var repository = new SqliteSavePathMappingRepository(dbPath);
             Assert.Equal(seedDoc.Mappings.Count, repository.CountApprovedMappings("windows"));
-            Assert.Equal(seedDoc.Mappings.Count, repository.CountCuratedMappings("windows"));
+            Assert.Equal(seedDoc.Mappings.Count, CountCurated(dbPath));
             Assert.Equal(0, repository.CountPendingMappings("windows"));
             Assert.Equal(0, repository.CountNeedsFixMappings("windows"));
 
@@ -85,12 +82,19 @@ namespace GameSaves.Tests
         [Fact]
         public void Seed_IdempotentOnSubsequentRuns_DoesNotDuplicateOrAlterData()
         {
-            string dbPath = _temp.GetPath("idempotent.db");
+            string dbPath = MigratedDatabase.Create(_temp, "idempotent.db");
             var seeder = new CuratedMappingSeeder();
             CuratedMappingSeedDocument seedDoc = seeder.LoadCuratedSeed();
 
             CuratedSeedResult firstRun = seeder.Seed(dbPath);
             Assert.Equal(seedDoc.Mappings.Count, firstRun.Inserted);
+
+            // Sentinel timestamps: any write by the second run would replace them.
+            const string Sentinel = "2000-01-01 00:00:00";
+            MigratedDatabase.Execute(dbPath, $"""
+                UPDATE game_titles SET last_updated_utc = '{Sentinel}';
+                UPDATE save_path_mappings SET updated_utc = '{Sentinel}';
+                """);
 
             CuratedSeedResult secondRun = seeder.Seed(dbPath);
             Assert.Equal(seedDoc.Mappings.Count, secondRun.TotalProcessed);
@@ -101,13 +105,16 @@ namespace GameSaves.Tests
 
             var repository = new SqliteSavePathMappingRepository(dbPath);
             Assert.Equal(seedDoc.Mappings.Count, repository.CountApprovedMappings("windows"));
-            Assert.Equal(seedDoc.Mappings.Count, repository.CountCuratedMappings("windows"));
+            Assert.Equal(seedDoc.Mappings.Count, CountCurated(dbPath));
+
+            Assert.Equal(0, MigratedDatabase.Scalar(dbPath, $"SELECT COUNT(*) FROM game_titles WHERE last_updated_utc <> '{Sentinel}';"));
+            Assert.Equal(0, MigratedDatabase.Scalar(dbPath, $"SELECT COUNT(*) FROM save_path_mappings WHERE updated_utc <> '{Sentinel}';"));
         }
 
         [Fact]
         public void Seed_PreservesUserModifiedCuratedMapping_WhenUserDisablesIt()
         {
-            string dbPath = _temp.GetPath("user_disabled.db");
+            string dbPath = MigratedDatabase.Create(_temp, "user_disabled.db");
             var seeder = new CuratedMappingSeeder();
             seeder.Seed(dbPath);
 
@@ -144,7 +151,7 @@ namespace GameSaves.Tests
         [Fact]
         public void Seed_PreservesUserModifiedReviewStatus_WhenReviewStatusChanged()
         {
-            string dbPath = _temp.GetPath("user_status_override.db");
+            string dbPath = MigratedDatabase.Create(_temp, "user_status_override.db");
             var seeder = new CuratedMappingSeeder();
             seeder.Seed(dbPath);
 
@@ -172,7 +179,7 @@ namespace GameSaves.Tests
         [Fact]
         public void Seed_PreservesUserCustomMappings_WhenCustomMappingAdded()
         {
-            string dbPath = _temp.GetPath("custom_mapping.db");
+            string dbPath = MigratedDatabase.Create(_temp, "custom_mapping.db");
             var seeder = new CuratedMappingSeeder();
             seeder.Seed(dbPath);
 
@@ -220,7 +227,7 @@ namespace GameSaves.Tests
         [Fact]
         public void Seed_UpdatesMetadata_WhenCuratedSeedHasUpdatedMetadata()
         {
-            string dbPath = _temp.GetPath("update_metadata.db");
+            string dbPath = MigratedDatabase.Create(_temp, "update_metadata.db");
             var seeder = new CuratedMappingSeeder();
             CuratedMappingSeedDocument originalDoc = seeder.LoadCuratedSeed();
 
@@ -272,21 +279,10 @@ namespace GameSaves.Tests
 
             var repository = new SqliteSavePathMappingRepository(resolvedPath);
             Assert.True(repository.CountApprovedMappings("windows") >= 20);
-            Assert.True(repository.CountCuratedMappings("windows") >= 20);
+            Assert.True(CountCurated(dbPath) >= 20);
         }
 
-        [Fact]
-        public void SavePathDatabase_SeedCuratedMappings_WorksDirectly()
-        {
-            string dbPath = _temp.GetPath("savepathdb_seed.db");
-            var database = new SavePathDatabase(dbPath);
-            database.Initialize();
-
-            CuratedSeedResult result = database.SeedCuratedMappings();
-            Assert.True(result.Inserted >= 20);
-
-            var repository = new SqliteSavePathMappingRepository(dbPath);
-            Assert.Equal(result.Inserted, repository.CountApprovedMappings("windows"));
-        }
+        private static long CountCurated(string dbPath) =>
+            MigratedDatabase.Scalar(dbPath, $"SELECT COUNT(*) FROM save_path_mappings WHERE platform = 'windows' AND source_name = '{CuratedMappingSeeder.CuratedSourceName}';");
     }
 }

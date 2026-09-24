@@ -485,6 +485,7 @@ namespace GameSaves.UiCapture
             viewModel.Games.Add(Game(
                 "730", "Counter-Strike 2", "FastLibrary/steamapps/common/Counter-Strike 2",
                 "FastLibrary", 2, 0, 0, true, 16, 67108864, "Ready"));
+            viewModel.Pagination.SetSource(viewModel.Games);
             viewModel.SelectedGame = viewModel.Games[0];
             viewModel.StatusMessage = "4 installed games found.";
         }

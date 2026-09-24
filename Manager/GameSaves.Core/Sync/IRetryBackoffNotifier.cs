@@ -7,7 +7,6 @@ public sealed record RetryBackoffEventArgs(
     int Attempt,
     int MaxAttempts,
     TimeSpan Delay,
-    bool IsServerInstructed,
     Exception Exception,
     bool IsRateLimited);
 
@@ -31,8 +30,6 @@ public interface IRetryBackoffNotifier
 /// </summary>
 public sealed class RetryBackoffNotifier : IRetryBackoffNotifier
 {
-    public static readonly RetryBackoffNotifier Instance = new();
-
     public event EventHandler<RetryBackoffEventArgs>? BackoffStarted;
 
     public event EventHandler<RetryBackoffEventArgs>? BackoffEnded;

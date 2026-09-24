@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using GameSaves.App.Common;
 using GameSaves.App.Models;
 using GameSaves.App.Services;
 using GameSaves.Core.Transfers;
@@ -438,11 +439,11 @@ namespace GameSaves.App.ViewModels
                     Warnings.Add(new TransferWarningRowViewModel(warning));
 
                 TotalFiles = plan.TotalFiles;
-                TotalSizeDisplay = FormatBytes(plan.TotalBytes);
+                TotalSizeDisplay = ByteSize.Format(plan.TotalBytes);
                 CanExecuteBackup = plan.CanExecute;
 
                 StatusMessage = plan.CanExecute
-                    ? $"Backup preview ready for {plan.Game.Name}: {plan.TotalFiles} file(s), {FormatBytes(plan.TotalBytes)}. Nothing was copied."
+                    ? $"Backup preview ready for {plan.Game.Name}: {plan.TotalFiles} file(s), {ByteSize.Format(plan.TotalBytes)}. Nothing was copied."
                     : "Backup preview created, but nothing can be backed up. Check the warnings.";
             }
             catch (Exception ex)
@@ -493,7 +494,7 @@ namespace GameSaves.App.ViewModels
                     ExecutionResults.Add(new SaveTransferItemResultRowViewModel(item));
 
                 FilesBackedUp = result.FilesBackedUp;
-                BytesBackedUpDisplay = FormatBytes(result.BytesBackedUp);
+                BytesBackedUpDisplay = ByteSize.Format(result.BytesBackedUp);
 
                 bool inDefaultLocation = result.BackupRootPath is not null &&
                     result.BackupRootPath.StartsWith(DefaultDestination, StringComparison.OrdinalIgnoreCase);
@@ -529,26 +530,6 @@ namespace GameSaves.App.ViewModels
             TotalFiles = 0;
             TotalSizeDisplay = "0 B";
             CanExecuteBackup = false;
-        }
-
-        private static string FormatBytes(long bytes)
-        {
-            if (bytes < 1024)
-                return $"{bytes} B";
-
-            double kb = bytes / 1024.0;
-
-            if (kb < 1024)
-                return $"{kb:0.##} KB";
-
-            double mb = kb / 1024.0;
-
-            if (mb < 1024)
-                return $"{mb:0.##} MB";
-
-            double gb = mb / 1024.0;
-
-            return $"{gb:0.##} GB";
         }
     }
 }

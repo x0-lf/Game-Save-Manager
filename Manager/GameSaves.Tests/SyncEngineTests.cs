@@ -170,10 +170,12 @@ public sealed class SyncEngineTests
             temp.GetPath("original.sav"),
             "sync payload");
 
+        // The user cancels while the upload is in flight. A cancellation
+        // with a live token would be an HTTP timeout, a failed item instead.
+        using var cancellation = new CancellationTokenSource();
         var remote = new RecordingRemoteFileSystem
         {
-            UploadException = new OperationCanceledException(
-                "Synthetic upload cancellation.")
+            CancelOnUpload = cancellation
         };
         var engine = new SyncEngine(
             remote,
@@ -192,7 +194,8 @@ public sealed class SyncEngineTests
                     DryRun = false,
                     ConfirmExecution = true,
                     Progress = progress
-                }));
+                },
+                cancellation.Token));
 
         Assert.Empty(progress.Values);
         Assert.Empty(remote.UploadedPaths);
@@ -337,6 +340,7 @@ public sealed class SyncEngineTests
         public List<string> ProviderMetadataReplacements { get; } = new();
         public bool FailMetadataReplacement { get; set; }
         public Exception? UploadException { get; set; }
+        public CancellationTokenSource? CancelOnUpload { get; set; }
 
         public string DisplayRoot => "test://remote";
 
@@ -433,6 +437,12 @@ public sealed class SyncEngineTests
         {
             if (UploadException is not null)
                 throw UploadException;
+
+            if (CancelOnUpload is not null)
+            {
+                CancelOnUpload.Cancel();
+                cancellationToken.ThrowIfCancellationRequested();
+            }
 
             if (TextFiles.ContainsKey(relativeRemotePath) || BinaryFiles.ContainsKey(relativeRemotePath))
                 throw new IOException("Remote file already exists.");

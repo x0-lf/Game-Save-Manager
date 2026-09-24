@@ -391,20 +391,19 @@
          system inside the same window. The keys are set inline in Fluent's
          control theme, so the states are restated here rather than retargeted
          through a resource. -->
+    <!-- The tint lives in the brush, never in Opacity: Opacity on the
+         presenter would fade the row's text along with its background. -->
     <Style Selector="ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
-        <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
-        <Setter Property="Opacity" Value="0.12" />
+        <Setter Property="Background" Value="{DynamicResource AccentSelectionTintBrush}" />
     </Style>
     <Style Selector="ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-        <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
-        <Setter Property="Opacity" Value="0.18" />
+        <Setter Property="Background" Value="{DynamicResource AccentPreviewTintBrush}" />
     </Style>
 
-    <!-- Virtualized table list: removes default ListBoxItem padding and margins
-         so custom table rows inside virtualized ListBoxes align cleanly. -->
+    <!-- Virtualized table list: removes the ListBox and ListBoxItem padding so
+         custom table rows inside virtualized ListBoxes align cleanly. Each call
+         site sets its own transparent, borderless chrome. -->
     <Style Selector="ListBox.virtualizedTable">
-        <Setter Property="Background" Value="Transparent" />
-        <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Padding" Value="0" />
     </Style>
     <Style Selector="ListBox.virtualizedTable > ListBoxItem">

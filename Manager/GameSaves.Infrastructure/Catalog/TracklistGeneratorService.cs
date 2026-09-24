@@ -7,7 +7,6 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using GameSaves.Core.Catalog;
 using GameSaves.Core.Steam;
-using GameSaves.Infrastructure.Save;
 using GameSaves.Infrastructure.Steam;
 using Microsoft.Data.Sqlite;
 
@@ -32,6 +31,20 @@ namespace GameSaves.Infrastructure.Catalog
             TracklistOptions? options = null)
         {
             options ??= new TracklistOptions();
+
+            // One read of the database serves both the catalog candidates and the per-title notes.
+            // A locked or corrupt database is an error, not "every title is missing".
+            var catalogTitles = new List<(string AppId, string? Title, string? Notes)>();
+            var mappingStats = new Dictionary<string, MappingStats>(StringComparer.OrdinalIgnoreCase);
+
+            if (File.Exists(databasePath))
+            {
+                LoadFromDatabase(databasePath, options.Platform, catalogTitles, mappingStats);
+            }
+
+            var catalogByAppId = new Dictionary<string, (string? Title, string? Notes)>(StringComparer.OrdinalIgnoreCase);
+            foreach ((string appId, string? title, string? notes) in catalogTitles)
+                catalogByAppId[appId] = (title, notes);
 
             // 1. Gather candidates from inputs, installed games, and/or database
             var candidateMap = new Dictionary<string, MissingTitleCandidate>(StringComparer.OrdinalIgnoreCase);
@@ -78,24 +91,23 @@ namespace GameSaves.Infrastructure.Catalog
                     // Discovery failure should not crash tracklist generation
                 }
 
-                // If not restricted to installed only, query game_titles from database
-                if (!options.IncludeInstalledOnly && File.Exists(databasePath))
+                // If not restricted to installed only, add the game_titles catalog
+                if (!options.IncludeInstalledOnly)
                 {
-                    LoadCatalogTitlesFromDatabase(databasePath, candidateMap);
+                    foreach ((string appId, string? title, string? notes) in catalogTitles)
+                    {
+                        AddOrMergeCandidate(candidateMap, new MissingTitleCandidate(
+                            SteamAppId: appId,
+                            Title: title ?? $"App {appId}",
+                            IsInstalled: false,
+                            Priority: "Normal",
+                            Source: "Catalog",
+                            Notes: notes));
+                    }
                 }
             }
 
-            // 2. Query save_path_mappings and game_titles notes from database
-            var mappingStats = new Dictionary<string, MappingStats>(StringComparer.OrdinalIgnoreCase);
-            var titleNotes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-            if (File.Exists(databasePath))
-            {
-                LoadMappingStatsFromDatabase(databasePath, options.Platform, mappingStats);
-                LoadTitleNotesFromDatabase(databasePath, titleNotes);
-            }
-
-            // 3. Reconcile candidates against mapping stats
+            // 2. Reconcile candidates against mapping stats
             int totalReconciled = 0;
             int totalCovered = 0;
             int totalMissing = 0;
@@ -108,12 +120,13 @@ namespace GameSaves.Infrastructure.Catalog
             foreach (MissingTitleCandidate candidate in candidateMap.Values)
             {
                 // Validate AppID: must be numeric
-                if (!candidate.SteamAppId.All(char.IsDigit))
+                if (!candidate.SteamAppId.All(char.IsAsciiDigit))
                     continue;
 
                 totalReconciled++;
 
                 mappingStats.TryGetValue(candidate.SteamAppId, out MappingStats stats);
+                catalogByAppId.TryGetValue(candidate.SteamAppId, out (string? Title, string? Notes) catalogEntry);
 
                 // If at least one approved mapping exists, the title has save path coverage
                 if (stats.ApprovedCount > 0)
@@ -127,7 +140,7 @@ namespace GameSaves.Infrastructure.Catalog
                 // Determine research status
                 string? effectiveNotes = !string.IsNullOrWhiteSpace(candidate.Notes)
                     ? candidate.Notes
-                    : (titleNotes.TryGetValue(candidate.SteamAppId, out string? dbNotes) ? dbNotes : null);
+                    : catalogEntry.Notes;
 
                 MissingTitleResearchStatus researchStatus;
 
@@ -136,8 +149,10 @@ namespace GameSaves.Infrastructure.Catalog
                     researchStatus = MissingTitleResearchStatus.NoSaveLocation;
                     noSaveLocationCount++;
                 }
-                else if (stats.TotalCount > 0)
+                else if (stats.PendingCount > 0)
                 {
+                    // Only Pending rows await review; a title whose mappings were all rejected
+                    // (or approved but disabled) needs fresh research.
                     researchStatus = MissingTitleResearchStatus.InReview;
                     inReviewCount++;
                 }
@@ -153,7 +168,9 @@ namespace GameSaves.Infrastructure.Catalog
 
                 missingItems.Add(new MissingTitleEntry(
                     SteamAppId: candidate.SteamAppId,
-                    Title: candidate.Title,
+                    Title: !string.IsNullOrWhiteSpace(candidate.Title)
+                        ? candidate.Title
+                        : catalogEntry.Title ?? $"App {candidate.SteamAppId}",
                     StoreUrl: $"https://store.steampowered.com/app/{candidate.SteamAppId}",
                     ResearchStatus: researchStatus,
                     Priority: priority,
@@ -163,7 +180,7 @@ namespace GameSaves.Infrastructure.Catalog
                     Notes: effectiveNotes));
             }
 
-            // 4. Apply filtering
+            // 3. Apply filtering
             IEnumerable<MissingTitleEntry> filtered = missingItems;
 
             if (options.StatusFilter.HasValue)
@@ -177,7 +194,7 @@ namespace GameSaves.Infrastructure.Catalog
                 filtered = filtered.Where(i => PriorityToRank(i.Priority) <= minRank);
             }
 
-            // 5. Sort: Priority (High > Normal > Low), then ResearchStatus, then numeric AppId
+            // 4. Sort: Priority (High > Normal > Low), then ResearchStatus, then numeric AppId
             var sorted = filtered
                 .OrderBy(i => PriorityToRank(i.Priority))
                 .ThenBy(i => i.ResearchStatus)
@@ -225,7 +242,8 @@ namespace GameSaves.Infrastructure.Catalog
         public string ExportCsv(MissingTitlesTracklist tracklist)
         {
             var sb = new StringBuilder();
-            sb.AppendLine("SteamAppId,Title,StoreUrl,ResearchStatus,Priority,IsInstalled,ExistingCandidateCount,DiscoveredUtc,Notes");
+            // RFC 4180 rows end in CRLF on every platform.
+            sb.Append("SteamAppId,Title,StoreUrl,ResearchStatus,Priority,IsInstalled,ExistingCandidateCount,DiscoveredUtc,Notes\r\n");
 
             foreach (MissingTitleEntry item in tracklist.Items)
             {
@@ -238,7 +256,7 @@ namespace GameSaves.Infrastructure.Catalog
                 sb.Append(item.ExistingCandidateCount).Append(',');
                 sb.Append(item.DiscoveredUtc.ToString("o")).Append(',');
                 sb.Append(EscapeCsv(item.Notes ?? string.Empty));
-                sb.AppendLine();
+                sb.Append("\r\n");
             }
 
             return sb.ToString();
@@ -295,16 +313,19 @@ namespace GameSaves.Infrastructure.Catalog
             }
         }
 
-        private static void LoadCatalogTitlesFromDatabase(
+        private static void LoadFromDatabase(
             string databasePath,
-            Dictionary<string, MissingTitleCandidate> candidateMap)
+            string platform,
+            List<(string AppId, string? Title, string? Notes)> catalogTitles,
+            Dictionary<string, MappingStats> statsMap)
         {
-            try
-            {
-                using var connection = new SqliteConnection($"Data Source={databasePath}");
-                connection.Open();
+            string connectionString = new SqliteConnectionStringBuilder { DataSource = databasePath }.ToString();
 
-                using var command = connection.CreateCommand();
+            using var connection = new SqliteConnection(connectionString);
+            connection.Open();
+
+            using (var command = connection.CreateCommand())
+            {
                 command.CommandText = """
                 SELECT steam_app_id, title, notes
                 FROM game_titles
@@ -314,38 +335,15 @@ namespace GameSaves.Infrastructure.Catalog
                 using var reader = command.ExecuteReader();
                 while (reader.Read())
                 {
-                    string appId = reader.GetString(0).Trim();
-                    string title = reader.IsDBNull(1) ? $"App {appId}" : reader.GetString(1);
-                    string? notes = reader.IsDBNull(2) ? null : reader.GetString(2);
-
-                    AddOrMergeCandidate(candidateMap, new MissingTitleCandidate(
-                        SteamAppId: appId,
-                        Title: title,
-                        IsInstalled: false,
-                        Priority: "Normal",
-                        Source: "Catalog",
-                        Notes: notes));
+                    catalogTitles.Add((
+                        reader.GetString(0).Trim(),
+                        reader.IsDBNull(1) ? null : reader.GetString(1),
+                        reader.IsDBNull(2) ? null : reader.GetString(2)));
                 }
             }
-            catch
+
+            using (var command = connection.CreateCommand())
             {
-                // Table might not exist yet
-            }
-        }
-
-        private static void LoadMappingStatsFromDatabase(
-            string databasePath,
-            string platform,
-            Dictionary<string, MappingStats> statsMap)
-        {
-            try
-            {
-                using var connection = new SqliteConnection($"Data Source={databasePath}");
-                connection.Open();
-
-                SavePathDatabase.EnsureReviewColumns(connection);
-
-                using var command = connection.CreateCommand();
                 command.CommandText = """
                 SELECT
                     steam_app_id,
@@ -369,40 +367,6 @@ namespace GameSaves.Infrastructure.Catalog
 
                     statsMap[appId] = new MappingStats(total, approved, pending);
                 }
-            }
-            catch
-            {
-                // If tables missing, stats remain empty
-            }
-        }
-
-        private static void LoadTitleNotesFromDatabase(
-            string databasePath,
-            Dictionary<string, string> notesMap)
-        {
-            try
-            {
-                using var connection = new SqliteConnection($"Data Source={databasePath}");
-                connection.Open();
-
-                using var command = connection.CreateCommand();
-                command.CommandText = """
-                SELECT steam_app_id, notes
-                FROM game_titles
-                WHERE steam_app_id IS NOT NULL AND notes IS NOT NULL;
-                """;
-
-                using var reader = command.ExecuteReader();
-                while (reader.Read())
-                {
-                    string appId = reader.GetString(0).Trim();
-                    string notes = reader.GetString(1);
-                    notesMap[appId] = notes;
-                }
-            }
-            catch
-            {
-                // Ignore if game_titles table absent
             }
         }
 
@@ -433,6 +397,11 @@ namespace GameSaves.Infrastructure.Catalog
         {
             if (string.IsNullOrEmpty(value))
                 return string.Empty;
+
+            // Titles and notes come from Steam and PCGamingWiki; a leading = + - @ tab or CR
+            // would make a spreadsheet evaluate the cell as a formula.
+            if (value[0] is '=' or '+' or '-' or '@' or '\t' or '\r')
+                value = "'" + value;
 
             if (value.Contains(',') || value.Contains('"') || value.Contains('\r') || value.Contains('\n'))
             {

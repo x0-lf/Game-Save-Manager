@@ -27,8 +27,9 @@ namespace GameSaves.Core.Transfers
                 "Integrity verification not supported by this history provider."));
 
         /// <summary>
-        /// Deletes orphaned ephemeral working directories (.staging_*, .export_*, .download_*)
-        /// and temporary export files (.export_*.tmp) older than the specified age (default 1 hour).
+        /// Deletes orphaned ephemeral working directories (.staging_&lt;guid&gt;, .export_&lt;guid&gt;,
+        /// .download_&lt;guid&gt;) whose newest write anywhere inside is older than the specified
+        /// age (default 1 hour), and temporary export files (.export_&lt;guid&gt;.tmp) of that age.
         /// </summary>
         void PurgeStaleWorkingDirectories(TimeSpan? olderThan = null) { }
     }

@@ -101,22 +101,29 @@ namespace GameSaves.Infrastructure.Catalog
                 }
             }
 
-            if (hasDataDir && dataDirName != null && !evidence.Contains(dataDirName))
+            // A *_Data folder alone (user_data, save_data) is not Unity evidence: it only counts
+            // next to a real Unity marker or an app.info inside it.
+            bool hasAppInfo = dataDirName != null &&
+                paths.Contains($"{dataDirName}/app.info", StringComparer.OrdinalIgnoreCase);
+
+            if (hasDataDir && dataDirName != null && (evidence.Count > 0 || hasAppInfo) && !evidence.Contains(dataDirName))
                 evidence.Add(dataDirName);
 
             // Attempt to read app.info if present on disk
-            if (!string.IsNullOrWhiteSpace(gameRootDirectory) && dataDirName != null)
+            if (!string.IsNullOrWhiteSpace(gameRootDirectory) && dataDirName != null && evidence.Count > 0)
             {
                 string appInfoPath = Path.Combine(gameRootDirectory, dataDirName, "app.info");
                 if (File.Exists(appInfoPath))
                 {
                     try
                     {
-                        string[] lines = File.ReadAllLines(appInfoPath);
-                        if (lines.Length >= 2)
+                        // app.info comes from the untrusted game folder and its names end up in
+                        // path templates: read only the two lines we need and keep only plain names.
+                        string[] lines = File.ReadLines(appInfoPath).Take(2).ToArray();
+                        if (lines.Length == 2)
                         {
-                            companyName = lines[0].Trim();
-                            productName = lines[1].Trim();
+                            companyName = AsSafeName(lines[0]);
+                            productName = AsSafeName(lines[1]);
                             evidence.Add($"{dataDirName}/app.info ({companyName}/{productName})");
                         }
                     }
@@ -144,6 +151,27 @@ namespace GameSaves.Infrastructure.Catalog
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// Returns <paramref name="value"/> trimmed when it can be used as a single path segment,
+        /// otherwise null (separators, drive colons, "." / "..", other invalid characters).
+        /// </summary>
+        internal static string? AsSafeName(string? value)
+        {
+            string? name = value?.Trim();
+
+            if (string.IsNullOrEmpty(name) || name == "." || name == ".." || name.Length > 100)
+                return null;
+
+            // Windows rules on every OS: templates are expanded on Windows.
+            foreach (char c in name)
+            {
+                if (char.IsControl(c) || "<>:\"/\\|?*".Contains(c))
+                    return null;
+            }
+
+            return name;
         }
 
         private static EngineFingerprintResult? CheckUnreal(List<string> paths)

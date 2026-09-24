@@ -3,7 +3,6 @@ using GameSaves.Core.Save;
 using GameSaves.Core.Steam;
 using GameSaves.Core.Transfers;
 using GameSaves.Infrastructure.Save;
-using System.Security.Cryptography;
 
 namespace GameSaves.Infrastructure.Transfers
 {
@@ -532,7 +531,7 @@ namespace GameSaves.Infrastructure.Transfers
                 }
 
                 if (options.VerifyHashes &&
-                    !ComputeSha256(backupFile).Equals(backupItem.Sha256, StringComparison.OrdinalIgnoreCase))
+                    !Sha256Hasher.HashFile(backupFile).Equals(backupItem.Sha256, StringComparison.OrdinalIgnoreCase))
                 {
                     return new BackupRestoreItemResult(
                         backupItem,
@@ -547,7 +546,7 @@ namespace GameSaves.Infrastructure.Transfers
                 long backupBytes = new FileInfo(backupFile).Length;
 
                 if (targetExists &&
-                    ComputeSha256(targetFile).Equals(backupItem.Sha256, StringComparison.OrdinalIgnoreCase))
+                    Sha256Hasher.HashFile(targetFile).Equals(backupItem.Sha256, StringComparison.OrdinalIgnoreCase))
                 {
                     return new BackupRestoreItemResult(
                         backupItem,
@@ -818,8 +817,12 @@ namespace GameSaves.Infrastructure.Transfers
                 return false;
             }
 
-            // Refuse Startup and Start Menu directories
-            if (IsUnderSpecialFolder(canonical, Environment.SpecialFolder.Startup) ||
+            // Refuse Startup and Start Menu directories. The special folders name only the
+            // current user's (and the shared) ones, so any profile's Start Menu is also
+            // matched by its fixed segment sequence.
+            if ((canonical + Path.DirectorySeparatorChar).Contains(
+                    @"\Microsoft\Windows\Start Menu\", StringComparison.OrdinalIgnoreCase) ||
+                IsUnderSpecialFolder(canonical, Environment.SpecialFolder.Startup) ||
                 IsUnderSpecialFolder(canonical, Environment.SpecialFolder.CommonStartup) ||
                 IsUnderSpecialFolder(canonical, Environment.SpecialFolder.StartMenu) ||
                 IsUnderSpecialFolder(canonical, Environment.SpecialFolder.CommonStartMenu) ||
@@ -842,92 +845,51 @@ namespace GameSaves.Infrastructure.Transfers
             return true;
         }
 
-        private static bool IsUnderSpecialFolder(string path, Environment.SpecialFolder folder)
-        {
-            string folderPath;
-            try
-            {
-                folderPath = Environment.GetFolderPath(folder);
-            }
-            catch
-            {
-                return false;
-            }
+        private static bool IsUnderSpecialFolder(string path, Environment.SpecialFolder folder) =>
+            TransferPathGuard.IsStrictlyUnderRoot(path, Environment.GetFolderPath(folder));
 
-            if (string.IsNullOrWhiteSpace(folderPath))
-                return false;
+        /// <summary>
+        /// Launcher folders directly under Program Files whose trees hold game saves.
+        /// </summary>
+        private static readonly string[] ProgramFilesLauncherFolders =
+            ["Steam", "GOG Galaxy", "GOG Games", "Epic Games"];
 
-            return IsChildOfDirectory(path, folderPath);
-        }
-
-        private static bool IsChildOfDirectory(string candidatePath, string parentDirectory)
-        {
-            try
-            {
-                string normalizedParent = Path.GetFullPath(parentDirectory)
-                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
-                    + Path.DirectorySeparatorChar;
-
-                string normalizedCandidate = Path.GetFullPath(candidatePath);
-
-                return normalizedCandidate.StartsWith(normalizedParent, StringComparison.OrdinalIgnoreCase);
-            }
-            catch
-            {
-                return false;
-            }
-        }
+        /// <summary>
+        /// System folders under Program Files that are refused even when a Steam library
+        /// segment sequence appears somewhere beneath them.
+        /// </summary>
+        private static readonly string[] ProgramFilesSystemFolders =
+        [
+            "Common Files", "Windows Defender", "Windows Defender Advanced Threat Protection",
+            "Windows NT", "WindowsApps", "Windows Mail", "Windows Media Player",
+            "WindowsPowerShell", "Internet Explorer", "Microsoft.NET"
+        ];
 
         private static bool IsSensitiveProgramFilesPath(string canonical)
         {
-            if (!IsUnderSpecialFolder(canonical, Environment.SpecialFolder.ProgramFiles) &&
-                !IsUnderSpecialFolder(canonical, Environment.SpecialFolder.ProgramFilesX86))
-            {
-                return false;
-            }
-
-            string programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
-            string programFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
-
-            string? parent = Path.GetDirectoryName(canonical);
-            if (string.Equals(parent, programFiles, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(parent, programFilesX86, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-
-            string[] sensitiveSubdirs = [
-                "Common Files", "Windows Defender", "Windows Defender Advanced Threat Protection",
-                "Windows NT", "WindowsApps", "Windows Mail", "Windows Media Player",
-                "WindowsPowerShell", "Internet Explorer", "Microsoft.NET"
-            ];
-
-            foreach (string sensitive in sensitiveSubdirs)
-            {
-                if ((!string.IsNullOrWhiteSpace(programFiles) && IsChildOfDirectory(canonical, Path.Combine(programFiles, sensitive))) ||
-                    (!string.IsNullOrWhiteSpace(programFilesX86) && IsChildOfDirectory(canonical, Path.Combine(programFilesX86, sensitive))))
+            string? programFilesRoot = new[]
                 {
-                    return true;
+                    Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                    Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86)
                 }
-            }
+                .FirstOrDefault(root => TransferPathGuard.IsStrictlyUnderRoot(canonical, root));
 
-            // Legitimate game saves in Program Files are inside Steam, Epic Games, GOG, or dedicated game folders.
-            string lower = canonical.ToLowerInvariant();
-            bool isGamingPath = lower.Contains(@"\steam\") ||
-                                lower.Contains(@"\steamapps\") ||
-                                lower.Contains(@"\userdata\") ||
-                                lower.Contains(@"\gog galaxy\") ||
-                                lower.Contains(@"\epic games\") ||
-                                lower.Contains(@"\games\");
+            if (programFilesRoot is null)
+                return false;
+
+            // Legitimate game saves in Program Files live under a launcher's own folder, or
+            // in a Steam library. The first segment is anchored: a token such as "\games\"
+            // anywhere in the path let C:\Program Files\EvilApp\games\payload.dll through.
+            // A direct child of Program Files is a file of its own and never passes.
+            string[] segments = Path.GetRelativePath(programFilesRoot, canonical)
+                .Split(Path.DirectorySeparatorChar);
+
+            bool isGamingPath = segments.Length > 1 &&
+                !ProgramFilesSystemFolders.Contains(segments[0], StringComparer.OrdinalIgnoreCase) &&
+                (ProgramFilesLauncherFolders.Contains(segments[0], StringComparer.OrdinalIgnoreCase) ||
+                 canonical.Contains(@"\steamapps\common\", StringComparison.OrdinalIgnoreCase));
 
             return !isGamingPath;
-        }
-
-        private static string ComputeSha256(string filePath)
-        {
-            using FileStream stream = File.OpenRead(filePath);
-            byte[] hash = SHA256.HashData(stream);
-            return Convert.ToHexString(hash);
         }
     }
 }

@@ -9,6 +9,8 @@ namespace GameSaves.Infrastructure.Catalog
 {
     /// <summary>
     /// Result of sanitizing a directory tree for AI analysis.
+    /// <see cref="RelativePaths"/> stay on this machine (engine fingerprinting) and are not scrubbed;
+    /// <see cref="FormattedTree"/> is the text that may be sent to an AI model and is scrubbed.
     /// </summary>
     public sealed record SanitizedTreeResult(
         IReadOnlyList<string> RelativePaths,
@@ -17,8 +19,9 @@ namespace GameSaves.Infrastructure.Catalog
         int TotalDirectoriesFound);
 
     /// <summary>
-    /// Traverses a game directory to extract structural file and folder layout while strictly
-    /// scrubbing personal usernames, private file names, credentials, and sensitive tokens.
+    /// Traverses a game directory to extract structural file and folder layout while excluding
+    /// credential files and scrubbing usernames, long numeric account IDs and e-mail addresses
+    /// from the formatted tree.
     /// </summary>
     public sealed class DirectoryTreeSanitizer
     {
@@ -27,14 +30,27 @@ namespace GameSaves.Infrastructure.Catalog
             ".key", ".pem", ".id_rsa", ".token", ".credentials", ".secret", ".pfx", ".cer"
         };
 
-        private static readonly Regex UserDirectoryPattern = new(
-            @"(?i)[\\/](Users|home)[\\/]([^\s\\/]+)",
+        // Junctions and symlinks can lead outside the game folder (or loop); skip them.
+        private static readonly EnumerationOptions EnumerationOptions = new()
+        {
+            AttributesToSkip = FileAttributes.ReparsePoint,
+            IgnoreInaccessible = true
+        };
+
+        private static readonly Regex EmailPattern = new(
+            @"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}",
             RegexOptions.Compiled);
 
+        // SteamID64 (17 digits) and account IDs (8+ digits) identify a person.
+        private static readonly Regex LongNumberPattern = new(
+            @"\d{8,}",
+            RegexOptions.Compiled);
+
+        /// <param name="maxEntries">Budget for files and directories together.</param>
         public SanitizedTreeResult Sanitize(
             string rootDirectory,
             int maxDepth = 3,
-            int maxFiles = 200)
+            int maxEntries = 200)
         {
             if (string.IsNullOrWhiteSpace(rootDirectory) || !Directory.Exists(rootDirectory))
             {
@@ -50,68 +66,45 @@ namespace GameSaves.Infrastructure.Catalog
             int fileCount = 0;
             int dirCount = 0;
 
-            string normalizedRoot = Path.GetFullPath(rootDirectory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            string normalizedRoot = Path.GetFullPath(rootDirectory);
 
             void Traverse(string currentDir, int depth)
             {
-                if (depth > maxDepth || fileCount >= maxFiles)
+                if (depth > maxDepth)
                     return;
 
-                string[] subDirs;
-                try
+                string indent = new string(' ', depth * 2);
+
+                // Files first: root markers (UnityPlayer.dll, *.uproject, Game.rgss3a) must be
+                // seen before subfolders spend the entry budget.
+                foreach (string file in List(Directory.EnumerateFiles, currentDir))
                 {
-                    subDirs = Directory.GetDirectories(currentDir);
-                }
-                catch
-                {
-                    return;
+                    if (fileCount + dirCount >= maxEntries)
+                        return;
+
+                    string fileName = Path.GetFileName(file);
+                    if (IsIgnoredFile(fileName) || IsSecretFile(fileName))
+                        continue;
+
+                    fileCount++;
+                    relativePaths.Add(Path.GetRelativePath(normalizedRoot, file).Replace('\\', '/'));
+                    treeBuilder.AppendLine($"{indent}[FILE] {Scrub(fileName)}");
                 }
 
-                foreach (string subDir in subDirs.OrderBy(d => d, StringComparer.OrdinalIgnoreCase))
+                foreach (string subDir in List(Directory.EnumerateDirectories, currentDir))
                 {
-                    if (fileCount >= maxFiles)
-                        break;
+                    if (fileCount + dirCount >= maxEntries)
+                        return;
 
                     string dirName = Path.GetFileName(subDir);
                     if (IsIgnoredDirectory(dirName))
                         continue;
 
                     dirCount++;
-                    string relativePath = GetSanitizedRelativePath(normalizedRoot, subDir);
-                    relativePaths.Add(relativePath + "/");
-
-                    string indent = new string(' ', depth * 2);
-                    treeBuilder.AppendLine($"{indent}[DIR]  {SanitizeString(dirName)}");
+                    relativePaths.Add(Path.GetRelativePath(normalizedRoot, subDir).Replace('\\', '/') + "/");
+                    treeBuilder.AppendLine($"{indent}[DIR]  {Scrub(dirName)}");
 
                     Traverse(subDir, depth + 1);
-                }
-
-                string[] files;
-                try
-                {
-                    files = Directory.GetFiles(currentDir);
-                }
-                catch
-                {
-                    return;
-                }
-
-                foreach (string file in files.OrderBy(f => f, StringComparer.OrdinalIgnoreCase))
-                {
-                    if (fileCount >= maxFiles)
-                        break;
-
-                    string fileName = Path.GetFileName(file);
-                    if (IsIgnoredFile(fileName))
-                        continue;
-
-                    fileCount++;
-                    string relativePath = GetSanitizedRelativePath(normalizedRoot, file);
-                    relativePaths.Add(relativePath);
-
-                    string indent = new string(' ', depth * 2);
-                    string sanitizedName = SanitizeFileName(fileName);
-                    treeBuilder.AppendLine($"{indent}[FILE] {sanitizedName}");
                 }
             }
 
@@ -124,58 +117,44 @@ namespace GameSaves.Infrastructure.Catalog
                 dirCount);
         }
 
-        public static string SanitizeRelativePath(string path)
+        private static List<string> List(
+            Func<string, string, EnumerationOptions, IEnumerable<string>> enumerate,
+            string directory)
         {
-            if (string.IsNullOrWhiteSpace(path))
-                return string.Empty;
-
-            string normalized = path.Replace('\\', '/');
-
-            // Scrub username in path
-            string currentUsername = Environment.UserName;
-            if (!string.IsNullOrWhiteSpace(currentUsername))
+            try
             {
-                normalized = normalized.Replace(currentUsername, "*", StringComparison.OrdinalIgnoreCase);
+                return enumerate(directory, "*", EnumerationOptions)
+                    .Order(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
             }
-
-            normalized = UserDirectoryPattern.Replace(normalized, "/$1/*");
-
-            return normalized;
+            catch (IOException)
+            {
+                // The folder vanished or cannot be read: treat it as empty.
+                return new List<string>();
+            }
         }
 
-        private static string GetSanitizedRelativePath(string root, string fullPath)
+        /// <summary>
+        /// Removes personal identifiers from a file or folder name before it can leave the machine.
+        /// </summary>
+        internal static string Scrub(string value)
         {
-            string rel = Path.GetRelativePath(root, fullPath).Replace('\\', '/');
-            return SanitizeRelativePath(rel);
+            string scrubbed = EmailPattern.Replace(value, "[EMAIL]");
+
+            string userName = Environment.UserName;
+            if (!string.IsNullOrWhiteSpace(userName))
+                scrubbed = scrubbed.Replace(userName, "[USERNAME]", StringComparison.OrdinalIgnoreCase);
+
+            return LongNumberPattern.Replace(scrubbed, "[ID]");
         }
 
-        private static string SanitizeString(string value)
+        private static bool IsSecretFile(string fileName)
         {
-            string currentUsername = Environment.UserName;
-            if (!string.IsNullOrWhiteSpace(currentUsername) &&
-                value.Equals(currentUsername, StringComparison.OrdinalIgnoreCase))
-            {
-                return "[USERNAME]";
-            }
-
-            return value;
-        }
-
-        private static string SanitizeFileName(string fileName)
-        {
-            string ext = Path.GetExtension(fileName);
-            if (SensitiveExtensions.Contains(ext))
-                return "[REDACTED_SECRET]" + ext;
-
-            if (fileName.StartsWith(".env", StringComparison.OrdinalIgnoreCase) ||
-                fileName.StartsWith("credentials", StringComparison.OrdinalIgnoreCase) ||
-                fileName.StartsWith("password", StringComparison.OrdinalIgnoreCase) ||
-                fileName.StartsWith("id_rsa", StringComparison.OrdinalIgnoreCase))
-            {
-                return "[REDACTED_SECRET]";
-            }
-
-            return SanitizeString(fileName);
+            return SensitiveExtensions.Contains(Path.GetExtension(fileName)) ||
+                   fileName.StartsWith(".env", StringComparison.OrdinalIgnoreCase) ||
+                   fileName.StartsWith("credentials", StringComparison.OrdinalIgnoreCase) ||
+                   fileName.StartsWith("password", StringComparison.OrdinalIgnoreCase) ||
+                   fileName.StartsWith("id_rsa", StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool IsIgnoredDirectory(string dirName)

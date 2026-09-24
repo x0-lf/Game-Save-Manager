@@ -16,9 +16,22 @@ namespace GameSaves.Infrastructure.Catalog
     /// AI-assisted save path pattern detector service.
     /// Combines engine fingerprint heuristics with pluggable AI completion models
     /// to generate tokenized candidate save paths strictly under the Pending trust lifecycle.
+    /// No completion client ships with the application (DI and the CLI pass none), so results
+    /// are engine heuristics unless a caller supplies an <see cref="IAiCompletionClient"/>.
     /// </summary>
     public sealed class AiPatternDetectorService : IAiPatternDetectorService
     {
+        // An AI completion is untrusted input: bound how much of it is accepted.
+        private const int MaxAiProposals = 8;
+        private const int MaxAiStringLength = 260;
+
+        // Tokens SavePathExpander resolves; an AI template must start with one of them.
+        private static readonly string[] AllowedAiTemplateRoots =
+        {
+            "%LOCALAPPDATA%", "%APPDATA%", "%USERPROFILE%", "%DOCUMENTS%",
+            "{Documents}", "{SteamRoot}", "{GameInstallPath}", "{LibraryRoot}"
+        };
+
         private readonly IAiCompletionClient? _aiClient;
         private readonly GameEngineFingerprinter _fingerprinter = new();
         private readonly DirectoryTreeSanitizer _sanitizer = new();
@@ -49,11 +62,13 @@ namespace GameSaves.Infrastructure.Catalog
             // 3. Determine effective game name
             string effectiveGameName = DetermineGameName(request, fingerprint);
 
-            // 4. Generate engine-specific heuristic proposals
-            var proposals = GenerateEngineHeuristics(
-                fingerprint,
-                effectiveGameName,
-                request.SteamAppId);
+            // 4. Generate engine-specific heuristic proposals. The name becomes a path segment, so
+            // one that is not a plain folder name ("..\..\x", "C:") falls back to the folder name.
+            string? templateName = GameEngineFingerprinter.AsSafeName(effectiveGameName) ??
+                                   GameEngineFingerprinter.AsSafeName(GetFolderName(request));
+            var proposals = templateName is null
+                ? new List<AiCandidateProposal>()
+                : GenerateEngineHeuristics(fingerprint, templateName, request.SteamAppId);
 
             string modelVersion = "offline-heuristic";
             string promptHash = string.Empty;
@@ -68,7 +83,7 @@ namespace GameSaves.Infrastructure.Catalog
                         "You are an expert game save-path analyst for a PC game save manager application. " +
                         "Your job is to inspect sanitized game directory layouts and game engine signatures, " +
                         "and propose candidate save game locations on Windows using standard environment tokens: " +
-                        "%LOCALAPPDATA%, %APPDATA%, %USERPROFILE%, {Documents}, {SavedGames}, {SteamRoot}, {GameInstallPath}. " +
+                        "%LOCALAPPDATA%, %APPDATA%, %USERPROFILE%, {Documents}, {SteamRoot}, {GameInstallPath}. " +
                         "Always respond strictly with a valid JSON array of objects.";
 
                     string userPrompt = BuildAiPrompt(
@@ -76,9 +91,6 @@ namespace GameSaves.Infrastructure.Catalog
                         request.SteamAppId,
                         fingerprint,
                         sanitizedTree.FormattedTree);
-
-                    promptHash = ComputeSha256(userPrompt);
-                    modelVersion = string.IsNullOrWhiteSpace(request.ModelName) ? "ai-model" : request.ModelName;
 
                     string completion = await _aiClient.GenerateCompletionAsync(
                         userPrompt,
@@ -90,12 +102,13 @@ namespace GameSaves.Infrastructure.Catalog
                     {
                         proposals = MergeProposals(proposals, aiProposals);
                         isOffline = false;
+                        promptHash = ComputeSha256(userPrompt);
+                        modelVersion = string.IsNullOrWhiteSpace(request.ModelName) ? "ai-model" : request.ModelName;
                     }
                 }
-                catch
+                catch (Exception) when (!cancellationToken.IsCancellationRequested)
                 {
-                    // Fall back cleanly to offline heuristics on AI failures
-                    isOffline = true;
+                    // Fall back cleanly to offline heuristics on AI failures; cancellation propagates.
                 }
             }
 
@@ -128,14 +141,18 @@ namespace GameSaves.Infrastructure.Catalog
 
             var items = new List<SavePathImportItem>();
 
+            string steamAppId = RequireAppId(result);
+
             foreach (var proposal in result.Proposals)
             {
                 int priority = overridePriority ?? proposal.Priority;
-                string promptShort = result.PromptHash.Length >= 8 ? result.PromptHash[..8] : result.PromptHash;
-                string notes = $"AI-assisted candidate ({result.DetectedEngine}, {result.ModelVersion}, prompt: {promptShort}). {proposal.Rationale}. Pending human review.";
+                string provenance = proposal.IsAiProposal
+                    ? $"AI-assisted candidate ({result.DetectedEngine}, {result.ModelVersion}, prompt: {(result.PromptHash.Length >= 8 ? result.PromptHash[..8] : result.PromptHash)})"
+                    : $"Engine-heuristic candidate ({result.DetectedEngine})";
+                string notes = $"{provenance}. {proposal.Rationale}. Pending human review.";
 
                 items.Add(new SavePathImportItem(
-                    SteamAppId: result.SteamAppId ?? "0",
+                    SteamAppId: steamAppId,
                     GameName: result.GameName,
                     Platform: proposal.Platform,
                     PathTemplate: proposal.PathTemplate,
@@ -157,42 +174,44 @@ namespace GameSaves.Infrastructure.Catalog
             if (result == null)
                 throw new ArgumentNullException(nameof(result));
 
-            var titles = new List<TitleImportEntry>();
-            if (!string.IsNullOrWhiteSpace(result.SteamAppId))
+            var titles = new List<TitleImportEntry>
             {
-                titles.Add(new TitleImportEntry(
-                    SteamAppId: result.SteamAppId,
+                new(
+                    SteamAppId: RequireAppId(result),
                     Title: result.GameName,
                     PlatformHint: "windows",
                     SourceName: "AI-PatternDetector",
-                    Notes: $"Detected engine: {result.DetectedEngine} ({result.EngineConfidence})"));
-            }
+                    Notes: $"Detected engine: {result.DetectedEngine} ({result.EngineConfidence})")
+            };
 
-            var mappings = new List<MappingImportEntry>();
-            foreach (var proposal in result.Proposals)
-            {
-                int priority = overridePriority ?? proposal.Priority;
-                string promptShort = result.PromptHash.Length >= 8 ? result.PromptHash[..8] : result.PromptHash;
-                string notes = $"AI-assisted candidate ({result.DetectedEngine}, {result.ModelVersion}, prompt: {promptShort}). {proposal.Rationale}.";
-
-                mappings.Add(new MappingImportEntry(
-                    SteamAppId: result.SteamAppId ?? "0",
-                    GameName: result.GameName,
-                    Platform: proposal.Platform,
-                    PathTemplate: proposal.PathTemplate,
-                    PathKind: proposal.PathKind,
-                    SourceName: "AI-PatternDetector",
-                    SourceUrl: null,
-                    SourceLicense: "Proprietary/Internal",
-                    Notes: notes,
-                    Priority: priority,
-                    ReviewStatus: "Pending")); // Strictly Pending
-            }
+            var mappings = ToImportItems(result, overridePriority)
+                .Select(item => new MappingImportEntry(
+                    SteamAppId: item.SteamAppId,
+                    GameName: item.GameName,
+                    Platform: item.Platform,
+                    PathTemplate: item.PathTemplate,
+                    PathKind: item.PathKind,
+                    SourceName: item.SourceName,
+                    SourceUrl: item.SourceUrl,
+                    SourceLicense: item.SourceLicense,
+                    Notes: item.Notes,
+                    Priority: item.Priority,
+                    ReviewStatus: "Pending")) // Strictly Pending
+                .ToList();
 
             return new MappingImportDocument(
                 SchemaVersion: 1,
                 Titles: titles,
                 Mappings: mappings);
+        }
+
+        private static string RequireAppId(AiDetectionResult result)
+        {
+            // Filing candidates under a placeholder AppID would attach them to the wrong game.
+            if (string.IsNullOrEmpty(result.SteamAppId) || !result.SteamAppId.All(char.IsAsciiDigit))
+                throw new InvalidOperationException("A numeric Steam AppID is required to import or export save path candidates.");
+
+            return result.SteamAppId;
         }
 
         private static string DetermineGameName(AiDetectionRequest request, EngineFingerprintResult fingerprint)
@@ -203,12 +222,15 @@ namespace GameSaves.Infrastructure.Catalog
             if (!string.IsNullOrWhiteSpace(fingerprint.ProductName))
                 return fingerprint.ProductName;
 
-            string dirName = Path.GetFileName(request.GameDirectory.TrimEnd('/', '\\'));
+            string dirName = GetFolderName(request);
             if (!string.IsNullOrWhiteSpace(dirName))
                 return dirName;
 
             return "Game";
         }
+
+        private static string GetFolderName(AiDetectionRequest request) =>
+            Path.GetFileName(Path.GetFullPath(request.GameDirectory).TrimEnd('/', '\\'));
 
         private static List<AiCandidateProposal> GenerateEngineHeuristics(
             EngineFingerprintResult fingerprint,
@@ -339,7 +361,7 @@ namespace GameSaves.Infrastructure.Catalog
                         Rationale: "Source Engine standard save directory inside mod folder.",
                         Priority: 80));
 
-                    if (!string.IsNullOrWhiteSpace(steamAppId) && steamAppId != "0")
+                    if (!string.IsNullOrEmpty(steamAppId) && steamAppId.All(char.IsAsciiDigit))
                     {
                         list.Add(new AiCandidateProposal(
                             PathTemplate: $@"{ "{SteamRoot}" }\userdata\{ "{AccountId}" }\{steamAppId}\remote",
@@ -420,24 +442,25 @@ namespace GameSaves.Infrastructure.Catalog
             EngineFingerprintResult fingerprint,
             string directoryTree)
         {
+            // Everything taken from the local folder is scrubbed: this text leaves the machine.
             var sb = new StringBuilder();
-            sb.AppendLine($"Game Name: {gameName}");
+            sb.AppendLine($"Game Name: {DirectoryTreeSanitizer.Scrub(gameName)}");
             sb.AppendLine($"Steam AppID: {steamAppId ?? "None"}");
             sb.AppendLine($"Detected Engine: {fingerprint.Engine} (Confidence: {fingerprint.Confidence})");
             if (fingerprint.Evidence.Count > 0)
             {
-                sb.AppendLine($"Engine Evidence: {string.Join(", ", fingerprint.Evidence)}");
+                sb.AppendLine($"Engine Evidence: {DirectoryTreeSanitizer.Scrub(string.Join(", ", fingerprint.Evidence))}");
             }
             if (!string.IsNullOrWhiteSpace(fingerprint.CompanyName))
             {
-                sb.AppendLine($"Company Name: {fingerprint.CompanyName}");
+                sb.AppendLine($"Company Name: {DirectoryTreeSanitizer.Scrub(fingerprint.CompanyName)}");
             }
             sb.AppendLine();
             sb.AppendLine("Sanitized Directory Structure:");
             sb.AppendLine(directoryTree);
             sb.AppendLine();
             sb.AppendLine("Instructions:");
-            sb.AppendLine("Propose 1 to 4 candidate save game paths for Windows. Use standard tokens (%LOCALAPPDATA%, %APPDATA%, %USERPROFILE%, {Documents}, {SavedGames}, {SteamRoot}, {GameInstallPath}).");
+            sb.AppendLine("Propose 1 to 4 candidate save game paths for Windows. Start each path with one of these tokens: %LOCALAPPDATA%, %APPDATA%, %USERPROFILE%, {Documents}, {SteamRoot}, {GameInstallPath}.");
             sb.AppendLine("Format your response strictly as a JSON array:");
             sb.AppendLine("[");
             sb.AppendLine("  {");
@@ -478,39 +501,81 @@ namespace GameSaves.Infrastructure.Catalog
             try
             {
                 using var doc = JsonDocument.Parse(json);
-                if (doc.RootElement.ValueKind != JsonValueKind.Array)
+
+                // More proposals than we asked for is not a useful answer: reject all of it.
+                if (doc.RootElement.ValueKind != JsonValueKind.Array ||
+                    doc.RootElement.GetArrayLength() > MaxAiProposals)
+                {
                     return result;
+                }
 
                 foreach (var el in doc.RootElement.EnumerateArray())
                 {
-                    string? pathTemplate = el.TryGetProperty("pathTemplate", out var pt) ? pt.GetString() : null;
-                    if (string.IsNullOrWhiteSpace(pathTemplate))
+                    if (el.ValueKind != JsonValueKind.Object)
                         continue;
 
-                    string platform = el.TryGetProperty("platform", out var p) ? (p.GetString() ?? "windows") : "windows";
-                    string pathKind = el.TryGetProperty("pathKind", out var pk) ? (pk.GetString() ?? "Directory") : "Directory";
-                    string confidenceStr = el.TryGetProperty("confidence", out var c) ? (c.GetString() ?? "Medium") : "Medium";
-                    string rationale = el.TryGetProperty("rationale", out var r) ? (r.GetString() ?? "AI proposed candidate") : "AI proposed candidate";
+                    string? pathTemplate = GetString(el, "pathTemplate")?.Trim().Replace('/', '\\');
+                    if (pathTemplate is null || !IsSafeAiTemplate(pathTemplate))
+                        continue;
 
-                    if (!Enum.TryParse(confidenceStr, ignoreCase: true, out DetectionConfidence confidence))
+                    // Only the kinds the runtime handles; the platform is always Windows.
+                    string pathKind = GetString(el, "pathKind") ?? "Directory";
+                    if (pathKind.Equals("Directory", StringComparison.OrdinalIgnoreCase))
+                        pathKind = "Directory";
+                    else if (pathKind.Equals("File", StringComparison.OrdinalIgnoreCase))
+                        pathKind = "File";
+                    else
+                        continue;
+
+                    string rationale = GetString(el, "rationale") ?? "AI proposed candidate";
+                    if (rationale.Length > MaxAiStringLength)
+                        continue;
+
+                    if (!Enum.TryParse(GetString(el, "confidence"), ignoreCase: true, out DetectionConfidence confidence) ||
+                        !Enum.IsDefined(confidence))
+                    {
                         confidence = DetectionConfidence.Medium;
+                    }
 
                     result.Add(new AiCandidateProposal(
-                        PathTemplate: pathTemplate.Replace('/', '\\'),
-                        Platform: platform.ToLowerInvariant(),
+                        PathTemplate: pathTemplate,
+                        Platform: "windows",
                         PathKind: pathKind,
                         Confidence: confidence,
                         Engine: engine,
                         Rationale: rationale,
-                        Priority: confidence == DetectionConfidence.High ? 75 : 65));
+                        Priority: confidence == DetectionConfidence.High ? 75 : 65,
+                        IsAiProposal: true));
                 }
             }
-            catch
+            catch (JsonException)
             {
-                // Return whatever could be extracted or empty
+                // Not JSON: no AI proposals.
             }
 
             return result;
+        }
+
+        private static string? GetString(JsonElement element, string name) =>
+            element.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.String
+                ? value.GetString()
+                : null;
+
+        /// <summary>
+        /// Accepts an AI-proposed template only when it is rooted at a token the runtime expands
+        /// and every following segment is a plain name: no "..", drive, UNC or invalid characters.
+        /// </summary>
+        internal static bool IsSafeAiTemplate(string template)
+        {
+            if (template.Length > MaxAiStringLength)
+                return false;
+
+            string[] segments = template.Split('\\');
+
+            if (segments.Length < 2 || !AllowedAiTemplateRoots.Contains(segments[0], StringComparer.OrdinalIgnoreCase))
+                return false;
+
+            return segments.Skip(1).All(segment => GameEngineFingerprinter.AsSafeName(segment) == segment);
         }
 
         private static List<AiCandidateProposal> MergeProposals(
@@ -533,11 +598,7 @@ namespace GameSaves.Infrastructure.Catalog
             return merged;
         }
 
-        private static string ComputeSha256(string value)
-        {
-            byte[] bytes = Encoding.UTF8.GetBytes(value);
-            byte[] hash = SHA256.HashData(bytes);
-            return Convert.ToHexString(hash);
-        }
+        private static string ComputeSha256(string value) =>
+            Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
     }
 }

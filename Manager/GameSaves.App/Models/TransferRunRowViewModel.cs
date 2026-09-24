@@ -1,3 +1,4 @@
+using GameSaves.App.Common;
 using GameSaves.Core.Transfers;
 using System.Collections.Generic;
 
@@ -39,7 +40,7 @@ namespace GameSaves.App.Models
             $"{Run.FilesCopied} copied, {Run.FilesSkipped} skipped" +
             (Run.FilesFailed > 0 ? $", {Run.FilesFailed} failed" : "");
 
-        public string BytesDisplay => FormatBytes(Run.BytesCopied);
+        public string BytesDisplay => ByteSize.Format(Run.BytesCopied);
 
         public bool IsDryRun => Run.DryRun;
 
@@ -57,7 +58,7 @@ namespace GameSaves.App.Models
             Run.DryRun ? "◷"
             : Run.WasBlocked ? "⚠"
             : Run.FilesFailed > 0 ? "✕"
-            : "✓";
+            : "◷";
 
         public string VerificationTooltip =>
             Run.DryRun ? "Simulated dry run; no files were written."
@@ -71,40 +72,14 @@ namespace GameSaves.App.Models
             {
                 var flags = new List<string>();
 
-                if (Run.DryRun)
-                    flags.Add("dry run");
-
                 if (Run.OverwriteEnabled)
                     flags.Add("overwrite");
 
                 if (Run.FilesBackedUp > 0)
                     flags.Add($"{Run.FilesBackedUp} backed up");
 
-                if (Run.WasBlocked)
-                    flags.Add("blocked");
-
                 return string.Join(" · ", flags);
             }
-        }
-
-        private static string FormatBytes(long bytes)
-        {
-            if (bytes < 1024)
-                return $"{bytes} B";
-
-            double kb = bytes / 1024.0;
-
-            if (kb < 1024)
-                return $"{kb:0.##} KB";
-
-            double mb = kb / 1024.0;
-
-            if (mb < 1024)
-                return $"{mb:0.##} MB";
-
-            double gb = mb / 1024.0;
-
-            return $"{gb:0.##} GB";
         }
     }
 }

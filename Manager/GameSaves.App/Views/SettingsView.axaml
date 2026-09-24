@@ -164,23 +164,25 @@
                                                 BorderThickness="1"
                                                 VerticalAlignment="Center"
                                                 AutomationProperties.Name="Custom accent colour preview" />
-                                        <TextBox Text="{Binding CustomAccentHex, Mode=TwoWay}"
+                                        <!-- Committed on leaving the box, not per keystroke:
+                                             every commit saves and re-applies the theme. -->
+                                        <TextBox Text="{Binding CustomAccentHex, Mode=TwoWay, UpdateSourceTrigger=LostFocus}"
+                                                 IsEnabled="{Binding IsCustomAccentSelected}"
                                                  PlaceholderText="#3B82F6"
                                                  Width="120"
-                                                 MaxLength="9"
+                                                 MaxLength="7"
                                                  VerticalAlignment="Center"
                                                  AutomationProperties.Name="Custom accent hex code" />
                                         <TextBlock Text="{Binding CustomAccentContrastRatioText}"
                                                    Foreground="{DynamicResource MutedTextBrush}"
                                                    FontSize="{DynamicResource FontSizeCaption}"
                                                    VerticalAlignment="Center"
-                                                   IsVisible="{Binding IsCustomAccentValid}" />
+                                                   IsVisible="{Binding !HasCustomAccentValidationMessage}" />
                                     </StackPanel>
                                     <TextBlock Text="{Binding CustomAccentValidationMessage}"
                                                Foreground="{DynamicResource DangerBrush}"
                                                FontSize="{DynamicResource FontSizeCaption}"
-                                               IsVisible="{Binding HasCustomAccentValidationMessage}"
-                                               AutomationProperties.Name="Custom accent validation error" />
+                                               IsVisible="{Binding HasCustomAccentValidationMessage}" />
                                 </StackPanel>
                             </StackPanel>
                         </Border>

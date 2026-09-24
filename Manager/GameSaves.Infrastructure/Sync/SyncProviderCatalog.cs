@@ -78,27 +78,39 @@ namespace GameSaves.Infrastructure.Sync
                     SyncProviderKind.OneDrive,
                     "OneDrive",
                     IsImplemented: true,
-                    CloudCapabilities(),
+                    // Not Google's record: OneDrive is confined to its app
+                    // folder (no folder choice, nothing to open) and upload
+                    // sessions are not resumed across runs.
+                    CloudCapabilities() with
+                    {
+                        SupportsResumableUpload = false,
+                        SupportsRemoteFolderSelection = false,
+                        SupportsOpenRemoteLocation = false
+                    },
                     SyncProviderConfigurationSurface.InteractiveOAuth,
                     UnavailableMessage: null,
                     IsConfigurationAvailable: true),
+                // Catalogued but not implemented. The first MEGA client did not
+                // implement MEGA's login or encryption protocol, so it was
+                // withdrawn rather than left offering a Connect button that
+                // could never succeed. The kind value stays: it is persisted.
                 new SyncProviderDescriptor(
                     SyncProviderKind.Mega,
                     "MEGA",
-                    IsImplemented: true,
+                    IsImplemented: false,
                     new SyncProviderCapabilities(
                         RequiresInteractiveLogin: false,
                         RequiresServerCredentials: true,
-                        SupportsResumableUpload: true,
-                        SupportsRemoteQuota: true,
+                        SupportsResumableUpload: false,
+                        SupportsRemoteQuota: false,
                         SupportsRemoteFolderSelection: false,
                         SupportsPersistentAuthentication: true,
                         SupportsConnectionTesting: true,
                         SupportsLogout: true,
                         SupportsOpenRemoteLocation: false),
                     SyncProviderConfigurationSurface.ServerCredentials,
-                    UnavailableMessage: null,
-                    IsConfigurationAvailable: true)
+                    "MEGA sync is not implemented yet.",
+                    IsConfigurationAvailable: false)
             };
 
         private static readonly IReadOnlyDictionary<SyncProviderKind, SyncProviderDescriptor> ByKind =

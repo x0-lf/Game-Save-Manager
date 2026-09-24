@@ -1,8 +1,9 @@
 using GameSaves.Core.Transfers;
 using SharpCompress.Archives;
 using SharpCompress.Archives.SevenZip;
+using SharpCompress.Common;
+using SharpCompress.Readers;
 using System.IO.Compression;
-using System.Security.Cryptography;
 using System.Text.Json;
 
 namespace GameSaves.Infrastructure.Transfers
@@ -348,9 +349,12 @@ namespace GameSaves.Infrastructure.Transfers
                 ? Path.Combine(path, TransferBackupLocations.ManifestFileName)
                 : path + "#" + TransferBackupLocations.ManifestFileName;
 
+            // Reading a manifest proves only that it parses. ManifestMatch is a comparison
+            // of two sides that sync performs, and PayloadVerified needs the bytes re-hashed,
+            // so a run listed from one place starts unverified.
             VerificationStrength strength = isSidecar
                 ? VerificationStrength.SidecarManifestMatch
-                : VerificationStrength.ManifestMatch;
+                : VerificationStrength.None;
 
             runInfo = new TransferBackupRunInfo(
                 BackupRootPath: path,
@@ -362,9 +366,16 @@ namespace GameSaves.Infrastructure.Transfers
             return true;
         }
 
-        public VerificationStrengthResult VerifyPayloadIntegrity(
+        public Task<VerificationStrengthResult> VerifyPayloadIntegrityAsync(
             TransferBackupRunInfo runInfo,
             CancellationToken cancellationToken = default)
+        {
+            return Task.Run(() => VerifyPayloadIntegrity(runInfo, cancellationToken), cancellationToken);
+        }
+
+        private VerificationStrengthResult VerifyPayloadIntegrity(
+            TransferBackupRunInfo runInfo,
+            CancellationToken cancellationToken)
         {
             if (runInfo is null)
             {
@@ -380,12 +391,13 @@ namespace GameSaves.Infrastructure.Transfers
                     "Run manifest or manifest items collection is null.");
             }
 
+            // Nothing listed means nothing was checked, and PayloadVerified 0/0 would
+            // read as a clean result.
             if (runInfo.Manifest.Items.Count == 0)
             {
-                return VerificationStrengthResult.Success(
-                    VerificationStrength.PayloadVerified,
-                    0,
-                    0);
+                return VerificationStrengthResult.Failure(
+                    VerificationStrength.None,
+                    "The manifest lists no payload files, so there is nothing to verify.");
             }
 
             try
@@ -415,6 +427,17 @@ namespace GameSaves.Infrastructure.Transfers
                     0,
                     runInfo.Manifest.Items.Count);
             }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // A file held open by another program or a folder the user cannot read
+                // says nothing about the bytes. PayloadMismatch would tell the user the
+                // run is corrupted or tampered with, so it stays unverified instead.
+                return VerificationStrengthResult.Failure(
+                    VerificationStrength.None,
+                    "The backup could not be read, so it was not verified. Close any program using it and try again.",
+                    0,
+                    runInfo.Manifest.Items.Count);
+            }
             catch (Exception ex)
             {
                 return VerificationStrengthResult.Failure(
@@ -425,247 +448,368 @@ namespace GameSaves.Infrastructure.Transfers
             }
         }
 
-        public Task<VerificationStrengthResult> VerifyPayloadIntegrityAsync(
-            TransferBackupRunInfo runInfo,
-            CancellationToken cancellationToken = default)
-        {
-            return Task.Run(() => VerifyPayloadIntegrity(runInfo, cancellationToken), cancellationToken);
-        }
-
         private static VerificationStrengthResult VerifyFolderPayload(
             TransferBackupRunInfo runInfo,
             CancellationToken cancellationToken)
         {
-            if (!Directory.Exists(runInfo.BackupRootPath))
+            string root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(runInfo.BackupRootPath));
+            Dictionary<string, List<TransferOverwriteBackupItem>> payloads = GroupByPayload(
+                runInfo.Manifest.Items,
+                item => Path.GetFullPath(item.ResolveBackupFile(root)));
+            var tally = new PayloadTally(payloads.Count);
+
+            if (!Directory.Exists(root))
             {
-                return VerificationStrengthResult.Failure(
+                return tally.Fail(
                     VerificationStrength.MissingLocally,
-                    $"Backup folder does not exist: {runInfo.BackupRootPath}",
-                    0,
-                    runInfo.Manifest.Items.Count);
+                    $"Backup folder does not exist: {runInfo.BackupRootPath}");
             }
 
-            var fileResults = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
-            int verified = 0;
+            // One walk of the run folder before anything is opened. A junction or symlink
+            // planted in the run would have File.OpenRead hash a file outside it (export
+            // skips them for the same reason), so a link anywhere in the tree fails.
+            string manifestPath = Path.Combine(root, TransferBackupLocations.ManifestFileName);
+            var present = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var walk = new EnumerationOptions
+            {
+                RecurseSubdirectories = true,
+                AttributesToSkip = 0,
+                IgnoreInaccessible = false
+            };
 
-            foreach (TransferOverwriteBackupItem item in runInfo.Manifest.Items)
+            foreach (FileSystemInfo entry in new DirectoryInfo(root).EnumerateFileSystemInfos("*", walk))
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                string path = item.ResolveBackupFile(runInfo.BackupRootPath);
-                if (!File.Exists(path))
+                if (entry.Attributes.HasFlag(FileAttributes.ReparsePoint))
                 {
-                    fileResults[item.OriginalFile] = false;
-                    return VerificationStrengthResult.Failure(
-                        VerificationStrength.MissingLocally,
-                        $"Backup payload file is missing: {path}",
-                        verified,
-                        runInfo.Manifest.Items.Count,
-                        fileResults);
-                }
-
-                using var stream = File.OpenRead(path);
-                byte[] hash = SHA256.HashData(stream);
-                string computedHash = Convert.ToHexString(hash);
-
-                if (!string.Equals(computedHash, item.Sha256, StringComparison.OrdinalIgnoreCase))
-                {
-                    fileResults[item.OriginalFile] = false;
-                    return VerificationStrengthResult.Failure(
+                    return tally.Fail(
                         VerificationStrength.PayloadMismatch,
-                        $"Payload hash mismatch for {Path.GetFileName(path)} (expected {item.Sha256}, got {computedHash}).",
-                        verified,
-                        runInfo.Manifest.Items.Count,
-                        fileResults);
+                        $"The backup folder contains a link, which verification never follows: {Path.GetRelativePath(root, entry.FullName)}");
                 }
 
-                fileResults[item.OriginalFile] = true;
-                verified++;
+                if (entry is FileInfo && !entry.FullName.Equals(manifestPath, StringComparison.OrdinalIgnoreCase))
+                    present.Add(entry.FullName);
             }
 
-            return VerificationStrengthResult.Success(
-                VerificationStrength.PayloadVerified,
-                verified,
-                runInfo.Manifest.Items.Count,
-                fileResults);
+            foreach ((string path, List<TransferOverwriteBackupItem> items) in payloads)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (!present.Contains(path))
+                {
+                    return tally.Fail(
+                        VerificationStrength.MissingLocally,
+                        $"Backup payload file is missing: {path}",
+                        items);
+                }
+
+                VerificationStrengthResult? failure = tally.Check(items, Sha256Hasher.HashFile(path), Path.GetFileName(path));
+                if (failure is not null)
+                    return failure;
+            }
+
+            return tally.Finish(
+                present.Where(path => !payloads.ContainsKey(path))
+                    .Select(path => Path.GetRelativePath(root, path)));
         }
 
         private VerificationStrengthResult VerifyZipPayload(
             TransferBackupRunInfo runInfo,
             CancellationToken cancellationToken)
         {
+            Dictionary<string, List<TransferOverwriteBackupItem>> payloads = GroupByPayload(
+                runInfo.Manifest.Items,
+                item => item.GetRelativePayloadPath());
+            var tally = new PayloadTally(payloads.Count);
+
             if (!File.Exists(runInfo.BackupRootPath))
             {
-                return VerificationStrengthResult.Failure(
+                return tally.Fail(
                     VerificationStrength.MissingLocally,
-                    $"ZIP archive does not exist: {runInfo.BackupRootPath}",
-                    0,
-                    runInfo.Manifest.Items.Count);
+                    $"ZIP archive does not exist: {runInfo.BackupRootPath}");
             }
 
             using ZipArchive archive = ZipFile.OpenRead(runInfo.BackupRootPath);
-            if (archive.Entries.Count > _safetyBounds.MaxFileEntries)
-            {
-                return VerificationStrengthResult.Failure(
-                    VerificationStrength.PayloadMismatch,
-                    $"Archive exceeds maximum allowed entries limit ({_safetyBounds.MaxFileEntries:N0}).",
-                    0,
-                    runInfo.Manifest.Items.Count);
-            }
 
-            var fileResults = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
-            int verified = 0;
+            // One case-insensitive index instead of a linear scan per manifest item.
+            var entries = new Dictionary<string, ZipArchiveEntry>(StringComparer.OrdinalIgnoreCase);
+            string? indexError = IndexPayloadEntries(
+                archive.Entries.Select(e => (
+                    (string?)e.FullName,
+                    e.FullName.EndsWith('/') || e.FullName.EndsWith('\\'),
+                    e)),
+                entries,
+                cancellationToken);
 
-            foreach (TransferOverwriteBackupItem item in runInfo.Manifest.Items)
+            if (indexError is not null)
+                return tally.Fail(VerificationStrength.PayloadMismatch, indexError);
+
+            long remainingBytes = _safetyBounds.MaxTotalUncompressedBytes;
+
+            foreach ((string relPath, List<TransferOverwriteBackupItem> items) in payloads)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                string relPath = item.GetRelativePayloadPath();
-                ZipArchiveEntry? entry = archive.GetEntry(relPath)
-                    ?? archive.Entries.FirstOrDefault(e =>
-                        e.FullName.Replace('\\', '/').Trim('/').Equals(relPath, StringComparison.OrdinalIgnoreCase));
-
-                if (entry is null)
+                if (!entries.TryGetValue(relPath, out ZipArchiveEntry? entry))
                 {
-                    fileResults[item.OriginalFile] = false;
-                    return VerificationStrengthResult.Failure(
+                    return tally.Fail(
                         VerificationStrength.PayloadMismatch,
                         $"Archive payload entry missing: {relPath}",
-                        verified,
-                        runInfo.Manifest.Items.Count,
-                        fileResults);
+                        items);
                 }
 
-                if (entry.Length > _safetyBounds.MaxSingleFileBytes)
+                if (!TryReserve(entry.Length, ref remainingBytes))
                 {
-                    fileResults[item.OriginalFile] = false;
-                    return VerificationStrengthResult.Failure(
+                    return tally.Fail(
                         VerificationStrength.PayloadMismatch,
                         $"Archive payload entry exceeds max file size limit: {relPath}",
-                        verified,
-                        runInfo.Manifest.Items.Count,
-                        fileResults);
+                        items);
                 }
 
                 using Stream stream = entry.Open();
-                byte[] hash = SHA256.HashData(stream);
-                string computedHash = Convert.ToHexString(hash);
+                VerificationStrengthResult? failure = tally.Check(
+                    items,
+                    Sha256Hasher.HashBounded(stream, entry.Length, cancellationToken),
+                    relPath);
 
-                if (!string.Equals(computedHash, item.Sha256, StringComparison.OrdinalIgnoreCase))
-                {
-                    fileResults[item.OriginalFile] = false;
-                    return VerificationStrengthResult.Failure(
-                        VerificationStrength.PayloadMismatch,
-                        $"Payload hash mismatch for {relPath} (expected {item.Sha256}, got {computedHash}).",
-                        verified,
-                        runInfo.Manifest.Items.Count,
-                        fileResults);
-                }
-
-                fileResults[item.OriginalFile] = true;
-                verified++;
+                if (failure is not null)
+                    return failure;
             }
 
-            return VerificationStrengthResult.Success(
-                VerificationStrength.PayloadVerified,
-                verified,
-                runInfo.Manifest.Items.Count,
-                fileResults);
+            return tally.Finish(entries.Keys.Where(key => !payloads.ContainsKey(key)));
         }
 
         private VerificationStrengthResult VerifySevenZipPayload(
             TransferBackupRunInfo runInfo,
             CancellationToken cancellationToken)
         {
+            Dictionary<string, List<TransferOverwriteBackupItem>> payloads = GroupByPayload(
+                runInfo.Manifest.Items,
+                item => item.GetRelativePayloadPath());
+            var tally = new PayloadTally(payloads.Count);
+
             if (!File.Exists(runInfo.BackupRootPath))
             {
-                return VerificationStrengthResult.Failure(
+                return tally.Fail(
                     VerificationStrength.MissingLocally,
-                    $"7-Zip archive does not exist: {runInfo.BackupRootPath}",
-                    0,
-                    runInfo.Manifest.Items.Count);
+                    $"7-Zip archive does not exist: {runInfo.BackupRootPath}");
             }
 
             using var archiveStream = File.OpenRead(runInfo.BackupRootPath);
             using IArchive archive = SevenZipArchive.OpenArchive(archiveStream);
 
-            var entriesByKey = new Dictionary<string, IArchiveEntry>(StringComparer.OrdinalIgnoreCase);
-            int entryCount = 0;
+            var entries = new Dictionary<string, IArchiveEntry>(StringComparer.OrdinalIgnoreCase);
+            string? indexError = IndexPayloadEntries(
+                archive.Entries.Select(e => (e.Key, e.IsDirectory, e)),
+                entries,
+                cancellationToken);
 
-            foreach (IArchiveEntry entry in archive.Entries)
+            if (indexError is not null)
+                return tally.Fail(VerificationStrength.PayloadMismatch, indexError);
+
+            foreach ((string relPath, List<TransferOverwriteBackupItem> items) in payloads)
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                entryCount++;
-                if (entryCount > _safetyBounds.MaxFileEntries)
+                if (!entries.ContainsKey(relPath))
                 {
-                    return VerificationStrengthResult.Failure(
-                        VerificationStrength.PayloadMismatch,
-                        $"Archive exceeds maximum allowed entries limit ({_safetyBounds.MaxFileEntries:N0}).",
-                        0,
-                        runInfo.Manifest.Items.Count);
-                }
-
-                if (entry.Key is not null)
-                {
-                    string key = entry.Key.Replace('\\', '/').Trim('/');
-                    entriesByKey[key] = entry;
-                }
-            }
-
-            var fileResults = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
-            int verified = 0;
-
-            foreach (TransferOverwriteBackupItem item in runInfo.Manifest.Items)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                string relPath = item.GetRelativePayloadPath();
-                if (!entriesByKey.TryGetValue(relPath, out IArchiveEntry? entry))
-                {
-                    fileResults[item.OriginalFile] = false;
-                    return VerificationStrengthResult.Failure(
+                    return tally.Fail(
                         VerificationStrength.PayloadMismatch,
                         $"7-Zip payload entry missing: {relPath}",
-                        verified,
-                        runInfo.Manifest.Items.Count,
-                        fileResults);
+                        items);
                 }
-
-                if (entry.Size > _safetyBounds.MaxSingleFileBytes)
-                {
-                    fileResults[item.OriginalFile] = false;
-                    return VerificationStrengthResult.Failure(
-                        VerificationStrength.PayloadMismatch,
-                        $"Archive payload entry exceeds max file size limit: {relPath}",
-                        verified,
-                        runInfo.Manifest.Items.Count,
-                        fileResults);
-                }
-
-                using Stream entryStream = entry.OpenEntryStream();
-                byte[] hash = SHA256.HashData(entryStream);
-                string computedHash = Convert.ToHexString(hash);
-
-                if (!string.Equals(computedHash, item.Sha256, StringComparison.OrdinalIgnoreCase))
-                {
-                    fileResults[item.OriginalFile] = false;
-                    return VerificationStrengthResult.Failure(
-                        VerificationStrength.PayloadMismatch,
-                        $"Payload hash mismatch for {relPath} (expected {item.Sha256}, got {computedHash}).",
-                        verified,
-                        runInfo.Manifest.Items.Count,
-                        fileResults);
-                }
-
-                fileResults[item.OriginalFile] = true;
-                verified++;
             }
 
-            return VerificationStrengthResult.Success(
-                VerificationStrength.PayloadVerified,
-                verified,
-                runInfo.Manifest.Items.Count,
-                fileResults);
+            // Opening entries one at a time re-decodes a solid block from its start for
+            // every entry. One reader pass decodes the archive once, in archive order.
+            long remainingBytes = _safetyBounds.MaxTotalUncompressedBytes;
+            using IReader reader = archive.ExtractAllEntries();
+
+            while (reader.MoveToNextEntry())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                IEntry entry = reader.Entry;
+                if (entry.IsDirectory || entry.Key is null)
+                    continue;
+
+                string relPath = NormalizeEntryKey(entry.Key);
+                if (!payloads.TryGetValue(relPath, out List<TransferOverwriteBackupItem>? items))
+                    continue;
+
+                if (!TryReserve(entry.Size, ref remainingBytes))
+                {
+                    return tally.Fail(
+                        VerificationStrength.PayloadMismatch,
+                        $"Archive payload entry exceeds max file size limit: {relPath}",
+                        items);
+                }
+
+                using Stream entryStream = reader.OpenEntryStream();
+                VerificationStrengthResult? failure = tally.Check(
+                    items,
+                    Sha256Hasher.HashBounded(entryStream, entry.Size, cancellationToken),
+                    relPath);
+
+                if (failure is not null)
+                    return failure;
+            }
+
+            return tally.Finish(entries.Keys.Where(key => !payloads.ContainsKey(key)));
+        }
+
+        /// <summary>
+        /// Items that name the same payload are one file: it is hashed and counted once,
+        /// and every item naming it has to agree with the hash.
+        /// </summary>
+        private static Dictionary<string, List<TransferOverwriteBackupItem>> GroupByPayload(
+            IEnumerable<TransferOverwriteBackupItem> items,
+            Func<TransferOverwriteBackupItem, string> payloadKey)
+        {
+            var groups = new Dictionary<string, List<TransferOverwriteBackupItem>>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (TransferOverwriteBackupItem item in items)
+            {
+                string key = payloadKey(item);
+                if (!groups.TryGetValue(key, out List<TransferOverwriteBackupItem>? group))
+                    groups[key] = group = [];
+
+                group.Add(item);
+            }
+
+            return groups;
+        }
+
+        /// <summary>
+        /// Indexes an archive's file entries by normalized path, leaving out directories
+        /// and the root manifest. A path stored twice is refused: which copy an extractor
+        /// keeps is up to the extractor, so the copy verified need not be the copy restored.
+        /// </summary>
+        private string? IndexPayloadEntries<TEntry>(
+            IEnumerable<(string? Key, bool IsDirectory, TEntry Entry)> archiveEntries,
+            Dictionary<string, TEntry> index,
+            CancellationToken cancellationToken)
+        {
+            int entryCount = 0;
+
+            foreach ((string? key, bool isDirectory, TEntry entry) in archiveEntries)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (++entryCount > _safetyBounds.MaxFileEntries)
+                    return $"Archive exceeds maximum allowed entries limit ({_safetyBounds.MaxFileEntries:N0}).";
+
+                if (key is null || isDirectory)
+                    continue;
+
+                string normalized = NormalizeEntryKey(key);
+                if (normalized.Length == 0 ||
+                    normalized.Equals(TransferBackupLocations.ManifestFileName, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (!index.TryAdd(normalized, entry))
+                    return $"Archive stores the same payload path more than once: {normalized}";
+            }
+
+            return null;
+        }
+
+        private static string NormalizeEntryKey(string key) => key.Replace('\\', '/').Trim('/');
+
+        /// <summary>
+        /// Admits an entry by its declared size against the import bounds. The hash then
+        /// reads no more than the declared size, so an entry that under-declares cannot
+        /// stream past the single-file or cumulative limit.
+        /// </summary>
+        private bool TryReserve(long declaredBytes, ref long remainingBytes)
+        {
+            if (declaredBytes < 0 ||
+                declaredBytes > _safetyBounds.MaxSingleFileBytes ||
+                declaredBytes > remainingBytes)
+            {
+                return false;
+            }
+
+            remainingBytes -= declaredBytes;
+            return true;
+        }
+
+        private sealed class PayloadTally(int totalFiles)
+        {
+            private readonly Dictionary<string, bool> _fileResults = new(StringComparer.OrdinalIgnoreCase);
+            private int _verified;
+
+            public VerificationStrengthResult Fail(
+                VerificationStrength strength,
+                string error,
+                List<TransferOverwriteBackupItem>? items = null)
+            {
+                foreach (TransferOverwriteBackupItem item in items ?? [])
+                    _fileResults[item.OriginalFile] = false;
+
+                return VerificationStrengthResult.Failure(strength, error, _verified, totalFiles, _fileResults);
+            }
+
+            /// <returns>A failure, or null when the hash matches every item naming this payload.</returns>
+            public VerificationStrengthResult? Check(
+                List<TransferOverwriteBackupItem> items,
+                string? computedHash,
+                string label)
+            {
+                if (computedHash is null)
+                {
+                    return Fail(
+                        VerificationStrength.PayloadMismatch,
+                        $"Archive payload entry holds more data than it declares: {label}",
+                        items);
+                }
+
+                foreach (TransferOverwriteBackupItem item in items)
+                {
+                    if (!string.Equals(computedHash, item.Sha256, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return Fail(
+                            VerificationStrength.PayloadMismatch,
+                            $"Payload hash mismatch for {label} (expected {item.Sha256}, got {computedHash}).",
+                            items);
+                    }
+                }
+
+                foreach (TransferOverwriteBackupItem item in items)
+                    _fileResults[item.OriginalFile] = true;
+
+                _verified++;
+                return null;
+            }
+
+            /// <summary>
+            /// Every listed payload matched. Content the manifest does not describe still
+            /// fails: a container with files added after the fact is not the run it claims to be.
+            /// </summary>
+            public VerificationStrengthResult Finish(IEnumerable<string> unlistedPaths)
+            {
+                if (_verified != totalFiles)
+                {
+                    return Fail(
+                        VerificationStrength.None,
+                        "Not every payload file listed in the manifest could be read, so the run was not verified.");
+                }
+
+                string? unlisted = unlistedPaths.FirstOrDefault();
+                if (unlisted is not null)
+                {
+                    return Fail(
+                        VerificationStrength.PayloadMismatch,
+                        $"The backup contains a file its manifest does not list: {unlisted}");
+                }
+
+                return VerificationStrengthResult.Success(
+                    VerificationStrength.PayloadVerified,
+                    _verified,
+                    totalFiles,
+                    _fileResults);
+            }
         }
     }
 }

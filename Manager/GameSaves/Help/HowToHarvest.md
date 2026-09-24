@@ -259,9 +259,22 @@ dotnet run -- tracklist -i -o missing-titles.json
 dotnet run -- pcgw-harvest-tracklist missing-titles.json External/Titles "SaveGameManager/0.1 (https://github.com/example; developer@example.invalid) .NET/10.0" 10
 ```
 
+The tracklist file may be the JSON or CSV export, a JSON array of AppIDs, or plain
+text with one AppID per line (`#` comments allowed; `413150, Portal 2` takes the
+first token). Only `steamAppId` values are read from JSON, so counts such as
+`totalReconciled` are never mistaken for AppIDs.
+
+- `[max-titles]` and `[max-games]` must be whole numbers.
+- Malformed JSON exits with code 1; a file with no AppIDs exits with code 2.
+- A run in which every title failed exits with code 1.
+- `pcgw-harvest-appids` with no valid AppIDs exits with code 2.
+
 All extracted mappings are saved into `save_path_mappings` strictly with:
 - `review_status = 'Pending'`
 - `enabled = 0`
+
+A later harvest may update a candidate only while it is still `Pending`; it never
+changes a mapping a reviewer has approved, rejected, or marked as needing a fix.
 
 Reviewers can then use the Reviewer application or CLI commands (`approve-mapping <id>`, `approve-app <steamAppId>`) to inspect and verify candidates before enabling them.
 

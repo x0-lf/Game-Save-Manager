@@ -10,11 +10,6 @@ namespace GameSaves.Core.Save
         CuratedSeedResult Seed(string databasePath);
 
         /// <summary>
-        /// Seeds a custom JSON dataset into the target SQLite database.
-        /// </summary>
-        CuratedSeedResult Seed(string databasePath, string jsonContent);
-
-        /// <summary>
         /// Seeds a parsed seed document into the target SQLite database.
         /// </summary>
         CuratedSeedResult Seed(string databasePath, CuratedMappingSeedDocument document);

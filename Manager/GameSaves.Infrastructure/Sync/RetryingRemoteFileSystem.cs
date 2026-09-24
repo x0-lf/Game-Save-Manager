@@ -12,7 +12,7 @@ namespace GameSaves.Infrastructure.Sync
     /// It sits at <see cref="IRemoteFileSystem"/> rather than inside each
     /// backend service for three reasons. It is provider-neutral, so no Google
     /// type reaches this file and any future backend gets the same behaviour by
-    /// supplying its own predicate. It wraps the eleven operations the engine
+    /// supplying its own predicate. It wraps the thirteen operations the engine
     /// actually calls, instead of the dozens of client calls beneath them. And
     /// it changes no existing service, so the call-count assertions throughout
     /// the suite keep measuring what they were written to measure.
@@ -44,7 +44,6 @@ namespace GameSaves.Infrastructure.Sync
         private readonly IRemoteFileSystem _inner;
         private readonly IDelayProvider _delay;
         private readonly Func<Exception, bool> _isRetryable;
-        private readonly Func<Exception, TimeSpan?>? _customRetryDelayExtractor;
         private readonly IRetryBackoffNotifier? _backoffNotifier;
         private readonly Func<Exception, bool>? _isRateLimited;
         private readonly int _maxAttempts;
@@ -56,7 +55,6 @@ namespace GameSaves.Infrastructure.Sync
             Func<Exception, bool> isRetryable,
             int maxAttempts = DefaultMaxAttempts,
             TimeSpan? baseDelay = null,
-            Func<Exception, TimeSpan?>? retryDelayExtractor = null,
             IRetryBackoffNotifier? backoffNotifier = null,
             Func<Exception, bool>? isRateLimited = null)
         {
@@ -64,7 +62,6 @@ namespace GameSaves.Infrastructure.Sync
             _delay = delay ?? throw new ArgumentNullException(nameof(delay));
             _isRetryable = isRetryable ??
                 throw new ArgumentNullException(nameof(isRetryable));
-            _customRetryDelayExtractor = retryDelayExtractor;
             _backoffNotifier = backoffNotifier;
             _isRateLimited = isRateLimited;
 
@@ -203,32 +200,34 @@ namespace GameSaves.Infrastructure.Sync
                 {
                     return await operation(cancellationToken);
                 }
-                catch (OperationCanceledException)
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
-                    // A cancelled operation is not a failure to retry.
+                    // A cancelled operation is not a failure to retry. An HTTP
+                    // timeout also arrives as a cancellation, but with the
+                    // caller's token live; that one is left to the predicate.
                     throw;
                 }
                 catch (Exception exception) when (
                     attempt < _maxAttempts && _isRetryable(exception))
                 {
-                    TimeSpan? serverDelay = ExtractRetryDelay(exception);
-                    TimeSpan wait = NextDelay(attempt, spent, serverDelay);
+                    TimeSpan wait = NextDelay(
+                        attempt,
+                        spent,
+                        (exception as IRetryDelayCarrier)?.RetryAfterDelay);
 
                     if (wait <= TimeSpan.Zero)
                         throw;
 
                     spent += wait;
 
-                    bool rateLimited = _isRateLimited?.Invoke(exception) ?? IsRateLimitException(exception);
                     var eventArgs = new RetryBackoffEventArgs(
                         Attempt: attempt,
                         MaxAttempts: _maxAttempts,
                         Delay: wait,
-                        IsServerInstructed: serverDelay.HasValue,
                         Exception: exception,
-                        IsRateLimited: rateLimited);
+                        IsRateLimited: _isRateLimited?.Invoke(exception) ?? false);
 
-                    _backoffNotifier?.NotifyBackoffStarted(eventArgs);
+                    Notify(notifier => notifier.NotifyBackoffStarted(eventArgs));
                     try
                     {
                         // The token is passed so a user cancelling during a backoff
@@ -237,72 +236,49 @@ namespace GameSaves.Infrastructure.Sync
                     }
                     finally
                     {
-                        _backoffNotifier?.NotifyBackoffEnded(eventArgs);
+                        Notify(notifier => notifier.NotifyBackoffEnded(eventArgs));
                     }
                 }
             }
         }
 
-        private static bool IsRateLimitException(Exception exception)
+        // Observers only watch. A throwing subscriber must not replace the
+        // transfer's own failure, end the retry loop, or skip BackoffEnded.
+        private void Notify(Action<IRetryBackoffNotifier> notify)
         {
-            for (Exception? current = exception; current is not null; current = current.InnerException)
+            if (_backoffNotifier is null)
+                return;
+
+            try
             {
-                if (current is IRetryDelayCarrier { RetryAfterDelay: not null })
-                    return true;
-
-                string message = current.Message;
-                if (message.Contains("429", StringComparison.OrdinalIgnoreCase) ||
-                    message.Contains("TooManyRequests", StringComparison.OrdinalIgnoreCase) ||
-                    message.Contains("rateLimitExceeded", StringComparison.OrdinalIgnoreCase) ||
-                    message.Contains("userRateLimitExceeded", StringComparison.OrdinalIgnoreCase))
-                {
-                    return true;
-                }
+                notify(_backoffNotifier);
             }
-
-            return false;
-        }
-
-        private TimeSpan? ExtractRetryDelay(Exception exception)
-        {
-            if (_customRetryDelayExtractor is not null)
+            catch (Exception)
             {
-                TimeSpan? custom = _customRetryDelayExtractor(exception);
-                if (custom.HasValue)
-                    return custom;
             }
-
-            if (exception is IRetryDelayCarrier { RetryAfterDelay: { } directDelay })
-                return directDelay;
-
-            if (exception.InnerException is IRetryDelayCarrier { RetryAfterDelay: { } innerDelay })
-                return innerDelay;
-
-            return null;
         }
 
         /// <summary>
-        /// Calculates the next delay before retrying. If the failing exception
-        /// carries an explicit, bounded server delay (such as an HTTP Retry-After
-        /// header), that delay is honoured; otherwise exponential backoff from the
-        /// base delay is used. The delay is clamped so the total spent waiting
-        /// never exceeds <see cref="MaximumTotalDelay"/>. Returns zero when the
-        /// budget is exhausted, which the caller treats as "stop retrying" rather
-        /// than as "wait for no time".
+        /// The server's Retry-After when the failure carries one, otherwise
+        /// exponential backoff from the base delay, clamped so the total spent
+        /// waiting never exceeds <see cref="MaximumTotalDelay"/>. Returns zero
+        /// when the budget is exhausted, which the caller treats as "stop
+        /// retrying" rather than as "wait for no time". A server that asks
+        /// for longer than the budget left is not retried early: retrying
+        /// before the instructed time only earns another refusal.
         /// </summary>
-        internal TimeSpan NextDelay(
-            int attempt,
-            TimeSpan alreadySpent,
-            TimeSpan? serverDelay = null)
+        private TimeSpan NextDelay(int attempt, TimeSpan alreadySpent, TimeSpan? instructed)
         {
             TimeSpan remaining = MaximumTotalDelay - alreadySpent;
 
             if (remaining <= TimeSpan.Zero)
                 return TimeSpan.Zero;
 
-            TimeSpan wait = serverDelay is { } instructed && instructed > TimeSpan.Zero
-                ? instructed
-                : TimeSpan.FromSeconds(_baseDelay.TotalSeconds * Math.Pow(2, attempt - 1));
+            if (instructed is { } serverDelay && serverDelay > TimeSpan.Zero)
+                return serverDelay > remaining ? TimeSpan.Zero : serverDelay;
+
+            double seconds = _baseDelay.TotalSeconds * Math.Pow(2, attempt - 1);
+            TimeSpan wait = TimeSpan.FromSeconds(seconds);
 
             return wait > remaining ? remaining : wait;
         }

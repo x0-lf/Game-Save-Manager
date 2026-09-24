@@ -250,10 +250,7 @@ public sealed class GoogleDriveRemoteFileSystemTests
         // is the provider wrapper itself, not every name that starts with it.
         Assert.DoesNotContain(
             services,
-            descriptor => string.Equals(
-                descriptor.ImplementationType?.Name,
-                "GoogleDriveSyncProvider",
-                StringComparison.Ordinal));
+            descriptor => descriptor.ImplementationType == typeof(EngineSyncProvider));
     }
 
     [Fact]
@@ -822,12 +819,13 @@ public sealed class GoogleDriveRemoteFileSystemTests
         Assert.Equal("CreateGoogleDriveProvider", driveCase.Name);
         Assert.Equal(typeof(Guid), Assert.Single(
             driveCase.GetParameters()).ParameterType);
-        // Milestone T added the wrapper itself, so the surviving invariant is
-        // that it stays internal and unactivated, not that it is absent.
-        Type wrapper = Assert.Single(
+        // Drive is served by the shared engine wrapper, so the surviving
+        // invariant is that the wrapper stays internal and no Drive-specific
+        // provider type exists beside it.
+        Assert.False(typeof(EngineSyncProvider).IsPublic);
+        Assert.DoesNotContain(
             googleTypes,
-            type => type.Name == "GoogleDriveSyncProvider");
-        Assert.False(wrapper.IsPublic);
+            type => typeof(ISyncProvider).IsAssignableFrom(type));
         Assert.True(new SyncProviderCatalog()
             .GetDescriptor(SyncProviderKind.GoogleDrive).IsImplemented);
     }
@@ -899,7 +897,7 @@ public sealed class GoogleDriveRemoteFileSystemTests
     [Theory]
     [InlineData(GoogleDriveRemoteValidationStatus.RateLimited, true)]
     [InlineData(GoogleDriveRemoteValidationStatus.Unavailable, true)]
-    [InlineData(GoogleDriveRemoteValidationStatus.AuthenticationUnavailable, true)]
+    [InlineData(GoogleDriveRemoteValidationStatus.AuthenticationUnavailable, false)]
     [InlineData(GoogleDriveRemoteValidationStatus.QuotaExceeded, false)]
     [InlineData(GoogleDriveRemoteValidationStatus.AuthorizationRevoked, false)]
     [InlineData(GoogleDriveRemoteValidationStatus.RootMissing, false)]

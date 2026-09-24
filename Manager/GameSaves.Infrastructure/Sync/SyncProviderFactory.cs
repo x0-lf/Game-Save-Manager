@@ -2,7 +2,6 @@ using GameSaves.Core.Platform;
 using GameSaves.Core.Sync;
 using GameSaves.Core.Transfers;
 using GameSaves.Infrastructure.GoogleDrive;
-using GameSaves.Infrastructure.Mega;
 using GameSaves.Infrastructure.OneDrive;
 
 namespace GameSaves.Infrastructure.Sync
@@ -12,12 +11,10 @@ namespace GameSaves.Infrastructure.Sync
         private readonly IBackupHistoryService _backupHistoryService;
         private readonly ITransferHistoryRepository _historyRepository;
         private readonly IGoogleDriveSyncProviderFactory _googleDriveProviders;
-        private readonly IOneDriveSyncProviderFactory? _oneDriveProviders;
-        private readonly IMegaSyncProviderFactory? _megaProviders;
+        private readonly IOneDriveSyncProviderFactory _oneDriveProviders;
         private readonly SftpKnownHostsStore _knownHosts;
-        private readonly Func<SftpConnectionSettings, SftpKnownHostsStore, IRemoteFileSystem>? _sftpFileSystemFactory;
 
-        // Internal because IGoogleDriveSyncProviderFactory, IOneDriveSyncProviderFactory, and IMegaSyncProviderFactory
+        // Internal because IGoogleDriveSyncProviderFactory and IOneDriveSyncProviderFactory
         // are internal: a public constructor taking them is CS0051. Dependency injection
         // resolves this through a registration lambda in the composition root, which keeps the
         // dependency explicit here instead of hiding it behind a service
@@ -27,16 +24,12 @@ namespace GameSaves.Infrastructure.Sync
             ITransferHistoryRepository historyRepository,
             IAppDatabasePathProvider databasePathProvider,
             IGoogleDriveSyncProviderFactory googleDriveProviders,
-            IOneDriveSyncProviderFactory? oneDriveProviders = null,
-            IMegaSyncProviderFactory? megaProviders = null,
-            Func<SftpConnectionSettings, SftpKnownHostsStore, IRemoteFileSystem>? sftpFileSystemFactory = null)
+            IOneDriveSyncProviderFactory oneDriveProviders)
         {
             _backupHistoryService = backupHistoryService;
             _historyRepository = historyRepository;
             _googleDriveProviders = googleDriveProviders;
             _oneDriveProviders = oneDriveProviders;
-            _megaProviders = megaProviders;
-            _sftpFileSystemFactory = sftpFileSystemFactory;
 
             string appDataDirectory =
                 Path.GetDirectoryName(databasePathProvider.GetDatabasePath())
@@ -60,42 +53,31 @@ namespace GameSaves.Infrastructure.Sync
                     nameof(remoteRoot));
             }
 
-            return new LocalFolderSyncProvider(
+            // Syncs with another local or mounted folder (NAS share, USB drive,
+            // cloud-synced folder). The root is the user's own path, as given.
+            return new EngineSyncProvider(
+                "Local folder",
                 remoteRoot,
+                new LocalFolderRemoteFileSystem(
+                    remoteRoot,
+                    _backupHistoryService.GetBackupBasePath()),
                 _backupHistoryService,
                 _historyRepository);
         }
 
         public ISyncProvider CreateSftpProvider(SftpConnectionSettings settings)
         {
-            if (_sftpFileSystemFactory is not null)
-            {
-                IRemoteFileSystem fileSystem = _sftpFileSystemFactory(settings, _knownHosts);
-                return new SftpSyncProvider(
-                    settings,
-                    fileSystem,
-                    _backupHistoryService,
-                    _historyRepository,
-                    ownsFileSystem: true);
-            }
+            ArgumentNullException.ThrowIfNull(settings);
 
-            return new SftpSyncProvider(
-                settings,
-                _knownHosts,
+            // DisplayRoot is sftp://user@host:port/path and never carries the
+            // password, key path, or passphrase. The provider owns the
+            // connection and closes it on Dispose.
+            return new EngineSyncProvider(
+                "SFTP",
+                settings.DisplayRoot,
+                new SftpRemoteFileSystem(settings, _knownHosts),
                 _backupHistoryService,
                 _historyRepository);
-        }
-
-        internal ISyncProvider CreateSftpProvider(
-            SftpConnectionSettings settings,
-            IRemoteFileSystem fileSystem)
-        {
-            return new SftpSyncProvider(
-                settings,
-                fileSystem,
-                _backupHistoryService,
-                _historyRepository,
-                ownsFileSystem: true);
         }
 
         // Pure delegation. Every rejection rule already lives in the internal
@@ -104,25 +86,8 @@ namespace GameSaves.Infrastructure.Sync
         public ISyncProvider CreateGoogleDriveProvider(Guid remoteProfileId) =>
             _googleDriveProviders.Create(remoteProfileId);
 
-        public ISyncProvider CreateOneDriveProvider(Guid remoteProfileId)
-        {
-            if (_oneDriveProviders is null)
-            {
-                throw new InvalidOperationException("Microsoft OneDrive provider factory is not configured.");
-            }
-
-            return _oneDriveProviders.Create(remoteProfileId);
-        }
-
-        public ISyncProvider CreateMegaProvider(Guid remoteProfileId)
-        {
-            if (_megaProviders is null)
-            {
-                throw new InvalidOperationException("MEGA provider factory is not configured.");
-            }
-
-            return _megaProviders.Create(remoteProfileId);
-        }
+        public ISyncProvider CreateOneDriveProvider(Guid remoteProfileId) =>
+            _oneDriveProviders.Create(remoteProfileId);
 
         public void ForgetSftpHostKey(string host, int port)
         {

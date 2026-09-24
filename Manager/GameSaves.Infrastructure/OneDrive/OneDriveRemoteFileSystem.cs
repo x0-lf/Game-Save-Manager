@@ -5,7 +5,6 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using GameSaves.Core.Sync;
 using GameSaves.Core.Transfers;
 using GameSaves.Infrastructure.Sync;
 
@@ -18,27 +17,27 @@ namespace GameSaves.Infrastructure.OneDrive
     /// </summary>
     internal sealed class OneDriveRemoteFileSystem : IRemoteFileSystem
     {
+        /// <summary>
+        /// Deliberately account-free: the display root becomes the engine's remote
+        /// root, which is persisted in plain transfer history.
+        /// </summary>
+        internal const string DisplayRootName = "OneDrive: AppRoot (GameSave Manager)";
+
         private readonly Guid _remoteProfileId;
         private readonly IOneDriveApiClient _apiClient;
         private readonly OneDriveOAuthService _oauthService;
-        private readonly string? _accountEmail;
 
         public OneDriveRemoteFileSystem(
             Guid remoteProfileId,
             IOneDriveApiClient apiClient,
-            OneDriveOAuthService oauthService,
-            string? accountEmail = null)
+            OneDriveOAuthService oauthService)
         {
             _remoteProfileId = remoteProfileId;
             _apiClient = apiClient ?? throw new ArgumentNullException(nameof(apiClient));
             _oauthService = oauthService ?? throw new ArgumentNullException(nameof(oauthService));
-            _accountEmail = accountEmail;
         }
 
-        public string DisplayRoot =>
-            string.IsNullOrWhiteSpace(_accountEmail)
-                ? "OneDrive: AppRoot (GameSave Manager)"
-                : $"OneDrive: AppRoot ({_accountEmail})";
+        public string DisplayRoot => DisplayRootName;
 
         public string GetDisplayPath(string relativePath)
         {
@@ -60,31 +59,23 @@ namespace GameSaves.Infrastructure.OneDrive
                     TransferWarningSeverity.Error);
             }
 
+            // No quota check: a full drive must not block download-only restores.
+            // Uploads to a full drive fail per run instead.
             try
             {
-                var appRoot = await _apiClient.GetAppRootAsync(token, cancellationToken);
-                if (appRoot == null)
+                if (await _apiClient.GetItemAsync(token, "", cancellationToken) == null)
                 {
                     return new TransferPreviewWarning(
                         "OneDriveAppRootMissing",
                         "The Microsoft OneDrive application folder (approot) could not be accessed.",
                         TransferWarningSeverity.Error);
                 }
-
-                var quota = await _apiClient.GetQuotaAsync(token, cancellationToken);
-                if (quota.RemainingBytes <= 0 && quota.TotalBytes > 0)
-                {
-                    return new TransferPreviewWarning(
-                        "OneDriveQuotaExceeded",
-                        "Microsoft OneDrive storage quota is exceeded.",
-                        TransferWarningSeverity.Error);
-                }
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 return new TransferPreviewWarning(
                     "OneDriveValidationFailed",
-                    $"Microsoft OneDrive validation failed: {ex.Message}",
+                    "Microsoft OneDrive could not be validated. Check the connection and try again.",
                     TransferWarningSeverity.Error);
             }
 
@@ -94,15 +85,14 @@ namespace GameSaves.Infrastructure.OneDrive
         public async Task<bool> RootExistsAsync(
             CancellationToken cancellationToken = default)
         {
-            string? token = await GetTokenOrThrowAsync(cancellationToken);
-            var appRoot = await _apiClient.GetAppRootAsync(token, cancellationToken);
-            return appRoot != null;
+            string token = await GetTokenOrThrowAsync(cancellationToken);
+            return await _apiClient.GetItemAsync(token, "", cancellationToken) != null;
         }
 
         public async Task<IReadOnlyList<string>> ListRunFolderNamesAsync(
             CancellationToken cancellationToken = default)
         {
-            string? token = await GetTokenOrThrowAsync(cancellationToken);
+            string token = await GetTokenOrThrowAsync(cancellationToken);
             var children = await _apiClient.ListChildrenAsync(token, "", cancellationToken);
 
             return children
@@ -118,7 +108,7 @@ namespace GameSaves.Infrastructure.OneDrive
         public async Task<IReadOnlyList<string>> ListRunArchiveNamesAsync(
             CancellationToken cancellationToken = default)
         {
-            string? token = await GetTokenOrThrowAsync(cancellationToken);
+            string token = await GetTokenOrThrowAsync(cancellationToken);
             var children = await _apiClient.ListChildrenAsync(token, "", cancellationToken);
 
             return children
@@ -134,35 +124,26 @@ namespace GameSaves.Infrastructure.OneDrive
             string relativeFolder,
             CancellationToken cancellationToken = default)
         {
-            string? token = await GetTokenOrThrowAsync(cancellationToken);
-            string clean = relativeFolder.Replace('\\', '/').Trim('/');
-            if (string.IsNullOrEmpty(clean))
-                return await RootExistsAsync(cancellationToken);
-
-            var item = await _apiClient.GetItemAsync(token, clean, cancellationToken);
-            return item != null && item.IsFolder;
+            string token = await GetTokenOrThrowAsync(cancellationToken);
+            var item = await _apiClient.GetItemAsync(token, relativeFolder, cancellationToken);
+            return item is { IsFolder: true };
         }
 
         public async Task<bool> FileExistsAsync(
             string relativePath,
             CancellationToken cancellationToken = default)
         {
-            string? token = await GetTokenOrThrowAsync(cancellationToken);
-            string clean = relativePath.Replace('\\', '/').Trim('/');
-            if (string.IsNullOrEmpty(clean))
-                return false;
-
-            var item = await _apiClient.GetItemAsync(token, clean, cancellationToken);
-            return item != null && item.IsFile;
+            string token = await GetTokenOrThrowAsync(cancellationToken);
+            var item = await _apiClient.GetItemAsync(token, relativePath, cancellationToken);
+            return item is { IsFile: true };
         }
 
         public async Task<string?> ReadTextFileAsync(
             string relativePath,
             CancellationToken cancellationToken = default)
         {
-            string? token = await GetTokenOrThrowAsync(cancellationToken);
-            string clean = relativePath.Replace('\\', '/').Trim('/');
-            return await _apiClient.ReadTextAsync(token, clean, cancellationToken);
+            string token = await GetTokenOrThrowAsync(cancellationToken);
+            return await _apiClient.ReadTextAsync(token, relativePath, cancellationToken);
         }
 
         public async Task CreateTextFileIfMissingAsync(
@@ -170,30 +151,20 @@ namespace GameSaves.Infrastructure.OneDrive
             string content,
             CancellationToken cancellationToken = default)
         {
-            string? token = await GetTokenOrThrowAsync(cancellationToken);
-            string clean = relativePath.Replace('\\', '/').Trim('/');
+            string token = await GetTokenOrThrowAsync(cancellationToken);
+            using var stream = new MemoryStream(Encoding.UTF8.GetBytes(content));
 
-            // Strict create-only invariant: Never overwrite existing file content
-            if (await FileExistsAsync(clean, cancellationToken))
-            {
-                throw new InvalidOperationException(
-                    $"Refusing to overwrite existing file in create-only mode: {clean}");
-            }
-
-            byte[] bytes = Encoding.UTF8.GetBytes(content);
-            using var stream = new MemoryStream(bytes);
-            await _apiClient.UploadContentAsync(token, clean, stream, cancellationToken);
+            // Create-only is enforced by Graph (conflictBehavior=fail), not by a racy existence check.
+            await _apiClient.UploadContentAsync(token, relativePath, stream, createOnly: true, cancellationToken);
         }
 
         public async Task<string?> ReadProviderMetadataAsync(
             string relativePath,
             CancellationToken cancellationToken = default)
         {
-            string clean = relativePath.Replace('\\', '/').Trim('/');
-            AssertAllowlistedMetadata(clean);
-
-            string? token = await GetTokenOrThrowAsync(cancellationToken);
-            return await _apiClient.ReadTextAsync(token, clean, cancellationToken);
+            string path = RemoteProviderMetadataPath.Validate(relativePath);
+            string token = await GetTokenOrThrowAsync(cancellationToken);
+            return await _apiClient.ReadTextAsync(token, path, cancellationToken);
         }
 
         public async Task ReplaceProviderMetadataAsync(
@@ -201,54 +172,39 @@ namespace GameSaves.Infrastructure.OneDrive
             string content,
             CancellationToken cancellationToken = default)
         {
-            string clean = relativePath.Replace('\\', '/').Trim('/');
-            AssertAllowlistedMetadata(clean);
-
-            string? token = await GetTokenOrThrowAsync(cancellationToken);
-            byte[] bytes = Encoding.UTF8.GetBytes(content);
-            using var stream = new MemoryStream(bytes);
-            await _apiClient.UploadContentAsync(token, clean, stream, cancellationToken);
+            string path = RemoteProviderMetadataPath.Validate(relativePath);
+            string token = await GetTokenOrThrowAsync(cancellationToken);
+            using var stream = new MemoryStream(Encoding.UTF8.GetBytes(content));
+            await _apiClient.UploadContentAsync(token, path, stream, createOnly: false, cancellationToken);
         }
 
         public async Task<IReadOnlyList<string>> ListFilesAsync(
             string relativeFolder,
             CancellationToken cancellationToken = default)
         {
-            string? token = await GetTokenOrThrowAsync(cancellationToken);
-            string cleanFolder = relativeFolder.Replace('\\', '/').Trim('/');
+            string token = await GetTokenOrThrowAsync(cancellationToken);
 
             var results = new List<string>();
-            var queue = new Queue<string>();
-            queue.Enqueue(cleanFolder);
+            var queue = new Queue<(string RemotePath, string RelativePath)>();
+            queue.Enqueue((relativeFolder, ""));
 
             while (queue.Count > 0)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                string current = queue.Dequeue();
+                (string remotePath, string relativePath) = queue.Dequeue();
 
-                var children = await _apiClient.ListChildrenAsync(token, current, cancellationToken);
+                var children = await _apiClient.ListChildrenAsync(token, remotePath, cancellationToken);
                 foreach (var child in children)
                 {
+                    // Returned paths are relative to relativeFolder.
+                    string childRelative = relativePath.Length == 0
+                        ? child.Name
+                        : $"{relativePath}/{child.Name}";
+
                     if (child.IsFolder)
-                    {
-                        string subFolder = string.IsNullOrEmpty(current)
-                            ? child.Name
-                            : $"{current}/{child.Name}";
-                        queue.Enqueue(subFolder);
-                    }
+                        queue.Enqueue(($"{remotePath}/{child.Name}", childRelative));
                     else if (child.IsFile)
-                    {
-                        // The returned path must be relative to relativeFolder!
-                        string fullRel = string.IsNullOrEmpty(current)
-                            ? child.Name
-                            : $"{current}/{child.Name}";
-
-                        string fileRelative = string.IsNullOrEmpty(cleanFolder)
-                            ? fullRel
-                            : fullRel.Substring(cleanFolder.Length).TrimStart('/');
-
-                        results.Add(fileRelative);
-                    }
+                        results.Add(childRelative);
                 }
             }
 
@@ -260,22 +216,13 @@ namespace GameSaves.Infrastructure.OneDrive
             string relativeRemotePath,
             CancellationToken cancellationToken = default)
         {
-            if (!File.Exists(localFilePath))
-                throw new FileNotFoundException($"Local file to upload not found: {localFilePath}");
-
-            string clean = relativeRemotePath.Replace('\\', '/').Trim('/');
-
-            // Strict create-only invariant: Never overwrite existing file content
-            if (await FileExistsAsync(clean, cancellationToken))
-            {
-                throw new InvalidOperationException(
-                    $"Refusing to overwrite existing file in create-only mode: {clean}");
-            }
-
-            string? token = await GetTokenOrThrowAsync(cancellationToken);
+            string token = await GetTokenOrThrowAsync(cancellationToken);
             using var fileStream = File.OpenRead(localFilePath);
-            var item = await _apiClient.UploadContentAsync(token, clean, fileStream, cancellationToken);
-            return new FileInfo(localFilePath).Length;
+            long length = fileStream.Length;
+
+            // Create-only is enforced by Graph (conflictBehavior=fail), not by a racy existence check.
+            await _apiClient.UploadContentAsync(token, relativeRemotePath, fileStream, createOnly: true, cancellationToken);
+            return length;
         }
 
         public async Task<long> DownloadFileAsync(
@@ -283,17 +230,26 @@ namespace GameSaves.Infrastructure.OneDrive
             string localFilePath,
             CancellationToken cancellationToken = default)
         {
-            string clean = relativeRemotePath.Replace('\\', '/').Trim('/');
             string? dir = Path.GetDirectoryName(localFilePath);
-            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-            {
+            if (!string.IsNullOrEmpty(dir))
                 Directory.CreateDirectory(dir);
-            }
 
-            string? token = await GetTokenOrThrowAsync(cancellationToken);
-            using (var fileStream = File.Create(localFilePath))
+            string token = await GetTokenOrThrowAsync(cancellationToken);
+
+            // CreateNew: an existing local file is never truncated.
+            var fileStream = new FileStream(localFilePath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+            try
             {
-                await _apiClient.DownloadContentAsync(token, clean, fileStream, cancellationToken);
+                await using (fileStream)
+                {
+                    await _apiClient.DownloadContentAsync(token, relativeRemotePath, fileStream, cancellationToken);
+                }
+            }
+            catch
+            {
+                // Only the partial file this call created is removed, so a retry can create it again.
+                File.Delete(localFilePath);
+                throw;
             }
 
             return new FileInfo(localFilePath).Length;
@@ -308,16 +264,6 @@ namespace GameSaves.Infrastructure.OneDrive
                     "OneDrive authentication token is missing or expired. Please re-authenticate the profile.");
             }
             return token;
-        }
-
-        private static void AssertAllowlistedMetadata(string cleanPath)
-        {
-            if (!cleanPath.StartsWith(".gamesave-sync/", StringComparison.OrdinalIgnoreCase) &&
-                !cleanPath.Equals(".gamesave-sync", StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException(
-                    $"Provider metadata path must reside under '.gamesave-sync/'. Path: '{cleanPath}'");
-            }
         }
     }
 }

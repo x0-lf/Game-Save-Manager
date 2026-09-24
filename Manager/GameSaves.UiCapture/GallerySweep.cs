@@ -96,6 +96,10 @@ namespace GameSaves.UiCapture
             // 05: Backups - Hierarchical Tree Mode (UI-015)
             tabs.SelectedIndex = 5;
             viewModel.BackupHistory.IsFileTreeMode = true;
+            // The tree exists only in tree mode, so the demo verification is
+            // applied now, keyed the way the payload verifier keys it.
+            viewModel.BackupHistory.FileTree.UpdateVerification(
+                viewModel.BackupHistory.SelectedRun!.Run.Manifest.Items.ToDictionary(i => i.OriginalFile, _ => true));
             viewModel.BackupHistory.FileTree.ExpandAll();
             Dispatcher.UIThread.RunJobs();
             written += RecordShot(shot, "05-backups-tree", "Backups (Hierarchical Tree)", "Discovered backup runs with virtualized file tree, folder expanders, aggregate sizes, and verification indicators");
@@ -205,9 +209,10 @@ namespace GameSaves.UiCapture
                 "999001", "A Long Game Title Used To Prove Column Alignment",
                 "ArchiveLibrary/steamapps/common/A Long Game Title",
                 "ArchiveLibrary", 0, 2, 1, false, 0, 0, "Needs attention"));
+            viewModel.InstalledGames.Pagination.SetSource(viewModel.InstalledGames.Games);
             viewModel.InstalledGames.SelectedGame = viewModel.InstalledGames.Games[0];
             viewModel.InstalledGames.StatusMessage = "4 installed games found.";
-            viewModel.InstalledGames.Pagination.PageSize = 20;
+            viewModel.InstalledGames.Pagination.SetPageSize(20);
 
             // 3. Profiles
             viewModel.Profiles.Profiles.Clear();
@@ -404,10 +409,9 @@ namespace GameSaves.UiCapture
             viewModel.BackupHistory.Runs.Add(new BackupRunRowViewModel(run1));
             viewModel.BackupHistory.Runs.Add(new BackupRunRowViewModel(run2));
             viewModel.BackupHistory.Runs.Add(new BackupRunRowViewModel(run3));
+            viewModel.BackupHistory.Pagination.SetSource(viewModel.BackupHistory.Runs);
             viewModel.BackupHistory.SelectedRun = viewModel.BackupHistory.Runs[0];
             viewModel.BackupHistory.StatusMessage = "3 backup runs discovered.";
-            var verificationMap = backupItemsRun1.ToDictionary(i => i.GetRelativePayloadPath(), _ => true);
-            viewModel.BackupHistory.FileTree.UpdateVerification(verificationMap);
 
             // 7. Sync
             SyncStateSweepSetup(viewModel.Sync);
@@ -551,6 +555,7 @@ namespace GameSaves.UiCapture
                 now.AddHours(-2),
                 now.AddHours(-2).AddSeconds(45))));
 
+            viewModel.TransferHistory.Pagination.SetSource(viewModel.TransferHistory.Runs);
             viewModel.TransferHistory.SelectedRun = run1Row;
             viewModel.TransferHistory.StatusMessage = "4 executed runs found.";
 

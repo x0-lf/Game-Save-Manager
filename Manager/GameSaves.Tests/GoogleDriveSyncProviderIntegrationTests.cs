@@ -154,7 +154,8 @@ public sealed class GoogleDriveSyncProviderIntegrationTests
     {
         using var harness = new Harness();
 
-        Assert.IsType<GoogleDriveSyncProvider>(harness.Provider);
+        Assert.IsType<EngineSyncProvider>(harness.Provider);
+        Assert.Equal("Google Drive", harness.Provider.ProviderName);
         Assert.True(new SyncProviderCatalog()
             .GetDescriptor(SyncProviderKind.GoogleDrive).IsImplemented);
         // Milestone U added the factory case itself, so the surviving

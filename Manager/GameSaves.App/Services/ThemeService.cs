@@ -339,9 +339,10 @@ namespace GameSaves.App.Services
             };
 
         /// <summary>
-        /// Parses an arbitrary hex string (#RGB, #RGBA, #RRGGBB, #AARRGGBB, or
-        /// hex without #) into an opaque <see cref="Color"/>. Returns false if
-        /// the input is empty or contains non-hex characters.
+        /// Parses an opaque hex colour (#RGB or #RRGGBB, with or without the
+        /// #) into a <see cref="Color"/>. Returns false if the input is empty,
+        /// has any other length, or contains non-hex characters. Alpha forms are
+        /// rejected: an accent is always opaque.
         /// </summary>
         public static bool TryParseHexColor(string? input, out Color color)
         {
@@ -353,7 +354,7 @@ namespace GameSaves.App.Services
             if (!trimmed.StartsWith('#'))
                 trimmed = "#" + trimmed;
 
-            if (trimmed.Length is not (4 or 5 or 7 or 9))
+            if (trimmed.Length is not (4 or 7))
                 return false;
 
             for (int i = 1; i < trimmed.Length; i++)
@@ -368,6 +369,32 @@ namespace GameSaves.App.Services
             color = Color.FromArgb(255, parsed.R, parsed.G, parsed.B);
             return true;
         }
+
+        /// <summary>The canonical "#RRGGBB" spelling of an opaque colour.</summary>
+        public static string ToHex(Color color) => $"#{color.R:X2}{color.G:X2}{color.B:X2}";
+
+        /// <summary>
+        /// The lightest surface accent text is drawn on in the dark variant
+        /// (cards and the navigation rail, Tokens.axaml); the page itself is
+        /// darker, so clearing this clears every resting dark surface.
+        /// </summary>
+        internal static readonly Color DarkAccentTextSurface = Color.Parse("#1D1F27");
+
+        /// <summary>
+        /// The light variant's page background, the reference for the light
+        /// custom accent (Tokens.axaml). White is lighter, so clearing this
+        /// also clears white cards and the white text on a primary button.
+        /// </summary>
+        internal static readonly Color LightAccentTextSurface = Color.Parse("#F4F5F8");
+
+        /// <summary>
+        /// The contrast of an accent's text colour (AccentBrush) against the
+        /// surface it is read on, in one variant.
+        /// </summary>
+        internal static double AccentTextContrast(string accentTheme, bool isDark) =>
+            CalculateContrastRatio(
+                GetPalette(accentTheme, isDark).Accent,
+                isDark ? DarkAccentTextSurface : LightAccentTextSurface);
 
         /// <summary>
         /// Calculates the WCAG 2.1 relative luminance of an sRGB color.
@@ -401,48 +428,45 @@ namespace GameSaves.App.Services
         }
 
         /// <summary>
-        /// Clamps or deepens a color's lightness in HSL space so that its contrast
-        /// ratio against <paramref name="textColor"/> meets or exceeds
-        /// <paramref name="minContrast"/> (default 4.5:1 for WCAG AA).
+        /// Moves a color's lightness in HSL space, as little as possible, so
+        /// that its contrast ratio against <paramref name="reference"/> meets or
+        /// exceeds <paramref name="minContrast"/> (default 4.5:1 for WCAG AA).
+        /// Against a dark reference the colour is lightened, against a light one
+        /// it is deepened: the direction is whichever extreme (white or black)
+        /// contrasts more with the reference.
         /// </summary>
         public static Color ClampLightnessForContrast(
             Color color,
-            Color textColor,
+            Color reference,
             double minContrast = 4.5)
         {
-            if (CalculateContrastRatio(color, textColor) >= minContrast)
+            if (CalculateContrastRatio(color, reference) >= minContrast)
                 return color;
 
+            bool lighten = CalculateContrastRatio(Colors.White, reference) >
+                           CalculateContrastRatio(Colors.Black, reference);
+
+            // Lightness is monotonic in luminance for a fixed hue and
+            // saturation, so a binary search between the failing original and
+            // the passing extreme finds the nearest passing shade.
             HslColor hsl = color.ToHsl();
-            double low = 0.0;
-            double high = hsl.L;
-            Color best = new HslColor(hsl.A, hsl.H, hsl.S, 0.0).ToRgb();
+            double failing = hsl.L;
+            double passing = lighten ? 1.0 : 0.0;
+            Color best = new HslColor(hsl.A, hsl.H, hsl.S, passing).ToRgb();
 
             for (int i = 0; i < 24; i++)
             {
-                double mid = (low + high) / 2.0;
+                double mid = (failing + passing) / 2.0;
                 Color candidate = new HslColor(hsl.A, hsl.H, hsl.S, mid).ToRgb();
 
-                if (CalculateContrastRatio(candidate, textColor) >= minContrast)
+                if (CalculateContrastRatio(candidate, reference) >= minContrast)
                 {
                     best = candidate;
-                    low = mid;
+                    passing = mid;
                 }
                 else
                 {
-                    high = mid;
-                }
-            }
-
-            if (CalculateContrastRatio(best, textColor) < minContrast)
-            {
-                HslColor bestHsl = best.ToHsl();
-                for (double l = bestHsl.L - 0.002; l >= 0.0; l -= 0.002)
-                {
-                    Color candidate = new HslColor(
-                        bestHsl.A, bestHsl.H, bestHsl.S, Math.Max(0.0, l)).ToRgb();
-                    if (CalculateContrastRatio(candidate, textColor) >= minContrast)
-                        return candidate;
+                    failing = mid;
                 }
             }
 
@@ -451,17 +475,23 @@ namespace GameSaves.App.Services
 
         /// <summary>
         /// Dynamically creates an <see cref="AccentPalette"/> from an arbitrary custom color,
-        /// ensuring WCAG AA contrast (>= 4.5:1) against white text for primary button fills.
+        /// ensuring WCAG AA contrast (>= 4.5:1) both for white text on primary button fills
+        /// and for accent-coloured text on the variant's surfaces.
         /// </summary>
         internal static AccentPalette CreateCustomPalette(Color baseColor, bool isDark)
         {
-            Color primaryButton = ClampLightnessForContrast(baseColor, Colors.White, 4.5);
             HslColor baseHsl = baseColor.ToHsl();
 
             if (isDark)
             {
-                double accentLightness = Math.Clamp(Math.Max(baseHsl.L, 0.65), 0.60, 0.85);
-                Color accent = new HslColor(baseHsl.A, baseHsl.H, baseHsl.S, accentLightness).ToRgb();
+                Color primaryButton = ClampLightnessForContrast(baseColor, Colors.White, 4.5);
+
+                // Accent is read as text on the dark cards, so it is lightened
+                // until it clears the lightest of them.
+                Color accent = ClampLightnessForContrast(
+                    new HslColor(baseHsl.A, baseHsl.H, baseHsl.S, Math.Clamp(baseHsl.L, 0.65, 0.85)).ToRgb(),
+                    DarkAccentTextSurface,
+                    4.5);
                 Color brand = Shade(accent, 0.10);
                 Color accentHover = Shade(accent, 0.05);
                 Color accentPressed = Shade(accent, -0.06);
@@ -481,6 +511,10 @@ namespace GameSaves.App.Services
             }
             else
             {
+                // One colour is both the light accent text on the page and the
+                // button fill under white text; clearing the page background
+                // clears white too, because white is lighter still.
+                Color primaryButton = ClampLightnessForContrast(baseColor, LightAccentTextSurface, 4.5);
                 Color primaryButtonHover = Shade(primaryButton, -0.05);
                 Color primaryButtonPressed = Shade(primaryButton, -0.10);
 

@@ -22,11 +22,16 @@ namespace GameSaves.App.ViewModels
         private readonly Services.IFolderPickerService _folderPickerService;
         private readonly ProfilesViewModel _profilesViewModel;
         private bool _initialized;
-        private bool _isBulkLoading;
         private BackupRunRowViewModel? _selectedRun;
 
+        // The selected run's last payload verification, kept so a file tree
+        // built after the check still shows the per-file outcome.
+        private IReadOnlyDictionary<string, bool>? _fileResults;
+
+        // The one busy flag: loading, restoring, cleaning up, exporting and
+        // verifying all set it, so no two of them can overlap (a run being
+        // hashed can never be deleted underneath the check).
         [ObservableProperty]
-        [NotifyPropertyChangedFor(nameof(CanVerifySelectedRun))]
         [NotifyCanExecuteChangedFor(nameof(VerifySelectedRunCommand))]
         private bool isLoading;
 
@@ -38,32 +43,21 @@ namespace GameSaves.App.ViewModels
             get => _selectedRun;
             set
             {
-                if (value is null && !_isBulkLoading && _selectedRun is not null && Runs.Contains(_selectedRun))
-                {
-                    if (Pagination.IsPaging || !Pagination.CurrentPageItems.Contains(_selectedRun))
-                    {
-                        return; // Ignore null assignment during page switch
-                    }
-                }
+                // A list control writes null when the selected run is merely on
+                // another page; the selection itself is kept.
+                if (value is null && _selectedRun is not null && Runs.Contains(_selectedRun) && Pagination.IsOffPage(_selectedRun))
+                    return;
 
                 if (SetProperty(ref _selectedRun, value))
                 {
                     OnSelectedRunChanged(value);
-                    OnPropertyChanged(nameof(CanVerifySelectedRun));
                     VerifySelectedRunCommand.NotifyCanExecuteChanged();
                 }
             }
         }
 
         [ObservableProperty]
-        [NotifyPropertyChangedFor(nameof(CanVerifySelectedRun))]
-        [NotifyCanExecuteChangedFor(nameof(VerifySelectedRunCommand))]
-        private bool isVerifying;
-
-        [ObservableProperty]
         private string fileListStatusMessage = "";
-
-        public bool CanVerifySelectedRun => SelectedRun is not null && !IsVerifying && !IsLoading;
 
         [ObservableProperty]
         private bool confirmRestore;
@@ -229,7 +223,7 @@ namespace GameSaves.App.ViewModels
         [ObservableProperty]
         private string preRestoreBackupMessage = "";
 
-        public ObservableCollection<BackupRunRowViewModel> Runs { get; } = new();
+        public BulkObservableCollection<BackupRunRowViewModel> Runs { get; } = new();
 
         public PaginationController<BackupRunRowViewModel> Pagination { get; } = new()
         {
@@ -237,7 +231,7 @@ namespace GameSaves.App.ViewModels
             PluralItemName = "backups",
         };
 
-        public ObservableCollection<BackupItemRowViewModel> RunItems { get; } = new();
+        public BulkObservableCollection<BackupItemRowViewModel> RunItems { get; } = new();
 
         public SaveFileHierarchyController FileTree { get; } = new();
 
@@ -271,14 +265,6 @@ namespace GameSaves.App.ViewModels
             Pagination.PageChanged += (_, _) =>
             {
                 OnPropertyChanged(nameof(SelectedRun));
-            };
-
-            Runs.CollectionChanged += (_, _) =>
-            {
-                if (!_isBulkLoading)
-                {
-                    Pagination.SetSource(Runs);
-                }
             };
         }
 
@@ -487,8 +473,8 @@ namespace GameSaves.App.ViewModels
                 else
                 {
                     CleanupStatusMessage = dryRun
-                        ? $"Cleanup preview: {result.RunsConsidered} run(s) would be deleted, freeing {FormatBytes(result.BytesFreed)}. Nothing was deleted."
-                        : $"Cleanup finished. Deleted {result.RunsDeleted} run(s), skipped {result.RunsSkipped}, freed {FormatBytes(result.BytesFreed)}.";
+                        ? $"Cleanup preview: {result.RunsConsidered} run(s) would be deleted, freeing {ByteSize.Format(result.BytesFreed)}. Nothing was deleted."
+                        : $"Cleanup finished. Deleted {result.RunsDeleted} run(s), skipped {result.RunsSkipped}, freed {ByteSize.Format(result.BytesFreed)}.";
                 }
 
                 if (!dryRun && result.RunsDeleted > 0)
@@ -545,7 +531,7 @@ namespace GameSaves.App.ViewModels
                     CleanupResults.Add(new BackupCleanupItemRowViewModel(item));
 
                 CleanupStatusMessage = result.RunsDeleted == 1
-                    ? $"Backup run deleted, freeing {FormatBytes(result.BytesFreed)}."
+                    ? $"Backup run deleted, freeing {ByteSize.Format(result.BytesFreed)}."
                     : $"The run was not deleted: {result.Items.FirstOrDefault()?.Error ?? "see the results below."}";
 
                 if (result.RunsDeleted > 0)
@@ -594,10 +580,33 @@ namespace GameSaves.App.ViewModels
             FileTree.CollapseAll();
         }
 
+        partial void OnIsFileTreeModeChanged(bool value) => LoadFileTree();
+
+        // The tree is built only while it is on screen; the table view never
+        // pays for it.
+        private void LoadFileTree()
+        {
+            if (!IsFileTreeMode || SelectedRun is null)
+            {
+                FileTree.Clear();
+                return;
+            }
+
+            FileTree.LoadItems(SelectedRun.Run.Manifest.Items);
+            FileTree.UpdateVerification(_fileResults);
+        }
+
         private void OnSelectedRunChanged(BackupRunRowViewModel? value)
         {
-            RunItems.Clear();
-            FileTree.Clear();
+            // A check still hashing the previous run must not keep going, nor
+            // report into this one.
+            VerifySelectedRunCommand.Cancel();
+            _fileResults = null;
+
+            RunItems.ReplaceAll(value is null
+                ? []
+                : value.Run.Manifest.Items.Select(item => new BackupItemRowViewModel(item)));
+            LoadFileTree();
             RestoreResults.Clear();
             ConfirmRestore = false;
             RestoreStatusMessage = "No restore has run yet.";
@@ -616,11 +625,6 @@ namespace GameSaves.App.ViewModels
                 UpdateResolvedTargetDisplay();
                 return;
             }
-
-            foreach (TransferOverwriteBackupItem item in value.Run.Manifest.Items)
-                RunItems.Add(new BackupItemRowViewModel(item));
-
-            FileTree.LoadItems(value.Run.Manifest.Items);
 
             if (RestoreToMappingLocation)
                 _ = LoadMappingOptionsAsync();
@@ -651,26 +655,15 @@ namespace GameSaves.App.ViewModels
                 IsLoading = true;
                 StatusMessage = "Reading backup history...";
 
-                _isBulkLoading = true;
-                try
-                {
-                    Runs.Clear();
-                    SelectedRun = null;
+                if (Profiles.Count == 0)
+                    await _profilesViewModel.RefreshProfilesCommand.ExecuteAsync(null);
 
-                    if (Profiles.Count == 0)
-                        await _profilesViewModel.RefreshProfilesCommand.ExecuteAsync(null);
+                var runs = await _backupHistoryService.GetRunsAsync();
 
-                    var runs = await _backupHistoryService.GetRunsAsync();
-
-                    foreach (TransferBackupRunInfo run in runs)
-                        Runs.Add(new BackupRunRowViewModel(run));
-                }
-                finally
-                {
-                    _isBulkLoading = false;
-                }
-
-                Pagination.SetSource(Runs);
+                // Swapped only once the read succeeded, so the old rows stay
+                // consistent with the old page until the new ones replace both.
+                Runs.ReplaceAll(runs.Select(run => new BackupRunRowViewModel(run)));
+                SelectedRun = null;
 
                 StatusMessage = Runs.Count == 0
                     ? "No backup runs found."
@@ -680,10 +673,14 @@ namespace GameSaves.App.ViewModels
             }
             catch (Exception ex)
             {
+                // Nothing stale stays clickable under a failed read.
+                Runs.Clear();
+                SelectedRun = null;
                 StatusMessage = $"Failed to read backup history: {ex.Message}";
             }
             finally
             {
+                Pagination.SetSource(Runs);
                 IsLoading = false;
             }
         }
@@ -772,7 +769,7 @@ namespace GameSaves.App.ViewModels
 
                 FilesRestored = result.FilesRestored;
                 FilesSkipped = result.FilesSkipped;
-                BytesRestoredDisplay = FormatBytes(result.BytesRestored);
+                BytesRestoredDisplay = ByteSize.Format(result.BytesRestored);
                 FilesBackedUp = result.FilesBackedUp;
                 PreRestoreBackupMessage = result.BackupRootPath is null
                     ? ""
@@ -792,54 +789,43 @@ namespace GameSaves.App.ViewModels
             }
         }
 
-        private static string FormatBytes(long bytes)
-        {
-            if (bytes < 1024)
-                return $"{bytes} B";
-
-            double kb = bytes / 1024.0;
-
-            if (kb < 1024)
-                return $"{kb:0.##} KB";
-
-            double mb = kb / 1024.0;
-
-            if (mb < 1024)
-                return $"{mb:0.##} MB";
-
-            double gb = mb / 1024.0;
-
-            return $"{gb:0.##} GB";
-        }
+        private bool CanVerifySelectedRun() => SelectedRun is not null && !IsLoading;
 
         [RelayCommand(CanExecute = nameof(CanVerifySelectedRun))]
-        private async Task VerifySelectedRunAsync()
+        private async Task VerifySelectedRunAsync(CancellationToken cancellationToken)
         {
-            if (SelectedRun is null || IsVerifying || IsLoading)
+            if (SelectedRun is not { } runVm || IsLoading)
                 return;
 
-            var runVm = SelectedRun;
             try
             {
-                IsVerifying = true;
+                IsLoading = true;
                 FileListStatusMessage = "Verifying cryptographic SHA-256 payload integrity...";
 
-                var result = await _backupHistoryService.VerifyRunIntegrityAsync(runVm.Run);
+                var result = await _backupHistoryService.VerifyRunIntegrityAsync(runVm.Run, cancellationToken);
 
-                if (SelectedRun != runVm)
+                // Switching runs cancels the check; a result that still
+                // arrives belongs to a run that is no longer on screen.
+                if (cancellationToken.IsCancellationRequested || SelectedRun != runVm)
                     return;
 
-                runVm.Verification = result.Strength;
+                // Only a payload outcome changes the run's badge; anything else
+                // (cancelled, unsupported) says nothing new about the payload.
+                if (result.Strength is VerificationStrength.PayloadVerified
+                    or VerificationStrength.PayloadMismatch
+                    or VerificationStrength.MissingLocally)
+                {
+                    runVm.Verification = result.Strength;
+                }
 
                 if (result.FileResults is not null)
                 {
+                    _fileResults = result.FileResults;
+
                     foreach (var itemRow in RunItems)
                     {
-                        if (result.FileResults.TryGetValue(itemRow.Item.BackupFile, out bool matched) ||
-                            result.FileResults.TryGetValue(itemRow.Item.OriginalFile, out matched))
-                        {
+                        if (result.FileResults.TryGetValue(itemRow.Item.OriginalFile, out bool matched))
                             itemRow.IsVerified = matched;
-                        }
                     }
 
                     FileTree.UpdateVerification(result.FileResults);
@@ -851,17 +837,17 @@ namespace GameSaves.App.ViewModels
                         $"Payload verified: all {result.VerifiedFiles} file(s) matched SHA-256 hashes.",
                     VerificationStrength.PayloadMismatch =>
                         $"Payload verification failed: {result.Error ?? "Hash mismatch detected."}",
-                    _ =>
-                        $"Verification status: {result.Strength}. {result.Error ?? ""}".Trim()
+                    _ => result.Error ?? runVm.VerificationDisplay
                 };
             }
             catch (Exception ex)
             {
-                FileListStatusMessage = $"Verification error: {ex.Message}";
+                if (!cancellationToken.IsCancellationRequested && SelectedRun == runVm)
+                    FileListStatusMessage = $"Verification error: {ex.Message}";
             }
             finally
             {
-                IsVerifying = false;
+                IsLoading = false;
             }
         }
     }

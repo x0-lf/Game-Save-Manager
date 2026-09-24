@@ -1,0 +1,86 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="GameSaves.App.Views.PaginationBar"
+             x:CompileBindings="False">
+
+    <!-- The one pagination bar every paged list uses. Its DataContext is the
+         list's PaginationController<T>, which is generic, so the bindings
+         here are reflection bindings. The three groups wrap onto more lines
+         in a narrow side rail instead of clipping the page number and the
+         Next/Last buttons off the edge. Hidden while there is nothing to page. -->
+    <Border BorderThickness="0,1,0,0"
+            BorderBrush="{DynamicResource SubtleBorderBrush}"
+            Background="{DynamicResource InsetBackgroundBrush}"
+            Padding="12,8"
+            IsVisible="{Binding !!TotalItemCount}">
+        <WrapPanel Orientation="Horizontal"
+                   ItemSpacing="16"
+                   LineSpacing="6">
+            <TextBlock Text="{Binding PageSummaryText}"
+                       Foreground="{DynamicResource SecondaryTextBrush}"
+                       FontSize="{DynamicResource FontSizeBody}"
+                       VerticalAlignment="Center" />
+
+            <StackPanel Orientation="Horizontal"
+                        VerticalAlignment="Center"
+                        Spacing="6">
+                <TextBlock Text="Page size:"
+                           Foreground="{DynamicResource SecondaryTextBrush}"
+                           FontSize="{DynamicResource FontSizeBody}"
+                           VerticalAlignment="Center" />
+                <ComboBox ItemsSource="{Binding PageSizeOptions}"
+                          SelectedItem="{Binding SelectedPageSizeOption}"
+                          ToolTip.Tip="Select page size"
+                          AutomationProperties.Name="Page size selector"
+                          MinWidth="72"
+                          VerticalAlignment="Center" />
+                <TextBox Text="{Binding CustomPageSizeText}"
+                         IsVisible="{Binding IsCustomPageSize}"
+                         PlaceholderText="Size"
+                         ToolTip.Tip="Enter custom page size (positive integer)"
+                         AutomationProperties.Name="Custom page size input"
+                         Width="60"
+                         VerticalAlignment="Center" />
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal"
+                        VerticalAlignment="Center"
+                        Spacing="4">
+                <Button Command="{Binding FirstPageCommand}"
+                        ToolTip.Tip="First page"
+                        AutomationProperties.Name="First page"
+                        Content="«"
+                        Width="32"
+                        HorizontalContentAlignment="Center"
+                        VerticalContentAlignment="Center" />
+                <Button Command="{Binding PreviousPageCommand}"
+                        ToolTip.Tip="Previous page"
+                        AutomationProperties.Name="Previous page"
+                        Content="‹"
+                        Width="32"
+                        HorizontalContentAlignment="Center"
+                        VerticalContentAlignment="Center" />
+                <TextBlock Text="{Binding PageNumberText}"
+                           Foreground="{DynamicResource PrimaryTextBrush}"
+                           FontSize="{DynamicResource FontSizeBody}"
+                           FontWeight="Medium"
+                           VerticalAlignment="Center"
+                           Margin="8,0" />
+                <Button Command="{Binding NextPageCommand}"
+                        ToolTip.Tip="Next page"
+                        AutomationProperties.Name="Next page"
+                        Content="›"
+                        Width="32"
+                        HorizontalContentAlignment="Center"
+                        VerticalContentAlignment="Center" />
+                <Button Command="{Binding LastPageCommand}"
+                        ToolTip.Tip="Last page"
+                        AutomationProperties.Name="Last page"
+                        Content="»"
+                        Width="32"
+                        HorizontalContentAlignment="Center"
+                        VerticalContentAlignment="Center" />
+            </StackPanel>
+        </WrapPanel>
+    </Border>
+</UserControl>

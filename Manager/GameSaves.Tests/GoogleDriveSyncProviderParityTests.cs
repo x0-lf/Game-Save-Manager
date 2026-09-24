@@ -2,7 +2,6 @@ using GameSaves.Core.Sync;
 using GameSaves.Core.Transfers;
 using GameSaves.Infrastructure.GoogleDrive;
 using GameSaves.Infrastructure.Sync;
-using System.Reflection;
 using System.Text.Json;
 
 namespace GameSaves.Tests;
@@ -123,19 +122,16 @@ public sealed class GoogleDriveSyncProviderParityTests
     }
 
     [Fact]
-    public void BothWrappers_ExposeTheSameOperationSurface()
+    public void BothWrappers_AreTheSameSharedWrapper()
     {
-        Assert.Equal(
-            OperationNames(typeof(LocalFolderSyncProvider)),
-            OperationNames(typeof(GoogleDriveSyncProvider)));
-    }
+        using var workspace = new Workspace();
+        using ISyncProvider drive = workspace.Drive();
+        using ISyncProvider local = workspace.LocalFolder();
 
-    private static string[] OperationNames(Type wrapper) =>
-        wrapper.GetMethods(BindingFlags.Instance | BindingFlags.DeclaredOnly |
-                           BindingFlags.Public | BindingFlags.NonPublic)
-            .Select(method => method.Name)
-            .OrderBy(name => name, StringComparer.Ordinal)
-            .ToArray();
+        // One wrapper type serves both backends, so their operation surfaces
+        // cannot drift apart.
+        Assert.Same(local.GetType(), drive.GetType());
+    }
 
     private static async Task<SyncResult> Run(Workspace workspace, bool drivePath)
     {
@@ -222,15 +218,24 @@ public sealed class GoogleDriveSyncProviderParityTests
 
         public string RemoteRoot => Path.Combine(_root.Path, "remote");
 
-        public ISyncProvider Drive() =>
-            new GoogleDriveSyncProvider(
-                new LocalFolderRemoteFileSystem(RemoteRoot, LocalBase),
+        // Each built exactly as its factory builds it; only the Drive side's
+        // remote boundary is the local-folder stand-in.
+        public ISyncProvider Drive()
+        {
+            var remote = new LocalFolderRemoteFileSystem(RemoteRoot, LocalBase);
+            return new EngineSyncProvider(
+                "Google Drive",
+                remote.DisplayRoot,
+                remote,
                 new WorkspaceHistoryService(LocalBase),
                 new RecordingHistoryRepository());
+        }
 
         public ISyncProvider LocalFolder() =>
-            new LocalFolderSyncProvider(
+            new EngineSyncProvider(
+                "Local folder",
                 RemoteRoot,
+                new LocalFolderRemoteFileSystem(RemoteRoot, LocalBase),
                 new WorkspaceHistoryService(LocalBase),
                 new RecordingHistoryRepository());
 
