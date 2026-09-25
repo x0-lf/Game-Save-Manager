@@ -251,6 +251,17 @@ internal sealed class OfflineDriveObjectClientFactory(
 
                 if (query == queryBuilder.BuildDirectChildrenQuery(
                         parentId,
+                        GoogleDriveObjectKind.File))
+                {
+                    return drive.FindChildren(parentId)
+                        .Where(value =>
+                            value.Metadata.Kind == GoogleDriveObjectKind.File)
+                        .Select(value => value.Metadata)
+                        .ToArray();
+                }
+
+                if (query == queryBuilder.BuildDirectChildrenQuery(
+                        parentId,
                         expectedKind: null))
                 {
                     return drive.FindChildren(parentId)

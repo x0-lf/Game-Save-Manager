@@ -74,7 +74,7 @@ public sealed class SyncDirectionAndPresenceTests
     }
 
     [Fact]
-    public async Task SyncNow_IsWithheldUntilAPlanASelectionAndAConfirmationExist()
+    public async Task SyncNow_IsWithheldUntilAPlanAndASelectionExist()
     {
         var provider = new ScriptedSyncProvider();
         SyncViewModel viewModel = CreateViewModel(provider);
@@ -83,31 +83,14 @@ public sealed class SyncDirectionAndPresenceTests
 
         await viewModel.PreviewBothDirectionsCommand.ExecuteAsync(null);
 
-        // A plan and a default selection are not enough on their own.
+        // A ready plan with its default selection is enough: the header
+        // action itself is the confirmation.
         Assert.True(viewModel.CanExecuteSync);
         Assert.True(viewModel.HasSelectedRuns);
-        Assert.False(viewModel.CanExecuteSyncNow);
-
-        viewModel.ConfirmSync = true;
         Assert.True(viewModel.CanExecuteSyncNow);
 
         viewModel.DeselectAllRunsCommand.Execute(null);
         Assert.False(viewModel.CanExecuteSyncNow);
-    }
-
-    [Fact]
-    public async Task ExecuteWithoutTheConfirmation_TransfersNothing()
-    {
-        var provider = new ScriptedSyncProvider();
-        SyncViewModel viewModel = CreateViewModel(provider);
-
-        await viewModel.PreviewBothDirectionsCommand.ExecuteAsync(null);
-        await viewModel.ExecuteSyncCommand.ExecuteAsync(null);
-
-        Assert.Empty(provider.ExecuteOptions);
-        Assert.Equal(
-            "Sync blocked. Confirm the checkbox first.",
-            viewModel.ExecutionStatusMessage);
     }
 
     [Fact]
@@ -123,6 +106,67 @@ public sealed class SyncDirectionAndPresenceTests
 
         Assert.True(viewModel.PlanHasUploads);
         Assert.False(viewModel.PlanHasDownloads);
+    }
+
+    // The header button for the previewed direction becomes the action that
+    // runs the plan, named for exactly what it will copy; the other two stay
+    // previews, and a settings change turns all three back into previews.
+    [Fact]
+    public async Task TheHeaderActionFollowsThePreviewedDirection()
+    {
+        var provider = new ScriptedSyncProvider
+        {
+            Plan = PlanOf(UploadItem("upload-run"))
+        };
+        SyncViewModel viewModel = CreateViewModel(provider);
+
+        await viewModel.PreviewUploadCommand.ExecuteAsync(null);
+
+        Assert.True(viewModel.ShowUploadAction);
+        Assert.False(viewModel.ShowDownloadAction);
+        Assert.False(viewModel.ShowSyncAction);
+        Assert.StartsWith("Upload 1 run(s)", viewModel.ExecuteActionCaption, StringComparison.Ordinal);
+        Assert.Contains("press Upload at the top", viewModel.StatusMessage);
+
+        provider.Plan = PlanOf(DownloadItem("download-run"));
+        await viewModel.PreviewDownloadCommand.ExecuteAsync(null);
+
+        Assert.True(viewModel.ShowDownloadAction);
+        Assert.False(viewModel.ShowUploadAction);
+        Assert.StartsWith("Download 1 run(s)", viewModel.ExecuteActionCaption, StringComparison.Ordinal);
+
+        await viewModel.PreviewBothDirectionsCommand.ExecuteAsync(null);
+
+        Assert.True(viewModel.ShowSyncAction);
+        Assert.False(viewModel.ShowDownloadAction);
+        Assert.StartsWith("Sync 1 run(s)", viewModel.ExecuteActionCaption, StringComparison.Ordinal);
+
+        viewModel.DeselectAllRunsCommand.Execute(null);
+        Assert.StartsWith("Sync 0 run(s)", viewModel.ExecuteActionCaption, StringComparison.Ordinal);
+        Assert.False(viewModel.CanExecuteSyncNow);
+
+        viewModel.ArchiveSync = !viewModel.ArchiveSync;
+
+        Assert.False(viewModel.ShowSyncAction);
+        Assert.Equal("", viewModel.ExecuteActionCaption);
+    }
+
+    [Fact]
+    public void SyncView_TurnsThePreviewedDirectionIntoTheHeaderAction()
+    {
+        string xaml = CancelSyncTests.ReadSyncView();
+
+        // One header slot per direction: its preview, or the action once a
+        // plan for that direction is ready. No separate checkbox or Sync now.
+        foreach (string action in new[] { "ShowUploadAction", "ShowDownloadAction", "ShowSyncAction" })
+        {
+            Assert.Contains($"IsVisible=\"{{Binding !{action}}}\"", xaml);
+            Assert.Contains($"IsVisible=\"{{Binding {action}}}\"", xaml);
+        }
+
+        Assert.Equal(3, xaml.Split("Command=\"{Binding ExecuteSyncCommand}\"").Length - 1);
+        Assert.DoesNotContain("I understand this will copy backup runs", xaml);
+        Assert.DoesNotContain("ConfirmSync", xaml);
     }
 
     // ---------------------------------------------------------------
@@ -356,7 +400,6 @@ public sealed class SyncDirectionAndPresenceTests
 
         Assert.Empty(viewModel.Items);
         Assert.False(viewModel.CanExecuteSync);
-        Assert.False(viewModel.ConfirmSync);
         Assert.False(viewModel.HasSelectedRuns);
     }
 
@@ -593,7 +636,6 @@ public sealed class SyncDirectionAndPresenceTests
         // The plan the check will read: the run is now on both sides.
         provider.Plan = PlanOf(InSyncItem("run-a"));
 
-        viewModel.ConfirmSync = true;
         await viewModel.ExecuteSyncCommand.ExecuteAsync(null);
 
         SyncItemResultRowViewModel row = Assert.Single(viewModel.ExecutionResults);
@@ -622,7 +664,6 @@ public sealed class SyncDirectionAndPresenceTests
         // wants to upload it.
         provider.Plan = PlanOf(UploadItem("run-a"));
 
-        viewModel.ConfirmSync = true;
         await viewModel.ExecuteSyncCommand.ExecuteAsync(null);
 
         SyncItemResultRowViewModel row = Assert.Single(viewModel.ExecutionResults);
@@ -650,7 +691,6 @@ public sealed class SyncDirectionAndPresenceTests
 
         provider.Plan = PlanOf(ConflictItem("run-a"));
 
-        viewModel.ConfirmSync = true;
         await viewModel.ExecuteSyncCommand.ExecuteAsync(null);
 
         SyncItemResultRowViewModel row = Assert.Single(viewModel.ExecutionResults);
@@ -674,7 +714,6 @@ public sealed class SyncDirectionAndPresenceTests
 
         provider.PreviewFailure = new InvalidOperationException("The remote is unreachable.");
 
-        viewModel.ConfirmSync = true;
         await viewModel.ExecuteSyncCommand.ExecuteAsync(null);
 
         SyncItemResultRowViewModel row = Assert.Single(viewModel.ExecutionResults);
@@ -711,7 +750,6 @@ public sealed class SyncDirectionAndPresenceTests
         SyncViewModel viewModel = CreateViewModel(provider);
         await viewModel.PreviewBothDirectionsCommand.ExecuteAsync(null);
         provider.Plan = PlanOf(InSyncItem("run-a"));
-        viewModel.ConfirmSync = true;
         await viewModel.ExecuteSyncCommand.ExecuteAsync(null);
 
         Assert.True(viewModel.CanVerifyLastSync);
@@ -746,7 +784,6 @@ public sealed class SyncDirectionAndPresenceTests
         SyncViewModel viewModel = CreateViewModel(provider);
         await viewModel.PreviewBothDirectionsCommand.ExecuteAsync(null);
         provider.Plan = PlanOf(InSyncItem("run-a"));
-        viewModel.ConfirmSync = true;
         await viewModel.ExecuteSyncCommand.ExecuteAsync(null);
 
         provider.PreviewGate = new TaskCompletionSource();
@@ -773,7 +810,6 @@ public sealed class SyncDirectionAndPresenceTests
         await viewModel.PreviewBothDirectionsCommand.ExecuteAsync(null);
         provider.Plan = PlanOf(InSyncItem("run-a"));
 
-        viewModel.ConfirmSync = true;
         await viewModel.ExecuteSyncCommand.ExecuteAsync(null);
 
         // The plan now shows the refreshed state...
@@ -783,8 +819,7 @@ public sealed class SyncDirectionAndPresenceTests
         // ...and the completed run is still on screen beside it.
         Assert.Single(viewModel.ExecutionResults);
 
-        // Nothing can run again without a fresh confirmation.
-        Assert.False(viewModel.ConfirmSync);
+        // The refreshed plan has nothing left to copy, so nothing can run again.
         Assert.False(viewModel.CanExecuteSyncNow);
 
         // Two reads in total: the preview and the one revalidation reused as
@@ -821,7 +856,6 @@ public sealed class SyncDirectionAndPresenceTests
         await viewModel.PreviewBothDirectionsCommand.ExecuteAsync(null);
         provider.Plan = PlanOf(InSyncItem("copied"), ConflictItem("skipped"));
 
-        viewModel.ConfirmSync = true;
         await viewModel.ExecuteSyncCommand.ExecuteAsync(null);
 
         SyncItemResultRowViewModel copied = viewModel.ExecutionResults

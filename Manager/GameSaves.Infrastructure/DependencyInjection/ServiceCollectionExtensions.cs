@@ -212,6 +212,8 @@ namespace GameSaves.Infrastructure.DependencyInjection
                 GoogleDriveRunFolderDiscoveryService>();
             services.AddSingleton<IGoogleDriveRunFolderNameService,
                 GoogleDriveRunFolderNameService>();
+            services.AddSingleton<IGoogleDriveRunArchiveNameService,
+                GoogleDriveRunArchiveNameService>();
             services.AddSingleton<IGoogleDriveFolderChildEnumerationService,
                 GoogleDriveFolderChildEnumerationService>();
             services.AddSingleton<IGoogleDriveOneLevelFileListingService,

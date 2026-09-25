@@ -88,7 +88,7 @@ public sealed class GoogleDriveOAuthViewModelTests
                 GoogleDriveAuthorizationScopes.DriveFile,
                 GoogleDriveConnectionStatus.Connected,
                 hasStoredToken: true),
-            Message: "Google Drive account connected. Backup synchronization is not available yet.");
+            Message: "Google Drive account connected.");
         SyncViewModel viewModel = CreateViewModel(repository, oauth, id);
         await viewModel.GoogleAuthenticationInitializationTask;
 
@@ -451,7 +451,7 @@ public sealed class GoogleDriveOAuthViewModelTests
                 GoogleDriveAuthorizationScopes.DriveFile,
                 GoogleDriveConnectionStatus.Connected,
                 hasStoredToken: true),
-            Message: "Google Drive account connected. Backup synchronization is not available yet.");
+            Message: "Google Drive account connected.");
 
     private static SyncViewModel CreateViewModel(
         InMemorySyncRemoteProfileRepository repository,

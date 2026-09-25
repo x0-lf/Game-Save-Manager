@@ -23,6 +23,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
         private readonly IGoogleDriveRootExistenceService _rootExistenceService;
         private readonly IGoogleDriveFolderExistenceService _folderExistenceService;
         private readonly IGoogleDriveRunFolderNameService _runFolderNameService;
+        private readonly IGoogleDriveRunArchiveNameService _runArchiveNameService;
         private readonly IGoogleDriveTextFileReadService _textFileReadService;
         private readonly IGoogleDriveProviderMetadataReadService
             _providerMetadataReadService;
@@ -42,6 +43,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
             IGoogleDriveRootExistenceService rootExistenceService,
             IGoogleDriveFolderExistenceService folderExistenceService,
             IGoogleDriveRunFolderNameService runFolderNameService,
+            IGoogleDriveRunArchiveNameService runArchiveNameService,
             IGoogleDriveTextFileReadService textFileReadService,
             IGoogleDriveProviderMetadataReadService providerMetadataReadService,
             IGoogleDriveProviderMetadataReplacementService
@@ -63,6 +65,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 throw new ArgumentNullException(nameof(folderExistenceService));
             _runFolderNameService = runFolderNameService ??
                 throw new ArgumentNullException(nameof(runFolderNameService));
+            _runArchiveNameService = runArchiveNameService ??
+                throw new ArgumentNullException(nameof(runArchiveNameService));
             _textFileReadService = textFileReadService ??
                 throw new ArgumentNullException(nameof(textFileReadService));
             _providerMetadataReadService = providerMetadataReadService ??
@@ -109,6 +113,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                     _rootExistenceService,
                     _folderExistenceService,
                     _runFolderNameService,
+                    _runArchiveNameService,
                     _textFileReadService,
                     _providerMetadataReadService,
                     _providerMetadataReplacementService,
@@ -179,6 +184,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
         private readonly IGoogleDriveRootExistenceService _rootExistenceService;
         private readonly IGoogleDriveFolderExistenceService _folderExistenceService;
         private readonly IGoogleDriveRunFolderNameService _runFolderNameService;
+        private readonly IGoogleDriveRunArchiveNameService _runArchiveNameService;
         private readonly IGoogleDriveTextFileReadService _textFileReadService;
         private readonly IGoogleDriveProviderMetadataReadService
             _providerMetadataReadService;
@@ -198,6 +204,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
             IGoogleDriveRootExistenceService rootExistenceService,
             IGoogleDriveFolderExistenceService folderExistenceService,
             IGoogleDriveRunFolderNameService runFolderNameService,
+            IGoogleDriveRunArchiveNameService runArchiveNameService,
             IGoogleDriveTextFileReadService textFileReadService,
             IGoogleDriveProviderMetadataReadService providerMetadataReadService,
             IGoogleDriveProviderMetadataReplacementService
@@ -230,6 +237,8 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 throw new ArgumentNullException(nameof(folderExistenceService));
             _runFolderNameService = runFolderNameService ??
                 throw new ArgumentNullException(nameof(runFolderNameService));
+            _runArchiveNameService = runArchiveNameService ??
+                throw new ArgumentNullException(nameof(runArchiveNameService));
             _textFileReadService = textFileReadService ??
                 throw new ArgumentNullException(nameof(textFileReadService));
             _providerMetadataReadService = providerMetadataReadService ??
@@ -281,12 +290,32 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 _remoteProfileId,
                 cancellationToken);
 
+        // A run synced as one compressed file is a root-level blob plus its
+        // sidecar manifest. Drive stores and lists those like any other file,
+        // so the container path is the cheap one here: two requests per run
+        // instead of one per payload file.
+        public bool SupportsArchiveContainers => true;
+
+        public Task<IReadOnlyList<string>> ListRunArchiveNamesAsync(
+            CancellationToken cancellationToken = default) =>
+            _runArchiveNameService.ListAsync(
+                _remoteProfileId,
+                cancellationToken);
+
         public Task<bool> FolderExistsAsync(
             string relativeFolder,
             CancellationToken cancellationToken = default) =>
             _folderExistenceService.ExistsAsync(
                 _remoteProfileId,
                 relativeFolder,
+                cancellationToken);
+
+        public Task<bool> FileExistsAsync(
+            string relativePath,
+            CancellationToken cancellationToken = default) =>
+            _folderExistenceService.FileExistsAsync(
+                _remoteProfileId,
+                relativePath,
                 cancellationToken);
 
         public Task<string?> ReadTextFileAsync(

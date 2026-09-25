@@ -143,9 +143,10 @@ where the provider declares that capability and the location is actually
 reachable; opening a location transfers nothing.
 
 Preview upload, Preview download, and Preview both build the plan in one
-direction or both. All three are dry runs, and none of them can start a
-transfer: the confirmation and Sync Now still stand between a direction and a
-byte.
+direction or both. All three are dry runs. Once a plan is ready, the button
+for the direction it was built in becomes the action that runs it, named for
+exactly what it will copy ("Upload 6 run(s) (93.9 MB)"); the other two stay
+previews, and any settings change turns all three back into previews.
 
 Each plan row says where the run currently is - local only, remote only,
 present on both and identical, present on both and conflicting, or incomplete
@@ -155,8 +156,14 @@ The visible Upload or Download action is itself the selection: clicking it, or
 pressing Space on it, includes or excludes that run, and Select All and Select
 None write the same state. Conflicts and already-synced runs are not selectable.
 
-Execution requires confirmation, reports byte and run progress, and can be
-cancelled. Conflicts, deselected items, and existing targets remain untouched.
+That press is the confirmation: the plan is on screen and the button says
+what it copies. Execution reports byte and run progress and can be cancelled.
+Conflicts, deselected items, and existing targets remain untouched.
+
+Transfer runs as compressed archive sends each run as one `.7z` file plus its
+manifest instead of one request per file. Every provider, Google Drive
+included, stores and lists runs that way, and they are imported back as
+folder runs.
 
 Transfer completion and verification are separate states. After a sync, the
 completed runs are re-read through the provider's own preview and reported one

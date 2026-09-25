@@ -16,6 +16,7 @@ the shared invariants are defined in the [safety model](safety-model.md).
 | Quota display | No | No | No current UI | No | Yes (used and total) | No |
 | Open-location control | Opens local folder | No | Opens the app folder in the browser | No | No | No |
 | Upload backup runs | Yes | Yes | Yes | No | Yes (upload sessions above 4 MiB) | No |
+| Archive containers (.7z, .zip) | Yes | Yes | Yes | No | Yes | No |
 | Download backup runs | Yes | Yes | Yes | No | Yes | No |
 | Overwrite runs | Never | Never | Never | N/A | Never (enforced server-side) | N/A |
 | Delete runs | Never | Never | Never | N/A | Never | N/A |
@@ -30,8 +31,15 @@ work.
 
 All implemented providers use the same Sync engine. Preview compares backup-run
 names and manifest identity and reports upload, download, in-sync, conflict, or
-warning. Users select individual copy actions, confirm execution separately,
-and receive live progress and per-run results.
+warning. Users select individual copy actions, start execution with a separate
+button named for what it copies, and receive live progress and per-run results.
+
+With "Transfer runs as compressed archive" on, a run is sent as one `.7z`
+container at the remote root plus a `<name>.7z.manifest.json` sidecar that
+carries its identity. The sidecar is written last, so a container without one
+is reported as an interrupted upload, never as a run. Containers download back
+as folder runs. Every implemented provider supports this; on a cloud provider
+it turns hundreds of requests per run into two.
 
 Uploads are create-only and place `manifest.json` last. Downloads never replace
 an existing local run. Neither direction deletes a run. A same-name run with
@@ -93,6 +101,12 @@ Its Drive ID is authoritative, so a rename or move within My Drive remains
 linked. Missing, trashed, invalid, unsupported, or ambiguous roots are not
 silently replaced. Shared drives, full Drive browsing, arbitrary folder picking,
 and quota UI are not implemented.
+
+Runs are stored as folders, or as `.7z` containers beside them when archive
+transfer is on. The container listing is one child listing of the backup
+folder, files only; a Drive-native object named like an archive, or two
+containers whose names differ only by case, fails the preview closed rather
+than being offered as a run that could not be restored.
 
 The Sync page can open that folder in the system browser. It is capability
 driven: the action is offered for any provider whose descriptor declares
@@ -176,7 +190,7 @@ Connect is not offered.
    `.gamesave-sync/sync-log.json` may be replaced. A partial download created by a
    failed call is removed so a retry can create it again; existing local files are
    never opened for writing.
-7. **Archive Containers Supported:** Like Local Folder and SFTP, OneDrive stores
+7. **Archive Containers Supported:** Like every other provider, OneDrive stores
    `.zip` and `.7z` backup archives.
 8. **Paging and Retries:** Folder listings follow every `@odata.nextLink` page
    (only links on the Graph host are followed). HTTP 429, 5xx, network errors and

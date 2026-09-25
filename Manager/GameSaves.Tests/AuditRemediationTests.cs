@@ -296,47 +296,6 @@ public sealed class AuditRemediationTests
 
     private static string WorkingName(string prefix) => prefix + Guid.NewGuid().ToString("N");
 
-    [Fact]
-    public void SyncViewModel_ExposesArchiveSyncCapabilitiesAndNotice()
-    {
-        var settings = SyncUiSettings.Default with
-        {
-            SelectedProviderKind = SyncProviderKind.LocalFolder
-        };
-        var repository = new InMemorySyncRemoteProfileRepository();
-        var vm = new SyncViewModel(
-            new SyncProviderSelectionTests.RecordingSyncProviderFactory(),
-            new SyncProviderCatalog(),
-            new SyncProviderSelectionTests.NullFolderPickerService(),
-            new SyncProviderSelectionTests.InMemorySyncSettingsStore(settings),
-            repository,
-            new SyncRemoteProfileService(repository, new InMemorySecretStore()),
-            new StubSyncRemoteProfileMigrationService(settings),
-            new FixedUtcClock(DateTimeOffset.UtcNow),
-            new StubGoogleDriveOAuthService(),
-            SyncProviderSelectionTests.NewWorkspaceLayout());
-
-        // Default LocalFolder supports archive containers
-        vm.SelectedProviderKind = SyncProviderKind.LocalFolder;
-        Assert.True(vm.SelectedProviderSupportsArchiveContainers);
-        Assert.False(vm.ShowArchiveSyncNotice);
-        Assert.Null(vm.ArchiveSyncNotice);
-        Assert.Contains(".7z archive container", vm.ArchiveSyncTooltip);
-
-        // Google Drive operates on loose-file sync
-        vm.SelectedProviderKind = SyncProviderKind.GoogleDrive;
-        Assert.False(vm.SelectedProviderSupportsArchiveContainers);
-        Assert.Contains("loose-file", vm.ArchiveSyncTooltip);
-
-        vm.ArchiveSync = false;
-        Assert.False(vm.ShowArchiveSyncNotice);
-
-        vm.ArchiveSync = true;
-        Assert.True(vm.ShowArchiveSyncNotice);
-        Assert.NotNull(vm.ArchiveSyncNotice);
-        Assert.Contains("loose-file sync", vm.ArchiveSyncNotice);
-    }
-
     private sealed class TestArchiveRemoteFileSystem : IRemoteFileSystem
     {
         public Dictionary<string, string> TextFiles { get; } = new(StringComparer.OrdinalIgnoreCase);

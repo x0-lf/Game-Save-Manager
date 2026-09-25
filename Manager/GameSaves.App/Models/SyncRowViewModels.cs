@@ -142,7 +142,7 @@ namespace GameSaves.App.Models
             : $"{RunName}. {ActionText}. Not selectable. {StatusText}";
 
         public string ActionToolTip => IsSelectable
-            ? "Click, or press Space, to include or exclude this run. Nothing is copied until you confirm and press Sync Now."
+            ? "Click, or press Space, to include or exclude this run. Nothing is copied until you press Upload, Download, or Sync at the top."
             : StatusText;
 
         public string StatusText => Item.StatusText;

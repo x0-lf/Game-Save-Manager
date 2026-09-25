@@ -119,10 +119,6 @@ namespace GameSaves.App.ViewModels
         [NotifyPropertyChangedFor(nameof(CanShowReconnectOneDrive))]
         [NotifyPropertyChangedFor(nameof(CanShowDisconnectOneDrive))]
         [NotifyPropertyChangedFor(nameof(CanUseOneDriveForSync))]
-        [NotifyPropertyChangedFor(nameof(SelectedProviderSupportsArchiveContainers))]
-        [NotifyPropertyChangedFor(nameof(ArchiveSyncNotice))]
-        [NotifyPropertyChangedFor(nameof(ShowArchiveSyncNotice))]
-        [NotifyPropertyChangedFor(nameof(ArchiveSyncTooltip))]
         [NotifyPropertyChangedFor(nameof(SelectedProviderDescriptor))]
         [NotifyPropertyChangedFor(nameof(RequiresInteractiveLogin))]
         [NotifyPropertyChangedFor(nameof(RequiresServerCredentials))]
@@ -187,9 +183,15 @@ namespace GameSaves.App.ViewModels
         private bool sftpTrustNewHostKey;
 
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(ShowUploadAction))]
+        [NotifyPropertyChangedFor(nameof(ShowDownloadAction))]
+        [NotifyPropertyChangedFor(nameof(ShowSyncAction))]
         private bool uploadEnabled = true;
 
         [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(ShowUploadAction))]
+        [NotifyPropertyChangedFor(nameof(ShowDownloadAction))]
+        [NotifyPropertyChangedFor(nameof(ShowSyncAction))]
         private bool downloadEnabled = true;
 
         [ObservableProperty]
@@ -197,11 +199,15 @@ namespace GameSaves.App.ViewModels
 
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(CanExecuteSyncNow))]
-        private bool confirmSync;
-
-        [ObservableProperty]
-        [NotifyPropertyChangedFor(nameof(CanExecuteSyncNow))]
+        [NotifyPropertyChangedFor(nameof(ShowUploadAction))]
+        [NotifyPropertyChangedFor(nameof(ShowDownloadAction))]
+        [NotifyPropertyChangedFor(nameof(ShowSyncAction))]
         private bool canExecuteSync;
+
+        // The header action for the direction the current plan was built
+        // for, named for its exact effect: "Upload 6 run(s) (93.9 MB)".
+        [ObservableProperty]
+        private string executeActionCaption = "";
 
         // What the plan actually contains, so the direction actions can be
         // withdrawn when there is nothing for them to do rather than offering
@@ -787,22 +793,6 @@ namespace GameSaves.App.ViewModels
             SelectedProviderDescriptor.ConfigurationSurface ==
             SyncProviderConfigurationSurface.InteractiveOAuth;
 
-        public bool SelectedProviderSupportsArchiveContainers =>
-            SelectedProviderKind != SyncProviderKind.GoogleDrive;
-
-        public string ArchiveSyncTooltip =>
-            SelectedProviderSupportsArchiveContainers
-                ? "Transfers whole backup runs as a single compressed .7z archive container, reducing cloud API request overhead and transfer latency."
-                : "Google Drive operates on loose-file folder sync. Runs are transferred as folders and verified safely.";
-
-        public string? ArchiveSyncNotice =>
-            !SelectedProviderSupportsArchiveContainers && ArchiveSync
-                ? "Note: Google Drive operates on loose-file sync. Archive container transfer is automatically converted to folder sync."
-                : null;
-
-        public bool ShowArchiveSyncNotice =>
-            !SelectedProviderSupportsArchiveContainers && ArchiveSync;
-
         public bool IsGoogleOAuthClientConfigurationAvailable =>
             _googleDriveOAuthService.GetClientConfigurationState().IsAvailable;
 
@@ -1303,12 +1293,7 @@ namespace GameSaves.App.ViewModels
 
         partial void OnDownloadEnabledChanged(bool value) => InvalidatePlan();
 
-        partial void OnArchiveSyncChanged(bool value)
-        {
-            OnPropertyChanged(nameof(ArchiveSyncNotice));
-            OnPropertyChanged(nameof(ShowArchiveSyncNotice));
-            InvalidatePlan();
-        }
+        partial void OnArchiveSyncChanged(bool value) => InvalidatePlan();
 
         partial void OnIsLoadingChanged(bool value)
         {
@@ -1464,7 +1449,6 @@ namespace GameSaves.App.ViewModels
             // revalidated: the endpoint it was produced against is gone.
             _verifiedProvider = null;
             ClearPreview();
-            ConfirmSync = false;
             OnPropertyChanged(nameof(CanVerifyLastSync));
             StatusMessage = "Sync settings changed. Build a new sync preview.";
         }
@@ -3522,6 +3506,7 @@ namespace GameSaves.App.ViewModels
             Warnings.Clear();
             SummaryDisplay = "";
             SelectedSummaryDisplay = "";
+            ExecuteActionCaption = "";
             ConnectionCheckMessage = "";
             CanExecuteSync = false;
             PlanHasUploads = false;
@@ -3539,17 +3524,20 @@ namespace GameSaves.App.ViewModels
             if (selectable.Count == 0)
             {
                 SelectedSummaryDisplay = "";
+                ExecuteActionCaption = "";
                 HasSelectedRuns = false;
                 return;
             }
 
             var selected = selectable.Where(row => row.IncludeInSync).ToList();
+            string selectedBytes = FormatBytes(selected.Sum(row => row.Item.TotalBytes));
 
             HasSelectedRuns = selected.Count > 0;
 
             SelectedSummaryDisplay =
                 $"Selected for sync: {selected.Count} of {selectable.Count} run(s) " +
-                $"({FormatBytes(selected.Sum(row => row.Item.TotalBytes))})";
+                $"({selectedBytes})";
+            ExecuteActionCaption = $"{ActionVerb} {selected.Count} run(s) ({selectedBytes})";
         }
 
         [RelayCommand]
@@ -3723,8 +3711,8 @@ namespace GameSaves.App.ViewModels
         //
         // These set the existing direction options and rebuild the preview
         // through the one engine. There is no second transfer path, and none
-        // of them execute anything: the confirmation and Sync Now still stand
-        // between a direction choice and a byte moving.
+        // of them execute anything: only the header action that a ready plan
+        // turns its own direction button into moves a byte.
         // ---------------------------------------------------------------
 
         [RelayCommand]
@@ -3761,7 +3749,6 @@ namespace GameSaves.App.ViewModels
             {
                 Items.Clear();
                 Warnings.Clear();
-                ConfirmSync = false;
 
                 DateTimeOffset checkedAt = _clock.UtcNow;
 
@@ -3798,12 +3785,24 @@ namespace GameSaves.App.ViewModels
         }
 
         /// <summary>
-        /// Sync Now is offered only for a plan that can run, with something
-        /// selected, and with the confirmation given. No path executes a
-        /// transfer without all three.
+        /// The header action is offered only for a plan that can run, with
+        /// something selected. Pressing it is the confirmation: the plan is
+        /// on screen and the button says exactly what it copies.
         /// </summary>
         public bool CanExecuteSyncNow =>
-            CanExecuteSync && ConfirmSync && HasSelectedRuns && !IsLoading;
+            CanExecuteSync && HasSelectedRuns && !IsLoading;
+
+        // Which of the three header buttons becomes that action: the one for
+        // the direction the current plan was previewed in. The other two stay
+        // previews, and any settings change turns all three back into previews.
+        public bool ShowUploadAction => CanExecuteSync && UploadEnabled && !DownloadEnabled;
+
+        public bool ShowDownloadAction => CanExecuteSync && DownloadEnabled && !UploadEnabled;
+
+        public bool ShowSyncAction => CanExecuteSync && UploadEnabled && DownloadEnabled;
+
+        private string ActionVerb =>
+            UploadEnabled && DownloadEnabled ? "Sync" : UploadEnabled ? "Upload" : "Download";
 
         [RelayCommand]
         private async Task PreviewSyncAsync()
@@ -3874,7 +3873,7 @@ namespace GameSaves.App.ViewModels
                 }
 
                 StatusMessage = plan.CanExecute
-                    ? "Sync preview ready. Untick runs you do not want to copy, then confirm and press Sync Now."
+                    ? $"Sync preview ready. Untick runs you do not want to copy, then press {ActionVerb} at the top."
                     : plan.ConflictCount > 0 && plan.UploadCount + plan.DownloadCount == 0
                         ? "Only conflicts remain; nothing can be synced automatically."
                         : "Nothing to sync, or the preview has errors. Check the warnings.";
@@ -3901,12 +3900,6 @@ namespace GameSaves.App.ViewModels
             if (_lastPlan is null || _lastProvider is null)
             {
                 ExecutionStatusMessage = "Build a sync preview first.";
-                return;
-            }
-
-            if (!ConfirmSync)
-            {
-                ExecutionStatusMessage = "Sync blocked. Confirm the checkbox first.";
                 return;
             }
 
@@ -3959,7 +3952,8 @@ namespace GameSaves.App.ViewModels
                     new SyncOptions
                     {
                         DryRun = false,
-                        ConfirmExecution = ConfirmSync,
+                        // The header action is the confirmation; see CanExecuteSyncNow.
+                        ConfirmExecution = true,
                         Upload = UploadEnabled,
                         Download = DownloadEnabled,
                         ArchiveSync = ArchiveSync,

@@ -436,6 +436,7 @@ public sealed class GoogleDriveTextFileReadServiceTests
             new ExistingRootService(),
             new UnusedFolderExistenceService(),
             new FixedRunFolderNameService("Unreadable Run"),
+            new EmptyRunArchiveNameService(),
             reader,
             new UnusedProviderMetadataReadService(),
             new UnusedProviderMetadataReplacementService(),
@@ -740,6 +741,22 @@ public sealed class GoogleDriveTextFileReadServiceTests
             CancellationToken cancellationToken = default) =>
             throw new InvalidOperationException(
                 "Preview must not check a run folder after its manifest is unreadable.");
+
+        public Task<bool> FileExistsAsync(
+            Guid remoteProfileId,
+            string relativePath,
+            CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException(
+                "Preview must not check a file after its manifest is unreadable.");
+    }
+
+    private sealed class EmptyRunArchiveNameService
+        : IGoogleDriveRunArchiveNameService
+    {
+        public Task<IReadOnlyList<string>> ListAsync(
+            Guid remoteProfileId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
     }
 
     private sealed class FixedRunFolderNameService(params string[] names)

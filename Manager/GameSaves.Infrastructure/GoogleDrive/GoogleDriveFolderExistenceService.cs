@@ -6,12 +6,21 @@ namespace GameSaves.Infrastructure.GoogleDrive
             Guid remoteProfileId,
             string relativeFolder,
             CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Same read-only resolution for a file path, which the engine needs
+        /// for the create-only check before an archive container upload.
+        /// </summary>
+        Task<bool> FileExistsAsync(
+            Guid remoteProfileId,
+            string relativePath,
+            CancellationToken cancellationToken = default);
     }
 
     /// <summary>
-    /// Resolves one Drive-relative folder path beneath the authoritative
-    /// configured application root. Resolution is read-only: ambiguous or
-    /// inaccessible state fails closed and folder creation is never invoked.
+    /// Resolves one Drive-relative path beneath the authoritative configured
+    /// application root. Resolution is read-only: ambiguous or inaccessible
+    /// state fails closed and folder creation is never invoked.
     /// </summary>
     internal sealed class GoogleDriveFolderExistenceService
         : IGoogleDriveFolderExistenceService
@@ -25,13 +34,34 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 throw new ArgumentNullException(nameof(contextFactory));
         }
 
-        public async Task<bool> ExistsAsync(
+        public Task<bool> ExistsAsync(
             Guid remoteProfileId,
             string relativeFolder,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default) =>
+            ExistsAsync(
+                remoteProfileId,
+                relativeFolder,
+                GoogleDriveObjectKind.Folder,
+                cancellationToken);
+
+        public Task<bool> FileExistsAsync(
+            Guid remoteProfileId,
+            string relativePath,
+            CancellationToken cancellationToken = default) =>
+            ExistsAsync(
+                remoteProfileId,
+                relativePath,
+                GoogleDriveObjectKind.File,
+                cancellationToken);
+
+        private async Task<bool> ExistsAsync(
+            Guid remoteProfileId,
+            string relativePath,
+            GoogleDriveObjectKind kind,
+            CancellationToken cancellationToken)
         {
             GoogleDriveRelativePath path =
-                GoogleDriveRelativePath.Parse(relativeFolder);
+                GoogleDriveRelativePath.Parse(relativePath);
 
             using GoogleDriveRemoteOperationContext context =
                 await _contextFactory.CreateAsync(
@@ -45,7 +75,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                 resolution = await context.Resolver.ResolveAsync(
                     context.RootFolderId,
                     path,
-                    GoogleDriveObjectKind.Folder,
+                    kind,
                     cancellationToken).ConfigureAwait(false);
                 cancellationToken.ThrowIfCancellationRequested();
             }
@@ -59,38 +89,41 @@ namespace GameSaves.Infrastructure.GoogleDrive
             }
             catch
             {
-                throw Failure();
+                throw Failure(kind);
             }
 
             if (resolution is null)
-                throw Failure();
+                throw Failure(kind);
 
             if (resolution.Status == GoogleDriveObjectResolutionStatus.NotFound)
                 return false;
 
             if (resolution.Status == GoogleDriveObjectResolutionStatus.Found)
             {
-                if (resolution.ObjectKind == GoogleDriveObjectKind.Folder &&
+                if (resolution.ObjectKind == kind &&
                     !string.IsNullOrWhiteSpace(resolution.ObjectId))
                 {
                     return true;
                 }
 
-                throw Failure();
+                throw Failure(kind);
             }
 
             throw new GoogleDriveRemoteOperationException(
                 GoogleDriveRemoteValidationMapper.FromObjectResolution(resolution));
         }
 
-        private static GoogleDriveRemoteOperationException Failure()
+        private static GoogleDriveRemoteOperationException Failure(
+            GoogleDriveObjectKind kind)
         {
             var resolution = new GoogleDriveObjectResolutionResult(
                 GoogleDriveObjectResolutionStatus.Failed,
                 GoogleDriveRelativePath.Root,
-                GoogleDriveObjectKind.Folder,
+                kind,
                 errorCode: GoogleDriveObjectResolutionErrorCodes.Failed,
-                message: "The Google Drive folder could not be resolved safely.");
+                message: kind == GoogleDriveObjectKind.Folder
+                    ? "The Google Drive folder could not be resolved safely."
+                    : "The Google Drive file could not be resolved safely.");
 
             return new GoogleDriveRemoteOperationException(
                 GoogleDriveRemoteValidationMapper.FromObjectResolution(resolution));

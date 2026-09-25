@@ -95,10 +95,12 @@
                                 CanCollapse="False"
                                 MinPanelWidth="320">
                 <wsp:WorkspacePanel.HeaderActions>
-                    <!-- Three previews, one engine. Each sets the direction
-                         options below and rebuilds the plan; none of them
-                         transfers anything, because the confirmation and Sync
-                         Now still stand between a direction and a byte. -->
+                    <!-- Three direction slots, one engine. Each preview sets
+                         the direction options below and rebuilds the plan
+                         without copying anything. Once a plan is ready, the
+                         slot for its direction shows the action that runs it,
+                         named for exactly what it copies; the other two stay
+                         previews. Any settings change puts the previews back. -->
                     <StackPanel Orientation="Horizontal"
                                 Spacing="8"
                                 VerticalAlignment="Center">
@@ -106,19 +108,43 @@
                                 ToolTip.Tip="Dry run of local-only runs going to the remote. Nothing is copied."
                                 Command="{Binding PreviewUploadCommand}"
                                 IsEnabled="{Binding CanPreviewSync}"
+                                IsVisible="{Binding !ShowUploadAction}"
+                                VerticalAlignment="Center" />
+                        <Button Content="{Binding ExecuteActionCaption}"
+                                ToolTip.Tip="Copies the selected local-only runs to the remote now. Nothing is overwritten or deleted."
+                                Classes="primary"
+                                Command="{Binding ExecuteSyncCommand}"
+                                IsEnabled="{Binding CanExecuteSyncNow}"
+                                IsVisible="{Binding ShowUploadAction}"
                                 VerticalAlignment="Center" />
 
                         <Button Content="Preview download"
                                 ToolTip.Tip="Dry run of remote-only runs coming to the local backup base. Nothing is copied."
                                 Command="{Binding PreviewDownloadCommand}"
                                 IsEnabled="{Binding CanPreviewSync}"
+                                IsVisible="{Binding !ShowDownloadAction}"
+                                VerticalAlignment="Center" />
+                        <Button Content="{Binding ExecuteActionCaption}"
+                                ToolTip.Tip="Copies the selected remote-only runs to the local backup base now. Nothing is overwritten or deleted."
+                                Classes="primary"
+                                Command="{Binding ExecuteSyncCommand}"
+                                IsEnabled="{Binding CanExecuteSyncNow}"
+                                IsVisible="{Binding ShowDownloadAction}"
                                 VerticalAlignment="Center" />
 
                         <Button Content="Preview both"
-                                ToolTip.Tip="Dry run in both directions: nothing is copied until you confirm."
-                                Classes="primary"
+                                ToolTip.Tip="Dry run in both directions. Nothing is copied."
+                                Classes.primary="{Binding !CanExecuteSync}"
                                 Command="{Binding PreviewBothDirectionsCommand}"
                                 IsEnabled="{Binding CanPreviewSync}"
+                                IsVisible="{Binding !ShowSyncAction}"
+                                VerticalAlignment="Center" />
+                        <Button Content="{Binding ExecuteActionCaption}"
+                                ToolTip.Tip="Copies the selected runs in both directions now. Nothing is overwritten or deleted."
+                                Classes="primary"
+                                Command="{Binding ExecuteSyncCommand}"
+                                IsEnabled="{Binding CanExecuteSyncNow}"
+                                IsVisible="{Binding ShowSyncAction}"
                                 VerticalAlignment="Center" />
                     </StackPanel>
                 </wsp:WorkspacePanel.HeaderActions>
@@ -421,14 +447,7 @@
                                     <CheckBox Content="Transfer runs as compressed archive (.7z)"
                                               IsChecked="{Binding ArchiveSync}"
                                               FontSize="{DynamicResource FontSizeBody}"
-                                              ToolTip.Tip="{Binding ArchiveSyncTooltip}" />
-
-                                    <TextBlock Text="{Binding ArchiveSyncNotice}"
-                                               IsVisible="{Binding ShowArchiveSyncNotice}"
-                                               Foreground="{DynamicResource WarningBrush}"
-                                               FontSize="{DynamicResource FontSizeCaption}"
-                                               Margin="4,2,0,0"
-                                               VerticalAlignment="Center" />
+                                              ToolTip.Tip="Sends each backup run as one compressed .7z file plus its manifest instead of one request per file. Every provider stores these; cloud syncs of many small files become far fewer requests." />
                                 </WrapPanel>
                             </StackPanel>
                         </Grid>
@@ -828,26 +847,6 @@
                                    HorizontalAlignment="Left" />
                     </StackPanel>
 
-                    <Border Height="1" Background="{DynamicResource SubtleBorderBrush}" />
-
-                    <WrapPanel ItemSpacing="8" LineSpacing="6">
-                        <Border Background="{DynamicResource InsetBackgroundBrush}"
-                                CornerRadius="8"
-                                Padding="10,6"
-                                VerticalAlignment="Center">
-                            <CheckBox Content="I understand this will copy backup runs"
-                                      IsChecked="{Binding ConfirmSync}"
-                                      FontSize="{DynamicResource FontSizeBody}" />
-                        </Border>
-                        <!-- Offered only for a runnable plan, with runs
-                             selected, and with the confirmation given. The
-                             command refuses all three cases again anyway; this
-                             just stops the button pretending otherwise. -->
-                        <Button Content="Sync now"
-                                Command="{Binding ExecuteSyncCommand}"
-                                IsEnabled="{Binding CanExecuteSyncNow}"
-                                VerticalAlignment="Center" />
-                    </WrapPanel>
                 </StackPanel>
             </wsp:WorkspacePanel>
 

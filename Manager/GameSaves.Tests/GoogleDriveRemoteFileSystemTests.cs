@@ -31,6 +31,7 @@ public sealed class GoogleDriveRemoteFileSystemTests
             new RecordingRootExistenceService(),
             new RecordingFolderExistenceService(),
             new RecordingRunFolderNameService(),
+            new RecordingRunArchiveNameService(),
             new RecordingTextFileReadService(),
             new RecordingProviderMetadataReadService(),
             new RecordingProviderMetadataReplacementService(),
@@ -74,6 +75,7 @@ public sealed class GoogleDriveRemoteFileSystemTests
             new RecordingRootExistenceService(),
             new RecordingFolderExistenceService(),
             new RecordingRunFolderNameService(),
+            new RecordingRunArchiveNameService(),
             new RecordingTextFileReadService(),
             new RecordingProviderMetadataReadService(),
             new RecordingProviderMetadataReplacementService(),
@@ -110,6 +112,7 @@ public sealed class GoogleDriveRemoteFileSystemTests
             new RecordingRootExistenceService(),
             new RecordingFolderExistenceService(),
             new RecordingRunFolderNameService(),
+            new RecordingRunArchiveNameService(),
             new RecordingTextFileReadService(),
             new RecordingProviderMetadataReadService(),
             new RecordingProviderMetadataReplacementService(),
@@ -138,6 +141,7 @@ public sealed class GoogleDriveRemoteFileSystemTests
             new RecordingRootExistenceService(),
             new RecordingFolderExistenceService(),
             new RecordingRunFolderNameService(),
+            new RecordingRunArchiveNameService(),
             new RecordingTextFileReadService(),
             new RecordingProviderMetadataReadService(),
             new RecordingProviderMetadataReplacementService(),
@@ -184,6 +188,8 @@ public sealed class GoogleDriveRemoteFileSystemTests
             provider.GetRequiredService<IGoogleDriveFolderExistenceService>());
         Assert.IsType<GoogleDriveRunFolderNameService>(
             provider.GetRequiredService<IGoogleDriveRunFolderNameService>());
+        Assert.IsType<GoogleDriveRunArchiveNameService>(
+            provider.GetRequiredService<IGoogleDriveRunArchiveNameService>());
         Assert.IsType<GoogleDriveTextFileReadService>(
             provider.GetRequiredService<IGoogleDriveTextFileReadService>());
         Assert.IsType<GoogleDriveProviderMetadataReadService>(
@@ -375,6 +381,43 @@ public sealed class GoogleDriveRemoteFileSystemTests
         Assert.Equal(listing.Result, names);
         Assert.Equal(new[] { ProfileId }, listing.ProfileIds);
         Assert.Equal(cancellation.Token, listing.CancellationTokens.Single());
+    }
+
+    [Fact]
+    public async Task ArchiveContainers_AreSupportedAndListedThroughTheArchiveService()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var listing = new RecordingRunArchiveNameService
+        {
+            Result = new[] { "Run One.7z", "Run Two.zip" }
+        };
+        IRemoteFileSystem remote = Remote(
+            new RecordingValidationService(),
+            runArchiveNames: listing);
+
+        Assert.True(remote.SupportsArchiveContainers);
+        IReadOnlyList<string> names =
+            await remote.ListRunArchiveNamesAsync(cancellation.Token);
+
+        Assert.Equal(listing.Result, names);
+        Assert.Equal(new[] { ProfileId }, listing.ProfileIds);
+        Assert.Equal(cancellation.Token, listing.CancellationTokens.Single());
+    }
+
+    [Fact]
+    public async Task FileExistsAsync_DelegatesPathProfileAndCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var existence = new RecordingFolderExistenceService { Result = true };
+        IRemoteFileSystem remote = Remote(
+            new RecordingValidationService(),
+            folderExistence: existence);
+
+        Assert.True(await remote.FileExistsAsync("run.7z", cancellation.Token));
+        Assert.Equal(new[] { ProfileId }, existence.ProfileIds);
+        Assert.Equal(new[] { "run.7z" }, existence.RelativeFiles);
+        Assert.Empty(existence.RelativeFolders);
+        Assert.Equal(cancellation.Token, existence.CancellationTokens.Single());
     }
 
     [Fact]
@@ -764,6 +807,7 @@ public sealed class GoogleDriveRemoteFileSystemTests
         Assert.Contains(typeof(IGoogleDriveRootExistenceService), fieldTypes);
         Assert.Contains(typeof(IGoogleDriveFolderExistenceService), fieldTypes);
         Assert.Contains(typeof(IGoogleDriveRunFolderNameService), fieldTypes);
+        Assert.Contains(typeof(IGoogleDriveRunArchiveNameService), fieldTypes);
         Assert.Contains(typeof(IGoogleDriveTextFileReadService), fieldTypes);
         Assert.Contains(
             typeof(IGoogleDriveProviderMetadataReadService),
@@ -885,6 +929,7 @@ public sealed class GoogleDriveRemoteFileSystemTests
             new RecordingRootExistenceService(),
             new RecordingFolderExistenceService(),
             new RecordingRunFolderNameService(),
+            new RecordingRunArchiveNameService(),
             new RecordingTextFileReadService(),
             new RecordingProviderMetadataReadService(),
             new RecordingProviderMetadataReplacementService(),
@@ -924,6 +969,7 @@ public sealed class GoogleDriveRemoteFileSystemTests
             roots,
             new RecordingFolderExistenceService(),
             new RecordingRunFolderNameService(),
+            new RecordingRunArchiveNameService(),
             new RecordingTextFileReadService(),
             new RecordingProviderMetadataReadService(),
             new RecordingProviderMetadataReplacementService(),
@@ -992,6 +1038,7 @@ public sealed class GoogleDriveRemoteFileSystemTests
         RecordingRootExistenceService? rootExistence = null,
         RecordingFolderExistenceService? folderExistence = null,
         RecordingRunFolderNameService? runFolderNames = null,
+        RecordingRunArchiveNameService? runArchiveNames = null,
         RecordingTextFileReadService? textFileReads = null,
         RecordingProviderMetadataReadService? providerMetadataReads = null,
         RecordingProviderMetadataReplacementService?
@@ -1007,6 +1054,7 @@ public sealed class GoogleDriveRemoteFileSystemTests
             rootExistence ?? new RecordingRootExistenceService(),
             folderExistence ?? new RecordingFolderExistenceService(),
             runFolderNames ?? new RecordingRunFolderNameService(),
+            runArchiveNames ?? new RecordingRunArchiveNameService(),
             textFileReads ?? new RecordingTextFileReadService(),
             providerMetadataReads ?? new RecordingProviderMetadataReadService(),
             providerMetadataReplacements ??
@@ -1093,6 +1141,8 @@ public sealed class GoogleDriveRemoteFileSystemTests
 
         public List<string> RelativeFolders { get; } = new();
 
+        public List<string> RelativeFiles { get; } = new();
+
         public List<CancellationToken> CancellationTokens { get; } = new();
 
         public Task<bool> ExistsAsync(
@@ -1102,6 +1152,39 @@ public sealed class GoogleDriveRemoteFileSystemTests
         {
             ProfileIds.Add(remoteProfileId);
             RelativeFolders.Add(relativeFolder);
+            CancellationTokens.Add(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(Result);
+        }
+
+        public Task<bool> FileExistsAsync(
+            Guid remoteProfileId,
+            string relativePath,
+            CancellationToken cancellationToken = default)
+        {
+            ProfileIds.Add(remoteProfileId);
+            RelativeFiles.Add(relativePath);
+            CancellationTokens.Add(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(Result);
+        }
+    }
+
+    private sealed class RecordingRunArchiveNameService
+        : IGoogleDriveRunArchiveNameService
+    {
+        public IReadOnlyList<string> Result { get; set; } =
+            Array.Empty<string>();
+
+        public List<Guid> ProfileIds { get; } = new();
+
+        public List<CancellationToken> CancellationTokens { get; } = new();
+
+        public Task<IReadOnlyList<string>> ListAsync(
+            Guid remoteProfileId,
+            CancellationToken cancellationToken = default)
+        {
+            ProfileIds.Add(remoteProfileId);
             CancellationTokens.Add(cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             return Task.FromResult(Result);

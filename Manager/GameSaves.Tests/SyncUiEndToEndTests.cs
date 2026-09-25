@@ -87,7 +87,6 @@ public sealed class SyncUiEndToEndTests
         SyncViewModel viewModel = workspace.CreateViewModel();
 
         await viewModel.PreviewSyncCommand.ExecuteAsync(null);
-        viewModel.ConfirmSync = true;
         await viewModel.ExecuteSyncCommand.ExecuteAsync(null);
 
         // The point of the whole task: bytes on disk, not a status message. A
@@ -124,7 +123,6 @@ public sealed class SyncUiEndToEndTests
         SyncViewModel viewModel = workspace.CreateViewModel();
 
         await viewModel.PreviewSyncCommand.ExecuteAsync(null);
-        viewModel.ConfirmSync = true;
         await viewModel.ExecuteSyncCommand.ExecuteAsync(null);
 
         SyncItemResultRowViewModel uploaded = viewModel.ExecutionResults
@@ -145,7 +143,6 @@ public sealed class SyncUiEndToEndTests
         SyncViewModel viewModel = workspace.CreateViewModel();
 
         await viewModel.PreviewSyncCommand.ExecuteAsync(null);
-        viewModel.ConfirmSync = true;
         await viewModel.ExecuteSyncCommand.ExecuteAsync(null);
 
         string[] localBefore = workspace.LocalTree();
@@ -166,7 +163,6 @@ public sealed class SyncUiEndToEndTests
         SyncViewModel viewModel = workspace.CreateViewModel();
 
         await viewModel.PreviewSyncCommand.ExecuteAsync(null);
-        viewModel.ConfirmSync = true;
         await viewModel.ExecuteSyncCommand.ExecuteAsync(null);
 
         SyncItemResultRowViewModel uploaded = viewModel.ExecutionResults
@@ -203,7 +199,6 @@ public sealed class SyncUiEndToEndTests
 
         SyncViewModel viewModel = workspace.CreateViewModel();
         await viewModel.PreviewSyncCommand.ExecuteAsync(null);
-        viewModel.ConfirmSync = true;
         await viewModel.ExecuteSyncCommand.ExecuteAsync(null);
 
         // Non-vacuity first. A provider that copied nothing at all would
@@ -217,33 +212,6 @@ public sealed class SyncUiEndToEndTests
         // already exists on both sides must be left exactly as it was.
         Assert.Equal(contentBefore, File.ReadAllText(workspace.RemotePayload(SharedRun)));
         Assert.Equal(before, File.GetLastWriteTimeUtc(workspace.RemotePayload(SharedRun)));
-    }
-
-    [Fact]
-    public async Task ViewModelExecute_WithoutConfirmation_CopiesNothing()
-    {
-        using var workspace = new Workspace();
-        SyncViewModel viewModel = workspace.CreateViewModel();
-
-        await viewModel.PreviewSyncCommand.ExecuteAsync(null);
-        viewModel.ConfirmSync = false;
-        await viewModel.ExecuteSyncCommand.ExecuteAsync(null);
-
-        Assert.False(File.Exists(workspace.RemoteManifest(LocalOnlyRun)));
-        Assert.False(File.Exists(workspace.LocalManifest(RemoteOnlyRun)));
-        Assert.Equal(
-            "Sync blocked. Confirm the checkbox first.",
-            viewModel.ExecutionStatusMessage);
-
-        // Non-vacuity: the same view model and the same plan, with only the
-        // confirmation changed, does copy. Without this the assertions above
-        // pass against any provider that never copies anything, which is
-        // exactly what the fake used elsewhere does.
-        viewModel.ConfirmSync = true;
-        await viewModel.ExecuteSyncCommand.ExecuteAsync(null);
-
-        Assert.True(File.Exists(workspace.RemoteManifest(LocalOnlyRun)));
-        Assert.True(File.Exists(workspace.LocalManifest(RemoteOnlyRun)));
     }
 
     // ---- W Task 3: the same, through the hermetic Google Drive composition ----
@@ -260,7 +228,6 @@ public sealed class SyncUiEndToEndTests
         Assert.True(viewModel.CanUseGoogleDriveForSync);
 
         await viewModel.PreviewSyncCommand.ExecuteAsync(null);
-        viewModel.ConfirmSync = true;
         await viewModel.ExecuteSyncCommand.ExecuteAsync(null);
 
         // Bytes on the far side, exactly as the Local Folder task asserts. The
@@ -326,7 +293,6 @@ public sealed class SyncUiEndToEndTests
     private static async Task<UiRunState> RunAsync(SyncViewModel viewModel)
     {
         await viewModel.PreviewSyncCommand.ExecuteAsync(null);
-        viewModel.ConfirmSync = true;
         await viewModel.ExecuteSyncCommand.ExecuteAsync(null);
 
         return new UiRunState(
@@ -364,7 +330,6 @@ public sealed class SyncUiEndToEndTests
                 !string.Equals(row.RunName, SecondLocalOnlyRun, StringComparison.Ordinal);
         }
 
-        viewModel.ConfirmSync = true;
         await viewModel.ExecuteSyncCommand.ExecuteAsync(null);
 
         // Non-vacuity: the ticked run really was copied, so the untouched
@@ -395,7 +360,6 @@ public sealed class SyncUiEndToEndTests
         SyncViewModel viewModel = workspace.CreateViewModel();
 
         await viewModel.PreviewSyncCommand.ExecuteAsync(null);
-        viewModel.ConfirmSync = true;
         await viewModel.ExecuteSyncCommand.ExecuteAsync(null);
 
         // Progress<T> marshals its callbacks, so the last report can still be
@@ -446,7 +410,6 @@ public sealed class SyncUiEndToEndTests
         Assert.True(viewModel.CanExecuteSync);
         Assert.Equal(3, viewModel.Items.Count);
 
-        viewModel.ConfirmSync = true;
         await viewModel.ExecuteSyncCommand.ExecuteAsync(null);
 
         // "Nothing is deleted automatically" is the promise the warning itself
@@ -495,7 +458,6 @@ public sealed class SyncUiEndToEndTests
         // A preview is a dry run and must record nothing.
         Assert.Equal(0, workspace.History.CountRuns());
 
-        viewModel.ConfirmSync = true;
         await viewModel.ExecuteSyncCommand.ExecuteAsync(null);
 
         Assert.Equal(1, workspace.History.CountRuns());
@@ -520,13 +482,14 @@ public sealed class SyncUiEndToEndTests
         SyncViewModel viewModel = workspace.CreateViewModel();
 
         await viewModel.PreviewSyncCommand.ExecuteAsync(null);
-        viewModel.ConfirmSync = false;
+        viewModel.DeselectAllRunsCommand.Execute(null);
         await viewModel.ExecuteSyncCommand.ExecuteAsync(null);
 
         Assert.Equal(0, workspace.History.CountRuns());
 
-        // Non-vacuity: the same view model and plan, confirmed, does record.
-        viewModel.ConfirmSync = true;
+        // Non-vacuity: the same view model and plan, with its runs selected
+        // again, does record.
+        viewModel.SelectAllRunsCommand.Execute(null);
         await viewModel.ExecuteSyncCommand.ExecuteAsync(null);
 
         Assert.Equal(1, workspace.History.CountRuns());
@@ -604,7 +567,6 @@ public sealed class SyncUiEndToEndTests
         SyncViewModel viewModel = workspace.CreateViewModel();
 
         await viewModel.PreviewSyncCommand.ExecuteAsync(null);
-        viewModel.ConfirmSync = true;
         await viewModel.ExecuteSyncCommand.ExecuteAsync(null);
 
         // Written by the run just executed and read back through the same
@@ -696,7 +658,6 @@ public sealed class SyncUiEndToEndTests
         // Non-vacuity: the Local Folder path in this same view model really
         // does reach the engine and copy bytes.
         await viewModel.PreviewSyncCommand.ExecuteAsync(null);
-        viewModel.ConfirmSync = true;
         await viewModel.ExecuteSyncCommand.ExecuteAsync(null);
         Assert.True(File.Exists(workspace.RemoteManifest(LocalOnlyRun)));
 

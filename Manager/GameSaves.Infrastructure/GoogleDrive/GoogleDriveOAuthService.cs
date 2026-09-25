@@ -356,7 +356,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
 
                     string message = operationKind == AuthenticationOperation.Reconnect
                         ? BuildReconnectSuccessMessage(profile, updated)
-                        : "Google Drive account connected. Backup synchronization is not available yet.";
+                        : "Google Drive account connected.";
 
                     if (operationKind is AuthenticationOperation.Connect or
                         AuthenticationOperation.Reconnect)

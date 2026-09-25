@@ -66,6 +66,7 @@ public sealed class GoogleDriveSyncEngineCompatibilityTests
                 new RemoteCall(
                     nameof(IRemoteFileSystem.ReadTextFileAsync),
                     "valid-run/manifest.json"),
+                new RemoteCall(nameof(IRemoteFileSystem.ListRunArchiveNamesAsync), null),
                 new RemoteCall(nameof(IRemoteFileSystem.RootExistsAsync), null)
             ],
             fixture.Remote.Calls);
@@ -329,6 +330,86 @@ public sealed class GoogleDriveSyncEngineCompatibilityTests
         Assert.DoesNotContain(
             fixture.Remote.Calls,
             call => call.Name == nameof(IRemoteFileSystem.DownloadFileAsync));
+    }
+
+    // A run synced as one compressed file is, to Drive, a root-level blob and
+    // its sidecar manifest: no run folder, two requests instead of one per
+    // payload file, listed back by the next preview and importable again.
+    [Fact]
+    public async Task ArchiveSync_UploadsOneContainerAndItsSidecar_ThenRoundTripsTheRun()
+    {
+        using var temp = new TemporaryDirectory();
+        using var fixture = new Fixture();
+        // A run with a real payload and hashes: the importer refuses an
+        // archive whose manifest lists nothing, as it should.
+        TransferBackupRunInfo run = TestData.CreateBackupRun(
+            temp.GetPath("Run 43"),
+            temp.GetPath("original.sav"),
+            "archive payload");
+        var engine = Engine(
+            fixture.Remote,
+            new StaticBackupHistoryService(temp.Path, run));
+        var preview = new SyncOptions { ArchiveSync = true };
+        var execute = new SyncOptions
+        {
+            DryRun = false,
+            ConfirmExecution = true,
+            ArchiveSync = true
+        };
+
+        SyncPlan plan = await engine.CreatePreviewAsync(preview);
+        SyncItem item = Assert.Single(plan.Items);
+        Assert.Equal(SyncItemAction.UploadToRemote, item.Action);
+        Assert.EndsWith("Run 43.7z", item.RemotePath, StringComparison.Ordinal);
+
+        SyncResult result = await engine.ExecuteAsync(plan, execute);
+
+        Assert.Equal(SyncItemStatus.Uploaded, Assert.Single(result.Items).Status);
+        Assert.Equal("Run 43.7z", Assert.Single(fixture.MediaUploads.Calls).FileName);
+        Assert.Contains(
+            fixture.CreationApi.Calls,
+            call => call.FileName == "Run 43.7z.manifest.json" &&
+                    call.ParentId == Fixture.RootId);
+        Assert.DoesNotContain(
+            fixture.ObjectClients.CreatedFolders,
+            call => call.Name == "Run 43");
+        Assert.Equal(
+            ["Run 43.7z", "Run 43.7z.manifest.json"],
+            fixture.Drive.FindChildren(Fixture.RootId)
+                .Where(child => child.Metadata.Kind == GoogleDriveObjectKind.File)
+                .Select(child => child.Metadata.Name)
+                .ToArray());
+
+        // The next preview sees the container as the same run, in sync.
+        SyncPlan again = await engine.CreatePreviewAsync(preview);
+        Assert.Equal(SyncItemAction.InSync, Assert.Single(again.Items).Action);
+        Assert.Contains("Run 43.7z", await fixture.Remote.ListRunArchiveNamesAsync());
+
+        // And an empty backup base gets the run back, as a folder run.
+        string downloadBase = temp.GetPath("download-base");
+        Directory.CreateDirectory(downloadBase);
+        var downloadEngine = Engine(
+            fixture.Remote,
+            new StaticBackupHistoryService(downloadBase));
+
+        SyncPlan downloadPlan = await downloadEngine.CreatePreviewAsync(preview);
+        Assert.Equal(
+            SyncItemAction.DownloadToLocal,
+            Assert.Single(downloadPlan.Items).Action);
+
+        SyncResult downloaded = await downloadEngine.ExecuteAsync(downloadPlan, execute);
+
+        SyncItemResult imported = Assert.Single(downloaded.Items);
+        Assert.True(imported.Status == SyncItemStatus.Downloaded, imported.Error);
+        Assert.Single(fixture.MediaDownloads.Calls);
+        string importedManifest = Assert.Single(Directory.GetFiles(
+            downloadBase,
+            "manifest.json",
+            SearchOption.AllDirectories));
+        Assert.Equal(
+            run.Manifest.Game,
+            JsonSerializer.Deserialize<TransferBackupManifest>(
+                File.ReadAllText(importedManifest))!.Game);
     }
 
     [Fact]
@@ -856,6 +937,7 @@ public sealed class GoogleDriveSyncEngineCompatibilityTests
                     cache),
                 new GoogleDriveFolderExistenceService(ContextFactory),
                 runFolders,
+                new GoogleDriveRunArchiveNameService(ContextFactory, objectApi),
                 textReader,
                 providerReader,
                 providerReplacement,
@@ -989,12 +1071,29 @@ public sealed class GoogleDriveSyncEngineCompatibilityTests
             return inner.ListRunFolderNamesAsync(cancellationToken);
         }
 
+        public bool SupportsArchiveContainers => inner.SupportsArchiveContainers;
+
+        public Task<IReadOnlyList<string>> ListRunArchiveNamesAsync(
+            CancellationToken cancellationToken = default)
+        {
+            Record(nameof(ListRunArchiveNamesAsync));
+            return inner.ListRunArchiveNamesAsync(cancellationToken);
+        }
+
         public Task<bool> FolderExistsAsync(
             string relativeFolder,
             CancellationToken cancellationToken = default)
         {
             Record(nameof(FolderExistsAsync), relativeFolder);
             return inner.FolderExistsAsync(relativeFolder, cancellationToken);
+        }
+
+        public Task<bool> FileExistsAsync(
+            string relativePath,
+            CancellationToken cancellationToken = default)
+        {
+            Record(nameof(FileExistsAsync), relativePath);
+            return inner.FileExistsAsync(relativePath, cancellationToken);
         }
 
         public Task<string?> ReadTextFileAsync(

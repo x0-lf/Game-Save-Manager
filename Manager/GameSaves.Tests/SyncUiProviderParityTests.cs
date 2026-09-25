@@ -257,7 +257,6 @@ public sealed class SyncUiProviderParityTests
     {
         await viewModel.PreviewSyncCommand.ExecuteAsync(null);
 
-        viewModel.ConfirmSync = true;
 
         await viewModel.ExecuteSyncCommand.ExecuteAsync(null);
 

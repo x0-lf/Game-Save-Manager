@@ -6,6 +6,10 @@
     "WSL": {
       "commandName": "WSL2",
       "distributionName": ""
+    },
+    "GameSaves.Reviewer": {
+      "commandName": "Project",
+      "workingDirectory": "C:\\Users\\MikeAbrams\\Documents\\Game-Save-Manager\\Manager\\GameSaves.Reviewer"
     }
   }
 }

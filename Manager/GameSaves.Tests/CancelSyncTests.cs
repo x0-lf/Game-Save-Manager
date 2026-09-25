@@ -25,7 +25,6 @@ public sealed class CancelSyncTests
         viewModel.RemoteRootPath = @"D:\MountedBackups";
 
         await viewModel.PreviewSyncCommand.ExecuteAsync(null);
-        viewModel.ConfirmSync = true;
         await viewModel.ExecuteSyncCommand.ExecuteAsync(null);
 
         // Proved, not assumed: the token the provider received can actually be
@@ -57,7 +56,6 @@ public sealed class CancelSyncTests
                 viewModel.CanCancelSync,
                 "Cancel Sync was not offered while the sync was running");
 
-        viewModel.ConfirmSync = true;
         await viewModel.ExecuteSyncCommand.ExecuteAsync(null);
 
         // And withdrawn again afterwards.
@@ -78,7 +76,6 @@ public sealed class CancelSyncTests
         // Cancel from inside the running sync, which is how a user arrives.
         factory.Provider.OnExecute = () => viewModel.CancelSyncCommand.Execute(null);
 
-        viewModel.ConfirmSync = true;
         await viewModel.ExecuteSyncCommand.ExecuteAsync(null);
 
         // Proved positively: the provider observed the cancellation rather than
@@ -154,7 +151,7 @@ public sealed class CancelSyncTests
             SyncProviderSelectionTests.NewWorkspaceLayout());
     }
 
-    private static string ReadSyncView()
+    internal static string ReadSyncView()
     {
         DirectoryInfo? directory = new(AppContext.BaseDirectory);
 
