@@ -1,6 +1,7 @@
 using GameSaves.Core.Secrets;
 using GameSaves.Core.Sync;
 using GameSaves.Infrastructure.GoogleDrive;
+using GameSaves.Infrastructure.WebDav;
 
 namespace GameSaves.Infrastructure.Sync
 {
@@ -110,6 +111,30 @@ namespace GameSaves.Infrastructure.Sync
             }
 
             return false;
+        }
+
+        public Task<SecretOperationResult> StoreWebDavPasswordAsync(
+            Guid profileId,
+            string password,
+            CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrEmpty(password))
+                throw new ArgumentException("A WebDAV password is required.", nameof(password));
+
+            if (_profileRepository.GetById(profileId) is not
+                {
+                    ProviderKind: SyncProviderKind.WebDav,
+                    ProviderSettings: WebDavSyncRemoteSettings settings
+                })
+            {
+                return Task.FromResult(
+                    SecretOperationResult.Failed("WebDavProfileNotFound"));
+            }
+
+            return _secretStore.StoreAsync(
+                new SecretKey(profileId, SecretNames.WebDavPassword),
+                WebDavStoredCredential.Create(settings.ServerUrl, password),
+                cancellationToken);
         }
 
         private static string CleanupMessage(

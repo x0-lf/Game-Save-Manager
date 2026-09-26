@@ -35,5 +35,15 @@ namespace GameSaves.Core.Sync
         Task<bool> HasStoredAuthenticationAsync(
             Guid profileId,
             CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Stores the password or app password of a saved WebDAV profile in the
+        /// protected secret store, replacing any earlier one. Refused for a
+        /// profile that does not exist or is not a WebDAV profile.
+        /// </summary>
+        Task<SecretOperationResult> StoreWebDavPasswordAsync(
+            Guid profileId,
+            string password,
+            CancellationToken cancellationToken = default);
     }
 }

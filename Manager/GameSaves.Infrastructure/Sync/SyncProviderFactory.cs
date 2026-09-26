@@ -3,6 +3,7 @@ using GameSaves.Core.Sync;
 using GameSaves.Core.Transfers;
 using GameSaves.Infrastructure.GoogleDrive;
 using GameSaves.Infrastructure.OneDrive;
+using GameSaves.Infrastructure.WebDav;
 
 namespace GameSaves.Infrastructure.Sync
 {
@@ -12,9 +13,10 @@ namespace GameSaves.Infrastructure.Sync
         private readonly ITransferHistoryRepository _historyRepository;
         private readonly IGoogleDriveSyncProviderFactory _googleDriveProviders;
         private readonly IOneDriveSyncProviderFactory _oneDriveProviders;
+        private readonly IWebDavSyncProviderFactory _webDavProviders;
         private readonly SftpKnownHostsStore _knownHosts;
 
-        // Internal because IGoogleDriveSyncProviderFactory and IOneDriveSyncProviderFactory
+        // Internal because the Google Drive, OneDrive and WebDAV provider factories
         // are internal: a public constructor taking them is CS0051. Dependency injection
         // resolves this through a registration lambda in the composition root, which keeps the
         // dependency explicit here instead of hiding it behind a service
@@ -24,12 +26,14 @@ namespace GameSaves.Infrastructure.Sync
             ITransferHistoryRepository historyRepository,
             IAppDatabasePathProvider databasePathProvider,
             IGoogleDriveSyncProviderFactory googleDriveProviders,
-            IOneDriveSyncProviderFactory oneDriveProviders)
+            IOneDriveSyncProviderFactory oneDriveProviders,
+            IWebDavSyncProviderFactory webDavProviders)
         {
             _backupHistoryService = backupHistoryService;
             _historyRepository = historyRepository;
             _googleDriveProviders = googleDriveProviders;
             _oneDriveProviders = oneDriveProviders;
+            _webDavProviders = webDavProviders;
 
             string appDataDirectory =
                 Path.GetDirectoryName(databasePathProvider.GetDatabasePath())
@@ -88,6 +92,9 @@ namespace GameSaves.Infrastructure.Sync
 
         public ISyncProvider CreateOneDriveProvider(Guid remoteProfileId) =>
             _oneDriveProviders.Create(remoteProfileId);
+
+        public ISyncProvider CreateWebDavProvider(Guid remoteProfileId) =>
+            _webDavProviders.Create(remoteProfileId);
 
         public void ForgetSftpHostKey(string host, int port)
         {

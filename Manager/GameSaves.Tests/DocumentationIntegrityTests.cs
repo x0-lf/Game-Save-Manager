@@ -111,9 +111,9 @@ public sealed class DocumentationIntegrityTests
         Assert.Contains("Sync never overwrites or deletes", readme, StringComparison.OrdinalIgnoreCase);
 
         // 5. Available sync providers
-        Assert.Contains("Local Folder, SFTP, and Google Drive synchronization are implemented", readme, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Local Folder, SFTP, Google Drive, and WebDAV (Nextcloud, ownCloud, and other https WebDAV servers) synchronization are implemented", readme, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("OneDrive is implemented but needs a developer-registered Microsoft client ID", readme, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("WebDAV and MEGA appear in the provider catalog but cannot be configured or used", readme, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("MEGA appears in the provider catalog but cannot be configured or used", readme, StringComparison.OrdinalIgnoreCase);
 
         // 6. Google Drive limitations
         Assert.Contains("https://www.googleapis.com/auth/drive.file", syncProviders, StringComparison.OrdinalIgnoreCase);

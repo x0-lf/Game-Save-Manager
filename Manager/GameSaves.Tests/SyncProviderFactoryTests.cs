@@ -255,7 +255,7 @@ public sealed class SyncProviderFactoryTests
         var catalog = new SyncProviderCatalog();
 
         foreach (SyncProviderKind kind in
-                 new[] { SyncProviderKind.WebDav })
+                 new[] { SyncProviderKind.Mega })
         {
             SyncProviderDescriptor descriptor = catalog.GetDescriptor(kind);
 
@@ -267,6 +267,7 @@ public sealed class SyncProviderFactoryTests
         Assert.True(catalog.GetDescriptor(SyncProviderKind.Sftp).IsImplemented);
         Assert.True(catalog.GetDescriptor(SyncProviderKind.GoogleDrive).IsImplemented);
         Assert.True(catalog.GetDescriptor(SyncProviderKind.OneDrive).IsImplemented);
+        Assert.True(catalog.GetDescriptor(SyncProviderKind.WebDav).IsImplemented);
     }
 
     [Fact]
@@ -359,7 +360,8 @@ public sealed class SyncProviderFactoryTests
                 new RecordingRemoteFileSystemFactory(),
                 new RootedBackupHistoryService(backupBasePath),
                 new RecordingHistoryRepository()),
-            new UnusedOneDriveSyncProviderFactory());
+            new UnusedOneDriveSyncProviderFactory(),
+            new UnusedWebDavSyncProviderFactory());
     }
 
     /// <summary>
@@ -459,4 +461,10 @@ internal sealed class UnusedOneDriveSyncProviderFactory : IOneDriveSyncProviderF
 {
     public ISyncProvider Create(Guid remoteProfileId) =>
         throw new InvalidOperationException("This test does not use OneDrive.");
+}
+
+internal sealed class UnusedWebDavSyncProviderFactory : GameSaves.Infrastructure.WebDav.IWebDavSyncProviderFactory
+{
+    public ISyncProvider Create(Guid remoteProfileId) =>
+        throw new InvalidOperationException("This test does not use WebDAV.");
 }

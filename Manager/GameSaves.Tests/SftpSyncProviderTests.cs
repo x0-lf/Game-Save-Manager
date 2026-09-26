@@ -345,7 +345,8 @@ public sealed class SftpSyncProviderTests
                 new RecordingRemoteFileSystemFactory(),
                 backupHistory,
                 historyRepo),
-            new UnusedOneDriveSyncProviderFactory());
+            new UnusedOneDriveSyncProviderFactory(),
+            new UnusedWebDavSyncProviderFactory());
 
         using ISyncProvider provider = factory.CreateSftpProvider(SftpSettings());
 
@@ -370,7 +371,8 @@ public sealed class SftpSyncProviderTests
                 new RecordingRemoteFileSystemFactory(),
                 backupHistory,
                 historyRepo),
-            new UnusedOneDriveSyncProviderFactory());
+            new UnusedOneDriveSyncProviderFactory(),
+            new UnusedWebDavSyncProviderFactory());
 
         // Must succeed without throwing
         factory.ForgetSftpHostKey("sftp.example.invalid", 2222);

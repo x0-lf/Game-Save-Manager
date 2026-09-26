@@ -129,7 +129,7 @@ boundary is owned by the [safety model](safety-model.md).
 ## Sync
 
 Select a saved or unsaved remote profile, configure Local Folder, SFTP,
-Google Drive, or OneDrive, and run Check Connection & Sync Status. Saving or selecting a
+Google Drive, WebDAV, or OneDrive, and run Check Connection & Sync Status. Saving or selecting a
 profile does not connect, preview, or sync.
 
 Both endpoints are named before any preview runs: the local backup base, and
@@ -155,6 +155,12 @@ and size where they were actually measured, and when both sides were last read.
 The visible Upload or Download action is itself the selection: clicking it, or
 pressing Space on it, includes or excludes that run, and Select All and Select
 None write the same state. Conflicts and already-synced runs are not selectable.
+
+WebDAV takes an https server URL, a user name, and a folder for the backups.
+Save the profile first; then enter the password or app password and choose
+Store password, which encrypts it for the current Windows account under that
+profile and clears the box. Forget password removes it again. A preview always
+uses the saved settings, so unsaved edits have to be saved before previewing.
 
 That press is the confirmation: the plan is on screen and the button says
 what it copies. Execution reports byte and run progress and can be cancelled.

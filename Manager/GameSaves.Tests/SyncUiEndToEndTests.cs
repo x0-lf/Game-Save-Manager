@@ -760,7 +760,8 @@ public sealed class SyncUiEndToEndTests
                     _driveFileSystems,
                     new WorkspaceHistoryService(LocalBase),
                     History),
-                new UnusedOneDriveSyncProviderFactory());
+                new UnusedOneDriveSyncProviderFactory(),
+                new UnusedWebDavSyncProviderFactory());
         }
 
         /// <summary>

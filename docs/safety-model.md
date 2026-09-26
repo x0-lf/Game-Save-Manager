@@ -62,6 +62,7 @@ backup runs:
 - deleting a saved remote profile removes its configuration and owned protected secrets;
 - deleting a manual-backup preset removes only that preset;
 - Google Drive Disconnect removes the selected profile's local OAuth token;
+- WebDAV Forget password removes the selected profile's stored password only;
 - failed Google Drive downloads may remove only the unique temporary file created
   by that download;
 - ZIP import and similar operations may clean up only their own internal temporary files.

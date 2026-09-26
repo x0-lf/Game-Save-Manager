@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using GameSaves.App.Common;
 using GameSaves.App.Models;
 using GameSaves.App.Services;
+using GameSaves.Core.Secrets;
 using GameSaves.Core.Sync;
 using GameSaves.Core.Transfers;
 using System;
@@ -112,6 +113,8 @@ namespace GameSaves.App.ViewModels
         [NotifyPropertyChangedFor(nameof(IsSftpSelected))]
         [NotifyPropertyChangedFor(nameof(IsGoogleDriveSelected))]
         [NotifyPropertyChangedFor(nameof(IsOneDriveSelected))]
+        [NotifyPropertyChangedFor(nameof(IsWebDavSelected))]
+        [NotifyPropertyChangedFor(nameof(CanStoreWebDavPassword))]
         [NotifyPropertyChangedFor(nameof(CanConnectOneDrive))]
         [NotifyPropertyChangedFor(nameof(CanReconnectOneDrive))]
         [NotifyPropertyChangedFor(nameof(CanDisconnectOneDrive))]
@@ -181,6 +184,22 @@ namespace GameSaves.App.ViewModels
 
         [ObservableProperty]
         private bool sftpTrustNewHostKey;
+
+        // WebDAV: the three settings below are saved in the profile. The
+        // password box is input only: its value goes to the protected secret
+        // store on Store password and is cleared from memory right away.
+        [ObservableProperty]
+        private string webDavServerUrl = "";
+
+        [ObservableProperty]
+        private string webDavUsername = "";
+
+        [ObservableProperty]
+        private string webDavRemoteFolder = DefaultWebDavRemoteFolder;
+
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(CanStoreWebDavPassword))]
+        private string webDavPassword = "";
 
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(ShowUploadAction))]
@@ -309,6 +328,7 @@ namespace GameSaves.App.ViewModels
         [NotifyPropertyChangedFor(nameof(CanShowDisconnectOneDrive))]
         [NotifyPropertyChangedFor(nameof(CanUseOneDriveForSync))]
         [NotifyPropertyChangedFor(nameof(CanPreviewSync))]
+        [NotifyPropertyChangedFor(nameof(CanStoreWebDavPassword))]
         private SyncRemoteProfile? selectedRemoteProfile;
 
         [ObservableProperty]
@@ -334,6 +354,7 @@ namespace GameSaves.App.ViewModels
         [NotifyPropertyChangedFor(nameof(CanDisconnectGoogleDrive))]
         [NotifyPropertyChangedFor(nameof(CanShowDisconnectGoogleDrive))]
         [NotifyPropertyChangedFor(nameof(CanUseGoogleDriveForSync))]
+        [NotifyPropertyChangedFor(nameof(WebDavPasswordStatusText))]
         private bool hasStoredAuthentication;
 
         [ObservableProperty]
@@ -634,6 +655,7 @@ namespace GameSaves.App.ViewModels
                 !string.IsNullOrWhiteSpace(SftpHost),
             SyncProviderKind.GoogleDrive => HasUsableGoogleDriveProfile,
             SyncProviderKind.OneDrive => HasUsableOneDriveProfile,
+            SyncProviderKind.WebDav => HasUsableWebDavProfile,
             _ => false,
         };
 
@@ -675,6 +697,10 @@ namespace GameSaves.App.ViewModels
 
             SyncProviderKind.OneDrive =>
                 $"{OneDriveEndpointAccount} — AppRoot (GameSave Manager)",
+
+            SyncProviderKind.WebDav => string.IsNullOrWhiteSpace(WebDavServerUrl)
+                ? "No WebDAV server configured yet."
+                : $"{WebDavServerUrl.Trim().TrimEnd('/')}/{WebDavRemoteFolder.Trim().Trim('/')}",
 
             _ => "This sync provider is not available in this version."
         };
@@ -787,6 +813,27 @@ namespace GameSaves.App.ViewModels
         public bool IsSftpSelected =>
             SelectedProviderDescriptor.ConfigurationSurface ==
             SyncProviderConfigurationSurface.Sftp;
+
+        internal const string DefaultWebDavRemoteFolder = "GameSave Manager Backups";
+
+        public bool IsWebDavSelected => SelectedProviderKind == SyncProviderKind.WebDav;
+
+        private bool HasUsableWebDavProfile =>
+            SelectedRemoteProfile is
+            {
+                ProviderKind: SyncProviderKind.WebDav,
+                SettingsError: null,
+                ProviderSettings: WebDavSyncRemoteSettings
+            };
+
+        public bool CanStoreWebDavPassword =>
+            IsWebDavSelected &&
+            HasUsableWebDavProfile &&
+            !string.IsNullOrEmpty(WebDavPassword);
+
+        public string WebDavPasswordStatusText => HasStoredAuthentication
+            ? "A password is stored for this profile, encrypted for your Windows account."
+            : "No password is stored for this profile yet.";
 
         public bool IsGoogleDriveSelected =>
             SelectedProviderKind == SyncProviderKind.GoogleDrive &&
@@ -1308,7 +1355,9 @@ namespace GameSaves.App.ViewModels
             ClearRateLimitDiagnostics();
 
             if (value != SyncProviderKind.Sftp)
-                ClearSessionOnlySftpState();
+                ClearSessionOnlySecrets();
+            else
+                WebDavPassword = "";
 
             InvalidatePlan();
             MarkProfileDirty();
@@ -1328,6 +1377,11 @@ namespace GameSaves.App.ViewModels
                 OneDriveConnectionMessage =
                     "Save the Microsoft OneDrive profile before connecting so its authentication can be stored securely.";
             }
+            else if (value == SyncProviderKind.WebDav && SelectedRemoteProfile is null)
+            {
+                StatusMessage =
+                    "Enter the WebDAV server, user name and folder, name the profile and choose Save; then store the password.";
+            }
         }
 
         partial void OnSftpHostChanged(string value) => OnPersistentSettingChanged();
@@ -1345,6 +1399,12 @@ namespace GameSaves.App.ViewModels
         partial void OnSftpRemotePathChanged(string value) => OnPersistentSettingChanged();
 
         partial void OnSftpTrustNewHostKeyChanged(bool value) => InvalidatePlan();
+
+        partial void OnWebDavServerUrlChanged(string value) => OnPersistentSettingChanged();
+
+        partial void OnWebDavUsernameChanged(string value) => OnPersistentSettingChanged();
+
+        partial void OnWebDavRemoteFolderChanged(string value) => OnPersistentSettingChanged();
 
         partial void OnSftpUsePasswordChanged(bool value)
         {
@@ -1492,7 +1552,7 @@ namespace GameSaves.App.ViewModels
             try
             {
                 RemoteProfileDisplayName = "";
-                ClearSessionOnlySftpState();
+                ClearSessionOnlySecrets();
             }
             finally
             {
@@ -1520,7 +1580,7 @@ namespace GameSaves.App.ViewModels
 
             try
             {
-                ClearSessionOnlySftpState();
+                ClearSessionOnlySecrets();
                 SelectedProviderKind = profile.ProviderKind;
                 RemoteProfileDisplayName = profile.DisplayName;
 
@@ -1530,6 +1590,7 @@ namespace GameSaves.App.ViewModels
                 // selected profile survives the switch.
                 ResetGoogleDriveState();
                 ResetOneDriveState();
+                ResetWebDavFields();
 
                 switch (profile.ProviderSettings)
                 {
@@ -1580,6 +1641,14 @@ namespace GameSaves.App.ViewModels
                             OneDriveConnectionStatus.StoredAuthenticationAvailable;
                         OneDriveConnectionMessage =
                             "Checking stored Microsoft OneDrive authentication…";
+                        break;
+
+                    case WebDavSyncRemoteSettings webDav:
+                        RemoteRootPath = "";
+                        ResetSftpNonSecretFields();
+                        WebDavServerUrl = webDav.ServerUrl;
+                        WebDavUsername = webDav.Username;
+                        WebDavRemoteFolder = webDav.RemoteFolder;
                         break;
 
                     default:
@@ -1646,9 +1715,10 @@ namespace GameSaves.App.ViewModels
                 SelectedProviderKind = SyncProviderKind.LocalFolder;
                 RemoteRootPath = "";
                 ResetSftpNonSecretFields();
-                ClearSessionOnlySftpState();
+                ClearSessionOnlySecrets();
                 ResetGoogleDriveState();
                 ResetOneDriveState();
+                ResetWebDavFields();
             }
             finally
             {
@@ -1670,6 +1740,8 @@ namespace GameSaves.App.ViewModels
             {
                 DateTimeOffset now = _clock.UtcNow;
                 bool isNewProfile = SelectedRemoteProfile is null;
+                string? previousWebDavServer =
+                    (SelectedRemoteProfile?.ProviderSettings as WebDavSyncRemoteSettings)?.ServerUrl;
                 SyncRemoteProfile profile;
 
                 if (isNewProfile)
@@ -1726,8 +1798,13 @@ namespace GameSaves.App.ViewModels
                         HasStoredOneDriveAuthentication = false;
                     }
                 }
+                else if (profile.ProviderKind == SyncProviderKind.WebDav && isNewProfile)
+                {
+                    HasStoredAuthentication = false;
+                }
                 RemoteProfileState = "Saved";
-                StatusMessage = $"Remote profile '{profile.DisplayName}' saved. No connection was started.";
+                StatusMessage = WebDavSaveMessage(profile, previousWebDavServer) ??
+                    $"Remote profile '{profile.DisplayName}' saved. No connection was started.";
                 SaveNonSecretSettings();
             }
             catch (ArgumentException ex)
@@ -1759,7 +1836,7 @@ namespace GameSaves.App.ViewModels
                     includeAccountMetadata: false));
 
                 RefreshProfileList(profile.Id);
-                ClearSessionOnlySftpState();
+                ClearSessionOnlySecrets();
                 if (profile.ProviderKind == SyncProviderKind.GoogleDrive)
                 {
                     GoogleDriveAccountDisplayName = null;
@@ -1783,6 +1860,10 @@ namespace GameSaves.App.ViewModels
                         "Profile saved. Connect Microsoft OneDrive to authorize this account.";
                     HasStoredOneDriveAuthentication = false;
                 }
+                else if (profile.ProviderKind == SyncProviderKind.WebDav)
+                {
+                    HasStoredAuthentication = false;
+                }
                 InvalidatePlan(force: true);
                 RemoteProfileState = "Saved";
                 StatusMessage = $"Saved a new remote profile '{profile.DisplayName}'. No connection was started.";
@@ -1800,6 +1881,76 @@ namespace GameSaves.App.ViewModels
             {
                 StatusMessage = "The new remote profile could not be saved.";
             }
+        }
+
+        /// <summary>
+        /// What to say after saving a WebDAV profile: the password still has
+        /// to be stored, or the one stored was for another server and will not
+        /// be sent to this one. Null for any other provider.
+        /// </summary>
+        private string? WebDavSaveMessage(SyncRemoteProfile profile, string? previousServerUrl)
+        {
+            if (profile.ProviderSettings is not WebDavSyncRemoteSettings settings)
+                return null;
+
+            if (!HasStoredAuthentication)
+            {
+                return $"Remote profile '{profile.DisplayName}' saved. Now enter the WebDAV password or app password and choose Store password.";
+            }
+
+            return previousServerUrl is not null &&
+                   !string.Equals(
+                       new Uri(previousServerUrl).GetLeftPart(UriPartial.Authority),
+                       new Uri(settings.ServerUrl).GetLeftPart(UriPartial.Authority),
+                       StringComparison.OrdinalIgnoreCase)
+                ? $"Remote profile '{profile.DisplayName}' saved. The stored password was entered for a different server and will not be sent to this one: store it again."
+                : null;
+        }
+
+        [RelayCommand]
+        private async Task StoreWebDavPasswordAsync()
+        {
+            if (SelectedRemoteProfile is not { ProviderKind: SyncProviderKind.WebDav } profile)
+            {
+                StatusMessage = "Save the WebDAV profile first, so the password can be stored under it.";
+                return;
+            }
+
+            if (string.IsNullOrEmpty(WebDavPassword))
+            {
+                StatusMessage = "Enter the WebDAV password or app password first.";
+                return;
+            }
+
+            string password = WebDavPassword;
+            WebDavPassword = "";
+
+            // A provider built earlier holds the previous credential.
+            InvalidatePlan(force: true);
+
+            SecretOperationResult result;
+            try
+            {
+                result = await _profileService.StoreWebDavPasswordAsync(profile.Id, password);
+            }
+            catch
+            {
+                result = SecretOperationResult.Failed("WebDavPasswordStoreFailed");
+            }
+
+            if (SelectedRemoteProfile?.Id != profile.Id)
+                return;
+
+            if (result.Succeeded)
+            {
+                HasStoredAuthentication = true;
+                StatusMessage =
+                    "WebDAV password stored, encrypted for your Windows account. Check the connection or build a preview.";
+                return;
+            }
+
+            await RefreshStoredAuthenticationAsync(profile.Id);
+            StatusMessage = "The WebDAV password could not be stored. Save the profile and try again.";
         }
 
         [RelayCommand]
@@ -1856,7 +2007,7 @@ namespace GameSaves.App.ViewModels
                 string deletedName = SelectedRemoteProfile.DisplayName;
                 InvalidatePlan(force: true);
                 CancelAllAuthentication();
-                ClearSessionOnlySftpState();
+                ClearSessionOnlySecrets();
 
                 SyncRemoteProfileDeleteResult result =
                     await _profileService.DeleteAsync(profileId);
@@ -1895,7 +2046,7 @@ namespace GameSaves.App.ViewModels
 
             Guid profileId = SelectedRemoteProfile.Id;
             InvalidatePlan(force: true);
-            ClearSessionOnlySftpState();
+            ClearSessionOnlySecrets();
 
             SyncRemoteProfileAuthenticationResult result =
                 await _profileService.DisconnectAuthenticationAsync(profileId);
@@ -2099,7 +2250,7 @@ namespace GameSaves.App.ViewModels
             _googleDriveInteractiveOperation = false;
             IsGoogleDriveConnecting = true;
             InvalidatePlan(force: true);
-            ClearSessionOnlySftpState();
+            ClearSessionOnlySecrets();
             GoogleDriveConnectionMessage = "Removing locally stored Google Drive authentication...";
             StatusMessage = GoogleDriveConnectionMessage;
 
@@ -2670,7 +2821,7 @@ namespace GameSaves.App.ViewModels
             _oneDriveInteractiveOperation = false;
             IsOneDriveConnecting = true;
             InvalidatePlan(force: true);
-            ClearSessionOnlySftpState();
+            ClearSessionOnlySecrets();
             OneDriveConnectionMessage = "Removing locally stored Microsoft OneDrive authentication...";
             StatusMessage = OneDriveConnectionMessage;
 
@@ -3128,6 +3279,16 @@ namespace GameSaves.App.ViewModels
                             : null;
                     break;
 
+                case SyncProviderKind.WebDav:
+                    var webDav = new WebDavSyncRemoteSettings(
+                        WebDavServerUrl,
+                        WebDavUsername,
+                        WebDavRemoteFolder);
+                    settings = webDav;
+                    accountDisplayName = webDav.Username;
+                    remoteRootDisplayName = webDav.DisplayRoot;
+                    break;
+
                 case SyncProviderKind.OneDrive:
                     settings = new OneDriveSyncRemoteSettings(
                         includeAccountMetadata ? OneDriveAccountEmail : null,
@@ -3192,11 +3353,20 @@ namespace GameSaves.App.ViewModels
             SftpRemotePath = "/gamesave-sync";
         }
 
-        private void ClearSessionOnlySftpState()
+        private void ClearSessionOnlySecrets()
         {
             SftpPassword = "";
             SftpKeyPassphrase = "";
             SftpTrustNewHostKey = false;
+            WebDavPassword = "";
+        }
+
+        private void ResetWebDavFields()
+        {
+            WebDavServerUrl = "";
+            WebDavUsername = "";
+            WebDavRemoteFolder = DefaultWebDavRemoteFolder;
+            WebDavPassword = "";
         }
 
         private void ResetGoogleDriveState()
@@ -3321,6 +3491,12 @@ namespace GameSaves.App.ViewModels
                     _syncProviderFactory.CreateOneDriveProvider(
                         SelectedRemoteProfile!.Id),
 
+                // Keyed by the saved profile like the cloud providers: the
+                // password lives in the secret store under that profile.
+                SyncProviderKind.WebDav =>
+                    _syncProviderFactory.CreateWebDavProvider(
+                        SelectedRemoteProfile!.Id),
+
                 _ => throw new NotSupportedException(
                     GetUnavailableProviderMessage(SelectedProviderKind)
                     ?? "The selected sync provider is unsupported.")
@@ -3376,6 +3552,8 @@ namespace GameSaves.App.ViewModels
 
                 SyncProviderKind.OneDrive => ValidateOneDriveSelection(),
 
+                SyncProviderKind.WebDav => ValidateWebDavSelection(),
+
                 _ => GetUnavailableProviderMessage(SelectedProviderKind)
             };
         }
@@ -3409,6 +3587,34 @@ namespace GameSaves.App.ViewModels
             (SelectedRemoteProfile?.ProviderKind != kind ? noProfileMessage
                 : ready ? null
                 : notReadyMessage);
+
+        // The provider reads the saved profile, not the fields on screen, so
+        // unsaved edits would silently not apply: they have to be saved first.
+        private string? ValidateWebDavSelection() =>
+            SelectedRemoteProfile is not { ProviderKind: SyncProviderKind.WebDav } profile
+                ? "Save the WebDAV profile first."
+                : profile.SettingsError ??
+                  (!WebDavFieldsMatchSavedProfile(profile)
+                      ? "Save the WebDAV profile first, so the preview uses the settings shown."
+                      : HasStoredAuthentication
+                          ? null
+                          : "Enter the WebDAV password or app password and choose Store password first.");
+
+        private bool WebDavFieldsMatchSavedProfile(SyncRemoteProfile profile)
+        {
+            try
+            {
+                return profile.ProviderSettings is WebDavSyncRemoteSettings saved &&
+                       saved == new WebDavSyncRemoteSettings(
+                           WebDavServerUrl,
+                           WebDavUsername,
+                           WebDavRemoteFolder);
+            }
+            catch (ArgumentException)
+            {
+                return false;
+            }
+        }
 
         private string? ValidateSftpSelection()
         {

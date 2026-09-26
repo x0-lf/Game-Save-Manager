@@ -36,6 +36,11 @@ public sealed class SyncProviderSelectionTests
             },
             option =>
             {
+                Assert.Equal(SyncProviderKind.WebDav, option.Kind);
+                Assert.Equal("WebDAV / Nextcloud", option.DisplayName);
+            },
+            option =>
+            {
                 Assert.Equal(SyncProviderKind.OneDrive, option.Kind);
                 Assert.Equal("OneDrive", option.DisplayName);
             });
@@ -83,7 +88,7 @@ public sealed class SyncProviderSelectionTests
     }
 
     [Theory]
-    [InlineData(SyncProviderKind.WebDav, "WebDAV sync is not implemented yet.")]
+    [InlineData(SyncProviderKind.Mega, "MEGA sync is not implemented yet.")]
     public async Task UnimplementedProvider_BlocksBeforeFactoryCreation(
         SyncProviderKind kind,
         string expectedMessage)
@@ -98,6 +103,24 @@ public sealed class SyncProviderSelectionTests
         Assert.False(viewModel.CanExecuteSync);
         Assert.Equal(0, factory.LocalFolderCreateCount);
         Assert.Equal(0, factory.SftpCreateCount);
+    }
+
+    // The WebDAV password lives under a saved profile, and the provider reads
+    // the saved settings; nothing reaches the factory before both exist.
+    [Fact]
+    public async Task WebDav_WithoutProfile_BlocksBeforeFactoryCreation()
+    {
+        var factory = new RecordingSyncProviderFactory();
+        var viewModel = CreateViewModel(factory, SyncUiSettings.Default);
+        viewModel.SelectedProviderKind = SyncProviderKind.WebDav;
+        viewModel.WebDavServerUrl = "https://dav.example.test/";
+        viewModel.WebDavUsername = "alice";
+
+        Assert.False(viewModel.CanPreviewSync);
+        await viewModel.PreviewSyncCommand.ExecuteAsync(null);
+
+        Assert.Equal("Save the WebDAV profile first.", viewModel.StatusMessage);
+        Assert.Equal(0, factory.WebDavCreateCount);
     }
 
     [Fact]
@@ -326,10 +349,12 @@ public sealed class SyncProviderSelectionTests
         public int SftpCreateCount { get; private set; }
         public int GoogleDriveCreateCount { get; private set; }
         public int OneDriveCreateCount { get; private set; }
+        public int WebDavCreateCount { get; private set; }
         public string? LastLocalFolderPath { get; private set; }
         public SftpConnectionSettings? LastSftpSettings { get; private set; }
         public Guid? LastGoogleDriveProfileId { get; private set; }
         public Guid? LastOneDriveProfileId { get; private set; }
+        public Guid? LastWebDavProfileId { get; private set; }
         public ISyncProvider? LastProvider { get; private set; }
 
         public ISyncProvider CreateLocalFolderProvider(string remoteRoot)
@@ -358,6 +383,13 @@ public sealed class SyncProviderSelectionTests
             OneDriveCreateCount++;
             LastOneDriveProfileId = remoteProfileId;
             return LastProvider = new FakeSyncProvider("OneDrive", "OneDrive: AppRoot (GameSave Manager)");
+        }
+
+        public ISyncProvider CreateWebDavProvider(Guid remoteProfileId)
+        {
+            WebDavCreateCount++;
+            LastWebDavProfileId = remoteProfileId;
+            return LastProvider = new FakeSyncProvider("WebDAV", "https://dav.example.test/GameSave Manager Backups");
         }
 
         public void ForgetSftpHostKey(string host, int port)

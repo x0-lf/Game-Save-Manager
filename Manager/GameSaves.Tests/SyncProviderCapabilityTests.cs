@@ -33,7 +33,7 @@ public sealed class SyncProviderCapabilityTests
     }
 
     [Fact]
-    public void LocalFolderSftpGoogleDriveAndOneDrive_AreImplemented()
+    public void LocalFolderSftpGoogleDriveWebDavAndOneDrive_AreImplemented()
     {
         Assert.Equal(
             new[]
@@ -41,6 +41,7 @@ public sealed class SyncProviderCapabilityTests
                 SyncProviderKind.LocalFolder,
                 SyncProviderKind.Sftp,
                 SyncProviderKind.GoogleDrive,
+                SyncProviderKind.WebDav,
                 SyncProviderKind.OneDrive
             },
             _catalog.GetAll()
@@ -54,6 +55,7 @@ public sealed class SyncProviderCapabilityTests
                 SyncProviderKind.LocalFolder,
                 SyncProviderKind.Sftp,
                 SyncProviderKind.GoogleDrive,
+                SyncProviderKind.WebDav,
                 SyncProviderKind.OneDrive
             },
             viewModel.ProviderOptions.Select(option => option.Kind));
@@ -61,7 +63,7 @@ public sealed class SyncProviderCapabilityTests
         Assert.True(_catalog.GetDescriptor(SyncProviderKind.GoogleDrive).IsConfigurationAvailable);
         Assert.True(_catalog.GetDescriptor(SyncProviderKind.OneDrive).IsConfigurationAvailable);
         Assert.False(_catalog.GetDescriptor(SyncProviderKind.Mega).IsConfigurationAvailable);
-        Assert.False(_catalog.GetDescriptor(SyncProviderKind.WebDav).IsConfigurationAvailable);
+        Assert.True(_catalog.GetDescriptor(SyncProviderKind.WebDav).IsConfigurationAvailable);
     }
 
     [Fact]
@@ -128,12 +130,14 @@ public sealed class SyncProviderCapabilityTests
     }
 
     [Fact]
-    public void PlannedWebDavCapabilities_AreConservativeButUnavailable()
+    public void WebDavCapabilities_AreServerCredentialsWithoutAnOpenAction()
     {
         SyncProviderDescriptor descriptor =
             _catalog.GetDescriptor(SyncProviderKind.WebDav);
 
-        Assert.False(descriptor.IsImplemented);
+        Assert.True(descriptor.IsImplemented);
+        Assert.Null(descriptor.UnavailableMessage);
+        Assert.Equal(SyncProviderConfigurationSurface.ServerCredentials, descriptor.ConfigurationSurface);
         Assert.Equal(
             new SyncProviderCapabilities(
                 RequiresInteractiveLogin: false,
@@ -144,7 +148,7 @@ public sealed class SyncProviderCapabilityTests
                 SupportsPersistentAuthentication: true,
                 SupportsConnectionTesting: true,
                 SupportsLogout: true,
-                SupportsOpenRemoteLocation: true),
+                SupportsOpenRemoteLocation: false),
             descriptor.Capabilities);
     }
 

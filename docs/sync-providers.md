@@ -8,19 +8,19 @@ the shared invariants are defined in the [safety model](safety-model.md).
 
 | Behavior | Local Folder | SFTP | Google Drive | WebDAV | OneDrive | MEGA |
 | --- | --- | --- | --- | --- | --- | --- |
-| Available | Yes | Yes | Yes | No | Yes, with a developer-supplied client ID | No (withdrawn) |
-| Authentication | Filesystem access | Password or private key over SSH | System-browser OAuth with PKCE | Not implemented | System-browser OAuth with PKCE and `state` (`Files.ReadWrite.AppFolder`) | Not implemented |
-| Secret storage | None | Password and passphrase are session-only | OAuth token in protected secret store | None | OAuth token in protected secret store (DPAPI) | None |
-| Folder selection | Native local folder picker or typed path | Typed remote path | Creates or discovers one app folder; no arbitrary picker | Unavailable | Sandboxed application folder (`drive/special/approot`); no arbitrary picker | Unavailable |
-| Connection/status check | Yes | Yes | Yes | Blocked | Yes | Blocked |
+| Available | Yes | Yes | Yes | Yes (https only) | Yes, with a developer-supplied client ID | No (withdrawn) |
+| Authentication | Filesystem access | Password or private key over SSH | System-browser OAuth with PKCE | HTTP Basic over https with a password or app password | System-browser OAuth with PKCE and `state` (`Files.ReadWrite.AppFolder`) | Not implemented |
+| Secret storage | None | Password and passphrase are session-only | OAuth token in protected secret store | Password in protected secret store (DPAPI), bound to the server origin | OAuth token in protected secret store (DPAPI) | None |
+| Folder selection | Native local folder picker or typed path | Typed remote path | Creates or discovers one app folder; no arbitrary picker | Typed folder under the server URL | Sandboxed application folder (`drive/special/approot`); no arbitrary picker | Unavailable |
+| Connection/status check | Yes | Yes | Yes | Yes | Yes | Blocked |
 | Quota display | No | No | No current UI | No | Yes (used and total) | No |
 | Open-location control | Opens local folder | No | Opens the app folder in the browser | No | No | No |
-| Upload backup runs | Yes | Yes | Yes | No | Yes (upload sessions above 4 MiB) | No |
-| Archive containers (.7z, .zip) | Yes | Yes | Yes | No | Yes | No |
-| Download backup runs | Yes | Yes | Yes | No | Yes | No |
-| Overwrite runs | Never | Never | Never | N/A | Never (enforced server-side) | N/A |
-| Delete runs | Never | Never | Never | N/A | Never | N/A |
-| Provider-specific tests | Shared engine and UI coverage | Shared engine coverage over an injectable remote seam | Extensive deterministic coverage and recorded live acceptance | Availability guards | Deterministic coverage through stub HTTP handlers (Graph and OAuth) | Availability guards |
+| Upload backup runs | Yes | Yes | Yes | Yes (streamed PUT, `If-None-Match: *`) | Yes (upload sessions above 4 MiB) | No |
+| Archive containers (.7z, .zip) | Yes | Yes | Yes | Yes | Yes | No |
+| Download backup runs | Yes | Yes | Yes | Yes | Yes | No |
+| Overwrite runs | Never | Never | Never | Never (enforced server-side) | Never (enforced server-side) | N/A |
+| Delete runs | Never | Never | Never | Never | Never | N/A |
+| Provider-specific tests | Shared engine and UI coverage | Shared engine coverage over an injectable remote seam | Extensive deterministic coverage and recorded live acceptance | Deterministic coverage against an in-memory RFC 4918 server | Deterministic coverage through stub HTTP handlers (Graph and OAuth) | Availability guards |
 
 The capability catalog describes intended provider potential. The live UI is
 narrower: Google Drive does not currently display quota or offer arbitrary
@@ -147,6 +147,77 @@ Developer OAuth configuration is documented separately in the
 [developer-only setup guide](google-drive-developer-setup.md). Closed chronology
 and evidence are [historical records](history/google-drive-acceptance.md), not
 the source of current provider status.
+
+## WebDAV and Nextcloud
+
+The WebDAV provider syncs with one folder on any server that speaks RFC 4918:
+Nextcloud, ownCloud, Apache `mod_dav`, nginx with the DAV module, and the
+WebDAV servers built into Synology, QNAP, and similar NAS systems. A profile
+holds an https server URL, a user name, and a folder under that URL; for
+Nextcloud and ownCloud the URL is `https://HOST/remote.php/dav/files/USER/`.
+
+### Safety and secrets
+
+1. **https only.** A plain `http://` URL is refused when the profile is saved
+   and again when it is loaded, because Basic authentication sends the password
+   with every request. A certificate Windows does not trust fails the
+   connection; there is no switch to ignore it. A server with a self-signed
+   certificate needs that certificate trusted by Windows first.
+2. **The password never leaves the secret store unprotected.** It is not part
+   of the profile, the settings file, plans, history, or any message. Store
+   password encrypts it with Windows DPAPI under
+   `SecretKey(profileId, SecretNames.WebDavPassword)` together with the server
+   origin it was entered for. If the profile is later edited to point at a
+   different scheme, host, or port, the stored password reads as absent and is
+   never sent there; store it again for the new server. Forget password, and
+   deleting the profile, remove it. Nextcloud app passwords are recommended.
+3. **Redirects are not followed.** A 3xx answer is reported with a request to
+   enter the final URL, so the password cannot be re-sent to another host or
+   over http.
+4. **Create-only uploads.** Every payload, container, and sidecar PUT carries
+   `If-None-Match: *`, so the server itself answers 412 instead of replacing
+   a resource that exists. Manifests and sidecars, which give a run its
+   identity, are also checked with PROPFIND first, so even a server that
+   ignores `If-None-Match` cannot have one replaced. `manifest.json` is written
+   after every payload file. Only `.gamesave-sync/sync-log.json` is ever
+   replaced, and nothing is ever deleted.
+5. **Untrusted listings.** Multistatus answers are parsed with DTD processing
+   refused and a 16 MiB cap; hrefs may be absolute paths or full URLs, and only
+   direct children of the requested folder are used.
+
+### RFC 4918 mapping
+
+| Engine operation | WebDAV request |
+| --- | --- |
+| Validate | `PROPFIND` Depth 0 on the server URL (must be a collection) |
+| Root exists, folder exists, file exists | `PROPFIND` Depth 0 |
+| List run folders and containers | `PROPFIND` Depth 1 on the backup folder |
+| List a run's files | `PROPFIND` Depth 1, folder by folder (Depth: infinity is often disabled) |
+| Create parent folders | `MKCOL`, parent first; 405 means it already exists |
+| Upload payload or container | streamed `PUT` with `If-None-Match: *` |
+| Create manifest or sidecar | `PROPFIND` then `PUT` with `If-None-Match: *` |
+| Replace sync log | `PUT` without preconditions, `.gamesave-sync/sync-log.json` only |
+| Read manifest, sidecar, sync log | `GET`, 404 means absent, 16 MiB cap |
+| Download | `GET` streamed into a new local file (`CreateNew`) |
+
+Throttling (429), server errors (5xx), timeouts, and network errors are retried
+with bounded backoff, honouring `Retry-After`. 401, 403, 404, 409, 412, 423,
+and 507 are reported with a fixed message and the status code.
+
+### Server differences and what is verified
+
+Nextcloud and ownCloud (sabre/dav) honour `If-None-Match: *` and answer
+`MKCOL` on an existing folder with 405, which is what the provider relies on.
+Apache `mod_dav` behaves the same. Some minimal servers ignore `If-None-Match`;
+there the manifest check above still protects run identity, but a payload file
+created by someone else between the preview and the upload could be replaced.
+Nextcloud's chunked-upload protocol is not used: each file is one streamed
+PUT, so very large containers depend on the server's request limits.
+
+Behaviour is verified against an in-memory RFC 4918 server in the automated
+tests. It has not yet been run against a live Nextcloud, Apache, or NAS
+server; that acceptance is tracked with PROVIDER-005 in the
+[roadmap](ROADMAP.md).
 
 ## Microsoft OneDrive
 

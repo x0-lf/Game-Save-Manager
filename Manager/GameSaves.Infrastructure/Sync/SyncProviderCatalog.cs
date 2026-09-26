@@ -57,10 +57,13 @@ namespace GameSaves.Infrastructure.Sync
                     CloudCapabilities(),
                     SyncProviderConfigurationSurface.InteractiveOAuth,
                     IsConfigurationAvailable: true),
+                // A typed folder under a typed https URL; the password is kept
+                // (encrypted) so it can be forgotten again. A DAV URL is not a
+                // page a browser can usefully open, so there is no Open action.
                 new SyncProviderDescriptor(
                     SyncProviderKind.WebDav,
-                    "WebDAV",
-                    IsImplemented: false,
+                    "WebDAV / Nextcloud",
+                    IsImplemented: true,
                     new SyncProviderCapabilities(
                         RequiresInteractiveLogin: false,
                         RequiresServerCredentials: true,
@@ -70,10 +73,10 @@ namespace GameSaves.Infrastructure.Sync
                         SupportsPersistentAuthentication: true,
                         SupportsConnectionTesting: true,
                         SupportsLogout: true,
-                        SupportsOpenRemoteLocation: true),
+                        SupportsOpenRemoteLocation: false),
                     SyncProviderConfigurationSurface.ServerCredentials,
-                    "WebDAV sync is not implemented yet.",
-                    IsConfigurationAvailable: false),
+                    UnavailableMessage: null,
+                    IsConfigurationAvailable: true),
                 new SyncProviderDescriptor(
                     SyncProviderKind.OneDrive,
                     "OneDrive",

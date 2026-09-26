@@ -329,7 +329,8 @@ public sealed class GoogleDriveSyncProviderFactoryTests
                 fileSystems,
                 new EmptyBackupHistoryService(),
                 new RecordingHistoryRepository()),
-            new UnusedOneDriveSyncProviderFactory());
+            new UnusedOneDriveSyncProviderFactory(),
+            new UnusedWebDavSyncProviderFactory());
 
         using ISyncProvider provider = core.CreateGoogleDriveProvider(ProfileId);
 
@@ -420,7 +421,8 @@ public sealed class GoogleDriveSyncProviderFactoryTests
             new TestDatabasePathProvider(
                 Path.Combine(Path.GetTempPath(), "gamesaves-u4.db")),
             Factory(repository),
-            new UnusedOneDriveSyncProviderFactory());
+            new UnusedOneDriveSyncProviderFactory(),
+            new UnusedWebDavSyncProviderFactory());
 
     private static GoogleDriveSyncProviderFactory Factory(
         ISyncRemoteProfileRepository repository) =>

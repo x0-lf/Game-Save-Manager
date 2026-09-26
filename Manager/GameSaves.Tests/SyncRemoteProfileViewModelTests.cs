@@ -392,6 +392,14 @@ public sealed class SyncRemoteProfileViewModelTests
             return Create("OneDrive", "OneDrive");
         }
 
+        public Guid? LastWebDavProfileId { get; private set; }
+
+        public ISyncProvider CreateWebDavProvider(Guid remoteProfileId)
+        {
+            LastWebDavProfileId = remoteProfileId;
+            return Create("WebDAV", "WebDAV");
+        }
+
         public void ForgetSftpHostKey(string host, int port)
         {
         }

@@ -19,6 +19,7 @@ using GameSaves.Infrastructure.Secrets;
 using GameSaves.Infrastructure.Steam;
 using GameSaves.Infrastructure.Transfers;
 using GameSaves.Infrastructure.Sync;
+using GameSaves.Infrastructure.WebDav;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace GameSaves.Infrastructure.DependencyInjection
@@ -74,7 +75,8 @@ namespace GameSaves.Infrastructure.DependencyInjection
                     provider.GetRequiredService<ITransferHistoryRepository>(),
                     provider.GetRequiredService<IAppDatabasePathProvider>(),
                     provider.GetRequiredService<IGoogleDriveSyncProviderFactory>(),
-                    provider.GetRequiredService<IOneDriveSyncProviderFactory>()));
+                    provider.GetRequiredService<IOneDriveSyncProviderFactory>(),
+                    provider.GetRequiredService<IWebDavSyncProviderFactory>()));
             services.AddSingleton<IUtcClock, SystemUtcClock>();
 
             // Registered beside the clock and for the same reason: so a test
@@ -281,6 +283,7 @@ namespace GameSaves.Infrastructure.DependencyInjection
             services.AddSingleton<IOneDriveOAuthService>(provider =>
                 provider.GetRequiredService<OneDriveOAuthService>());
             services.AddSingleton<IOneDriveSyncProviderFactory, OneDriveSyncProviderFactory>();
+            services.AddSingleton<IWebDavSyncProviderFactory, WebDavSyncProviderFactory>();
 
             return services;
         }

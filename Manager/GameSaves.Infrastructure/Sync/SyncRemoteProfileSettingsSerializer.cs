@@ -75,6 +75,15 @@ namespace GameSaves.Infrastructure.Sync
                             oneDrive.AppRootFolderId),
                         Options),
 
+                (SyncProviderKind.WebDav, WebDavSyncRemoteSettings webDav) =>
+                    JsonSerializer.Serialize(
+                        new WebDavSettingsDto(
+                            webDav.SchemaVersion,
+                            webDav.ServerUrl,
+                            webDav.Username,
+                            webDav.RemoteFolder),
+                        Options),
+
                 _ => throw new ArgumentException(
                     "The provider settings do not match a supported persisted settings model.",
                     nameof(settings))
@@ -87,7 +96,7 @@ namespace GameSaves.Infrastructure.Sync
             string json)
         {
             // Only implemented providers have a persisted settings model; the
-            // rest (WebDAV, MEGA, unknown kinds) report the catalog's message.
+            // rest (MEGA, unknown kinds) report the catalog's message.
             if (!_providerCatalog.IsImplemented(providerKind))
             {
                 return new SyncRemoteProfileSettingsReadResult(
@@ -124,6 +133,7 @@ namespace GameSaves.Infrastructure.Sync
                     SyncProviderKind.Sftp => ReadSftp(root),
                     SyncProviderKind.GoogleDrive => ReadGoogleDrive(root),
                     SyncProviderKind.OneDrive => ReadOneDrive(root),
+                    SyncProviderKind.WebDav => ReadWebDav(root),
                     _ => Corrupted()
                 };
             }
@@ -244,6 +254,30 @@ namespace GameSaves.Infrastructure.Sync
             }
         }
 
+        // The constructor re-validates what was stored, so a hand-edited row
+        // that points at plain http or carries credentials in the URL is
+        // reported as corrupted instead of being used.
+        private static SyncRemoteProfileSettingsReadResult ReadWebDav(JsonElement root)
+        {
+            if (!TryReadString(root, "serverUrl", out string serverUrl) ||
+                !TryReadString(root, "username", out string username) ||
+                !TryReadString(root, "remoteFolder", out string remoteFolder))
+            {
+                return Corrupted();
+            }
+
+            try
+            {
+                return new SyncRemoteProfileSettingsReadResult(
+                    new WebDavSyncRemoteSettings(serverUrl, username, remoteFolder),
+                    null);
+            }
+            catch (ArgumentException)
+            {
+                return Corrupted();
+            }
+        }
+
         private static SyncRemoteProfileSettingsReadResult Corrupted() =>
             new(null, "The saved provider settings are unreadable or corrupted.");
 
@@ -348,6 +382,12 @@ namespace GameSaves.Infrastructure.Sync
             int SchemaVersion,
             string? AccountEmail,
             string RequestedScope);
+
+        private sealed record WebDavSettingsDto(
+            int SchemaVersion,
+            string ServerUrl,
+            string Username,
+            string RemoteFolder);
 
         private sealed record OneDriveSettingsDto(
             int SchemaVersion,

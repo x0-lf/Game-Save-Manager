@@ -10,9 +10,10 @@ PCGamingWiki harvesting.
 
 ## Current status
 
-Local Folder, SFTP, and Google Drive synchronization are implemented. OneDrive
-is implemented but needs a developer-registered Microsoft client ID. WebDAV
-and MEGA appear in the provider catalog but cannot be configured or used.
+Local Folder, SFTP, Google Drive, and WebDAV (Nextcloud, ownCloud, and other
+https WebDAV servers) synchronization are implemented. OneDrive is implemented
+but needs a developer-registered Microsoft client ID. MEGA appears in the
+provider catalog but cannot be configured or used.
 Google Drive completed controlled live acceptance on 2026-08-20; the remaining
 provider limitations are documented in the current [provider guide](docs/sync-providers.md).
 

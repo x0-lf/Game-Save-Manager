@@ -588,6 +588,73 @@
                             </WrapPanel>
                         </StackPanel>
 
+                        <!-- WebDAV target. Only https is accepted. The password
+                             box is input only and never saved with the profile:
+                             Store password encrypts it for this Windows account
+                             under the saved profile, then clears the box. -->
+                        <StackPanel Spacing="8"
+                                    Width="560"
+                                    HorizontalAlignment="Left"
+                                    IsVisible="{Binding IsWebDavSelected}">
+                            <TextBlock Text="WebDAV server"
+                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                       FontSize="{DynamicResource FontSizeBody}"
+                                       FontWeight="SemiBold" />
+
+                            <TextBox Text="{Binding WebDavServerUrl}"
+                                     PlaceholderText="https://cloud.example.com/remote.php/dav/files/USER/"
+                                     AutomationProperties.Name="WebDAV server URL"
+                                     ToolTip.Tip="The https:// address of the WebDAV root. Nextcloud and ownCloud: https://HOST/remote.php/dav/files/USER/. Plain http is refused because the password would travel unencrypted." />
+
+                            <Grid ColumnDefinitions="*,*"
+                                  ColumnSpacing="6">
+                                <TextBox Grid.Column="0"
+                                         Text="{Binding WebDavUsername}"
+                                         PlaceholderText="User name"
+                                         AutomationProperties.Name="WebDAV user name" />
+
+                                <TextBox Grid.Column="1"
+                                         Text="{Binding WebDavRemoteFolder}"
+                                         PlaceholderText="Folder for backups"
+                                         AutomationProperties.Name="WebDAV folder for backups"
+                                         ToolTip.Tip="A folder under the server address. It is created on the first sync if it does not exist." />
+                            </Grid>
+
+                            <Grid ColumnDefinitions="*,Auto"
+                                  ColumnSpacing="6">
+                                <TextBox Grid.Column="0"
+                                         Text="{Binding WebDavPassword}"
+                                         PasswordChar="●"
+                                         PlaceholderText="Password or app password"
+                                         AutomationProperties.Name="WebDAV password or app password" />
+
+                                <Button Grid.Column="1"
+                                        Content="Store password"
+                                        Command="{Binding StoreWebDavPasswordCommand}"
+                                        IsEnabled="{Binding CanStoreWebDavPassword}"
+                                        ToolTip.Tip="Encrypts the password for your Windows account and stores it with this saved profile. Save the profile first."
+                                        VerticalAlignment="Top" />
+                            </Grid>
+
+                            <WrapPanel ItemSpacing="8" LineSpacing="6">
+                                <TextBlock Text="{Binding WebDavPasswordStatusText}"
+                                           Foreground="{DynamicResource SecondaryTextBrush}"
+                                           FontSize="{DynamicResource FontSizeBody}"
+                                           VerticalAlignment="Center" />
+
+                                <Button Content="Forget password"
+                                        Command="{Binding DisconnectAuthenticationCommand}"
+                                        IsEnabled="{Binding HasStoredAuthentication}"
+                                        FontSize="{DynamicResource FontSizeBody}"
+                                        ToolTip.Tip="Removes the stored password from this installation. The profile, local backups, and files on the server are kept." />
+                            </WrapPanel>
+
+                            <TextBlock Text="Nextcloud and ownCloud: create an app password under Settings, Security, and use it here instead of your account password. Uploads only create files, downloads never overwrite local files, archive containers (.7z, .zip) are supported, and nothing is ever deleted on the server."
+                                       Foreground="{DynamicResource MutedTextBrush}"
+                                       FontSize="{DynamicResource FontSizeBody}"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+
                         <!-- Google Drive account configuration -->
                         <!-- One measure for the whole block. Its
                              paragraphs previously wrapped at three

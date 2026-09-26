@@ -29,7 +29,7 @@ namespace GameSaves.Core.Sync
 
     /// <summary>
     /// Creates providers for configured remotes: local folder, SFTP, Google
-    /// Drive and OneDrive. WebDAV and MEGA are catalogued but not implemented.
+    /// Drive, OneDrive and WebDAV. MEGA is catalogued but not implemented.
     /// </summary>
     public interface ISyncProviderFactory
     {
@@ -53,6 +53,13 @@ namespace GameSaves.Core.Sync
         /// Uses sandboxed application folder permissions (drive/special/approot).
         /// </summary>
         ISyncProvider CreateOneDriveProvider(Guid remoteProfileId);
+
+        /// <summary>
+        /// Creates a provider for a saved WebDAV remote profile. Keyed by the
+        /// profile because the password lives in the protected secret store
+        /// under that profile, never in connection settings.
+        /// </summary>
+        ISyncProvider CreateWebDavProvider(Guid remoteProfileId);
 
         /// <summary>
         /// Removes the stored host-key fingerprint for a server, so the next
