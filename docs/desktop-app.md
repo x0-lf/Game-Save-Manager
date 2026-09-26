@@ -171,6 +171,14 @@ manifest instead of one request per file. Every provider, Google Drive
 included, stores and lists runs that way, and they are imported back as
 folder runs.
 
+The "Upload to several profiles" panel uploads the local runs to several saved
+profiles in one go: tick the profiles, preview (one dry run per profile), then
+press the action that the preview button turns into. Profiles run one after
+another, each shows its own outcome, one failing does not stop the others, and
+each is recorded separately in History. SFTP profiles are not offered because
+their passwords are never stored; downloads stay a single-profile operation.
+See the [provider guide](sync-providers.md#uploading-to-several-profiles).
+
 Transfer completion and verification are separate states. After a sync, the
 completed runs are re-read through the provider's own preview and reported one
 by one: verified in sync, copied but missing on one side, copied but different,

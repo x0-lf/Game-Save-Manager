@@ -8,21 +8,21 @@ title, product outcome (The What), dependency, and observable completion criteri
 
 ## Now
 
-Current sprint focus: Multi-target profile synchronization (SYNC-003 / PROVIDER-003).
+Current sprint focus: Remote quota and provider health dashboard (SYNC-004 / PROVIDER-004).
 
 | ID | Title | Product outcome | Dependency | Completion criteria |
 | --- | --- | --- | --- | --- |
-| **SYNC-003** | Multi-target profile synchronization (PROVIDER-003) | One backup set can be synchronized to multiple explicitly selected profiles in one workflow | Stable providers | Preview and history identify each destination; failures remain isolated; execution order and concurrency clear |
+| **SYNC-004** | Remote quota and provider health dashboard (PROVIDER-004) | Users can inspect available cloud storage quotas and provider health status | PROVIDER-007 | Unified health widget reports verified capability data and degrades cleanly when unavailable |
 
 ---
 
 ## Next
 
-Upcoming sprint priorities: Remote quota and provider health dashboard (SYNC-004 / PROVIDER-004).
+Upcoming sprint priorities: Compressed-by-default backup container format (BACKUP-001).
 
 | ID | Title | Product outcome | Dependency | Completion criteria |
 | --- | --- | --- | --- | --- |
-| **SYNC-004** | Remote quota and provider health dashboard (PROVIDER-004) | Users can inspect available cloud storage quotas and provider health status | PROVIDER-007 | Unified health widget reports verified capability data and degrades cleanly when unavailable |
+| **BACKUP-001** | Compressed-by-default backup container format | New backups default to compressed containers while remaining verifiable and restorable | OBS-004, BACKUP-006 | Compressed backup container versioned; manifest integrity preserved; restore validates content before replacement; opt-out uncompressed setting |
 
 ---
 
@@ -32,7 +32,6 @@ Planned feature sprints: Curated data distribution, catalog expansion, new cloud
 
 | ID | Title | Product outcome | Dependency | Completion criteria |
 | --- | --- | --- | --- | --- |
-| **BACKUP-001** | Compressed-by-default backup container format | New backups default to compressed containers while remaining verifiable and restorable | OBS-004, BACKUP-006 | Compressed backup container versioned; manifest integrity preserved; restore validates content before replacement; opt-out uncompressed setting |
 | **BACKUP-003** | Scheduled backups and synchronization umbrella | Umbrella epic for background backups and unattended synchronization | Headless workflows, secret safety | Scheduling is opt-in; preview-equivalent validation before execution; results appear in History; secrets protected |
 | **BACKUP-007** | Windows Task Scheduler integration for backups | Approved backup presets run automatically via Windows Task Scheduler | BACKUP-003, CLI backup command | Safe non-interactive backup command; single-run locking; preset validated at execution; failure never deletes existing data |
 | **BACKUP-008** | Scheduled profile synchronization engine | Approved remote profiles synchronize automatically without weakening safety rules | BACKUP-003, BACKUP-007 | Opt-in per profile; conflicts reported and skipped; authentication failures fail safely without opening browser; create-only upload preserved |
@@ -109,6 +108,7 @@ Verified in code, documentation, and automated tests.
 
 | ID | Title | Product outcome | Dependency | Completion criteria |
 | --- | --- | --- | --- | --- |
+| **SYNC-003** | Multi-target profile synchronization (PROVIDER-003) | One backup set can be synchronized to multiple explicitly selected profiles in one workflow | Stable providers | Upload-only by design (downloads stay single-profile); saved Local Folder, Google Drive, WebDAV and OneDrive profiles chosen explicitly, SFTP excluded because its secrets are session-only; `MultiTargetSyncCoordinator` builds one dry-run plan per destination through that destination's own provider and engine, shown per destination with name, provider, root, counts and blocking reason; destinations run sequentially in the listed order; a failed preview or upload stays with its destination and the others continue; Cancel stops the running destination and starts no other; each destination records its own history row naming its remote root; one-press "Upload to N profile(s)" action; 10 automated tests including a real-engine run to two folders; all automated tests pass with 0 warnings and 0 errors in Release |
 | **SYNC-001** | WebDAV and Nextcloud sync provider (PROVIDER-001) | Users can synchronize backups to private WebDAV or Nextcloud servers | PROVIDER-005, MAINT-001 | RFC 4918 client over HttpClient (PROPFIND depth 0/1, MKCOL, streamed PUT, GET) with DTD-free multistatus parsing and bounded reads; https enforced at save, load and request time; redirects not followed; password stored with DPAPI under `SecretKey(profileId, SecretNames.WebDavPassword)` and bound to the server origin; create-only via `If-None-Match: *` plus a PROPFIND check for manifests and sidecars; manifest last; only the sync log replaced; nothing deleted; archive containers supported; retries for 429/5xx/timeouts honouring Retry-After; Sync page panel with Store and Forget password; verified against an in-memory RFC 4918 server (29 tests); live Nextcloud/Apache acceptance pending under PROVIDER-005; all automated tests pass with 0 warnings and 0 errors in Release |
 | **MAINT-004** | Post-audit hardening pass over commits since `e17b300` | Code added since the last security review is correct, safe, and simpler | AUDIT-001, e17b300 | Every commit since `e17b300` reviewed; MEGA provider withdrawn (OBS-012/013); dead Google Drive `Retry-After` chain removed; OneDrive gains paging, upload sessions, server-side create-only, `state` checking, no invented client ID, and retries; stale-directory purge, payload verification bounds, and restore confinement hardened; schema migrations run all-or-nothing and the DI migrator is no longer empty; untrusted imports cannot rewrite reviewed mappings; harvester reads tracklist JSON correctly; AI/heuristic save-path proposals are bounded and sanitized; HTTP timeouts are failed items, not user cancellations; rate-limit and Google Drive for Desktop UI tied to real signals; pagination, accent contrast, and selection styling fixes; all automated tests pass with 0 warnings and 0 errors in Release |
 | **OBS-011** | Microsoft OneDrive cloud sync provider (PROVIDER-002, SYNC-002) | Users can sync backups to Microsoft OneDrive using sandboxed app-folder permissions | PROVIDER-006 | Microsoft Graph OAuth 2.0 with PKCE; sandboxed to `Files.ReadWrite.AppFolder` targeting `drive/special/approot`; create-only uploads with manifest-last ordering; zip archive containers supported (`SupportsArchiveContainers => true`); zero deletion and immutable conflict handling; storage quota inspection via `/me/drive` with UI warning; OAuth tokens encrypted via Windows DPAPI secret store; 18 automated unit and integration tests in `OneDriveSyncProviderTests` pass; all 2,577 tests pass with 0 warnings and 0 errors in Release |

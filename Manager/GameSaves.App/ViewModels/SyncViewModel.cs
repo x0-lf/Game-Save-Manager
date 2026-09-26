@@ -55,6 +55,8 @@ namespace GameSaves.App.ViewModels
         private long _oneDriveAuthenticationGeneration;
         private bool _oneDriveInteractiveOperation;
         private bool _isBulkLoadingItems;
+        private MultiTargetSyncCoordinator? _multiTarget;
+        private bool _multiTargetRunning;
         private CancellationTokenSource? _googleRootFolderCancellation;
 
         // Owned by ExecuteSyncAsync for the lifetime of one run. Until
@@ -240,6 +242,19 @@ namespace GameSaves.App.ViewModels
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(CanExecuteSyncNow))]
         private bool hasSelectedRuns;
+
+        // Multi-profile upload (SYNC-003): its own destinations, previews, and
+        // one-press action, separate from the single-profile plan above.
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(CanExecuteMultiTarget))]
+        private bool hasMultiTargetPlan;
+
+        [ObservableProperty]
+        private string multiTargetActionCaption = "";
+
+        [ObservableProperty]
+        private string multiTargetStatusMessage =
+            "Tick the saved profiles to upload to, then preview.";
 
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(CanVerifyLastSync))]
@@ -578,6 +593,17 @@ namespace GameSaves.App.ViewModels
         public ObservableCollection<SyncRemoteProfile> RemoteProfiles { get; } = new();
 
         public ObservableCollection<SyncRemoteProfileOption> RemoteProfileOptions { get; } = new();
+
+        public ObservableCollection<MultiTargetDestinationRowViewModel> MultiTargetDestinations { get; } = new();
+
+        public bool CanPreviewMultiTarget =>
+            !IsLoading && MultiTargetDestinations.Any(row => row.IsSelected);
+
+        public bool CanExecuteMultiTarget =>
+            !IsLoading &&
+            HasMultiTargetPlan &&
+            _multiTarget is not null &&
+            _multiTarget.Previews.Any(preview => preview.CanExecute);
 
         public IReadOnlyList<SyncProviderDescriptor> ProviderOptions { get; }
 
@@ -1340,13 +1366,19 @@ namespace GameSaves.App.ViewModels
 
         partial void OnDownloadEnabledChanged(bool value) => InvalidatePlan();
 
-        partial void OnArchiveSyncChanged(bool value) => InvalidatePlan();
+        partial void OnArchiveSyncChanged(bool value)
+        {
+            InvalidatePlan();
+            InvalidateMultiTarget();
+        }
 
         partial void OnIsLoadingChanged(bool value)
         {
             OnPropertyChanged(nameof(CanPreviewSync));
             OnPropertyChanged(nameof(CanExecuteSyncNow));
             OnPropertyChanged(nameof(CanVerifyLastSync));
+            OnPropertyChanged(nameof(CanPreviewMultiTarget));
+            OnPropertyChanged(nameof(CanExecuteMultiTarget));
         }
 
         partial void OnSelectedProviderKindChanged(SyncProviderKind value)
@@ -3413,6 +3445,8 @@ namespace GameSaves.App.ViewModels
                     profile,
                     profile.DisplayName));
             }
+
+            RefreshMultiTargetDestinations(profiles);
         }
 
         private void SelectNoProfileOption()
@@ -3478,30 +3512,36 @@ namespace GameSaves.App.ViewModels
                 SyncProviderKind.Sftp =>
                     _syncProviderFactory.CreateSftpProvider(BuildSftpSettings()),
 
-                // Google Drive is keyed by the saved profile rather than by
-                // connection settings: its credentials live in the profile and
-                // its remote file system is assembled from provider-internal
-                // services. ValidateProviderSelection guarantees the profile is
+                // ValidateProviderSelection guarantees the saved profile is
                 // present and usable before this runs.
-                SyncProviderKind.GoogleDrive =>
-                    _syncProviderFactory.CreateGoogleDriveProvider(
-                        SelectedRemoteProfile!.Id),
-
-                SyncProviderKind.OneDrive =>
-                    _syncProviderFactory.CreateOneDriveProvider(
-                        SelectedRemoteProfile!.Id),
-
-                // Keyed by the saved profile like the cloud providers: the
-                // password lives in the secret store under that profile.
-                SyncProviderKind.WebDav =>
-                    _syncProviderFactory.CreateWebDavProvider(
-                        SelectedRemoteProfile!.Id),
-
-                _ => throw new NotSupportedException(
-                    GetUnavailableProviderMessage(SelectedProviderKind)
-                    ?? "The selected sync provider is unsupported.")
+                _ => CreateSavedProfileProvider(
+                    SelectedProviderKind,
+                    SelectedRemoteProfile?.Id ?? Guid.Empty)
             };
         }
+
+        /// <summary>
+        /// Google Drive, OneDrive and WebDAV are keyed by the saved profile
+        /// rather than by connection settings: their credentials live in the
+        /// secret store under that profile, and their remote file systems are
+        /// assembled from provider-internal services.
+        /// </summary>
+        private ISyncProvider CreateSavedProfileProvider(SyncProviderKind kind, Guid profileId) =>
+            kind switch
+            {
+                SyncProviderKind.GoogleDrive =>
+                    _syncProviderFactory.CreateGoogleDriveProvider(profileId),
+
+                SyncProviderKind.OneDrive =>
+                    _syncProviderFactory.CreateOneDriveProvider(profileId),
+
+                SyncProviderKind.WebDav =>
+                    _syncProviderFactory.CreateWebDavProvider(profileId),
+
+                _ => throw new NotSupportedException(
+                    GetUnavailableProviderMessage(kind)
+                    ?? "The selected sync provider is unsupported.")
+            };
 
         private SftpConnectionSettings BuildSftpSettings()
         {
@@ -4432,6 +4472,259 @@ namespace GameSaves.App.ViewModels
         // Kept as a method: its signature ends the source slice that
         // SyncUiProviderParityTests inspects.
         private static string FormatBytes(long bytes) => ByteSize.Format(bytes);
+
+        // ---------------------------------------------------------------
+        // Multi-profile upload (SYNC-003)
+        //
+        // One backup set uploaded to several explicitly ticked saved profiles.
+        // MultiTargetSyncCoordinator runs one existing provider per profile,
+        // one after another; this section only offers the profiles, shows
+        // each preview and outcome, and wires progress and cancellation.
+        // ---------------------------------------------------------------
+
+        // SFTP is left out: its password and key passphrase are never stored,
+        // so a saved SFTP profile cannot connect without the page's session
+        // fields, and those belong to the single-profile workflow.
+        private bool IsMultiTargetDestination(SyncRemoteProfile profile) =>
+            profile.SettingsError is null &&
+            profile.ProviderSettings is not null &&
+            profile.ProviderKind != SyncProviderKind.Sftp &&
+            _providerCatalog.IsImplemented(profile.ProviderKind);
+
+        private ISyncProvider CreateDestinationProvider(SyncRemoteProfile profile) =>
+            profile.ProviderSettings is LocalFolderSyncRemoteSettings local
+                ? _syncProviderFactory.CreateLocalFolderProvider(local.LocalFolderPath)
+                : CreateSavedProfileProvider(profile.ProviderKind, profile.Id);
+
+        private void RefreshMultiTargetDestinations(IReadOnlyList<SyncRemoteProfile> profiles)
+        {
+            List<SyncRemoteProfile> eligible = profiles
+                .Where(IsMultiTargetDestination)
+                .OrderBy(profile => profile.DisplayName, StringComparer.CurrentCultureIgnoreCase)
+                .ToList();
+
+            // Profile metadata such as the last-used time changes on every
+            // sync. Only a change to what a row shows or targets rebuilds the
+            // list, because rebuilding discards the preview built from it.
+            if (eligible.Select(DestinationKey)
+                .SequenceEqual(MultiTargetDestinations.Select(row => DestinationKey(row.Profile))))
+            {
+                return;
+            }
+
+            var ticked = MultiTargetDestinations
+                .Where(row => row.IsSelected)
+                .Select(row => row.Profile.Id)
+                .ToHashSet();
+
+            InvalidateMultiTarget();
+            MultiTargetDestinations.Clear();
+
+            foreach (SyncRemoteProfile profile in eligible)
+            {
+                var row = new MultiTargetDestinationRowViewModel(
+                    profile,
+                    _providerCatalog.GetDescriptor(profile.ProviderKind).DisplayName,
+                    OnMultiTargetSelectionChanged)
+                {
+                    IsSelected = ticked.Contains(profile.Id)
+                };
+                MultiTargetDestinations.Add(row);
+            }
+
+            OnPropertyChanged(nameof(CanPreviewMultiTarget));
+        }
+
+        private static (Guid, string, SyncProviderKind, string?, SyncRemoteProfileSettings?) DestinationKey(
+            SyncRemoteProfile profile) =>
+            (profile.Id, profile.DisplayName, profile.ProviderKind, profile.RemoteRootDisplayName, profile.ProviderSettings);
+
+        private void OnMultiTargetSelectionChanged()
+        {
+            if (HasMultiTargetPlan)
+                MultiTargetStatusMessage = "The chosen profiles changed. Preview again before uploading.";
+
+            InvalidateMultiTarget();
+            OnPropertyChanged(nameof(CanPreviewMultiTarget));
+        }
+
+        // A preview built for another set of profiles or another container
+        // choice must not stay executable. Never while an upload is running:
+        // the coordinator is still using the providers it would dispose.
+        private void InvalidateMultiTarget()
+        {
+            if (_multiTargetRunning)
+                return;
+
+            _multiTarget?.Dispose();
+            _multiTarget = null;
+            HasMultiTargetPlan = false;
+            MultiTargetActionCaption = "";
+
+            foreach (MultiTargetDestinationRowViewModel row in MultiTargetDestinations)
+                row.Clear();
+        }
+
+        [RelayCommand]
+        private async Task PreviewMultiTargetUploadAsync()
+        {
+            if (IsLoading)
+                return;
+
+            List<MultiTargetDestinationRowViewModel> chosen = MultiTargetDestinations
+                .Where(row => row.IsSelected)
+                .ToList();
+
+            if (chosen.Count == 0)
+            {
+                MultiTargetStatusMessage = "Tick at least one saved profile first.";
+                return;
+            }
+
+            InvalidateMultiTarget();
+            Dictionary<Guid, MultiTargetDestinationRowViewModel> rows =
+                chosen.ToDictionary(row => row.Profile.Id);
+
+            try
+            {
+                IsLoading = true;
+                MultiTargetStatusMessage =
+                    $"Previewing the upload to {chosen.Count} profile(s), one after another (dry run, nothing is copied)...";
+
+                _multiTarget = await MultiTargetSyncCoordinator.PreviewAsync(
+                    chosen.Select(row => new SyncDestination(row.Profile.Id, row.DisplayName)).ToList(),
+                    destination => CreateDestinationProvider(rows[destination.ProfileId].Profile),
+                    ArchiveSync);
+
+                foreach (SyncDestinationPreview preview in _multiTarget.Previews)
+                    rows[preview.Destination.ProfileId].ShowPreview(preview);
+
+                List<SyncDestinationPreview> ready = _multiTarget.Previews
+                    .Where(preview => preview.CanExecute)
+                    .ToList();
+                int runs = ready.Sum(preview => preview.Plan!.UploadCount);
+                long bytes = ready.Sum(preview => preview.Plan!.BytesToUpload);
+
+                HasMultiTargetPlan = true;
+                MultiTargetActionCaption =
+                    $"Upload to {ready.Count} profile(s) ({runs} run(s), {FormatBytes(bytes)})";
+                MultiTargetStatusMessage = ready.Count == 0
+                    ? "Nothing can be uploaded to the chosen profiles; each row says why."
+                    : ready.Count < chosen.Count
+                        ? $"{chosen.Count - ready.Count} profile(s) will be skipped; each row says why. Press Upload to copy to the rest."
+                        : "Preview ready. Press Upload to copy the runs to every chosen profile.";
+                OnPropertyChanged(nameof(CanExecuteMultiTarget));
+            }
+            catch (Exception ex)
+            {
+                InvalidateMultiTarget();
+                MultiTargetStatusMessage = $"The preview could not be built: {ex.Message}";
+            }
+            finally
+            {
+                IsLoading = false;
+            }
+        }
+
+        /// <summary>
+        /// Pressing the action named for what it copies is the confirmation,
+        /// as on the single-profile page. Destinations run one at a time;
+        /// Cancel Sync stops the one running and leaves the rest unstarted.
+        /// </summary>
+        [RelayCommand]
+        private async Task ExecuteMultiTargetUploadAsync()
+        {
+            if (!CanExecuteMultiTarget || _multiTarget is not { } coordinator)
+                return;
+
+            Dictionary<Guid, MultiTargetDestinationRowViewModel> rows =
+                MultiTargetDestinations.ToDictionary(row => row.Profile.Id);
+            bool reporting = true;
+
+            try
+            {
+                _multiTargetRunning = true;
+                IsLoading = true;
+                IsSyncRunning = true;
+                IsCancellingSync = false;
+                ClearRateLimitDiagnostics();
+                _syncCancellation?.Dispose();
+                _syncCancellation = new CancellationTokenSource();
+                ProgressValue = 0;
+                ProgressMax = 1;
+                ProgressText = "Starting...";
+                MultiTargetStatusMessage = "Uploading to each chosen profile in turn...";
+
+                IReadOnlyList<SyncDestinationResult> results = await coordinator.ExecuteAsync(
+                    destination => new Progress<SyncProgress>(p =>
+                    {
+                        if (!reporting)
+                            return;
+
+                        ProgressMax = Math.Max(1, p.BytesTotal);
+                        ProgressValue = p.BytesDone;
+                        ProgressText =
+                            $"{destination.DisplayName}: run {Math.Min(p.RunsDone + 1, p.RunsTotal)}/{p.RunsTotal}: " +
+                            $"{p.RunName}  -  {p.CurrentFile}  ({FormatBytes(p.BytesDone)} / {FormatBytes(p.BytesTotal)})";
+                    }),
+                    result =>
+                    {
+                        if (rows.TryGetValue(result.Destination.ProfileId, out MultiTargetDestinationRowViewModel? row))
+                            row.ShowOutcome(result);
+                    },
+                    _syncCancellation.Token);
+
+                reporting = false;
+                ProgressText = "";
+                MultiTargetStatusMessage = SummarizeMultiTarget(results);
+            }
+            catch (Exception ex)
+            {
+                MultiTargetStatusMessage = $"The upload stopped unexpectedly: {ex.Message}";
+            }
+            finally
+            {
+                reporting = false;
+                _countdownCancellation?.Cancel();
+                IsRetrying = false;
+                RetryCountdownText = "";
+                IsLoading = false;
+                IsSyncRunning = false;
+                IsCancellingSync = false;
+                _syncCancellation?.Dispose();
+                _syncCancellation = null;
+                _multiTargetRunning = false;
+
+                // A preview is used once: the next upload needs a fresh one.
+                coordinator.Dispose();
+                _multiTarget = null;
+                HasMultiTargetPlan = false;
+                MultiTargetActionCaption = "";
+            }
+        }
+
+        private static string SummarizeMultiTarget(IReadOnlyList<SyncDestinationResult> results)
+        {
+            int count(SyncDestinationOutcome outcome) =>
+                results.Count(result => result.Outcome == outcome);
+
+            var parts = new List<string>
+            {
+                $"{count(SyncDestinationOutcome.Completed)} of {results.Count} profile(s) uploaded without errors"
+            };
+
+            int withErrors = count(SyncDestinationOutcome.CompletedWithErrors);
+            int failed = count(SyncDestinationOutcome.Failed);
+            int skipped = count(SyncDestinationOutcome.Skipped);
+            int stopped = count(SyncDestinationOutcome.Cancelled) + count(SyncDestinationOutcome.NotStarted);
+
+            if (withErrors > 0) parts.Add($"{withErrors} with errors");
+            if (failed > 0) parts.Add($"{failed} failed");
+            if (skipped > 0) parts.Add($"{skipped} skipped");
+            if (stopped > 0) parts.Add($"{stopped} cancelled or not started");
+
+            return $"Finished: {string.Join(", ", parts)}. Nothing was deleted, and each profile's upload is recorded in History.";
+        }
 
         private sealed class UnavailableGoogleDriveRootFolderService
             : IGoogleDriveRootFolderService

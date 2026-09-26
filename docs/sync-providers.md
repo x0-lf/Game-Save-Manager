@@ -51,6 +51,39 @@ renaming, or deleting a profile never starts a connection or sync. Profile
 deletion removes only the profile configuration and its owned secrets; it does
 not delete local backups, remote runs, history, archives, saves, or SFTP host trust.
 
+## Uploading to several profiles
+
+The Sync page's "Upload to several profiles" panel uploads the local backup
+runs to several saved profiles in one workflow (SYNC-003). The rules:
+
+- **Upload only.** Downloading from several remotes into one local base in one
+  step could meet the same run name with different content on two remotes, and
+  each engine compares its remote with the local side only. Downloads stay a
+  single-profile operation.
+- **Explicit choice of saved profiles.** Nothing is ticked by default. Local
+  Folder, Google Drive, WebDAV, and OneDrive profiles can be chosen; SFTP
+  profiles are not offered, because their password and key passphrase are
+  never stored and a saved SFTP profile cannot connect on its own.
+- **A preview per destination.** Each ticked profile gets its own dry-run plan
+  through its own provider and engine, shown with its name, provider, root,
+  counts, and the reason when it cannot run. Changing the ticked profiles or
+  the archive-container choice discards the previews.
+- **One press runs them all, one after another.** The preview button becomes
+  "Upload to N profile(s) (runs, size)". Destinations run sequentially in the
+  listed order, so progress, throttling, and failures always belong to one
+  destination. There is no parallelism to reason about.
+- **Isolation.** A destination whose preview failed or found nothing to copy is
+  skipped with its reason. A destination that fails while uploading is reported
+  as failed and the next one still runs. Cancel Sync stops the destination that
+  is running (files already copied stay) and starts no other; the rest are
+  reported as not started.
+- **History.** Each destination records its own sync entry in History, naming
+  its remote root, exactly as a single-profile sync does. No extra workflow
+  identifier links them; they are adjacent entries of the same minutes.
+
+The safety rules are the same as for one profile: create-only uploads, manifest
+last, nothing overwritten, nothing deleted.
+
 ## Local Folder
 
 Local Folder targets an ordinary local, network-mounted, or provider-mounted

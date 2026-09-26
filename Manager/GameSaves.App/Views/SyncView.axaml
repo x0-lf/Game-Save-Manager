@@ -1343,6 +1343,96 @@
             </wsp:WorkspacePanel>
 
             <!-- Sync history -->
+            <!-- Upload to several profiles (SYNC-003). A separate workflow from
+                 the single-profile plan above: every ticked profile gets its
+                 own preview and its own result, and they run one after
+                 another. The preview button turns into the action once the
+                 previews are ready, as in the header. -->
+            <wsp:WorkspacePanel PanelKey="sync.multiTarget"
+                                Title="Upload to several profiles"
+                                MinPanelWidth="320">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Upload the local backup runs to several saved profiles in one go. Each profile is previewed and uploaded on its own, one after another; one failing does not stop the others, and each gets its own entry in History. SFTP profiles are not listed because their passwords are never stored."
+                               Foreground="{DynamicResource MutedTextBrush}"
+                               FontSize="{DynamicResource FontSizeBody}"
+                               TextWrapping="Wrap" />
+
+                    <ItemsControl ItemsSource="{Binding MultiTargetDestinations}"
+                                  IsEnabled="{Binding !IsLoading}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:MultiTargetDestinationRowViewModel">
+                                <Border Padding="0,6"
+                                        BorderBrush="{DynamicResource SubtleBorderBrush}"
+                                        BorderThickness="0,0,0,1">
+                                    <StackPanel Spacing="2">
+                                        <CheckBox Content="{Binding DisplayName}"
+                                                  IsChecked="{Binding IsSelected}"
+                                                  AutomationProperties.Name="{Binding AccessibleName}"
+                                                  FontSize="{DynamicResource FontSizeBody}" />
+
+                                        <TextBlock Text="{Binding EndpointText}"
+                                                   Margin="28,0,0,0"
+                                                   Foreground="{DynamicResource MutedTextBrush}"
+                                                   FontSize="{DynamicResource FontSizeMicro}"
+                                                   TextWrapping="Wrap" />
+
+                                        <TextBlock Text="{Binding PlanText}"
+                                                   IsVisible="{Binding PlanText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                                   Margin="28,0,0,0"
+                                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                                   FontSize="{DynamicResource FontSizeBody}"
+                                                   TextWrapping="Wrap" />
+
+                                        <Grid ColumnDefinitions="Auto,*"
+                                              ColumnSpacing="6"
+                                              Margin="28,0,0,0"
+                                              IsVisible="{Binding OutcomeText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                            <TextBlock Grid.Column="0"
+                                                       Text="{Binding OutcomeGlyph}"
+                                                       Foreground="{DynamicResource PrimaryTextBrush}"
+                                                       FontSize="{DynamicResource FontSizeBody}" />
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding OutcomeText}"
+                                                       Foreground="{DynamicResource PrimaryTextBrush}"
+                                                       FontSize="{DynamicResource FontSizeBody}"
+                                                       TextWrapping="Wrap" />
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <views:EmptyState Glyph="&#xE898;"
+                                      Title="No profiles to upload to"
+                                      Message="Save a Local folder, Google Drive, WebDAV, or OneDrive profile first; each one appears here."
+                                      IsVisible="{Binding !MultiTargetDestinations.Count}" />
+
+                    <WrapPanel ItemSpacing="8" LineSpacing="6">
+                        <Button Content="Preview upload to the ticked profiles"
+                                Command="{Binding PreviewMultiTargetUploadCommand}"
+                                IsEnabled="{Binding CanPreviewMultiTarget}"
+                                IsVisible="{Binding !HasMultiTargetPlan}"
+                                ToolTip.Tip="Dry run for every ticked profile, one after another. Nothing is copied." />
+                        <Button Content="{Binding MultiTargetActionCaption}"
+                                Classes="primary"
+                                Command="{Binding ExecuteMultiTargetUploadCommand}"
+                                IsEnabled="{Binding CanExecuteMultiTarget}"
+                                IsVisible="{Binding HasMultiTargetPlan}"
+                                ToolTip.Tip="Uploads to every ticked profile whose preview can run, one after another. Nothing is overwritten or deleted." />
+                        <Button Content="Preview again"
+                                Command="{Binding PreviewMultiTargetUploadCommand}"
+                                IsEnabled="{Binding CanPreviewMultiTarget}"
+                                IsVisible="{Binding HasMultiTargetPlan}" />
+                    </WrapPanel>
+
+                    <TextBlock Text="{Binding MultiTargetStatusMessage}"
+                               Foreground="{DynamicResource SecondaryTextBrush}"
+                               FontSize="{DynamicResource FontSizeBody}"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+            </wsp:WorkspacePanel>
+
             <wsp:WorkspacePanel PanelKey="sync.history"
                                 Title="Sync history"
                                 MinPanelWidth="320"
