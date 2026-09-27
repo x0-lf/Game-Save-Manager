@@ -256,6 +256,11 @@ namespace GameSaves.App.ViewModels
         private string multiTargetStatusMessage =
             "Tick the saved profiles to upload to, then preview.";
 
+        // Provider health (SYNC-004): checked only on request.
+        [ObservableProperty]
+        private string providerHealthStatusMessage =
+            "Nothing is checked until you press Check now.";
+
         [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(CanVerifyLastSync))]
         [NotifyPropertyChangedFor(nameof(CanCancelVerification))]
@@ -4724,6 +4729,64 @@ namespace GameSaves.App.ViewModels
             if (stopped > 0) parts.Add($"{stopped} cancelled or not started");
 
             return $"Finished: {string.Join(", ", parts)}. Nothing was deleted, and each profile's upload is recorded in History.";
+        }
+
+        // ---------------------------------------------------------------
+        // Provider health and storage (SYNC-004)
+        //
+        // The same saved profiles as the multi-profile upload, checked one
+        // after another and only when asked. Each check is read-only and runs
+        // through the profile's own provider; a failing profile is reported
+        // on its row and the next one is still checked.
+        // ---------------------------------------------------------------
+
+        [RelayCommand(IncludeCancelCommand = true)]
+        private async Task CheckProviderHealthAsync(CancellationToken cancellationToken)
+        {
+            List<MultiTargetDestinationRowViewModel> rows = MultiTargetDestinations.ToList();
+
+            if (rows.Count == 0)
+            {
+                ProviderHealthStatusMessage = "Save a profile first; each one appears here.";
+                return;
+            }
+
+            foreach (MultiTargetDestinationRowViewModel row in rows)
+                row.ShowHealthNote("Waiting to be checked.");
+
+            for (int index = 0; index < rows.Count; index++)
+            {
+                MultiTargetDestinationRowViewModel row = rows[index];
+                bool reportsStorage = _providerCatalog
+                    .GetDescriptor(row.Profile.ProviderKind)
+                    .Capabilities.SupportsRemoteQuota;
+
+                ProviderHealthStatusMessage = $"Checking {row.DisplayName} ({index + 1} of {rows.Count})...";
+                row.ShowHealthNote("Checking...");
+
+                try
+                {
+                    using ISyncProvider provider = CreateDestinationProvider(row.Profile);
+                    row.ShowHealth(await provider.CheckHealthAsync(cancellationToken), reportsStorage);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    foreach (MultiTargetDestinationRowViewModel rest in rows.Skip(index))
+                        rest.ShowHealthNote("Not checked: the check was cancelled.");
+
+                    ProviderHealthStatusMessage = $"Check cancelled after {index} of {rows.Count} profile(s).";
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    row.ShowHealth(
+                        new ProviderHealthReport(ProviderHealthState.Unavailable, ex.Message),
+                        reportsStorage);
+                }
+            }
+
+            ProviderHealthStatusMessage =
+                $"Checked {rows.Count} profile(s) at {_clock.UtcNow.ToLocalTime():t}.";
         }
 
         private sealed class UnavailableGoogleDriveRootFolderService

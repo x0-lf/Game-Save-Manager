@@ -8,8 +8,17 @@ using GameSaves.Core.Sync;
 
 namespace GameSaves.Infrastructure.WebDav
 {
-    /// <summary>One resource from a PROPFIND answer.</summary>
-    internal sealed record WebDavEntry(string Name, bool IsCollection, long? Length);
+    /// <summary>
+    /// One resource from a PROPFIND answer. The RFC 4331 quota properties are
+    /// present only when requested and reported; a server's negative
+    /// "unlimited" or "unknown" markers are not numbers of bytes and stay null.
+    /// </summary>
+    internal sealed record WebDavEntry(
+        string Name,
+        bool IsCollection,
+        long? Length,
+        long? QuotaAvailableBytes = null,
+        long? QuotaUsedBytes = null);
 
     /// <summary>
     /// A WebDAV request that failed. Messages are fixed sentences plus the
@@ -49,6 +58,12 @@ namespace GameSaves.Infrastructure.WebDav
             "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
             "<d:propfind xmlns:d=\"DAV:\"><d:prop><d:resourcetype/><d:getcontentlength/></d:prop></d:propfind>";
 
+        // Asked only by the health check: a server may compute quota per
+        // resource, so listings never request it.
+        private const string QuotaPropfindBody =
+            "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
+            "<d:propfind xmlns:d=\"DAV:\"><d:prop><d:resourcetype/><d:quota-available-bytes/><d:quota-used-bytes/></d:prop></d:propfind>";
+
         private static readonly HttpMethod Propfind = new("PROPFIND");
         private static readonly HttpMethod Mkcol = new("MKCOL");
 
@@ -87,6 +102,20 @@ namespace GameSaves.Infrastructure.WebDav
         {
             IReadOnlyList<(string Path, WebDavEntry Entry)>? entries =
                 await PropfindAsync(ResourceUri(relativePath, collection), depth: 0, cancellationToken);
+
+            return entries is { Count: > 0 } ? entries[0].Entry : null;
+        }
+
+        /// <summary>A collection with its RFC 4331 quota properties, or null when it does not exist.</summary>
+        public async Task<WebDavEntry?> StatQuotaAsync(
+            string relativeFolder,
+            CancellationToken cancellationToken)
+        {
+            IReadOnlyList<(string Path, WebDavEntry Entry)>? entries = await PropfindAsync(
+                ResourceUri(relativeFolder, collection: true),
+                depth: 0,
+                cancellationToken,
+                QuotaPropfindBody);
 
             return entries is { Count: > 0 } ? entries[0].Entry : null;
         }
@@ -274,7 +303,8 @@ namespace GameSaves.Infrastructure.WebDav
         private async Task<IReadOnlyList<(string Path, WebDavEntry Entry)>?> PropfindAsync(
             Uri uri,
             int depth,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            string body = PropfindBody)
         {
             using HttpResponseMessage response = await SendAsync(
                 Propfind,
@@ -282,7 +312,7 @@ namespace GameSaves.Infrastructure.WebDav
                 request =>
                 {
                     request.Headers.Add("Depth", depth.ToString(CultureInfo.InvariantCulture));
-                    request.Content = new StringContent(PropfindBody, Encoding.UTF8, "application/xml");
+                    request.Content = new StringContent(body, Encoding.UTF8, "application/xml");
                 },
                 transfer: false,
                 cancellationToken);
@@ -460,6 +490,8 @@ namespace GameSaves.Infrastructure.WebDav
 
                 bool isCollection = false;
                 long? length = null;
+                long? quotaAvailable = null;
+                long? quotaUsed = null;
                 bool anyPropstat = false;
                 bool anyOk = false;
 
@@ -474,14 +506,9 @@ namespace GameSaves.Infrastructure.WebDav
                     XElement? prop = propstat.Element(Dav + "prop");
                     isCollection |= prop?.Element(Dav + "resourcetype")?.Element(Dav + "collection") is not null;
 
-                    if (long.TryParse(
-                            prop?.Element(Dav + "getcontentlength")?.Value,
-                            NumberStyles.None,
-                            CultureInfo.InvariantCulture,
-                            out long parsed))
-                    {
-                        length = parsed;
-                    }
+                    length = ParseBytes(prop, "getcontentlength") ?? length;
+                    quotaAvailable = ParseBytes(prop, "quota-available-bytes") ?? quotaAvailable;
+                    quotaUsed = ParseBytes(prop, "quota-used-bytes") ?? quotaUsed;
                 }
 
                 // A response may carry its own status instead of propstats
@@ -492,11 +519,22 @@ namespace GameSaves.Infrastructure.WebDav
                 string path = DecodeHrefPath(href);
                 string name = path.TrimEnd('/');
                 name = name[(name.LastIndexOf('/') + 1)..];
-                results.Add((path, new WebDavEntry(name, isCollection, length)));
+                results.Add((path, new WebDavEntry(name, isCollection, length, quotaAvailable, quotaUsed)));
             }
 
             return results;
         }
+
+        // NumberStyles.None refuses a sign, so Nextcloud's -3 ("unlimited")
+        // and -2 ("unknown") come back as null rather than as a size.
+        private static long? ParseBytes(XElement? prop, string name) =>
+            long.TryParse(
+                prop?.Element(Dav + name)?.Value,
+                NumberStyles.None,
+                CultureInfo.InvariantCulture,
+                out long parsed)
+                ? parsed
+                : null;
 
         // "HTTP/1.1 200 OK": the second token is the status code.
         private static bool IsOk(string? status)

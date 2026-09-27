@@ -26,7 +26,7 @@ namespace GameSaves.Infrastructure.Sync
                         RequiresInteractiveLogin: false,
                         RequiresServerCredentials: false,
                         SupportsResumableUpload: false,
-                        SupportsRemoteQuota: false,
+                        SupportsRemoteQuota: true,
                         SupportsRemoteFolderSelection: true,
                         SupportsPersistentAuthentication: false,
                         SupportsConnectionTesting: true,
@@ -60,6 +60,7 @@ namespace GameSaves.Infrastructure.Sync
                 // A typed folder under a typed https URL; the password is kept
                 // (encrypted) so it can be forgotten again. A DAV URL is not a
                 // page a browser can usefully open, so there is no Open action.
+                // Quota is RFC 4331, which a server may leave unreported.
                 new SyncProviderDescriptor(
                     SyncProviderKind.WebDav,
                     "WebDAV / Nextcloud",
@@ -68,7 +69,7 @@ namespace GameSaves.Infrastructure.Sync
                         RequiresInteractiveLogin: false,
                         RequiresServerCredentials: true,
                         SupportsResumableUpload: false,
-                        SupportsRemoteQuota: false,
+                        SupportsRemoteQuota: true,
                         SupportsRemoteFolderSelection: false,
                         SupportsPersistentAuthentication: true,
                         SupportsConnectionTesting: true,
@@ -82,11 +83,13 @@ namespace GameSaves.Infrastructure.Sync
                     "OneDrive",
                     IsImplemented: true,
                     // Not Google's record: OneDrive is confined to its app
-                    // folder (no folder choice, nothing to open) and upload
-                    // sessions are not resumed across runs.
+                    // folder (no folder choice, nothing to open), upload
+                    // sessions are not resumed across runs, and its drive
+                    // quota is read.
                     CloudCapabilities() with
                     {
                         SupportsResumableUpload = false,
+                        SupportsRemoteQuota = true,
                         SupportsRemoteFolderSelection = false,
                         SupportsOpenRemoteLocation = false
                     },
@@ -127,11 +130,13 @@ namespace GameSaves.Infrastructure.Sync
         public bool IsImplemented(SyncProviderKind kind) =>
             GetDescriptor(kind).IsImplemented;
 
+        // No remote quota: Google Drive's storage quota is not read, and a
+        // capability the code cannot honour is not declared.
         private static SyncProviderCapabilities CloudCapabilities() => new(
             RequiresInteractiveLogin: true,
             RequiresServerCredentials: false,
             SupportsResumableUpload: true,
-            SupportsRemoteQuota: true,
+            SupportsRemoteQuota: false,
             SupportsRemoteFolderSelection: true,
             SupportsPersistentAuthentication: true,
             SupportsConnectionTesting: true,

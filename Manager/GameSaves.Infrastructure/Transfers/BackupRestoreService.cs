@@ -256,113 +256,226 @@ namespace GameSaves.Infrastructure.Transfers
                 return BuildResult(run, options, results, warnings);
             }
 
-            if (run.IsArchive)
-            {
-                warnings.Add(new TransferPreviewWarning(
-                    "ArchiveMustBeImported",
-                    "This backup is a compressed archive. Import it before restoring.",
-                    TransferWarningSeverity.Error));
-
-                return BuildResult(run, options, results, warnings);
-            }
-
-            if (run.Manifest.Items.Count == 0)
-            {
-                warnings.Add(new TransferPreviewWarning(
-                    "NoItems",
-                    "Restore was blocked because the backup run contains no files.",
-                    TransferWarningSeverity.Error));
-
-                return BuildResult(run, options, results, warnings);
-            }
-
-            if (options.TargetMode == BackupRestoreTargetMode.SelectedSteamProfileUserData &&
-                (options.TargetProfile is null ||
-                 string.IsNullOrWhiteSpace(options.TargetProfile.UserDataPath)))
-            {
-                warnings.Add(new TransferPreviewWarning(
-                    "NoTargetProfileSelected",
-                    "Restore was blocked: restoring to a selected profile requires choosing a target profile with a known userdata path.",
-                    TransferWarningSeverity.Error));
-
-                return BuildResult(run, options, results, warnings);
-            }
-
-            if (options.TargetMode == BackupRestoreTargetMode.CustomPathLater)
-            {
-                warnings.Add(new TransferPreviewWarning(
-                    "TargetModeNotSupported",
-                    "Restoring to a custom path is not supported yet.",
-                    TransferWarningSeverity.Error));
-
-                return BuildResult(run, options, results, warnings);
-            }
-
-            string? mappingTargetRoot = null;
-
-            if (options.TargetMode == BackupRestoreTargetMode.ApprovedMappingLocation)
-            {
-                TransferPreviewWarning? mappingBlocker =
-                    TryResolveMappingTargetRoot(run, options, cancellationToken, out mappingTargetRoot);
-
-                if (mappingBlocker is not null)
-                {
-                    warnings.Add(mappingBlocker);
-                    return BuildResult(run, options, results, warnings);
-                }
-            }
-
-            string effectiveTargetAccount =
-                options.TargetMode == BackupRestoreTargetMode.SelectedSteamProfileUserData
-                    ? options.TargetProfile!.AccountId
-                    : run.Manifest.TargetAccountId;
-
-            ITransferOverwriteBackupSession? preRestoreSession = null;
-
-            ITransferOverwriteBackupSession GetPreRestoreSession() =>
-                preRestoreSession ??= _overwriteBackupService.BeginSession(
-                    new OverwriteBackupContext(
-                        Kind: OverwriteBackupContext.RestoreKind,
-                        Game: run.Manifest.Game,
-                        SteamAppId: run.Manifest.SteamAppId,
-                        SourceAccountId: run.Manifest.SourceAccountId,
-                        TargetAccountId: effectiveTargetAccount));
+            // A container is restored from a private, verified copy: its own
+            // manifest (never a sidecar beside it) is read, the payload is
+            // extracted under the import guards into a staging folder, and every
+            // file is hashed against that manifest before a single live file is
+            // touched. The copy is removed afterwards, whatever happened.
+            string payloadRoot = run.BackupRootPath;
+            string? staging = null;
 
             try
             {
-                foreach (TransferOverwriteBackupItem backupItem in run.Manifest.Items)
+                if (run.IsArchive)
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
+                    TransferPreviewWarning? blocker = StageContainer(
+                        run,
+                        cancellationToken,
+                        out staging,
+                        out TransferBackupManifest? containerManifest);
 
-                    results.Add(RestoreOneFile(
-                        backupItem,
-                        run.BackupRootPath,
-                        run.Manifest.SteamAppId,
-                        options,
-                        mappingTargetRoot,
-                        GetPreRestoreSession));
+                    if (blocker is not null)
+                    {
+                        warnings.Add(blocker);
+                        return BuildResult(run, options, results, warnings);
+                    }
+
+                    run = run with { Manifest = containerManifest! };
+                    payloadRoot = staging!;
                 }
+
+                if (run.Manifest.Items.Count == 0)
+                {
+                    warnings.Add(new TransferPreviewWarning(
+                        "NoItems",
+                        "Restore was blocked because the backup run contains no files.",
+                        TransferWarningSeverity.Error));
+
+                    return BuildResult(run, options, results, warnings);
+                }
+
+                if (options.TargetMode == BackupRestoreTargetMode.SelectedSteamProfileUserData &&
+                    (options.TargetProfile is null ||
+                     string.IsNullOrWhiteSpace(options.TargetProfile.UserDataPath)))
+                {
+                    warnings.Add(new TransferPreviewWarning(
+                        "NoTargetProfileSelected",
+                        "Restore was blocked: restoring to a selected profile requires choosing a target profile with a known userdata path.",
+                        TransferWarningSeverity.Error));
+
+                    return BuildResult(run, options, results, warnings);
+                }
+
+                if (options.TargetMode == BackupRestoreTargetMode.CustomPathLater)
+                {
+                    warnings.Add(new TransferPreviewWarning(
+                        "TargetModeNotSupported",
+                        "Restoring to a custom path is not supported yet.",
+                        TransferWarningSeverity.Error));
+
+                    return BuildResult(run, options, results, warnings);
+                }
+
+                string? mappingTargetRoot = null;
+
+                if (options.TargetMode == BackupRestoreTargetMode.ApprovedMappingLocation)
+                {
+                    TransferPreviewWarning? mappingBlocker =
+                        TryResolveMappingTargetRoot(run, options, cancellationToken, out mappingTargetRoot);
+
+                    if (mappingBlocker is not null)
+                    {
+                        warnings.Add(mappingBlocker);
+                        return BuildResult(run, options, results, warnings);
+                    }
+                }
+
+                string effectiveTargetAccount =
+                    options.TargetMode == BackupRestoreTargetMode.SelectedSteamProfileUserData
+                        ? options.TargetProfile!.AccountId
+                        : run.Manifest.TargetAccountId;
+
+                ITransferOverwriteBackupSession? preRestoreSession = null;
+
+                ITransferOverwriteBackupSession GetPreRestoreSession() =>
+                    preRestoreSession ??= _overwriteBackupService.BeginSession(
+                        new OverwriteBackupContext(
+                            Kind: OverwriteBackupContext.RestoreKind,
+                            Game: run.Manifest.Game,
+                            SteamAppId: run.Manifest.SteamAppId,
+                            SourceAccountId: run.Manifest.SourceAccountId,
+                            TargetAccountId: effectiveTargetAccount));
+
+                try
+                {
+                    foreach (TransferOverwriteBackupItem backupItem in run.Manifest.Items)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+
+                        results.Add(RestoreOneFile(
+                            backupItem,
+                            payloadRoot,
+                            run.Manifest.SteamAppId,
+                            options,
+                            mappingTargetRoot,
+                            GetPreRestoreSession));
+                    }
+                }
+                finally
+                {
+                    preRestoreSession?.Complete();
+                }
+
+                // A compressed pre-restore run moved the replaced files into its
+                // container, so the per-file locations say where they are now.
+                if (preRestoreSession is not null)
+                {
+                    for (int i = 0; i < results.Count; i++)
+                    {
+                        if (results[i].PreRestoreBackupFile is { } replaced)
+                            results[i] = results[i] with { PreRestoreBackupFile = preRestoreSession.LocateBackupFile(replaced) };
+                    }
+                }
+
+                if (preRestoreSession is not null && preRestoreSession.FilesBackedUp > 0)
+                {
+                    warnings.Add(new TransferPreviewWarning(
+                        "PreRestoreBackups",
+                        $"Backed up {preRestoreSession.FilesBackedUp} current file(s) before restoring over them to: {preRestoreSession.BackupRootPath}",
+                        TransferWarningSeverity.Info));
+                }
+
+                return BuildResult(
+                    run,
+                    options,
+                    results,
+                    warnings,
+                    preRestoreSession?.FilesBackedUp ?? 0,
+                    preRestoreSession?.FilesBackedUp > 0 ? preRestoreSession.BackupRootPath : null);
             }
             finally
             {
-                preRestoreSession?.Complete();
+                if (staging is not null && Directory.Exists(staging))
+                {
+                    try
+                    {
+                        Directory.Delete(staging, recursive: true);
+                    }
+                    catch
+                    {
+                        // A leftover staging folder is never listed as a run, and
+                        // the backup history removes it once it is stale.
+                    }
+                }
             }
+        }
 
-            if (preRestoreSession is not null && preRestoreSession.FilesBackedUp > 0)
+        private static TransferPreviewWarning? StageContainer(
+            TransferBackupRunInfo run,
+            CancellationToken cancellationToken,
+            out string? staging,
+            out TransferBackupManifest? manifest)
+        {
+            staging = null;
+            var reader = new BackupMetadataReader();
+
+            if (!reader.TryReadManifest(run.BackupRootPath, out manifest, out string? manifestError, allowSidecar: false, cancellationToken))
             {
-                warnings.Add(new TransferPreviewWarning(
-                    "PreRestoreBackups",
-                    $"Backed up {preRestoreSession.FilesBackedUp} current file(s) before restoring over them to: {preRestoreSession.BackupRootPath}",
-                    TransferWarningSeverity.Info));
+                return new TransferPreviewWarning(
+                    "ContainerUnreadable",
+                    $"The backup archive could not be read, so nothing was restored: {manifestError}",
+                    TransferWarningSeverity.Error);
             }
 
-            return BuildResult(
-                run,
-                options,
-                results,
-                warnings,
-                preRestoreSession?.FilesBackedUp ?? 0,
-                preRestoreSession?.FilesBackedUp > 0 ? preRestoreSession.BackupRootPath : null);
+            staging = Path.Combine(
+                Path.GetDirectoryName(run.BackupRootPath)!,
+                ".staging_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(staging);
+
+            string? extractError;
+
+            try
+            {
+                extractError = BackupArchiveService.ExtractContainer(
+                    run.BackupRootPath,
+                    run.ContainerFormat,
+                    staging,
+                    BackupArchiveSafetyBounds.Default,
+                    cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                extractError = ex.Message;
+            }
+
+            if (extractError is not null)
+            {
+                return new TransferPreviewWarning(
+                    "ContainerRejected",
+                    $"The backup archive could not be unpacked safely, so nothing was restored: {extractError}",
+                    TransferWarningSeverity.Error);
+            }
+
+            VerificationStrengthResult check = reader.VerifyPayloadIntegrityAsync(
+                    new TransferBackupRunInfo(
+                        staging,
+                        Path.Combine(staging, TransferBackupLocations.ManifestFileName),
+                        manifest!),
+                    cancellationToken)
+                .GetAwaiter()
+                .GetResult();
+
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (check.Strength != VerificationStrength.PayloadVerified)
+            {
+                return new TransferPreviewWarning(
+                    "ContainerVerificationFailed",
+                    $"The backup archive does not match its manifest, so nothing was restored: {check.Error}",
+                    TransferWarningSeverity.Error);
+            }
+
+            return null;
         }
 
         // Resolves the approved mapping selected in the options to a single

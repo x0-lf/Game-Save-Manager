@@ -25,6 +25,16 @@ namespace GameSaves.Core.Sync
         /// <summary>The remote's sync log (version history), newest first.</summary>
         Task<IReadOnlyList<SyncLogEntry>> GetSyncLogAsync(
             CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// One read-only, cancellable health check: validates the remote and
+        /// reads its free space when the backend can. It writes nothing
+        /// remotely, never starts an interactive sign-in, and sends stored
+        /// credentials only to the host the provider already uses.
+        /// </summary>
+        Task<ProviderHealthReport> CheckHealthAsync(
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("This provider cannot check its health.");
     }
 
     /// <summary>

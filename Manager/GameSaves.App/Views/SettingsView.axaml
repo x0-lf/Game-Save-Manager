@@ -475,6 +475,40 @@
                                 </StackPanel>
                             </StackPanel>
                         </Border>
+
+                        <Border Background="{DynamicResource CardBackgroundBrush}"
+                                BorderBrush="{DynamicResource CardBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="14"
+                                Padding="14"
+                                HorizontalAlignment="Left"
+                                MinWidth="360"
+                                MaxWidth="640">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Backup storage"
+                                           Foreground="{DynamicResource PrimaryTextBrush}"
+                                           FontSize="{DynamicResource FontSizeBodyLarge}"
+                                           FontWeight="SemiBold" />
+                                <TextBlock Text="How new backups are stored, including the automatic backups taken before a transfer or restore overwrites a file. A compressed backup is checked against its manifest before it replaces the copied files, and is restored straight from the archive. Backups you already have keep their format."
+                                           Foreground="{DynamicResource MutedTextBrush}"
+                                           FontSize="{DynamicResource FontSizeBody}"
+                                           TextWrapping="Wrap" />
+                                <StackPanel Spacing="4">
+                                    <RadioButton GroupName="SettingsBackupFormat"
+                                                 Content="Compressed ZIP (recommended; opens in Windows without extra tools)"
+                                                 IsChecked="{Binding NewBackupFormat, Mode=TwoWay, Converter={x:Static conv:StringEqualityConverter.Instance}, ConverterParameter={x:Static s:AppUiSettings.BackupFormatZip}}"
+                                                 AutomationProperties.Name="Store new backups as compressed ZIP archives" />
+                                    <RadioButton GroupName="SettingsBackupFormat"
+                                                 Content="Compressed 7-Zip (smaller, slower to write)"
+                                                 IsChecked="{Binding NewBackupFormat, Mode=TwoWay, Converter={x:Static conv:StringEqualityConverter.Instance}, ConverterParameter={x:Static s:AppUiSettings.BackupFormatSevenZip}}"
+                                                 AutomationProperties.Name="Store new backups as compressed 7-Zip archives" />
+                                    <RadioButton GroupName="SettingsBackupFormat"
+                                                 Content="Uncompressed folder (opt out of compression)"
+                                                 IsChecked="{Binding NewBackupFormat, Mode=TwoWay, Converter={x:Static conv:StringEqualityConverter.Instance}, ConverterParameter={x:Static s:AppUiSettings.BackupFormatFolder}}"
+                                                 AutomationProperties.Name="Store new backups as uncompressed folders" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
                 </TabItem>
 

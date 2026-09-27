@@ -252,23 +252,22 @@ namespace GameSaves.App.Views.Workspace
                 return double.IsFinite(height) ? height : viewport;
             }
 
-            // The height the page cannot go below. Filling panels are pinned to
-            // their declared minimum for the measure: left free they would
-            // report a table's full row count and the page would grow without
-            // bound instead of ever simply filling the window.
+            // The height the page cannot go below. Filling panels report their
+            // declared minimum for the probe: left free they would report a
+            // table's full row count and the page would grow without bound
+            // instead of ever simply filling the window. They report it without
+            // measuring their content (see WorkspacePanel.IsProbingMinimumHeight)
+            // and nothing is set that would invalidate a measure, so a probe
+            // leaves no work behind for the next layout pass.
             private double Minimum(Control child, double width)
             {
                 // Snapshot: a rebuild reached from inside the measure would
                 // otherwise repopulate the live list and strand the panels
-                // pinned at their minimum for good.
+                // probing for good.
                 WorkspacePanel[] fills = _fills.ToArray();
-                var restore = new double[fills.Length];
 
-                for (int index = 0; index < fills.Length; index++)
-                {
-                    restore[index] = fills[index].MaxHeight;
-                    fills[index].MaxHeight = fills[index].MinPanelHeight;
-                }
+                foreach (WorkspacePanel fill in fills)
+                    fill.IsProbingMinimumHeight = true;
 
                 try
                 {
@@ -277,8 +276,8 @@ namespace GameSaves.App.Views.Workspace
                 }
                 finally
                 {
-                    for (int index = 0; index < fills.Length; index++)
-                        fills[index].MaxHeight = restore[index];
+                    foreach (WorkspacePanel fill in fills)
+                        fill.IsProbingMinimumHeight = false;
                 }
             }
         }

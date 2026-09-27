@@ -542,7 +542,7 @@ namespace GameSaves.Tests
             AppUiSettings loaded = new UiSettingsStore(path).Load();
 
             Assert.Equal(AppUiSettings.CurrentSchemaVersion, loaded.SchemaVersion);
-            Assert.Equal(9, AppUiSettings.CurrentSchemaVersion);
+            Assert.Equal(10, AppUiSettings.CurrentSchemaVersion);
             Assert.Equal(AppUiSettings.ThemeDark, loaded.ThemeChoice);
             Assert.Equal(UiRailLayoutSettings.TabDashboard, loaded.StartupTabKey);
             Assert.Equal("Desk", Assert.Single(loaded.WorkspaceLayouts).Name);

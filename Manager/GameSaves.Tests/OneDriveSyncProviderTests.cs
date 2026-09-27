@@ -488,6 +488,66 @@ public sealed class OneDriveSyncProviderTests
     }
 
     [Fact]
+    public async Task Health_ReportsTheDriveQuota_AFullDrive_AndADriveWithoutAQuotaFacet()
+    {
+        var fakeClient = new FakeOneDriveApiClient();
+        OneDriveRemoteFileSystem fs = await CreateFileSystemAsync(fakeClient);
+
+        ProviderHealthReport healthy = await HealthProvider(fs).CheckHealthAsync();
+        Assert.Equal(ProviderHealthState.Healthy, healthy.State);
+        Assert.Equal(new RemoteCapacity(9_000_000_000, 10_000_000_000, 1_000_000_000), healthy.Capacity);
+
+        fakeClient.Quota = new OneDriveQuotaInfo(5_000_000_000, 5_000_000_000, 0, "exceeded");
+        ProviderHealthReport full = await HealthProvider(fs).CheckHealthAsync();
+        Assert.Equal(ProviderHealthState.QuotaExhausted, full.State);
+        Assert.Equal(0, full.Capacity!.FreeBytes);
+
+        // The client reports a missing quota facet as all zeros: not a full drive.
+        fakeClient.Quota = new OneDriveQuotaInfo(0, 0, 0, "unknown");
+        ProviderHealthReport unreported = await HealthProvider(fs).CheckHealthAsync();
+        Assert.Equal(ProviderHealthState.Healthy, unreported.State);
+        Assert.Null(unreported.Capacity);
+    }
+
+    [Fact]
+    public async Task Health_ThrottledIsRateLimited_AndNoStoredSignInIsUnavailableWithoutSigningIn()
+    {
+        var throttledClient = new FakeOneDriveApiClient { GetItemFailure = new OneDriveApiException(429) };
+        ProviderHealthReport throttled =
+            await HealthProvider(await CreateFileSystemAsync(throttledClient)).CheckHealthAsync();
+
+        Assert.Equal(ProviderHealthState.RateLimited, throttled.State);
+        Assert.Contains("limiting how fast", throttled.Reason);
+
+        var client = new FakeOneDriveApiClient();
+        bool signInStarted = false;
+        var oauth = CreateService(
+            new InMemorySyncRemoteProfileRepository(),
+            new InMemorySecretStore(),
+            client,
+            authorizer: new FakeAuthorizer((_, _, _) =>
+            {
+                signInStarted = true;
+                return "code";
+            }));
+
+        ProviderHealthReport signedOut = await HealthProvider(
+            new OneDriveRemoteFileSystem(TestProfileId, client, oauth)).CheckHealthAsync();
+
+        Assert.Equal(ProviderHealthState.Unavailable, signedOut.State);
+        Assert.Equal("Microsoft OneDrive authentication is required before syncing.", signedOut.Reason);
+        Assert.False(signInStarted);
+    }
+
+    private static ISyncProvider HealthProvider(IRemoteFileSystem fs) =>
+        new EngineSyncProvider(
+            "OneDrive",
+            OneDriveRemoteFileSystem.DisplayRootName,
+            OneDriveSyncProviderFactory.WithRetries(fs, new RecordingDelayProvider(), backoffNotifier: null),
+            new InMemoryBackupHistoryService(),
+            new InMemoryTransferHistoryRepository());
+
+    [Fact]
     public async Task ValidateAsync_PropagatesCancellation()
     {
         var fs = await CreateFileSystemAsync(new FakeOneDriveApiClient());
@@ -910,6 +970,7 @@ public sealed class OneDriveSyncProviderTests
         public OneDriveTokenResponse? RefreshedToken { get; set; }
         public Exception? RefreshFailure { get; set; }
         public OneDriveQuotaInfo Quota { get; set; } = new(10_000_000_000, 1_000_000_000, 9_000_000_000, "normal");
+        public Exception? GetItemFailure { get; set; }
 
         public Task<OneDriveTokenResponse> ExchangeCodeForTokenAsync(string clientId, string code, string codeVerifier, string redirectUri, CancellationToken cancellationToken = default)
         {
@@ -949,6 +1010,9 @@ public sealed class OneDriveSyncProviderTests
         public Task<OneDriveItemInfo?> GetItemAsync(string accessToken, string pathUnderAppRoot, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            if (GetItemFailure is not null)
+                return Task.FromException<OneDriveItemInfo?>(GetItemFailure);
 
             if (string.IsNullOrEmpty(pathUnderAppRoot))
                 return Task.FromResult<OneDriveItemInfo?>(new OneDriveItemInfo("approot", IsFolder: true, IsFile: false));

@@ -1,3 +1,4 @@
+using GameSaves.Core.Sync;
 using GameSaves.Core.Transfers;
 
 namespace GameSaves.Infrastructure.Sync
@@ -25,6 +26,19 @@ namespace GameSaves.Infrastructure.Sync
 
         Task<bool> RootExistsAsync(
             CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Storage space the provider reports for the remote root, read without
+        /// writing anything; null when this backend cannot read it or the
+        /// server did not say. The catalog's SupportsRemoteQuota must be true
+        /// exactly for backends that override this.
+        /// </summary>
+        Task<RemoteCapacity?> GetCapacityAsync(
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<RemoteCapacity?>(null);
+
+        /// <summary>True when a failure from this backend means the provider is throttling requests.</summary>
+        bool IsRateLimited(Exception exception) => false;
 
         /// <summary>Top-level folder names under the remote root.</summary>
         Task<IReadOnlyList<string>> ListRunFolderNamesAsync(

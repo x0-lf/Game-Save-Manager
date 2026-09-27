@@ -13,7 +13,7 @@ the shared invariants are defined in the [safety model](safety-model.md).
 | Secret storage | None | Password and passphrase are session-only | OAuth token in protected secret store | Password in protected secret store (DPAPI), bound to the server origin | OAuth token in protected secret store (DPAPI) | None |
 | Folder selection | Native local folder picker or typed path | Typed remote path | Creates or discovers one app folder; no arbitrary picker | Typed folder under the server URL | Sandboxed application folder (`drive/special/approot`); no arbitrary picker | Unavailable |
 | Connection/status check | Yes | Yes | Yes | Yes | Yes | Blocked |
-| Quota display | No | No | No current UI | No | Yes (used and total) | No |
+| Quota display (health panel) | Free and total space of the folder's volume (not for network shares or links) | No | No (not read) | When the server reports RFC 4331 quota | Yes (free, used, total) | No |
 | Open-location control | Opens local folder | No | Opens the app folder in the browser | No | No | No |
 | Upload backup runs | Yes | Yes | Yes | Yes (streamed PUT, `If-None-Match: *`) | Yes (upload sessions above 4 MiB) | No |
 | Archive containers (.7z, .zip) | Yes | Yes | Yes | Yes | Yes | No |
@@ -23,9 +23,9 @@ the shared invariants are defined in the [safety model](safety-model.md).
 | Provider-specific tests | Shared engine and UI coverage | Shared engine coverage over an injectable remote seam | Extensive deterministic coverage and recorded live acceptance | Deterministic coverage against an in-memory RFC 4918 server | Deterministic coverage through stub HTTP handlers (Graph and OAuth) | Availability guards |
 
 The capability catalog describes intended provider potential. The live UI is
-narrower: Google Drive does not currently display quota or offer arbitrary
-folder selection, even though cloud capabilities are declared for future UI
-work.
+narrower: Google Drive does not offer arbitrary folder selection, even though
+that capability is declared for future UI work. Remote quota is declared only
+for the providers whose storage space is actually read (SYNC-004).
 
 ## Shared behavior
 
@@ -39,7 +39,9 @@ container at the remote root plus a `<name>.7z.manifest.json` sidecar that
 carries its identity. The sidecar is written last, so a container without one
 is reported as an interrupted upload, never as a run. Containers download back
 as folder runs. Every implemented provider supports this; on a cloud provider
-it turns hundreds of requests per run into two.
+it turns hundreds of requests per run into two. A run that is already
+compressed locally (the default for new backups since BACKUP-001) is always
+sent as its own `.zip` or `.7z` container, whatever the switch says.
 
 Uploads are create-only and place `manifest.json` last. Downloads never replace
 an existing local run. Neither direction deletes a run. A same-name run with
@@ -83,6 +85,51 @@ runs to several saved profiles in one workflow (SYNC-003). The rules:
 
 The safety rules are the same as for one profile: create-only uploads, manifest
 last, nothing overwritten, nothing deleted.
+
+## Provider health and storage
+
+The Sync page's "Provider health and storage" panel checks every saved profile
+that can connect on its own (the same Local Folder, Google Drive, WebDAV, and
+OneDrive profiles the multi-profile upload offers; SFTP is left out because its
+password is never stored). The rules (SYNC-004):
+
+- **On request only.** Nothing is checked until Check now is pressed. Profiles
+  are checked one after another, and Stop checking cancels the one running and
+  leaves the rest marked as not checked.
+- **Read-only.** A check is the provider's own validation followed, where the
+  provider supports it, by one storage-space read. It uploads, replaces, and
+  deletes nothing, never opens a sign-in, and sends stored credentials only to
+  the host that provider already talks to. A sign-in that has expired is
+  refreshed the same way a sync would refresh it; one that cannot be refreshed
+  is reported, not re-requested.
+- **Four states, in words.** Healthy (the remote answered), Rate limited (the
+  provider is throttling requests; try later), Storage full (the provider
+  reported no free space), and Unavailable (not signed in, unreachable,
+  refused, or misconfigured, with the provider's own reason). The glyph beside
+  each state only repeats it.
+- **Only reported space is shown.** A figure appears only when the provider
+  returned it on that check. Otherwise the row says either that the provider
+  does not report free space (Google Drive today, because its storage quota is
+  not read) or that the server did not report it on this check (a WebDAV
+  server without RFC 4331 quota, or a local folder on a network share or
+  behind a mount point, junction, or link). A failed or throttled check shows
+  no space at all.
+- **One profile's problem stays on its row.** A profile whose provider cannot
+  be built or whose check fails is reported as Unavailable and the next one is
+  still checked.
+
+| Provider | Storage figure | Source |
+| --- | --- | --- |
+| Local Folder | Free and total space of the folder's volume | The folder, or its nearest existing parent before the first upload; none for network shares or through links |
+| Google Drive | Not reported | The Drive storage quota is not read |
+| WebDAV / Nextcloud | Free, used, and total when the server reports them | RFC 4331 `quota-available-bytes` and `quota-used-bytes` on the backup folder, or on the server URL until the folder exists; Nextcloud's "unlimited" marker is not a size |
+| OneDrive | Free, used, and total | The drive's quota facet (`GET /me/drive`); a drive without one is "not reported", not "full" |
+
+The contract lives in Core (`ISyncProvider.CheckHealthAsync`, returning a
+`ProviderHealthReport` with a state, a reason, and an optional
+`RemoteCapacity`). The catalog's `SupportsRemoteQuota` is true exactly for the
+providers that read space, which is how "does not report" is told apart from
+"not reported this time".
 
 ## Local Folder
 
@@ -133,7 +180,8 @@ My Drive/GameSave Manager Backups
 Its Drive ID is authoritative, so a rename or move within My Drive remains
 linked. Missing, trashed, invalid, unsupported, or ambiguous roots are not
 silently replaced. Shared drives, full Drive browsing, arbitrary folder picking,
-and quota UI are not implemented.
+and reading the Drive storage quota are not implemented; the health panel says
+that Google Drive does not report free space.
 
 Runs are stored as folders, or as `.7z` containers beside them when archive
 transfer is on. The container listing is one child listing of the backup
@@ -223,6 +271,7 @@ Nextcloud and ownCloud the URL is `https://HOST/remote.php/dav/files/USER/`.
 | Engine operation | WebDAV request |
 | --- | --- |
 | Validate | `PROPFIND` Depth 0 on the server URL (must be a collection) |
+| Health check storage space | `PROPFIND` Depth 0 asking RFC 4331 `quota-available-bytes` and `quota-used-bytes`, on the backup folder or the server URL until it exists; never part of a listing |
 | Root exists, folder exists, file exists | `PROPFIND` Depth 0 |
 | List run folders and containers | `PROPFIND` Depth 1 on the backup folder |
 | List a run's files | `PROPFIND` Depth 1, folder by folder (Depth: infinity is often disabled) |
@@ -304,7 +353,7 @@ Connect is not offered.
    history is the constant `OneDrive: AppRoot (GameSave Manager)`, never the
    account email. Error messages are fixed sentences without response bodies.
 10. **Quota is informational:** The Sync page shows used and total storage after
-    a connect. A full drive no longer blocks validation; an upload that does not
+    a connect, and the health panel shows free space on request. A full drive no longer blocks validation; an upload that does not
     fit fails like any other failed item.
 
 ## MEGA
@@ -384,7 +433,8 @@ synced through the mounted folder lives wherever that folder points, not in the
 ### What must stay intact, whichever path is used
 
 A backup run is a directory that is self-describing, and every path above relies
-on that:
+on that. A compressed run is the same thing in one file: `<run>.zip` or
+`<run>.7z` with `manifest.json` at its root and the `files` subtree inside.
 
 - The run folder keeps its name. It is the identity both sides compare on.
 - `manifest.json` stays in the run folder root, unedited. It carries the game,

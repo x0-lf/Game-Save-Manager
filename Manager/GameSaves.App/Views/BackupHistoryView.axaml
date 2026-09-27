@@ -591,7 +591,7 @@
             <wsp:WorkspacePanel PanelKey="backups.archive"
                                 IsVisible="{Binding !!Runs.Count}"
                                 Title="Archive (ZIP / 7-Zip)"
-                                Subtitle="Export packs the selected run (files + manifest) into one archive for cold storage or another machine. Import brings an archive back into the backup base, where it appears in this list and can be restored. Nothing is ever overwritten.">
+                                Subtitle="Export packs the selected run (files + manifest) into one archive for cold storage or another machine; a run that is already compressed is copied as it is. Compressed runs in this list restore directly. Import brings an archive from elsewhere into the backup base as a folder run. Nothing is ever overwritten.">
                 <StackPanel Spacing="10">
                     <StackPanel Orientation="Horizontal"
                                 Spacing="16"

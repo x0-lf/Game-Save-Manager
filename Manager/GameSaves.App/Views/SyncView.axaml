@@ -1433,6 +1433,81 @@
                 </StackPanel>
             </wsp:WorkspacePanel>
 
+            <!-- Provider health and storage (SYNC-004). The same saved profiles
+                 as above, checked one after another only when asked. Each row
+                 says its state in words and shows storage space only when the
+                 provider reported it. -->
+            <wsp:WorkspacePanel PanelKey="sync.health"
+                                Title="Provider health and storage"
+                                MinPanelWidth="320">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Checks whether each saved profile answers and how much free space its provider reports. A check only reads: it never uploads, deletes, or opens a sign-in. SFTP profiles are not listed because their passwords are never stored."
+                               Foreground="{DynamicResource MutedTextBrush}"
+                               FontSize="{DynamicResource FontSizeBody}"
+                               TextWrapping="Wrap" />
+
+                    <ItemsControl ItemsSource="{Binding MultiTargetDestinations}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:MultiTargetDestinationRowViewModel">
+                                <Border Padding="0,6"
+                                        BorderBrush="{DynamicResource SubtleBorderBrush}"
+                                        BorderThickness="0,0,0,1"
+                                        AutomationProperties.Name="{Binding HealthAccessibleName}">
+                                    <StackPanel Spacing="2">
+                                        <TextBlock Text="{Binding DisplayName}"
+                                                   Foreground="{DynamicResource PrimaryTextBrush}"
+                                                   FontSize="{DynamicResource FontSizeBody}" />
+
+                                        <TextBlock Text="{Binding EndpointText}"
+                                                   Foreground="{DynamicResource MutedTextBrush}"
+                                                   FontSize="{DynamicResource FontSizeMicro}"
+                                                   TextWrapping="Wrap" />
+
+                                        <Grid ColumnDefinitions="Auto,*"
+                                              ColumnSpacing="6">
+                                            <TextBlock Grid.Column="0"
+                                                       Text="{Binding HealthGlyph}"
+                                                       Foreground="{DynamicResource PrimaryTextBrush}"
+                                                       FontSize="{DynamicResource FontSizeBody}" />
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding HealthText}"
+                                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                                       FontSize="{DynamicResource FontSizeBody}"
+                                                       TextWrapping="Wrap" />
+                                        </Grid>
+
+                                        <TextBlock Text="{Binding CapacityText}"
+                                                   IsVisible="{Binding CapacityText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                                   FontSize="{DynamicResource FontSizeBody}"
+                                                   TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <views:EmptyState Glyph="&#xE898;"
+                                      Title="No profiles to check"
+                                      Message="Save a Local folder, Google Drive, WebDAV, or OneDrive profile first; each one appears here."
+                                      IsVisible="{Binding !MultiTargetDestinations.Count}" />
+
+                    <WrapPanel ItemSpacing="8" LineSpacing="6">
+                        <Button Content="Check now"
+                                Command="{Binding CheckProviderHealthCommand}"
+                                ToolTip.Tip="Checks every listed profile, one after another. Read-only: nothing is uploaded, changed, or deleted." />
+                        <Button Content="Stop checking"
+                                Command="{Binding CheckProviderHealthCancelCommand}"
+                                IsVisible="{Binding CheckProviderHealthCommand.IsRunning}" />
+                    </WrapPanel>
+
+                    <TextBlock Text="{Binding ProviderHealthStatusMessage}"
+                               Foreground="{DynamicResource SecondaryTextBrush}"
+                               FontSize="{DynamicResource FontSizeBody}"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+            </wsp:WorkspacePanel>
+
             <wsp:WorkspacePanel PanelKey="sync.history"
                                 Title="Sync history"
                                 MinPanelWidth="320"

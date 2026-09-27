@@ -91,8 +91,9 @@ that file.
 
 Choose a profile, installed game, source set, and destination. The destination
 can be typed or selected with the native folder picker. Every execution creates
-a fresh timestamped directory with mirrored source paths and a SHA-256
-`manifest.json`; it does not replace a previous run.
+a fresh timestamped run with mirrored source paths and a SHA-256
+`manifest.json`; it does not replace a previous run. New runs are compressed
+ZIP archives unless [Backup storage](#backup-storage) says otherwise.
 
 Named presets store the destination and source choices. Applying or deleting a
 preset never starts a backup and never deletes backup data. Runs written under
@@ -119,10 +120,36 @@ and shows Payload verified, Payload mismatch, or Payload missing; selecting
 another run cancels a check in progress and leaves the badge unchanged. The
 file tree starts at each file's original location.
 
-ZIP export creates a self-contained archive. Import validates extraction,
-rewrites manifest paths to the imported location, and never overwrites an
-existing run. Cleanup is the only user-backup deletion feature; its exact
-boundary is owned by the [safety model](safety-model.md).
+ZIP export creates a self-contained archive; a run that is already compressed
+is copied as it is. Import validates extraction, rewrites manifest paths to the
+imported location, and never overwrites an existing run. Cleanup is the only
+user-backup deletion feature; its exact boundary is owned by the
+[safety model](safety-model.md).
+
+Compressed runs restore directly, with the same preview, targets, and overwrite
+rules as folder runs. The archive's own manifest is read, the payload is
+unpacked into a private staging copy under the import limits, and every file is
+hashed against the manifest before any current file is replaced. A tampered,
+truncated, or unreadable archive is refused with its reason and nothing is
+restored; the staging copy is removed either way.
+
+## Backup storage
+
+Settings > Behaviour > Backup storage chooses how new backups are stored:
+Compressed ZIP (the default; opens in Windows without extra tools), Compressed
+7-Zip (smaller, slower to write), or Uncompressed folder. The choice covers
+manual backups and the automatic backups taken before a transfer or restore
+overwrites a file, and applies from the next backup on. Backups already on disk
+keep their format; nothing is converted.
+
+A compressed run is written as a folder first, without a manifest, so it is
+never listed half-built. On completion its files and manifest are packed into a
+temporary archive, every file is read back and hashed against the manifest, and
+only then is the archive renamed to `<run>.zip` or `<run>.7z` and the staged
+folder removed. If any step fails, or a file of that name already exists, the
+run is kept as an ordinary folder run instead. Backups shows each run's format
+in words (ZIP Archive, 7-Zip Archive, or Folder), and Sync sends a compressed
+run as its own container.
 
 ![Backups hierarchical tree view](images/05-backups-tree.png)
 
@@ -178,6 +205,15 @@ another, each shows its own outcome, one failing does not stop the others, and
 each is recorded separately in History. SFTP profiles are not offered because
 their passwords are never stored; downloads stay a single-profile operation.
 See the [provider guide](sync-providers.md#uploading-to-several-profiles).
+
+The "Provider health and storage" panel checks, when Check now is pressed,
+whether each saved profile answers and how much free space its provider
+reports. Each row says Healthy, Rate limited, Storage full, or Unavailable in
+words with the provider's reason, and shows a storage figure only when the
+provider returned one; otherwise it says whether the provider never reports
+space or did not report it this time. Checks run one after another, only read,
+never open a sign-in, and Stop checking cancels them. See the
+[provider guide](sync-providers.md#provider-health-and-storage).
 
 Transfer completion and verification are separate states. After a sync, the
 completed runs are re-read through the provider's own preview and reported one

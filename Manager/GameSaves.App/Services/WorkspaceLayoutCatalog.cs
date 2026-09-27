@@ -308,6 +308,7 @@ namespace GameSaves.App.Services
                 ("warnings", "Warnings", C, 1.0, true),
                 ("results", "Execution results", C, 1.0, true),
                 ("multiTarget", "Upload to several profiles", C, 1.0, true),
+                ("health", "Provider health and storage", C, 1.0, true),
                 ("history", "Sync history", C, 1.0, true));
 
             // History: the run list on the left, that run's files in the centre.

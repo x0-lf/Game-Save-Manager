@@ -266,6 +266,34 @@ namespace GameSaves.App.Views.Workspace
                 menu.Click += (_, _) => RequestMenu();
         }
 
+        // What the panel last measured to with its content, kept for the page
+        // host's minimum-height probe.
+        private Size _contentDesiredSize;
+
+        /// <summary>
+        /// Set by the page host while it probes the page's minimum height. A
+        /// filling panel then reports its declared minimum, or less when its
+        /// content last needed less, without measuring its content. Measuring
+        /// a table at that second, smaller height in the same pass flipped its
+        /// scrollbars, which re-invalidated its measure, so the page never
+        /// stopped laying out: the Installed games table froze the app that
+        /// way with only a handful of games.
+        /// </summary>
+        internal bool IsProbingMinimumHeight { get; set; }
+
+        protected override Size MeasureOverride(Size availableSize)
+        {
+            if (IsProbingMinimumHeight)
+            {
+                return new Size(
+                    _contentDesiredSize.Width,
+                    Math.Min(MinPanelHeight, _contentDesiredSize.Height));
+            }
+
+            _contentDesiredSize = base.MeasureOverride(availableSize);
+            return _contentDesiredSize;
+        }
+
         /// <summary>
         /// Marks the panel as the one currently being dragged, so the theme can
         /// fade it while the docking guide is showing. Owned by

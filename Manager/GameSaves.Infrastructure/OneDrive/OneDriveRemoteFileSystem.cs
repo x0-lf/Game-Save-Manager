@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using GameSaves.Core.Sync;
 using GameSaves.Core.Transfers;
 using GameSaves.Infrastructure.Sync;
 
@@ -22,6 +23,8 @@ namespace GameSaves.Infrastructure.OneDrive
         /// root, which is persisted in plain transfer history.
         /// </summary>
         internal const string DisplayRootName = "OneDrive: AppRoot (GameSave Manager)";
+
+        internal const string RateLimitedWarningCode = "OneDriveRateLimited";
 
         private readonly Guid _remoteProfileId;
         private readonly IOneDriveApiClient _apiClient;
@@ -71,6 +74,13 @@ namespace GameSaves.Infrastructure.OneDrive
                         TransferWarningSeverity.Error);
                 }
             }
+            catch (OneDriveApiException ex) when (ex.StatusCode == 429)
+            {
+                return new TransferPreviewWarning(
+                    RateLimitedWarningCode,
+                    "Microsoft OneDrive is limiting how fast requests may be sent. Try again later.",
+                    TransferWarningSeverity.Error);
+            }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 return new TransferPreviewWarning(
@@ -87,6 +97,20 @@ namespace GameSaves.Infrastructure.OneDrive
         {
             string token = await GetTokenOrThrowAsync(cancellationToken);
             return await _apiClient.GetItemAsync(token, "", cancellationToken) != null;
+        }
+
+        // The drive's quota facet (GET /me/drive). A drive without one is
+        // reported by the client as all zeros, which is "not reported", not
+        // "full".
+        public async Task<RemoteCapacity?> GetCapacityAsync(
+            CancellationToken cancellationToken = default)
+        {
+            string token = await GetTokenOrThrowAsync(cancellationToken);
+            OneDriveQuotaInfo quota = await _apiClient.GetQuotaAsync(token, cancellationToken);
+
+            return quota.TotalBytes > 0
+                ? new RemoteCapacity(Math.Max(0, quota.RemainingBytes), quota.TotalBytes, quota.UsedBytes)
+                : null;
         }
 
         public async Task<IReadOnlyList<string>> ListRunFolderNamesAsync(

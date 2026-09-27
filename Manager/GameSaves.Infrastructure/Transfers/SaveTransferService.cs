@@ -195,6 +195,17 @@ namespace GameSaves.Infrastructure.Transfers
                 backupSession?.Complete();
             }
 
+            // A compressed backup run moved the replaced files into its
+            // container, so the per-file locations say where they are now.
+            if (backupSession is not null)
+            {
+                for (int i = 0; i < results.Count; i++)
+                {
+                    if (results[i].BackupFile is { } backupFile)
+                        results[i] = results[i] with { BackupFile = backupSession.LocateBackupFile(backupFile) };
+                }
+            }
+
             if (backupSession is not null && backupSession.FilesBackedUp > 0)
             {
                 warnings.Add(new TransferPreviewWarning(

@@ -98,6 +98,13 @@ namespace GameSaves.Infrastructure.Sync
             CancellationToken cancellationToken = default) =>
             RunAsync(token => _inner.RootExistsAsync(token), cancellationToken);
 
+        public Task<RemoteCapacity?> GetCapacityAsync(
+            CancellationToken cancellationToken = default) =>
+            RunAsync(token => _inner.GetCapacityAsync(token), cancellationToken);
+
+        public bool IsRateLimited(Exception exception) =>
+            _isRateLimited?.Invoke(exception) ?? false;
+
         public Task<IReadOnlyList<string>> ListRunFolderNamesAsync(
             CancellationToken cancellationToken = default) =>
             RunAsync(token => _inner.ListRunFolderNamesAsync(token), cancellationToken);

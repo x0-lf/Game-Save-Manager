@@ -232,6 +232,7 @@ namespace GameSaves.App.ViewModels
             railCollapsed = settings.RailLayout.Collapsed;
             startupTabKey = settings.StartupTabKey;
             showScanInNavigationRail = settings.ScanAction.ShowInNavigationRail;
+            newBackupFormat = settings.NewBackupFormat;
 
             // Per-page scan visibility. Only the pages that actually offer a
             // scan action of their own get a row, so the list cannot imply a
@@ -541,6 +542,21 @@ namespace GameSaves.App.ViewModels
             {
                 RailLayout = settings.RailLayout with { Collapsed = value },
             });
+
+        /// <summary>
+        /// How new backup runs are stored: "zip" (default), "7z", or "folder".
+        /// Runs already written keep their format.
+        /// </summary>
+        [ObservableProperty]
+        private string newBackupFormat = AppUiSettings.BackupFormatZip;
+
+        partial void OnNewBackupFormatChanged(string value)
+        {
+            if (!AppUiSettings.IsBackupFormat(value))
+                return;
+
+            SaveAndApply(settings => settings with { NewBackupFormat = value });
+        }
 
         partial void OnStartupTabKeyChanged(string value)
         {

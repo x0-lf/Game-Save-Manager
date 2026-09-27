@@ -1,3 +1,4 @@
+using GameSaves.Core.Transfers;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -50,7 +51,7 @@ namespace GameSaves.App.Services
         string StartupTabKey,
         IReadOnlyList<UiWorkspaceLayoutSettings> WorkspaceLayouts)
     {
-        public const int CurrentSchemaVersion = 9;
+        public const int CurrentSchemaVersion = 10;
 
         /// <summary>
         /// The live per-page panel arrangement (schema v9). An init property
@@ -68,6 +69,30 @@ namespace GameSaves.App.Services
         /// </summary>
         public UiScanActionSettings ScanAction { get; init; } =
             UiScanActionSettings.Default;
+
+        /// <summary>
+        /// How new backup runs are stored (schema v10, BACKUP-001): a
+        /// compressed ZIP unless the user chose 7-Zip or an uncompressed
+        /// folder. A file written before v10 has no value and loads as ZIP;
+        /// runs already on disk keep the format they have either way.
+        /// </summary>
+        public string NewBackupFormat { get; init; } = BackupFormatZip;
+
+        public const string BackupFormatZip = "zip";
+        public const string BackupFormatSevenZip = "7z";
+        public const string BackupFormatFolder = "folder";
+
+        public static bool IsBackupFormat(string? value) => value is
+            BackupFormatZip or
+            BackupFormatSevenZip or
+            BackupFormatFolder;
+
+        public static BackupContainerFormat ToContainerFormat(string? value) => value switch
+        {
+            BackupFormatSevenZip => BackupContainerFormat.SevenZip,
+            BackupFormatFolder => BackupContainerFormat.Folder,
+            _ => BackupContainerFormat.Zip
+        };
 
         public const string ThemeSystem = "system";
         public const string ThemeLight = "light";
@@ -634,6 +659,7 @@ namespace GameSaves.App.Services
                 {
                     WorkspacePages = ReadWorkspacePages(document.RootElement),
                     ScanAction = ReadScanAction(document.RootElement),
+                    NewBackupFormat = ReadNewBackupFormat(document.RootElement),
                 };
             }
             catch (Exception exception) when (
@@ -656,6 +682,15 @@ namespace GameSaves.App.Services
                     settings,
                     new JsonSerializerOptions { WriteIndented = true }));
         }
+
+        // Whitelisted like the window material; a missing or unknown value is
+        // the ZIP default.
+        private static string ReadNewBackupFormat(JsonElement root) =>
+            root.TryGetProperty(nameof(AppUiSettings.NewBackupFormat), out JsonElement value) &&
+            value.ValueKind == JsonValueKind.String &&
+            AppUiSettings.IsBackupFormat(value.GetString())
+                ? value.GetString()!
+                : AppUiSettings.BackupFormatZip;
 
         // The window material vocabulary is whitelisted like the theme and
         // accent choices; unknown or malformed values load as "none", which

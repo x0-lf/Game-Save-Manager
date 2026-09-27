@@ -371,7 +371,7 @@ public sealed class PortableManifestSchemaV2Tests
     }
 
     [Fact]
-    public async Task BackupRestore_RejectsDirectRestoreOfArchiveWithoutImport()
+    public async Task BackupRestore_RestoresAnArchiveDirectly_FromAVerifiedPrivateCopy()
     {
         using var temp = new TemporaryDirectory();
         string staging = temp.GetPath("staging");
@@ -402,8 +402,13 @@ public sealed class PortableManifestSchemaV2Tests
                 ConfirmExecution = true
             });
 
-        Assert.Equal(0, result.FilesRestored);
-        Assert.Contains(result.Warnings, w => w.Code == "ArchiveMustBeImported");
+        // BACKUP-001: an archive no longer has to be imported first. It is
+        // unpacked into a private staging copy, verified, restored from, and
+        // the copy is removed.
+        Assert.Equal(1, result.FilesRestored);
+        Assert.Equal("archive content", File.ReadAllText(temp.GetPath("orig.sav")));
+        Assert.Empty(Directory.GetDirectories(temp.GetPath("out"), ".staging_*"));
+        Assert.True(File.Exists(export.ArchivePath));
     }
 
     [Fact]

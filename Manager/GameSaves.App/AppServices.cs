@@ -1,5 +1,6 @@
 ﻿using GameSaves.App.Services;
 using GameSaves.App.ViewModels;
+using GameSaves.Core.Transfers;
 using GameSaves.Infrastructure.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection;
 using System;
@@ -25,6 +26,12 @@ namespace GameSaves.App
 
             services.AddSingleton<IFolderPickerService, FolderPickerService>();
             services.AddSingleton<IUiSettingsStore, UiSettingsStore>();
+
+            // The backup writer reads the Settings choice when a run begins,
+            // so a change applies to the next backup without a restart.
+            services.AddSingleton(provider => new BackupStoragePreference(() =>
+                AppUiSettings.ToContainerFormat(
+                    provider.GetRequiredService<IUiSettingsStore>().Load().NewBackupFormat)));
             services.AddSingleton<ThemeService>();
             services.AddSingleton<WorkspaceLayoutService>();
             services.AddSingleton<WindowMaterialService>();

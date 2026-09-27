@@ -31,9 +31,19 @@ namespace GameSaves.Core.Transfers
         TransferOverwriteBackupItem BackUpFile(string targetFile);
 
         /// <summary>
-        /// Writes the manifest for this run. Idempotent; a session with no
-        /// backed-up files writes nothing.
+        /// Writes the manifest for this run, and packs the run into its
+        /// container when the run is compressed. Idempotent; a session with no
+        /// backed-up files writes nothing. Afterwards
+        /// <see cref="BackupRootPath"/> names the run as stored: the folder, or
+        /// the container file.
         /// </summary>
         void Complete();
+
+        /// <summary>
+        /// Where a file returned by <see cref="BackUpFile"/> lives once the run
+        /// is complete: unchanged for a folder run, inside the container for a
+        /// compressed one (for example <c>run.zip\files\C\save.dat</c>).
+        /// </summary>
+        string LocateBackupFile(string backupFile) => backupFile;
     }
 }

@@ -531,6 +531,17 @@ namespace GameSaves.Infrastructure.Transfers
                 session?.Complete();
             }
 
+            // A compressed run moved the copies into its container, so each
+            // copied file's location says where it is now.
+            if (session is not null)
+            {
+                for (int i = 0; i < results.Count; i++)
+                {
+                    if (results[i].Copied)
+                        results[i] = results[i] with { TargetFile = session.LocateBackupFile(results[i].TargetFile) };
+                }
+            }
+
             if (session is not null && session.FilesBackedUp > 0)
             {
                 warnings.Add(new TransferPreviewWarning(
@@ -655,7 +666,9 @@ namespace GameSaves.Infrastructure.Transfers
                 BackupRootPath: backupRootPath,
                 ManifestPath: backupRootPath is null
                     ? null
-                    : Path.Combine(backupRootPath, TransferBackupLocations.ManifestFileName));
+                    : File.Exists(backupRootPath)
+                        ? backupRootPath + "#" + TransferBackupLocations.ManifestFileName
+                        : Path.Combine(backupRootPath, TransferBackupLocations.ManifestFileName));
         }
 
         private static (int FileCount, long TotalBytes) CountDirectoryContents(string path)

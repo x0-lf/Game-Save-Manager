@@ -1,5 +1,6 @@
 using System.Net.Http.Headers;
 using System.Text;
+using GameSaves.Core.Sync;
 using GameSaves.Core.Transfers;
 using GameSaves.Infrastructure.Sync;
 
@@ -72,6 +73,20 @@ namespace GameSaves.Infrastructure.WebDav
 
         public async Task<bool> RootExistsAsync(CancellationToken cancellationToken = default) =>
             (await _client.StatAsync(_folder, collection: true, cancellationToken))?.IsCollection == true;
+
+        // RFC 4331 on the sync folder, or on the server folder until the sync
+        // folder exists. A server that does not implement the properties
+        // answers without them, which is "not reported", never zero.
+        public async Task<RemoteCapacity?> GetCapacityAsync(CancellationToken cancellationToken = default)
+        {
+            WebDavEntry? entry =
+                await _client.StatQuotaAsync(_folder, cancellationToken) ??
+                await _client.StatQuotaAsync("", cancellationToken);
+
+            return entry?.QuotaAvailableBytes is { } free
+                ? new RemoteCapacity(free, free + entry.QuotaUsedBytes, entry.QuotaUsedBytes)
+                : null;
+        }
 
         public async Task<IReadOnlyList<string>> ListRunFolderNamesAsync(
             CancellationToken cancellationToken = default) =>

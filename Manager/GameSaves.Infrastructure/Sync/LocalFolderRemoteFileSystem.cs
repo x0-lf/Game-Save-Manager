@@ -1,3 +1,4 @@
+using GameSaves.Core.Sync;
 using GameSaves.Core.Transfers;
 using GameSaves.Infrastructure.Transfers;
 using System.Text;
@@ -55,6 +56,49 @@ namespace GameSaves.Infrastructure.Sync
         public Task<bool> RootExistsAsync(CancellationToken cancellationToken = default)
         {
             return Task.FromResult(Directory.Exists(_normalizedRoot));
+        }
+
+        /// <summary>
+        /// Free space of the volume holding the folder, or of its nearest
+        /// existing parent, since the folder itself appears only with the first
+        /// upload. A folder with no existing parent at all (an unplugged drive,
+        /// a missing share) fails the check. Null when the volume cannot be
+        /// told truthfully: a network share path, or a mount point, junction,
+        /// or link on the way, where Windows would report the drive letter's
+        /// volume instead of the one actually written to.
+        /// </summary>
+        public Task<RemoteCapacity?> GetCapacityAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.Run<RemoteCapacity?>(() =>
+            {
+                if (_normalizedRoot is null)
+                    return null;
+
+                DirectoryInfo? existing = new(_normalizedRoot);
+                while (existing is not null && !existing.Exists)
+                    existing = existing.Parent;
+
+                if (existing is null)
+                {
+                    throw new DirectoryNotFoundException(
+                        "The sync folder's drive or network share is not available.");
+                }
+
+                for (DirectoryInfo? step = existing; step?.Parent is not null; step = step.Parent)
+                {
+                    if (step.Attributes.HasFlag(FileAttributes.ReparsePoint))
+                        return null;
+                }
+
+                if (_normalizedRoot.StartsWith(@"\\", StringComparison.Ordinal))
+                    return null;
+
+                var drive = new DriveInfo(existing.FullName);
+                return new RemoteCapacity(
+                    drive.AvailableFreeSpace,
+                    drive.TotalSize,
+                    drive.TotalSize - drive.TotalFreeSpace);
+            }, cancellationToken);
         }
 
         public Task<IReadOnlyList<string>> ListRunFolderNamesAsync(

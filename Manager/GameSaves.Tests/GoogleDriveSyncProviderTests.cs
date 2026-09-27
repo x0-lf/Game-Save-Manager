@@ -213,6 +213,7 @@ public sealed class GoogleDriveSyncProviderTests
         Assert.Equal(
             new[]
             {
+                nameof(ISyncProvider.CheckHealthAsync),
                 nameof(ISyncProvider.CreatePreviewAsync),
                 nameof(IDisposable.Dispose),
                 nameof(ISyncProvider.ExecuteAsync),

@@ -1104,6 +1104,28 @@ namespace GameSaves.Tests
             Assert.Contains("could not be written", viewModel.WorkspaceStatus);
         }
 
+        // BACKUP-001: the backup storage choice opens as stored (ZIP when
+        // nothing is stored), persists on change, ignores an unknown value,
+        // and is what the backup writer reads when the next run begins.
+        [Fact]
+        public void ChangingTheBackupFormat_PersistsAndReachesTheBackupWriter()
+        {
+            string path = _temp.GetPath("backup-format.json");
+            SettingsViewModel viewModel = CreateViewModel(path);
+            var preference = new GameSaves.Core.Transfers.BackupStoragePreference(() =>
+                AppUiSettings.ToContainerFormat(new UiSettingsStore(path).Load().NewBackupFormat));
+
+            Assert.Equal(AppUiSettings.BackupFormatZip, viewModel.NewBackupFormat);
+            Assert.Equal(GameSaves.Core.Transfers.BackupContainerFormat.Zip, preference.NewRunFormat);
+
+            viewModel.NewBackupFormat = AppUiSettings.BackupFormatFolder;
+            viewModel.NewBackupFormat = "rar";
+
+            Assert.Equal(AppUiSettings.BackupFormatFolder, new UiSettingsStore(path).Load().NewBackupFormat);
+            Assert.Equal(AppUiSettings.BackupFormatFolder, CreateViewModel(path).NewBackupFormat);
+            Assert.Equal(GameSaves.Core.Transfers.BackupContainerFormat.Folder, preference.NewRunFormat);
+        }
+
         // A8 Behaviour: the startup tab choice is a persisted setting like
         // the appearance choices — reflected on open, saved on change,
         // rejected when it is not one of the nine stable tab keys.

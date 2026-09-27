@@ -48,13 +48,20 @@ belong to the [security policy](../SECURITY.md).
     mapping. `import --approve` is the one explicit approval path; the audited
     rule lives in `SavePathMappingWriter.cs`. Invalid candidates (unknown
     platform or path kind, non-numeric or zero AppID) are dropped, not stored.
+14. **A compressed run exists only verified.** A new run is packed into a
+    temporary container that is read back and hashed against its manifest
+    before it is renamed into place; an existing file of that name is never
+    replaced, and any failure leaves the run as a folder run. Restoring from a
+    container extracts it into a private staging copy under the import bounds
+    and verifies every file before any live file is replaced.
 
 ## What can be deleted
 
 Backup cleanup is the only user-facing feature that deletes user backup content.
 It requires a preview and confirmation and can remove only recognized,
-manifest-bearing run directories inside the application backup base. It does
-not delete live saves, remote backup runs, or custom-destination backups.
+manifest-bearing run directories inside the application backup base, and the
+run archives (`.zip`, `.7z`) there. It does not delete live saves, remote
+backup runs, or custom-destination backups.
 
 Other delete operations have different ownership and do not delete saves or
 backup runs:
@@ -65,6 +72,9 @@ backup runs:
 - WebDAV Forget password removes the selected profile's stored password only;
 - failed Google Drive downloads may remove only the unique temporary file created
   by that download;
+- packing a compressed backup run removes that run's own staged, manifest-less
+  folder, and only after the container holding the same files has been read
+  back and verified; restoring from a container removes its private staging copy;
 - ZIP import and similar operations may clean up only their own internal temporary files.
   Orphaned working folders (`.staging_<32 hex>`, `.download_<32 hex>`,
   `.export_<32 hex>` and `.export_<32 hex>.tmp`) are purged once per process,
@@ -75,8 +85,8 @@ backup runs:
 
 SHA-256 manifests detect changes relative to the stored manifest. They do not
 encrypt data, authenticate an author, or protect against an attacker who can
-replace both the file and manifest. Backup folders and ZIP exports are not
-application-encrypted. Protect them with filesystem permissions, disk encryption,
+replace both the file and manifest. Backup folders, compressed runs, and ZIP
+exports are not application-encrypted. Protect them with filesystem permissions, disk encryption,
 remote access control, and independent retention.
 
 Google Drive and Local Folder synchronization do not overwrite remote or local

@@ -78,7 +78,7 @@ public sealed class SyncProviderCapabilityTests
                 RequiresInteractiveLogin: false,
                 RequiresServerCredentials: false,
                 SupportsResumableUpload: false,
-                SupportsRemoteQuota: false,
+                SupportsRemoteQuota: true,
                 SupportsRemoteFolderSelection: true,
                 SupportsPersistentAuthentication: false,
                 SupportsConnectionTesting: true,
@@ -143,7 +143,7 @@ public sealed class SyncProviderCapabilityTests
                 RequiresInteractiveLogin: false,
                 RequiresServerCredentials: true,
                 SupportsResumableUpload: false,
-                SupportsRemoteQuota: false,
+                SupportsRemoteQuota: true,
                 SupportsRemoteFolderSelection: false,
                 SupportsPersistentAuthentication: true,
                 SupportsConnectionTesting: true,
@@ -198,7 +198,9 @@ public sealed class SyncProviderCapabilityTests
         Assert.True(viewModel.CanCheckConnection);
         Assert.True(viewModel.CanLogout);
         Assert.True(viewModel.CanOpenRemoteLocation);
-        Assert.True(viewModel.CanShowQuota);
+
+        // SYNC-004 withdrew the quota flag: Google Drive's quota is not read.
+        Assert.False(viewModel.CanShowQuota);
 
         await viewModel.PreviewSyncCommand.ExecuteAsync(null);
 
@@ -231,7 +233,7 @@ public sealed class SyncProviderCapabilityTests
                 RequiresInteractiveLogin: true,
                 RequiresServerCredentials: false,
                 SupportsResumableUpload: true,
-                SupportsRemoteQuota: true,
+                SupportsRemoteQuota: false,
                 SupportsRemoteFolderSelection: true,
                 SupportsPersistentAuthentication: true,
                 SupportsConnectionTesting: true,
@@ -243,14 +245,15 @@ public sealed class SyncProviderCapabilityTests
     [Fact]
     public void ActivatedDriveCapabilities_OfferNoControlTheCodeCannotHonour()
     {
-        // Remote quota is still declared and still unimplemented, so it must
-        // not reach a control a user can press. Opening the remote location is
-        // no longer in that category: DRIVE-004 implemented it for Google
-        // Drive, which is why this test now only guards quota.
+        // Remote quota was declared for Google Drive without being read.
+        // SYNC-004 withdrew the declaration instead of leaving a promise the
+        // code cannot keep, so the health panel says this provider does not
+        // report space. Opening the remote location is not in this category:
+        // DRIVE-004 implemented it for Google Drive.
         SyncViewModel viewModel = CreateViewModel();
         viewModel.SelectedProviderKind = SyncProviderKind.GoogleDrive;
 
-        Assert.True(viewModel.CanShowQuota);
+        Assert.False(viewModel.CanShowQuota);
 
         string view = ReadSyncView();
         Assert.DoesNotContain("CanShowQuota", view, StringComparison.Ordinal);

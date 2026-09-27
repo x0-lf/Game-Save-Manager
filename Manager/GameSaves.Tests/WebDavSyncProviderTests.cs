@@ -305,6 +305,120 @@ public sealed class WebDavSyncProviderTests
         Assert.Empty(workspace.Server.Requests);
     }
 
+    // ---- health and RFC 4331 quota (SYNC-004) ----
+
+    [Fact]
+    public async Task Health_ReportsTheQuotaOfTheSyncFolder_OrOfTheServerFolderBeforeTheFirstUpload()
+    {
+        using var workspace = new Workspace();
+        await workspace.StorePasswordAsync();
+        var quotas = new Dictionary<string, (string Available, string Used)>
+        {
+            [FakeWebDavServer.BasePath] = ("1000", "500")
+        };
+        workspace.Server.Intercept = QuotaAnswers(quotas);
+
+        using ISyncProvider provider = workspace.Provider();
+        ProviderHealthReport beforeUpload = await provider.CheckHealthAsync();
+
+        Assert.Equal(ProviderHealthState.Healthy, beforeUpload.State);
+        Assert.Equal(new RemoteCapacity(1000, 1500, 500), beforeUpload.Capacity);
+        Assert.False(workspace.Server.IsCollection(Folder), "a check must not create the sync folder");
+
+        workspace.Server.AddFile($"{Folder}/Run1/manifest.json", [1]);
+        quotas[$"{FakeWebDavServer.BasePath}/{Folder}"] = ("200", "800");
+
+        ProviderHealthReport afterUpload = await provider.CheckHealthAsync();
+
+        Assert.Equal(new RemoteCapacity(200, 1000, 800), afterUpload.Capacity);
+        Assert.All(workspace.Server.Requests, request => Assert.Equal("PROPFIND", request.Method));
+    }
+
+    [Fact]
+    public async Task Health_WithoutQuotaProperties_OrWithAnUnlimitedMarker_ReportsNoCapacity()
+    {
+        using var workspace = new Workspace();
+        await workspace.StorePasswordAsync();
+        using ISyncProvider provider = workspace.Provider();
+
+        ProviderHealthReport plain = await provider.CheckHealthAsync();
+
+        workspace.Server.Intercept = QuotaAnswers(new()
+        {
+            [FakeWebDavServer.BasePath] = ("-3", "500")
+        });
+        ProviderHealthReport unlimited = await provider.CheckHealthAsync();
+
+        Assert.Equal(new ProviderHealthReport(ProviderHealthState.Healthy, plain.Reason), plain);
+        Assert.Equal(new ProviderHealthReport(ProviderHealthState.Healthy, plain.Reason), unlimited);
+    }
+
+    [Fact]
+    public async Task Health_TellsAMissingPasswordAThrottledServerAndAFullOneApart()
+    {
+        using var workspace = new Workspace();
+        using (ISyncProvider noPassword = workspace.Provider())
+        {
+            ProviderHealthReport refused = await noPassword.CheckHealthAsync();
+
+            Assert.Equal(ProviderHealthState.Unavailable, refused.State);
+            Assert.Contains("No WebDAV password is stored", refused.Reason);
+            Assert.Empty(workspace.Server.Requests);
+        }
+
+        await workspace.StorePasswordAsync();
+        workspace.Server.Intercept = _ => new HttpResponseMessage(HttpStatusCode.TooManyRequests);
+        using (ISyncProvider throttledProvider = workspace.Provider())
+        {
+            ProviderHealthReport throttled = await throttledProvider.CheckHealthAsync();
+
+            Assert.Equal(ProviderHealthState.RateLimited, throttled.State);
+            Assert.Contains("limiting how fast", throttled.Reason);
+            Assert.Equal(3, workspace.Delay.Requested.Count);
+        }
+
+        workspace.Server.Intercept = QuotaAnswers(new()
+        {
+            [FakeWebDavServer.BasePath] = ("0", "5000")
+        });
+        using (ISyncProvider fullProvider = workspace.Provider())
+        {
+            ProviderHealthReport full = await fullProvider.CheckHealthAsync();
+
+            Assert.Equal(ProviderHealthState.QuotaExhausted, full.State);
+            Assert.Equal(new RemoteCapacity(0, 5000, 5000), full.Capacity);
+        }
+    }
+
+    // Answers a quota PROPFIND for the listed paths; anything else, including
+    // a quota request for a folder that is not listed, goes to the server.
+    private static Func<HttpRequestMessage, HttpResponseMessage?> QuotaAnswers(
+        Dictionary<string, (string Available, string Used)> quotas) =>
+        request =>
+        {
+            string path = Uri.UnescapeDataString(request.RequestUri!.AbsolutePath).TrimEnd('/');
+
+            if (request.Method.Method != "PROPFIND" ||
+                !request.Content!.ReadAsStringAsync().Result.Contains("quota-available-bytes", StringComparison.Ordinal) ||
+                !quotas.TryGetValue(path, out (string Available, string Used) quota))
+            {
+                return null;
+            }
+
+            string xml =
+                "<?xml version=\"1.0\" encoding=\"utf-8\"?><d:multistatus xmlns:d=\"DAV:\"><d:response>" +
+                $"<d:href>{path}/</d:href><d:propstat><d:prop>" +
+                "<d:resourcetype><d:collection/></d:resourcetype>" +
+                $"<d:quota-available-bytes>{quota.Available}</d:quota-available-bytes>" +
+                $"<d:quota-used-bytes>{quota.Used}</d:quota-used-bytes>" +
+                "</d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response></d:multistatus>";
+
+            return new HttpResponseMessage(HttpStatusCode.MultiStatus)
+            {
+                Content = new StringContent(xml, Encoding.UTF8, "application/xml")
+            };
+        };
+
     // ---- the whole engine through the real factory ----
 
     [Fact]
