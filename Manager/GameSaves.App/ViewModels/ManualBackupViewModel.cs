@@ -18,6 +18,7 @@ namespace GameSaves.App.ViewModels
         private readonly IBackupHistoryService _backupHistoryService;
         private readonly IFolderPickerService _folderPickerService;
         private readonly IManualBackupPresetRepository _presetRepository;
+        private readonly IScheduledBackupJobRepository _scheduledJobs;
         private readonly ProfilesViewModel _profilesViewModel;
         private readonly InstalledGamesViewModel _installedGamesViewModel;
         private ManualBackupPlan? _lastPlan;
@@ -95,6 +96,11 @@ namespace GameSaves.App.ViewModels
 
         public ObservableCollection<BackupPresetRowViewModel> Presets { get; } = new();
 
+        public ObservableCollection<ScheduledBackupJob> ScheduledJobs { get; } = new();
+
+        /// <summary>What a Windows task runs; each job adds its own arguments.</summary>
+        public string ScheduledRunProgram { get; } = Environment.ProcessPath ?? "GameSaves.App.exe";
+
         /// <summary>This page's panel arrangement.</summary>
         public GameSaves.App.Services.IWorkspaceLayoutPage Workspace { get; }
 
@@ -105,9 +111,11 @@ namespace GameSaves.App.ViewModels
             IManualBackupPresetRepository presetRepository,
             ProfilesViewModel profilesViewModel,
             InstalledGamesViewModel installedGamesViewModel,
-            GameSaves.App.Services.WorkspaceLayoutService workspaceLayout)
+            GameSaves.App.Services.WorkspaceLayoutService workspaceLayout,
+            IScheduledBackupJobRepository scheduledJobs)
         {
             _manualBackupService = manualBackupService;
+            _scheduledJobs = scheduledJobs;
             _backupHistoryService = backupHistoryService;
             _folderPickerService = folderPickerService;
             _presetRepository = presetRepository;
@@ -268,6 +276,73 @@ namespace GameSaves.App.ViewModels
             }
         }
 
+        private async Task LoadScheduledJobsAsync()
+        {
+            var jobs = await Task.Run(() => _scheduledJobs.GetAll());
+
+            ScheduledJobs.Clear();
+
+            foreach (ScheduledBackupJob job in jobs)
+                ScheduledJobs.Add(job);
+        }
+
+        // Scheduling is opt-in and starts from a clean preview, so a job always
+        // describes a backup that worked when it was saved. Each run checks it
+        // again before writing anything.
+        [RelayCommand]
+        private async Task SaveScheduledJobAsync()
+        {
+            if (IsLoading)
+                return;
+
+            if (_lastPlan is not { CanExecute: true } plan)
+            {
+                StatusMessage = "Preview the backup first. Only a backup that previews cleanly can be scheduled.";
+                return;
+            }
+
+            var job = new ScheduledBackupJob(
+                Id: Guid.NewGuid(),
+                SteamAppId: plan.Game.AppId,
+                GameName: plan.Game.Name,
+                SteamAccountId: plan.Profile.AccountId,
+                DestinationRoot: plan.DestinationRoot,
+                IncludeSteamUserDataGameFolder: IncludeSteamUserDataGameFolder,
+                IncludeApprovedMappings: IncludeApprovedMappings,
+                CreatedUtc: DateTimeOffset.UtcNow);
+
+            try
+            {
+                await Task.Run(() => _scheduledJobs.Add(job));
+                await LoadScheduledJobsAsync();
+
+                StatusMessage = $"Scheduled backup for {job.GameName} saved. It runs only when a Windows task starts it.";
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Failed to save the scheduled backup: {ex.Message}";
+            }
+        }
+
+        [RelayCommand]
+        private async Task RemoveScheduledJobAsync(ScheduledBackupJob? job)
+        {
+            if (job is null)
+                return;
+
+            try
+            {
+                await Task.Run(() => _scheduledJobs.Delete(job.Id));
+                await LoadScheduledJobsAsync();
+
+                StatusMessage = $"Scheduled backup for {job.GameName} removed. Backups it already made are kept.";
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Failed to remove the scheduled backup: {ex.Message}";
+            }
+        }
+
         [RelayCommand]
         private async Task ChooseDestinationFolderAsync()
         {
@@ -349,6 +424,9 @@ namespace GameSaves.App.ViewModels
 
                 if (!_presetsLoaded)
                     await LoadPresetsAsync();
+
+                // Always reloaded: an unattended run updates a job's last outcome.
+                await LoadScheduledJobsAsync();
 
                 SelectedProfile ??= Profiles.FirstOrDefault();
                 SelectedGame ??= Games.FirstOrDefault();

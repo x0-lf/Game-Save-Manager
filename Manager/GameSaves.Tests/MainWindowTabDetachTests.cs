@@ -6,6 +6,7 @@ using GameSaves.App.Views;
 
 namespace GameSaves.Tests;
 
+[Collection(nameof(AvaloniaDispatcherCollection))]
 public sealed class MainWindowTabDetachTests
 {
     [Fact]

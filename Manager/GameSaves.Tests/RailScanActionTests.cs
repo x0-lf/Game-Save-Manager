@@ -300,7 +300,8 @@ public sealed class RailScanActionTests
                 new EmptyPresetRepository(),
                 profiles,
                 installedGames,
-                layout),
+                layout,
+                new InMemoryScheduledBackupJobRepository()),
             new TransferHistoryViewModel(new RecordingHistoryRepository(), layout),
             new SyncViewModel(
                 new SyncProviderSelectionTests.RecordingSyncProviderFactory(),

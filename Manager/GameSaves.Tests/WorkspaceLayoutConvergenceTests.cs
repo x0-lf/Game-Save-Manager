@@ -15,6 +15,7 @@ namespace GameSaves.Tests;
 /// fix, none after). A filling panel now answers that probe without measuring
 /// its content, so the content is only ever measured at its real size.
 /// </summary>
+[Collection(nameof(AvaloniaDispatcherCollection))]
 public sealed class WorkspaceLayoutConvergenceTests
 {
     [Fact]

@@ -365,6 +365,25 @@ internal sealed class RecordingHistoryRepository : ITransferHistoryRepository
     public int CountRuns() => Records.Count;
 }
 
+internal sealed class InMemoryScheduledBackupJobRepository : IScheduledBackupJobRepository
+{
+    public List<ScheduledBackupJob> Jobs { get; } = new();
+
+    public IReadOnlyList<ScheduledBackupJob> GetAll() => Jobs.ToList();
+
+    public void Add(ScheduledBackupJob job) => Jobs.Add(job);
+
+    public void RecordOutcome(Guid id, DateTimeOffset runUtc, string outcome)
+    {
+        int index = Jobs.FindIndex(job => job.Id == id);
+
+        if (index >= 0)
+            Jobs[index] = Jobs[index] with { LastRunUtc = runUtc, LastOutcome = outcome };
+    }
+
+    public void Delete(Guid id) => Jobs.RemoveAll(job => job.Id == id);
+}
+
 internal sealed class ThrowingHistoryRepository : ITransferHistoryRepository
 {
     public long RecordRun(TransferRunRecord record) => throw new IOException("History unavailable.");

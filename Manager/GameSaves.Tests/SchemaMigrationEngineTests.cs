@@ -33,8 +33,8 @@ namespace GameSaves.Tests
 
             Assert.True(result.Success);
             Assert.Equal(0, result.PreviousVersion);
-            Assert.Equal(5, result.CurrentVersion);
-            Assert.Equal(5, result.AppliedMigrations.Count);
+            Assert.Equal(6, result.CurrentVersion);
+            Assert.Equal(6, result.AppliedMigrations.Count);
             Assert.False(result.RolledBack);
             Assert.Null(result.ErrorMessage);
 
@@ -52,6 +52,7 @@ namespace GameSaves.Tests
             Assert.True(TableExists(dbPath, "transfer_runs"));
             Assert.True(TableExists(dbPath, "transfer_items"));
             Assert.True(TableExists(dbPath, "manual_backup_presets"));
+            Assert.True(TableExists(dbPath, "scheduled_backup_jobs"));
 
             Assert.True(IndexExists(dbPath, "idx_game_titles_source"));
             Assert.True(IndexExists(dbPath, "idx_save_path_mappings_source_enabled"));
@@ -61,7 +62,7 @@ namespace GameSaves.Tests
 
             // Verify schema_migrations rows
             IReadOnlyList<SchemaMigrationRecord> applied = migrator.GetAppliedMigrations(dbPath);
-            Assert.Equal(5, applied.Count);
+            Assert.Equal(6, applied.Count);
             Assert.Equal(1, applied[0].Id);
             Assert.Equal("V001__BaselineSchema", applied[0].Name);
             Assert.Equal(2, applied[1].Id);
@@ -72,6 +73,8 @@ namespace GameSaves.Tests
             Assert.Equal("V004__CatalogAndMappingIndexes", applied[3].Name);
             Assert.Equal(5, applied[4].Id);
             Assert.Equal("V005__DropDuplicateTransferItemsIndex", applied[4].Name);
+            Assert.Equal(6, applied[5].Id);
+            Assert.Equal("V006__ScheduledBackupJobs", applied[5].Name);
 
             // CURRENT_TIMESTAMP is UTC; it must not be read back as local time.
             Assert.Equal(TimeSpan.Zero, applied[0].AppliedUtc.Offset);
@@ -86,12 +89,12 @@ namespace GameSaves.Tests
 
             MigrationExecutionResult firstRun = migrator.Migrate(dbPath);
             Assert.True(firstRun.Success);
-            Assert.Equal(5, firstRun.CurrentVersion);
+            Assert.Equal(6, firstRun.CurrentVersion);
 
             MigrationExecutionResult secondRun = migrator.Migrate(dbPath);
             Assert.True(secondRun.Success);
-            Assert.Equal(5, secondRun.PreviousVersion);
-            Assert.Equal(5, secondRun.CurrentVersion);
+            Assert.Equal(6, secondRun.PreviousVersion);
+            Assert.Equal(6, secondRun.CurrentVersion);
             Assert.Empty(secondRun.AppliedMigrations);
             Assert.Null(secondRun.PreMigrationBackupPath);
             Assert.False(secondRun.RolledBack);
@@ -124,8 +127,8 @@ namespace GameSaves.Tests
 
             Assert.True(updateResult.Success);
             Assert.Equal(1, updateResult.PreviousVersion);
-            Assert.Equal(5, updateResult.CurrentVersion);
-            Assert.Equal(4, updateResult.AppliedMigrations.Count);
+            Assert.Equal(6, updateResult.CurrentVersion);
+            Assert.Equal(5, updateResult.AppliedMigrations.Count);
             Assert.NotNull(updateResult.PreMigrationBackupPath);
             Assert.True(File.Exists(updateResult.PreMigrationBackupPath));
         }
@@ -148,14 +151,15 @@ namespace GameSaves.Tests
 
             Assert.Equal(dbPath, plan.DatabasePath);
             Assert.Equal(1, plan.CurrentVersion);
-            Assert.Equal(5, plan.TargetVersion);
+            Assert.Equal(6, plan.TargetVersion);
             Assert.True(plan.IntegrityCheckPassed);
             Assert.Equal("ok", plan.IntegrityMessage);
-            Assert.Equal(4, plan.PendingMigrations.Count);
+            Assert.Equal(5, plan.PendingMigrations.Count);
             Assert.Equal("V002__ReviewColumnsAndProvenance", plan.PendingMigrations[0].Name);
             Assert.Equal("V003__SyncAndSecretStorage", plan.PendingMigrations[1].Name);
             Assert.Equal("V004__CatalogAndMappingIndexes", plan.PendingMigrations[2].Name);
             Assert.Equal("V005__DropDuplicateTransferItemsIndex", plan.PendingMigrations[3].Name);
+            Assert.Equal("V006__ScheduledBackupJobs", plan.PendingMigrations[4].Name);
             Assert.Equal(Path.Combine(Path.GetDirectoryName(dbPath)!, "backups"), plan.PlannedBackupDirectory);
         }
 
@@ -173,7 +177,7 @@ namespace GameSaves.Tests
             var fullMigrator = new SchemaMigrator();
             MigrationPlan plan = fullMigrator.Plan(dbPath);
 
-            Assert.Equal(4, plan.PendingMigrations.Count);
+            Assert.Equal(5, plan.PendingMigrations.Count);
 
             // Verify database was NOT changed
             IReadOnlyList<SchemaMigrationRecord> applied = fullMigrator.GetAppliedMigrations(dbPath);
@@ -300,7 +304,7 @@ namespace GameSaves.Tests
 
             // Database should be fully migrated and seeded
             IReadOnlyList<SchemaMigrationRecord> applied = migrator.GetAppliedMigrations(dbPath);
-            Assert.Equal(5, applied.Count);
+            Assert.Equal(6, applied.Count);
 
             var repository = new SqliteSavePathMappingRepository(dbPath);
             Assert.True(repository.CountApprovedMappings("windows") > 0);
@@ -316,7 +320,7 @@ namespace GameSaves.Tests
 
             var migrator = new SchemaMigrator();
             IReadOnlyList<SchemaMigrationRecord> applied = migrator.GetAppliedMigrations(dbPath);
-            Assert.Equal(5, applied.Count);
+            Assert.Equal(6, applied.Count);
             Assert.True(TableExists(dbPath, "schema_migrations"));
             Assert.True(TableExists(dbPath, "sync_remote_profiles"));
         }

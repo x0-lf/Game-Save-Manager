@@ -54,6 +54,17 @@ belong to the [security policy](../SECURITY.md).
     replaced, and any failure leaves the run as a folder run. Restoring from a
     container extracts it into a private staging copy under the import bounds
     and verifies every file before any live file is replaced.
+15. **Unattended runs are opt-in and refuse rather than guess.** Nothing runs
+    unattended until the user saves a scheduled backup from a clean preview,
+    and removing the job revokes it. Every run repeats the preview's checks
+    (destination present, game installed, profile present, a clean manual
+    backup preview) and refuses without writing when one fails; it never
+    creates a missing destination. The run is a manual backup, so it only adds
+    a new run. One run per job holds an OS file lock that a crash releases.
+    The headless host replaces the interactive Google Drive and OneDrive
+    sign-ins with refusals, so an unattended run never opens a browser or
+    prompts; stored tokens stay in the DPAPI secret store and only refresh
+    silently. Every outcome, refusals included, is recorded in History.
 
 ## What can be deleted
 

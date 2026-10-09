@@ -157,7 +157,8 @@ public sealed class ViewModelStartupTests
             new FakePresetRepository(),
             profiles,
             games,
-            NewWorkspaceLayout());
+            NewWorkspaceLayout(),
+            new InMemoryScheduledBackupJobRepository());
 
         await profiles.InitializeAsync();
         await games.InitializeAsync();
@@ -166,6 +167,47 @@ public sealed class ViewModelStartupTests
         Assert.NotEmpty(viewModel.Games);                        // scenario 33
         Assert.NotEmpty(viewModel.Profiles);
         Assert.False(manualBackup.BackupWasExecuted);            // scenario 34
+    }
+
+    // ----- Scheduled backups (BACKUP-003) -----
+
+    [Fact]
+    public async Task ScheduledBackup_IsSavedOnlyFromACleanPreview_AndRemovingItRevokesIt()
+    {
+        var profiles = new ProfilesViewModel(new EmptySteamDiscoveryService(), new FakeSteamProfileDetector(), NewWorkspaceLayout());
+        var games = new InstalledGamesViewModel(new FakeInstalledGameStatusService(), NewWorkspaceLayout());
+        var jobs = new InMemoryScheduledBackupJobRepository();
+
+        var viewModel = new ManualBackupViewModel(
+            new CleanPreviewManualBackupService(),
+            new FakeBackupHistoryService(),
+            new NullFolderPicker(),
+            new FakePresetRepository(),
+            profiles,
+            games,
+            NewWorkspaceLayout(),
+            jobs);
+
+        await profiles.InitializeAsync();
+        await games.InitializeAsync();
+        await viewModel.InitializeAsync();
+
+        // Opt-in starts from a preview: without one, nothing is scheduled.
+        await viewModel.SaveScheduledJobCommand.ExecuteAsync(null);
+        Assert.Empty(jobs.Jobs);
+
+        await viewModel.PreviewBackupCommand.ExecuteAsync(null);
+        await viewModel.SaveScheduledJobCommand.ExecuteAsync(null);
+
+        ScheduledBackupJob job = Assert.Single(viewModel.ScheduledJobs);
+        Assert.Equal(viewModel.SelectedGame!.Game.AppId, job.SteamAppId);
+        Assert.Equal(viewModel.SelectedProfile!.Profile.AccountId, job.SteamAccountId);
+        Assert.Equal(viewModel.DestinationPath, job.DestinationRoot);
+
+        await viewModel.RemoveScheduledJobCommand.ExecuteAsync(job);
+
+        Assert.Empty(jobs.Jobs);
+        Assert.Empty(viewModel.ScheduledJobs);
     }
 
     // ----- Backups -----
@@ -355,6 +397,24 @@ public sealed class ViewModelStartupTests
             BackupWasExecuted = true;
             throw new InvalidOperationException("Backup must not execute during startup.");
         }
+    }
+
+    private sealed class CleanPreviewManualBackupService : IManualBackupService
+    {
+        public Task<ManualBackupPlan> CreatePreviewAsync(
+            SteamGame game,
+            SteamProfile profile,
+            string destinationRoot,
+            ManualBackupOptions? options = null,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new ManualBackupPlan(
+                game, profile, destinationRoot, [], [], CanExecute: true, TotalFiles: 1, TotalBytes: 1));
+
+        public Task<ManualBackupResult> ExecuteAsync(
+            ManualBackupPlan plan,
+            ManualBackupExecuteOptions options,
+            CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("Saving a schedule must not run a backup.");
     }
 
     private sealed class FakeBackupHistoryService : IBackupHistoryService

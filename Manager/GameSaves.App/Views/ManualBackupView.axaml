@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:GameSaves.App.ViewModels"
              xmlns:models="using:GameSaves.App.Models"
+             xmlns:transfers="using:GameSaves.Core.Transfers"
              xmlns:views="using:GameSaves.App.Views"
              xmlns:wsp="using:GameSaves.App.Views.Workspace"
              x:Class="GameSaves.App.Views.ManualBackupView"
@@ -549,6 +550,89 @@
                         </ListBox.ItemTemplate>
                     </ListBox>
                 </Grid>
+            </wsp:WorkspacePanel>
+
+            <!-- Scheduling is opt-in: a job exists only after the user saves one
+                 from a clean preview, and nothing runs until a Windows task
+                 starts the command shown here. Removing a job revokes it;
+                 backups it already made are kept. -->
+            <wsp:WorkspacePanel PanelKey="manualBackup.scheduled"
+                                Title="Scheduled backups"
+                                Subtitle="Run a previewed backup unattended from Windows Task Scheduler."
+                                MinPanelWidth="420">
+                <wsp:WorkspacePanel.HeaderActions>
+                    <Button Content="Save as scheduled backup"
+                            IsEnabled="{Binding CanExecuteBackup}"
+                            Command="{Binding SaveScheduledJobCommand}"
+                            ToolTip.Tip="Saves the previewed game, profile, destination and sources as a job. Nothing runs until a Windows task starts it."
+                            VerticalAlignment="Center" />
+                </wsp:WorkspacePanel.HeaderActions>
+
+                <StackPanel Spacing="8">
+                    <TextBlock Text="In Task Scheduler, create a task that runs as you, with this program and a job's arguments. Every run checks the game, profile and destination again, never opens a window, and records its result in History."
+                               Foreground="{DynamicResource MutedTextBrush}"
+                               FontSize="{DynamicResource FontSizeBody}"
+                               TextWrapping="Wrap" />
+
+                    <SelectableTextBlock Text="{Binding ScheduledRunProgram, StringFormat='Program: {0}'}"
+                                         Foreground="{DynamicResource SecondaryTextBrush}"
+                                         FontSize="{DynamicResource FontSizeBody}"
+                                         TextWrapping="Wrap" />
+
+                    <views:EmptyState Glyph="&#xE823;"
+                                      Title="No scheduled backups"
+                                      Message="Preview a backup, then save it here to run it unattended."
+                                      IsVisible="{Binding !ScheduledJobs.Count}" />
+
+                    <ItemsControl ItemsSource="{Binding ScheduledJobs}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="transfers:ScheduledBackupJob">
+                                <Border Padding="0,6"
+                                        BorderBrush="{DynamicResource SubtleBorderBrush}"
+                                        BorderThickness="0,0,0,1">
+
+                                    <Grid ColumnDefinitions="*,Auto"
+                                          ColumnSpacing="10">
+
+                                        <StackPanel Spacing="2">
+                                            <TextBlock Text="{Binding GameName}"
+                                                       Foreground="{DynamicResource PrimaryTextBrush}"
+                                                       FontSize="{DynamicResource FontSizeBody}"
+                                                       FontWeight="SemiBold" />
+
+                                            <TextBlock Text="{Binding SteamAccountId, StringFormat='Steam account {0}'}"
+                                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                                       FontSize="{DynamicResource FontSizeBody}" />
+
+                                            <TextBlock Text="{Binding DestinationRoot, StringFormat='To {0}'}"
+                                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                                       FontSize="{DynamicResource FontSizeBody}"
+                                                       TextWrapping="Wrap" />
+
+                                            <SelectableTextBlock Text="{Binding Id, StringFormat='Arguments: --run-job {0}'}"
+                                                                 Foreground="{DynamicResource SecondaryTextBrush}"
+                                                                 FontSize="{DynamicResource FontSizeBody}" />
+
+                                            <TextBlock Text="{Binding LastOutcome, TargetNullValue='Not run yet.'}"
+                                                       Foreground="{DynamicResource MutedTextBrush}"
+                                                       FontSize="{DynamicResource FontSizeBody}"
+                                                       TextWrapping="Wrap" />
+                                        </StackPanel>
+
+                                        <Button Grid.Column="1"
+                                                Content="Remove"
+                                                Classes="danger"
+                                                Command="{Binding $parent[ItemsControl].((vm:ManualBackupViewModel)DataContext).RemoveScheduledJobCommand}"
+                                                CommandParameter="{Binding}"
+                                                ToolTip.Tip="Removes the job. Its Windows task is then refused on every run until you delete it; backups already made are kept."
+                                                FontSize="{DynamicResource FontSizeBody}"
+                                                VerticalAlignment="Center" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
             </wsp:WorkspacePanel>
 
         </wsp:WorkspaceSurface.Panels>

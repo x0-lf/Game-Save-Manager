@@ -18,7 +18,7 @@ The navigation rail contains nine tabs:
 | Installed games | Installed games and approved, pending, or needs-fix mapping state |
 | Profiles | Detected Steam profiles and transfer source/target selection |
 | Transfer profiles | Preview and execute local profile-to-profile copies |
-| Manual backup | Create a new timestamped backup run |
+| Manual backup | Create a new timestamped backup run, or save one as a scheduled backup |
 | Backups | Inspect, verify, restore, archive, import, and clean up backup runs |
 | Sync | Configure a provider and synchronize completed backup runs |
 | History | Inspect executed transfer, restore, backup, cleanup, and sync results |
@@ -101,6 +101,43 @@ the application backup base appear in Backups; custom destinations remain
 self-contained but are not indexed there.
 
 ![Manual backup](images/04-manual-backup.png)
+
+## Scheduled backups
+
+A scheduled backup runs one game's backup without opening the window. Nothing
+is scheduled by default. Preview a backup on the Manual backup page, then use
+**Save as scheduled backup** in the Scheduled backups panel. The job stores the
+game, the Steam profile, the destination, and the two source switches. The
+button stays disabled until the current preview is clean.
+
+The panel shows the program path and each job's arguments. Until the app can
+register the task itself (BACKUP-007), create it in Windows Task Scheduler:
+
+1. Create a task that runs as your own Windows user, because the jobs, the
+   History, and the settings live in your user profile.
+2. Set the action's program to the path shown in the panel.
+3. Set the action's arguments to the job's `--run-job <id>` text.
+
+Each run checks the job again before it writes anything. It refuses when the
+destination folder is missing, the game is no longer installed, the profile is
+gone, or the preview finds nothing to back up. It never creates a missing
+destination, because that usually means an unplugged drive. A run adds a new
+backup run in the format chosen under [Backup storage](#backup-storage) and
+never replaces or deletes anything. Every outcome, refusals included, appears
+in History as a **Scheduled backup** row and on the job as its last outcome.
+
+Removing a job revokes it. A Windows task left behind is refused and recorded
+on every run until you delete it. Backups the job already made are kept.
+
+The exit code of `GameSaves.App.exe --run-job <id>` reports the outcome:
+
+| Code | Meaning |
+| --- | --- |
+| 0 | Completed |
+| 1 | The command line was malformed |
+| 2 | Refused before anything was written |
+| 3 | Skipped because the previous run of this job is still running |
+| 4 | Failed; nothing that existed before the run was changed or removed |
 
 ## Backups and restore
 

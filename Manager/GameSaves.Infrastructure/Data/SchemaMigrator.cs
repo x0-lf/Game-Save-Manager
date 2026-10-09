@@ -31,7 +31,8 @@ namespace GameSaves.Infrastructure.Data
             new V002__ReviewColumnsAndProvenance(),
             new V003__SyncAndSecretStorage(),
             new V004__CatalogAndMappingIndexes(),
-            new V005__DropDuplicateTransferItemsIndex()
+            new V005__DropDuplicateTransferItemsIndex(),
+            new V006__ScheduledBackupJobs()
         ];
 
         public MigrationPlan Plan(string databasePath)
@@ -136,10 +137,16 @@ namespace GameSaves.Infrastructure.Data
                 }
             }
 
+            // Not pooled: a migration runs once per process and must hold the
+            // only handle on the file until it commits or rolls back. A pooled
+            // handle can be disposed under it by a process-wide pool clear
+            // (SqliteConnection.ClearAllPools) from another thread, which the
+            // tests do when they delete their temporary databases.
             var connectionString = new SqliteConnectionStringBuilder
             {
                 DataSource = databasePath,
-                ForeignKeys = true
+                ForeignKeys = true,
+                Pooling = false
             }.ToString();
 
             var appliedNames = new List<string>();
@@ -225,7 +232,7 @@ namespace GameSaves.Infrastructure.Data
             string backupFileName = $"gamesave-pre-migration-{timestamp}-{Guid.NewGuid().ToString("N")[..8]}.db";
             string backupPath = Path.Combine(backupDir, backupFileName);
 
-            var sourceBuilder = new SqliteConnectionStringBuilder { DataSource = databasePath };
+            var sourceBuilder = new SqliteConnectionStringBuilder { DataSource = databasePath, Pooling = false };
             var destBuilder = new SqliteConnectionStringBuilder
             {
                 DataSource = backupPath,

@@ -413,7 +413,7 @@ namespace GameSaves.Infrastructure.Transfers
                     .Message;
 
                 _historyRepository.RecordRun(new TransferRunRecord(
-                    Kind: TransferRunKind.ManualBackup,
+                    Kind: options.HistoryKind,
                     GameName: plan.Game.Name,
                     SteamAppId: plan.Game.AppId,
                     SourceAccountId: plan.Profile.AccountId,

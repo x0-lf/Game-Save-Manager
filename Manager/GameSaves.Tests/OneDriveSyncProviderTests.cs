@@ -13,8 +13,10 @@ using GameSaves.Core.Platform;
 using GameSaves.Core.Secrets;
 using GameSaves.Core.Sync;
 using GameSaves.Core.Transfers;
+using GameSaves.Infrastructure.DependencyInjection;
 using GameSaves.Infrastructure.OneDrive;
 using GameSaves.Infrastructure.Sync;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace GameSaves.Tests;
@@ -220,6 +222,26 @@ public sealed class OneDriveSyncProviderTests
 
         Assert.Equal(OneDriveAuthenticationStatus.Cancelled, cancelled.Status);
         Assert.Equal(OneDriveAuthenticationStatus.AuthorizationDenied, denied.Status);
+    }
+
+    [Fact]
+    public async Task ConnectAsync_InAnUnattendedHost_FailsWithoutOpeningABrowser()
+    {
+        var repo = new InMemorySyncRemoteProfileRepository();
+        repo.Create(CreateProfile());
+        using ServiceProvider unattended = new ServiceCollection()
+            .AddUnattendedSignInGuards()
+            .BuildServiceProvider();
+
+        var result = await CreateService(
+                repo,
+                new InMemorySecretStore(),
+                new FakeOneDriveApiClient(),
+                authorizer: unattended.GetRequiredService<IOneDriveInteractiveAuthorizer>())
+            .ConnectAsync(TestProfileId);
+
+        Assert.Equal(OneDriveAuthenticationStatus.BrowserLaunchFailed, result.Status);
+        Assert.Null(repo.GetById(TestProfileId)!.AccountDisplayName);
     }
 
     [Fact]

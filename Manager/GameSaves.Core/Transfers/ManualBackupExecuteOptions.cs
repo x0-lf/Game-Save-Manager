@@ -10,5 +10,8 @@ namespace GameSaves.Core.Transfers
         public bool DryRun { get; init; } = true;
 
         public bool ConfirmExecution { get; init; } = false;
+
+        /// <summary>How the run is labelled in History; a scheduled run says so.</summary>
+        public TransferRunKind HistoryKind { get; init; } = TransferRunKind.ManualBackup;
     }
 }

@@ -277,8 +277,8 @@ namespace GameSaves.App.Services
                 ("warnings", "Warnings", C, 1.0, true),
                 ("results", "Preview results", C, 1.0, true));
 
-            // Manual backup: selectors on the left; summary, preview, warnings
-            // and results stacked in the centre.
+            // Manual backup: selectors on the left; summary, preview, warnings,
+            // results and scheduled backups stacked in the centre.
             Page(UiRailLayoutSettings.TabManualBackup,
                 ("header", "Manual backup", T, 1.0, false),
                 ("noProfiles", "No profiles found", T, 1.0, false),
@@ -286,7 +286,8 @@ namespace GameSaves.App.Services
                 ("summary", "Summary", L, 1.0, true),
                 ("preview", "What will be backed up", C, 1.0, true),
                 ("warnings", "Warnings", C, 1.0, true),
-                ("results", "Execution results", C, 1.0, true));
+                ("results", "Execution results", C, 1.0, true),
+                ("scheduled", "Scheduled backups", C, 1.0, true));
 
             // Backups: the run list on the left, everything about the selected
             // run in the centre.
