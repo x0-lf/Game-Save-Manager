@@ -55,8 +55,13 @@ belong to the [security policy](../SECURITY.md).
     container extracts it into a private staging copy under the import bounds
     and verifies every file before any live file is replaced.
 15. **Unattended runs are opt-in and refuse rather than guess.** Nothing runs
-    unattended until the user saves a scheduled backup from a clean preview,
-    and removing the job revokes it. Every run repeats the preview's checks
+    unattended until the user saves a scheduled backup from a clean preview.
+    The app registers, updates, or removes a job's Windows task only when the
+    user saves, applies a schedule, or removes the job; reading task status
+    never changes a task. A task runs as the user who saved it, only while
+    that user is signed in, with least privilege and no stored password.
+    Removing a job removes its task first, keeps the job if Windows refuses,
+    and never deletes backups or History. Every run repeats the preview's checks
     (destination present, game installed, profile present, a clean manual
     backup preview) and refuses without writing when one fails; it never
     creates a missing destination. The run is a manual backup, so it only adds

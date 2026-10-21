@@ -31,6 +31,37 @@ dotnet test Manager/GameSaves.Tests/GameSaves.Tests.csproj --filter "FullyQualif
 dotnet test Manager/GameSaves.Tests/GameSaves.Tests.csproj --filter "FullyQualifiedName~Sync"
 ```
 
+## Task documentation and continuation
+
+Use `/ponytail` (full) for the smallest complete implementation and `/caveman`
+for concise chat updates. Read their skill instructions before starting. Keep
+persisted documentation in complete prose and retain all technical evidence.
+
+After each task, update the affected owner guides and `ROADMAP.md`. Save an
+implementation report in `docs/raports/` covering behavior, changed files,
+decisions, safety and compatibility effects, exact verification commands and
+results, skipped checks, known limits, and unfinished work. Separate inherited
+changes from new work and historical test claims from fresh results.
+
+Select the next unfinished task from the reconciled roadmap and create two
+Markdown files at the repository root:
+
+- `<TASK-ID>.md`: the task brief, dependencies, scope, acceptance criteria,
+  code/documentation references, and verification requirements.
+- `prompt-<TASK-ID>.md`: a self-contained execution prompt with current
+  repository state, committed/uncommitted work, `/ponytail` and `/caveman`,
+  implementation requirements, tests, documentation, and handoff instructions.
+
+For example, the handoff after completing BACKUP-008 uses `BACKUP-009.md` and
+`prompt-BACKUP-009.md`. Link both actual files from the implementation report
+and this directory's `README.md`; verify the links and record why that task is
+next. If work remains incomplete, hand off the unfinished task instead.
+
+End every continuation prompt with the requirement to document its work and
+create the following task brief and prompt as two separate Markdown files,
+using the same naming and documentation-linking convention. Preserve older
+handoff files; do not invent completion evidence or silently skip prerequisites.
+
 ## Run tools
 
 ```powershell

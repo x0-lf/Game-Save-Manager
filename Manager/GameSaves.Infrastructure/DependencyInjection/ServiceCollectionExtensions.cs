@@ -117,6 +117,7 @@ namespace GameSaves.Infrastructure.DependencyInjection
                 new SqliteScheduledBackupJobRepository(
                     provider.GetRequiredService<IAppDatabasePathProvider>().GetDatabasePath()));
             services.AddSingleton<ScheduledBackupRunner>();
+            services.AddSingleton<IBackupTaskScheduler, WindowsBackupTaskScheduler>();
 
             services.AddSingleton<ISyncRemoteProfileRepository>(provider =>
             {

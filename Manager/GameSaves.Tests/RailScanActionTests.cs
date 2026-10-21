@@ -301,7 +301,8 @@ public sealed class RailScanActionTests
                 profiles,
                 installedGames,
                 layout,
-                new InMemoryScheduledBackupJobRepository()),
+                new InMemoryScheduledBackupJobRepository(),
+                new FakeBackupTaskScheduler()),
             new TransferHistoryViewModel(new RecordingHistoryRepository(), layout),
             new SyncViewModel(
                 new SyncProviderSelectionTests.RecordingSyncProviderFactory(),

@@ -104,19 +104,51 @@ self-contained but are not indexed there.
 
 ## Scheduled backups
 
-A scheduled backup runs one game's backup without opening the window. Nothing
-is scheduled by default. Preview a backup on the Manual backup page, then use
-**Save as scheduled backup** in the Scheduled backups panel. The job stores the
-game, the Steam profile, the destination, and the two source switches. The
-button stays disabled until the current preview is clean.
+A scheduled backup runs one game's backup on a schedule, without opening the
+window. Nothing is scheduled by default. To schedule one:
 
-The panel shows the program path and each job's arguments. Until the app can
-register the task itself (BACKUP-007), create it in Windows Task Scheduler:
+1. Preview a backup on the Manual backup page.
+2. In the Scheduled backups panel, pick **Daily** or **Weekly** (with a day) and
+   a time.
+3. Select **Save as scheduled backup**. The button stays disabled until the
+   current preview is clean.
 
-1. Create a task that runs as your own Windows user, because the jobs, the
-   History, and the settings live in your user profile.
-2. Set the action's program to the path shown in the panel.
-3. Set the action's arguments to the job's `--run-job <id>` text.
+The job stores the game, the Steam profile, the destination, and the two source
+switches. The app registers a Windows task for it in Task Scheduler's
+`Game Save Manager` folder. The task runs `GameSaves.App.exe --run-job <id>`.
+
+The task runs as you, without administrator rights, and only while you are
+signed in. No password is stored. Your jobs, History, settings, and cloud sign-ins
+live in your Windows profile and are protected for your user, so a task that
+ran while you were signed out could not use them. When a scheduled time is
+missed, for example because the computer was off, Windows starts the run as
+soon as it can afterwards. If a run is still going when the next one is due,
+Windows skips the new one.
+
+Each job in the panel shows:
+
+- its schedule and the task's state (Ready, Running now, or Disabled in Task
+  Scheduler);
+- the last run time with its result in words, and the next run time;
+- the outcome the last run recorded;
+- a warning when the job and its task disagree.
+
+The app reports these mismatches and never repairs them on its own:
+
+- **No Windows task.** Registration failed, or the task was deleted in Task
+  Scheduler. Nothing runs.
+- **A different program.** The task starts another copy of the app, for
+  example after the app moved to a new folder.
+- **Changed arguments.** The task's arguments no longer name the job.
+
+**Apply schedule** on a job registers its task again with the schedule picked
+above and points it at this copy of the app. It fixes all three mismatches,
+changes the schedule, and enables a task that was disabled in Task Scheduler.
+A schedule edited in Task Scheduler into something the app does not offer is
+shown as a custom schedule.
+
+If Windows refuses to register or update a task, the panel says why and nothing
+else changes. A new job is kept without a task until Apply schedule succeeds.
 
 Each run checks the job again before it writes anything. It refuses when the
 destination folder is missing, the game is no longer installed, the profile is
@@ -126,8 +158,17 @@ backup run in the format chosen under [Backup storage](#backup-storage) and
 never replaces or deletes anything. Every outcome, refusals included, appears
 in History as a **Scheduled backup** row and on the job as its last outcome.
 
-Removing a job revokes it. A Windows task left behind is refused and recorded
-on every run until you delete it. Backups the job already made are kept.
+**Remove** deletes the job's Windows task first and then the job. If Windows
+refuses to remove the task, the job is kept so that nothing is left running
+without it. Backups the job already made and its History rows are kept.
+
+A task without a job, left by an older copy of the app or a restored database,
+is listed under **Windows tasks without a saved job** with **Remove task**.
+Until it is removed, each of its runs is refused and recorded in History.
+
+The app manages only the tasks it registered in its `Game Save Manager` folder.
+A task you created by hand for a job is not shown or removed by the app. Delete
+it in Task Scheduler, then use Apply schedule on the job.
 
 The exit code of `GameSaves.App.exe --run-job <id>` reports the outcome:
 

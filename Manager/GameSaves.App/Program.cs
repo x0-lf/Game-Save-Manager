@@ -17,6 +17,9 @@ namespace GameSaves.App
 
         internal const string RunJobSwitch = "--run-job";
 
+        /// <summary>The arguments a job's Windows task passes to this program.</summary>
+        internal static string RunJobArguments(Guid jobId) => $"{RunJobSwitch} {jobId:D}";
+
         /// <summary>
         /// <c>GameSaves.App.exe --run-job &lt;id&gt;</c> runs one scheduled backup
         /// without a window and returns its <see cref="ScheduledBackupOutcome"/>

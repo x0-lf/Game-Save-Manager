@@ -111,6 +111,8 @@ namespace GameSaves.UiMaterialCapture
                                 new FixedDatabasePathProvider("capture.db")));
                     services.AddSingleton<ISteamRootLocator>(new NoSteamRootLocator());
                     services.AddSingleton<ISteamFallbackScanner>(new NoSteamFallbackScanner());
+                    services.AddSingleton<GameSaves.Core.Transfers.IBackupTaskScheduler>(
+                        new NoBackupTaskScheduler());
                     services.AddSingleton<IUiSettingsStore>(
                         new UiSettingsStore("ui-settings.json"));
                 };
@@ -741,6 +743,19 @@ namespace GameSaves.UiMaterialCapture
             {
                 return new SteamFallbackScanResult();
             }
+        }
+
+        // Windows Task Scheduler is machine state: the captures must not show
+        // this computer's scheduled backups, and must never change them.
+        private sealed class NoBackupTaskScheduler : GameSaves.Core.Transfers.IBackupTaskScheduler
+        {
+            public IReadOnlyList<GameSaves.Core.Transfers.BackupTaskStatus> GetTasks() => [];
+
+            public void Register(GameSaves.Core.Transfers.BackupTaskDefinition definition) =>
+                throw new InvalidOperationException("The capture harness never registers a Windows task.");
+
+            public void Remove(Guid jobId) =>
+                throw new InvalidOperationException("The capture harness never removes a Windows task.");
         }
     }
 }

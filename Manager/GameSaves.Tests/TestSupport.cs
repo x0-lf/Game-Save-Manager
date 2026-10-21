@@ -384,6 +384,53 @@ internal sealed class InMemoryScheduledBackupJobRepository : IScheduledBackupJob
     public void Delete(Guid id) => Jobs.RemoveAll(job => job.Id == id);
 }
 
+/// <summary>
+/// Stands in for Windows Task Scheduler, so no test registers a real task.
+/// <see cref="Refusal"/> makes Register and Remove fail the way Windows
+/// refuses, leaving the tasks as they were.
+/// </summary>
+internal sealed class FakeBackupTaskScheduler : IBackupTaskScheduler
+{
+    public Dictionary<Guid, BackupTaskStatus> Tasks { get; } = new();
+
+    public List<BackupTaskDefinition> Registered { get; } = new();
+
+    public List<Guid> Removed { get; } = new();
+
+    public Exception? Refusal { get; set; }
+
+    public Exception? ReadFailure { get; set; }
+
+    public IReadOnlyList<BackupTaskStatus> GetTasks() =>
+        ReadFailure is null ? Tasks.Values.ToList() : throw ReadFailure;
+
+    public void Register(BackupTaskDefinition definition)
+    {
+        if (Refusal is not null)
+            throw Refusal;
+
+        Registered.Add(definition);
+        Tasks[definition.JobId] = new BackupTaskStatus(
+            definition.JobId,
+            BackupTaskState.Ready,
+            definition.ProgramPath,
+            definition.Arguments,
+            definition.Schedule,
+            LastRun: null,
+            LastResult: 0x41303,
+            NextRun: null);
+    }
+
+    public void Remove(Guid jobId)
+    {
+        if (Refusal is not null)
+            throw Refusal;
+
+        Removed.Add(jobId);
+        Tasks.Remove(jobId);
+    }
+}
+
 internal sealed class ThrowingHistoryRepository : ITransferHistoryRepository
 {
     public long RecordRun(TransferRunRecord record) => throw new IOException("History unavailable.");
