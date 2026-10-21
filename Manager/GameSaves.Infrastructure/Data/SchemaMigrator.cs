@@ -32,7 +32,8 @@ namespace GameSaves.Infrastructure.Data
             new V003__SyncAndSecretStorage(),
             new V004__CatalogAndMappingIndexes(),
             new V005__DropDuplicateTransferItemsIndex(),
-            new V006__ScheduledBackupJobs()
+            new V006__ScheduledBackupJobs(),
+            new V007__ScheduledSyncJobs()
         ];
 
         public MigrationPlan Plan(string databasePath)

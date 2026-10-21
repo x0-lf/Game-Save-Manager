@@ -160,7 +160,8 @@ public sealed class ViewModelStartupTests
             games,
             NewWorkspaceLayout(),
             new InMemoryScheduledBackupJobRepository(),
-            new FakeBackupTaskScheduler());
+            new FakeBackupTaskScheduler(),
+            new InMemoryScheduledSyncJobRepository());
 
         await profiles.InitializeAsync();
         await games.InitializeAsync();
@@ -188,7 +189,8 @@ public sealed class ViewModelStartupTests
         await viewModel.PreviewBackupCommand.ExecuteAsync(null);
         await viewModel.SaveScheduledJobCommand.ExecuteAsync(null);
 
-        ScheduledBackupJob job = Assert.Single(viewModel.ScheduledJobs).Job;
+        ScheduledBackupJob job = Assert.Single(jobs.Jobs);
+        Assert.Equal(job.Id, Assert.Single(viewModel.ScheduledJobs).JobId);
         Assert.Equal(viewModel.SelectedGame!.Game.AppId, job.SteamAppId);
         Assert.Equal(viewModel.SelectedProfile!.Profile.AccountId, job.SteamAccountId);
         Assert.Equal(viewModel.DestinationPath, job.DestinationRoot);
@@ -222,9 +224,9 @@ public sealed class ViewModelStartupTests
         BackupTaskDefinition registered = Assert.Single(scheduler.Registered);
 
         // The task runs this program with the job's own arguments.
-        Assert.Equal(row.Job.Id, registered.JobId);
+        Assert.Equal(row.JobId, registered.JobId);
         Assert.Equal(viewModel.ScheduledRunProgram, registered.ProgramPath);
-        Assert.Equal($"--run-job {row.Job.Id:D}", registered.Arguments);
+        Assert.Equal($"--run-job {row.JobId:D}", registered.Arguments);
         Assert.Equal(
             new BackupSchedule(BackupScheduleFrequency.Weekly, new TimeOnly(6, 30), DayOfWeek.Saturday),
             registered.Schedule);
@@ -238,7 +240,7 @@ public sealed class ViewModelStartupTests
         await viewModel.ApplyScheduleCommand.ExecuteAsync(row);
 
         Assert.Equal(2, scheduler.Registered.Count);
-        Assert.Equal(row.Job.Id, scheduler.Registered[1].JobId);
+        Assert.Equal(row.JobId, scheduler.Registered[1].JobId);
         Assert.Equal("Daily at 21:05 · Ready", Assert.Single(viewModel.ScheduledJobs).ScheduleDisplay);
         Assert.Contains("Daily at 21:05", viewModel.StatusMessage);
     }
@@ -275,7 +277,7 @@ public sealed class ViewModelStartupTests
         Assert.Contains("did not update the task", viewModel.StatusMessage);
         Assert.Single(jobs.Jobs);
         ScheduledJobRowViewModel kept = Assert.Single(viewModel.ScheduledJobs);
-        Assert.Equal(row.Job.Id, kept.Job.Id);
+        Assert.Equal(row.JobId, kept.JobId);
         Assert.Equal("Daily at 20:00 · Ready", kept.ScheduleDisplay);
         Assert.Null(kept.Problem);
     }
@@ -296,7 +298,7 @@ public sealed class ViewModelStartupTests
 
         // A job is never removed while its task could still run.
         Assert.Equal(jobId, Assert.Single(jobs.Jobs).Id);
-        Assert.Equal(jobId, Assert.Single(viewModel.ScheduledJobs).Job.Id);
+        Assert.Equal(jobId, Assert.Single(viewModel.ScheduledJobs).JobId);
         Assert.Contains("did not remove the task", viewModel.StatusMessage);
 
         scheduler.Refusal = null;
@@ -339,7 +341,7 @@ public sealed class ViewModelStartupTests
 
         ManualBackupViewModel viewModel = await NewScheduledBackupViewModelAsync(jobs, scheduler);
         ScheduledJobRowViewModel Row(ScheduledBackupJob job) =>
-            viewModel.ScheduledJobs.Single(row => row.Job.Id == job.Id);
+            viewModel.ScheduledJobs.Single(row => row.JobId == job.Id);
 
         Assert.Contains("No Windows task", Row(unscheduled).Problem);
         Assert.Contains(@"starts C:\Old\GameSaves.App.exe, not this app", Row(moved).Problem);
@@ -381,9 +383,10 @@ public sealed class ViewModelStartupTests
         Assert.Empty(viewModel.LeftoverTasks);
     }
 
-    private static async Task<ManualBackupViewModel> NewScheduledBackupViewModelAsync(
+    internal static async Task<ManualBackupViewModel> NewScheduledBackupViewModelAsync(
         InMemoryScheduledBackupJobRepository jobs,
-        FakeBackupTaskScheduler scheduler)
+        FakeBackupTaskScheduler scheduler,
+        InMemoryScheduledSyncJobRepository? syncJobs = null)
     {
         var profiles = new ProfilesViewModel(new EmptySteamDiscoveryService(), new FakeSteamProfileDetector(), NewWorkspaceLayout());
         var games = new InstalledGamesViewModel(new FakeInstalledGameStatusService(), NewWorkspaceLayout());
@@ -397,7 +400,8 @@ public sealed class ViewModelStartupTests
             games,
             NewWorkspaceLayout(),
             jobs,
-            scheduler);
+            scheduler,
+            syncJobs ?? new InMemoryScheduledSyncJobRepository());
 
         await profiles.InitializeAsync();
         await games.InitializeAsync();

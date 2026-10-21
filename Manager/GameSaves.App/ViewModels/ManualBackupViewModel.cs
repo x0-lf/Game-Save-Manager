@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using GameSaves.App.Common;
 using GameSaves.App.Models;
 using GameSaves.App.Services;
+using GameSaves.Core.Sync;
 using GameSaves.Core.Transfers;
 using System;
 using System.Collections.Generic;
@@ -20,6 +21,7 @@ namespace GameSaves.App.ViewModels
         private readonly IFolderPickerService _folderPickerService;
         private readonly IManualBackupPresetRepository _presetRepository;
         private readonly IScheduledBackupJobRepository _scheduledJobs;
+        private readonly IScheduledSyncJobRepository _scheduledSyncJobs;
         private readonly IBackupTaskScheduler _taskScheduler;
         private readonly ProfilesViewModel _profilesViewModel;
         private readonly InstalledGamesViewModel _installedGamesViewModel;
@@ -100,7 +102,10 @@ namespace GameSaves.App.ViewModels
 
         public ObservableCollection<ScheduledJobRowViewModel> ScheduledJobs { get; } = new();
 
-        /// <summary>Windows tasks whose job is gone; each run of one is refused.</summary>
+        /// <summary>
+        /// Windows tasks whose job is gone, backup or sync; each run of one is
+        /// refused. The Sync page lists no leftovers, so they all appear here.
+        /// </summary>
         public ObservableCollection<BackupTaskStatus> LeftoverTasks { get; } = new();
 
         /// <summary>What a Windows task runs; each job adds its own arguments.</summary>
@@ -139,10 +144,12 @@ namespace GameSaves.App.ViewModels
             InstalledGamesViewModel installedGamesViewModel,
             GameSaves.App.Services.WorkspaceLayoutService workspaceLayout,
             IScheduledBackupJobRepository scheduledJobs,
-            IBackupTaskScheduler taskScheduler)
+            IBackupTaskScheduler taskScheduler,
+            IScheduledSyncJobRepository scheduledSyncJobs)
         {
             _manualBackupService = manualBackupService;
             _scheduledJobs = scheduledJobs;
+            _scheduledSyncJobs = scheduledSyncJobs;
             _taskScheduler = taskScheduler;
             _backupHistoryService = backupHistoryService;
             _folderPickerService = folderPickerService;
@@ -309,6 +316,8 @@ namespace GameSaves.App.ViewModels
         private async Task LoadScheduledJobsAsync()
         {
             var jobs = await Task.Run(() => _scheduledJobs.GetAll());
+            // Sync jobs share the task folder; their tasks are not leftovers.
+            var syncJobIds = await Task.Run(() => _scheduledSyncJobs.GetAll().Select(job => job.Id).ToHashSet());
             IReadOnlyList<BackupTaskStatus> tasks = [];
             string? taskError = null;
 
@@ -326,29 +335,34 @@ namespace GameSaves.App.ViewModels
             foreach (ScheduledBackupJob job in jobs)
             {
                 ScheduledJobs.Add(new ScheduledJobRowViewModel(
-                    job,
+                    job.Id,
+                    job.GameName,
+                    $"Steam account {job.SteamAccountId} · To {job.DestinationRoot}",
+                    job.LastOutcome,
                     tasks.FirstOrDefault(task => task.JobId == job.Id),
                     taskError,
-                    ScheduledRunProgram));
+                    ScheduledRunProgram,
+                    Program.RunJobArguments(job.Id)));
             }
 
             LeftoverTasks.Clear();
 
-            foreach (BackupTaskStatus task in tasks.Where(task => jobs.All(job => job.Id != task.JobId)))
+            foreach (BackupTaskStatus task in tasks.Where(task =>
+                         jobs.All(job => job.Id != task.JobId) && !syncJobIds.Contains(task.JobId)))
                 LeftoverTasks.Add(task);
         }
 
         // Registers or replaces the job's task. Returns why Windows refused,
         // or null; a refusal changes nothing else.
-        private async Task<string?> TryRegisterTaskAsync(ScheduledBackupJob job, BackupSchedule schedule)
+        private async Task<string?> TryRegisterTaskAsync(Guid jobId, string gameName, BackupSchedule schedule)
         {
             try
             {
                 await Task.Run(() => _taskScheduler.Register(new BackupTaskDefinition(
-                    job.Id,
-                    job.GameName,
+                    jobId,
+                    $"scheduled backup of {gameName}",
                     ScheduledRunProgram,
-                    Program.RunJobArguments(job.Id),
+                    Program.RunJobArguments(jobId),
                     schedule)));
 
                 return null;
@@ -406,7 +420,7 @@ namespace GameSaves.App.ViewModels
 
             // The job is kept even if Windows refuses the task: it does nothing
             // on its own, and its row offers Apply schedule to try again.
-            string? refusal = await TryRegisterTaskAsync(job, schedule);
+            string? refusal = await TryRegisterTaskAsync(job.Id, job.GameName, schedule);
             await ReloadScheduledJobsAsync();
 
             StatusMessage = refusal is null
@@ -428,12 +442,12 @@ namespace GameSaves.App.ViewModels
                 return;
             }
 
-            string? refusal = await TryRegisterTaskAsync(row.Job, schedule);
+            string? refusal = await TryRegisterTaskAsync(row.JobId, row.Title, schedule);
             await ReloadScheduledJobsAsync();
 
             StatusMessage = refusal is null
-                ? $"{row.GameName} now runs while you are signed in: {schedule}."
-                : $"Windows did not update the task for {row.GameName}: {refusal} Its task, if it has one, was left as it was.";
+                ? $"{row.Title} now runs while you are signed in: {schedule}."
+                : $"Windows did not update the task for {row.Title}: {refusal} Its task, if it has one, was left as it was.";
         }
 
         // The task goes first: a job is never removed while its task could
@@ -446,22 +460,22 @@ namespace GameSaves.App.ViewModels
 
             try
             {
-                await Task.Run(() => _taskScheduler.Remove(row.Job.Id));
+                await Task.Run(() => _taskScheduler.Remove(row.JobId));
             }
             catch (Exception ex)
             {
-                StatusMessage = $"Windows did not remove the task for {row.GameName}: {ex.Message} The job was kept so you can try again.";
+                StatusMessage = $"Windows did not remove the task for {row.Title}: {ex.Message} The job was kept so you can try again.";
                 return;
             }
 
             try
             {
-                await Task.Run(() => _scheduledJobs.Delete(row.Job.Id));
-                StatusMessage = $"Scheduled backup for {row.GameName} and its Windows task removed. Backups it already made are kept.";
+                await Task.Run(() => _scheduledJobs.Delete(row.JobId));
+                StatusMessage = $"Scheduled backup for {row.Title} and its Windows task removed. Backups it already made are kept.";
             }
             catch (Exception ex)
             {
-                StatusMessage = $"The Windows task for {row.GameName} was removed, but the job could not be: {ex.Message}";
+                StatusMessage = $"The Windows task for {row.Title} was removed, but the job could not be: {ex.Message}";
             }
 
             await ReloadScheduledJobsAsync();

@@ -7,6 +7,7 @@ namespace GameSaves.Core.Transfers
         ManualBackup = 2,
         Cleanup = 3,
         Sync = 4,
-        ScheduledBackup = 5
+        ScheduledBackup = 5,
+        ScheduledSync = 6
     }
 }

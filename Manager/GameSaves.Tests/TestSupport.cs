@@ -384,6 +384,34 @@ internal sealed class InMemoryScheduledBackupJobRepository : IScheduledBackupJob
     public void Delete(Guid id) => Jobs.RemoveAll(job => job.Id == id);
 }
 
+internal sealed class InMemoryScheduledSyncJobRepository : IScheduledSyncJobRepository
+{
+    public List<ScheduledSyncJob> Jobs { get; } = new();
+
+    public Exception? Failure { get; set; }
+
+    public IReadOnlyList<ScheduledSyncJob> GetAll() =>
+        Failure is null ? Jobs.ToList() : throw Failure;
+
+    public void Add(ScheduledSyncJob job)
+    {
+        if (Jobs.Any(existing => existing.ProfileId == job.ProfileId))
+            throw new InvalidOperationException("UNIQUE constraint failed: scheduled_sync_jobs.profile_id");
+
+        Jobs.Add(job);
+    }
+
+    public void RecordOutcome(Guid id, DateTimeOffset runUtc, string outcome)
+    {
+        int index = Jobs.FindIndex(job => job.Id == id);
+
+        if (index >= 0)
+            Jobs[index] = Jobs[index] with { LastRunUtc = runUtc, LastOutcome = outcome };
+    }
+
+    public void Delete(Guid id) => Jobs.RemoveAll(job => job.Id == id);
+}
+
 /// <summary>
 /// Stands in for Windows Task Scheduler, so no test registers a real task.
 /// <see cref="Refusal"/> makes Register and Remove fail the way Windows

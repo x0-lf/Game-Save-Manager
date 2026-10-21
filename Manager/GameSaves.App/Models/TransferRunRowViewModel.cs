@@ -22,6 +22,7 @@ namespace GameSaves.App.Models
             TransferRunKind.ScheduledBackup => "Scheduled backup",
             TransferRunKind.Cleanup => "Cleanup",
             TransferRunKind.Sync => "Sync",
+            TransferRunKind.ScheduledSync => "Scheduled sync",
             _ => "Transfer copy"
         };
 

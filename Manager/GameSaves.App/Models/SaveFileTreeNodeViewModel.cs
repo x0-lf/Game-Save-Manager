@@ -79,7 +79,9 @@ namespace GameSaves.App.Models
 
         public string SizeDisplay => ByteSize.Format(SizeBytes);
 
-        public string FileCountDisplay => IsDirectory ? (FileCount == 1 ? "1 file" : $"{FileCount:N0} files") : string.Empty;
+        public string FileCountDisplay => IsDirectory
+            ? (FileCount == 1 ? "1 file" : $"{FileCount.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)} files")
+            : string.Empty;
 
         // A folder's file count and glyph already show in their own columns.
         public string StatusDisplay => IsDirectory

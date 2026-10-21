@@ -18,6 +18,7 @@ should link to it instead of maintaining a second explanation.
 - [Architecture](architecture.md)
 - [Development and verification](development.md)
 - [Solution-wide Definition of Done](definition-of-done.md)
+- [Next task brief: BACKUP-009](../BACKUP-009.md) and its [execution prompt](../prompt-BACKUP-009.md) **Developer-only**
 - [Windows material regression baseline](material-regression-baseline.md) **Developer-only**
 - [Database and save-path mappings](database-and-mappings.md)
 - [Sync providers](sync-providers.md)

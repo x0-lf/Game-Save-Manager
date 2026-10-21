@@ -1508,6 +1508,136 @@
                 </StackPanel>
             </wsp:WorkspacePanel>
 
+            <!-- Scheduled syncs: opt-in, one per saved profile, saved from a
+                 clean preview. Reading the tasks never changes them; only
+                 Schedule, Apply schedule and Remove do. Removing a schedule
+                 removes its task first; backup runs on both sides are kept.
+                 Tasks without a job are listed on the Manual backup page. -->
+            <wsp:WorkspacePanel PanelKey="sync.scheduled"
+                                Title="Scheduled syncs"
+                                Subtitle="Sync a previewed profile on a schedule, without opening the app."
+                                MinPanelWidth="320">
+                <wsp:WorkspacePanel.HeaderActions>
+                    <StackPanel Orientation="Horizontal"
+                                Spacing="8">
+                        <Button Content="Refresh"
+                                Command="{Binding RefreshScheduledSyncsCommand}"
+                                ToolTip.Tip="Reads the scheduled syncs and their Windows tasks again. Reading never changes a task."
+                                VerticalAlignment="Center" />
+                        <Button Content="Schedule this profile"
+                                IsEnabled="{Binding CanExecuteSync}"
+                                Command="{Binding ScheduleSyncCommand}"
+                                ToolTip.Tip="Saves the previewed saved profile with its direction and archive setting as a scheduled sync and registers its Windows task with the schedule below. Each run copies the backup runs missing on either side at that time, including runs made later."
+                                VerticalAlignment="Center" />
+                    </StackPanel>
+                </wsp:WorkspacePanel.HeaderActions>
+
+                <StackPanel Spacing="8">
+                    <StackPanel Orientation="Horizontal"
+                                Spacing="8">
+                        <TextBlock Text="Schedule:"
+                                   VerticalAlignment="Center"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                   FontSize="{DynamicResource FontSizeBody}" />
+                        <ComboBox ItemsSource="{Binding ScheduleFrequencies}"
+                                  SelectedItem="{Binding ScheduleFrequency}"
+                                  Width="110"
+                                  ToolTip.Tip="How often Windows starts the sync." />
+                        <ComboBox ItemsSource="{Binding ScheduleDays}"
+                                  SelectedItem="{Binding ScheduleDay}"
+                                  IsVisible="{Binding IsWeeklySchedule}"
+                                  Width="130"
+                                  ToolTip.Tip="The day of the week the sync runs." />
+                        <TextBlock Text="at"
+                                   VerticalAlignment="Center"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                   FontSize="{DynamicResource FontSizeBody}" />
+                        <TimePicker SelectedTime="{Binding ScheduleTime}"
+                                    ClockIdentifier="24HourClock"
+                                    MinuteIncrement="5"
+                                    ToolTip.Tip="The local time the sync starts." />
+                    </StackPanel>
+
+                    <TextBlock Text="Windows runs each task as you, without administrator rights, and only while you are signed in. A run missed while the computer was off starts as soon as it can. Every run reads the saved profile again, checks the local backup folder, the stored sign-in and the provider, builds a fresh preview, copies only the runs missing on one side, skips conflicts, never opens a window or a browser, and records its result in History. SFTP profiles cannot be scheduled because their passwords are never stored."
+                               Foreground="{DynamicResource MutedTextBrush}"
+                               FontSize="{DynamicResource FontSizeBody}"
+                               TextWrapping="Wrap" />
+
+                    <views:EmptyState Glyph="&#xE823;"
+                                      Title="No scheduled syncs"
+                                      Message="Preview a saved profile, pick a schedule, then schedule it here."
+                                      IsVisible="{Binding !ScheduledSyncJobs.Count}" />
+
+                    <ItemsControl ItemsSource="{Binding ScheduledSyncJobs}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:ScheduledJobRowViewModel">
+                                <Border Padding="0,6"
+                                        BorderBrush="{DynamicResource SubtleBorderBrush}"
+                                        BorderThickness="0,0,0,1">
+
+                                    <Grid ColumnDefinitions="*,Auto"
+                                          ColumnSpacing="10">
+
+                                        <StackPanel Spacing="2">
+                                            <TextBlock Text="{Binding Title}"
+                                                       Foreground="{DynamicResource PrimaryTextBrush}"
+                                                       FontSize="{DynamicResource FontSizeBody}"
+                                                       FontWeight="SemiBold" />
+
+                                            <TextBlock Text="{Binding Subtitle}"
+                                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                                       FontSize="{DynamicResource FontSizeBody}"
+                                                       TextWrapping="Wrap" />
+
+                                            <TextBlock Text="{Binding ScheduleDisplay}"
+                                                       Foreground="{DynamicResource PrimaryTextBrush}"
+                                                       FontSize="{DynamicResource FontSizeBody}"
+                                                       TextWrapping="Wrap" />
+
+                                            <TextBlock Text="{Binding RunsDisplay}"
+                                                       IsVisible="{Binding HasRuns}"
+                                                       Foreground="{DynamicResource SecondaryTextBrush}"
+                                                       FontSize="{DynamicResource FontSizeBody}"
+                                                       TextWrapping="Wrap" />
+
+                                            <TextBlock Text="{Binding Problem}"
+                                                       IsVisible="{Binding Problem, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                                       Foreground="{DynamicResource WarningBrush}"
+                                                       FontSize="{DynamicResource FontSizeBody}"
+                                                       TextWrapping="Wrap" />
+
+                                            <TextBlock Text="{Binding LastOutcomeDisplay}"
+                                                       Foreground="{DynamicResource MutedTextBrush}"
+                                                       FontSize="{DynamicResource FontSizeBody}"
+                                                       TextWrapping="Wrap" />
+                                        </StackPanel>
+
+                                        <StackPanel Grid.Column="1"
+                                                    Spacing="6"
+                                                    VerticalAlignment="Center">
+                                            <Button Content="Apply schedule"
+                                                    Command="{Binding $parent[ItemsControl].((vm:SyncViewModel)DataContext).ApplySyncScheduleCommand}"
+                                                    CommandParameter="{Binding}"
+                                                    ToolTip.Tip="Registers or updates this sync's Windows task with the schedule above, pointing it at this app. The task is enabled again if it was disabled."
+                                                    HorizontalAlignment="Stretch"
+                                                    FontSize="{DynamicResource FontSizeBody}" />
+
+                                            <Button Content="Remove"
+                                                    Classes="danger"
+                                                    Command="{Binding $parent[ItemsControl].((vm:SyncViewModel)DataContext).RemoveScheduledSyncCommand}"
+                                                    CommandParameter="{Binding}"
+                                                    ToolTip.Tip="Removes the Windows task, then the scheduled sync. Backup runs on both sides and History are kept."
+                                                    HorizontalAlignment="Stretch"
+                                                    FontSize="{DynamicResource FontSizeBody}" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </wsp:WorkspacePanel>
+
             <wsp:WorkspacePanel PanelKey="sync.history"
                                 Title="Sync history"
                                 MinPanelWidth="320"

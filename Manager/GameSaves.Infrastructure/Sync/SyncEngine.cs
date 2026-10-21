@@ -1264,8 +1264,8 @@ namespace GameSaves.Infrastructure.Sync
                     .Message;
 
                 _historyRepository.RecordRun(new TransferRunRecord(
-                    Kind: TransferRunKind.Sync,
-                    GameName: "(backup sync)",
+                    Kind: options.HistoryKind,
+                    GameName: options.HistoryLabel ?? "(backup sync)",
                     SteamAppId: "-",
                     SourceAccountId: Environment.MachineName,
                     TargetAccountId: _remoteRootRaw,

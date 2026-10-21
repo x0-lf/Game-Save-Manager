@@ -7,7 +7,7 @@ using System.Xml.Linq;
 namespace GameSaves.Infrastructure.Transfers
 {
     /// <summary>
-    /// Registers scheduled backups with Windows Task Scheduler through its COM
+    /// Registers scheduled backups and syncs with Windows Task Scheduler through its COM
     /// API, late bound so no interop package is needed. Each job is one task
     /// in the <c>\Game Save Manager</c> folder, named by the job id, which a
     /// standard user may create. A task runs as the user who saved it, only
@@ -169,7 +169,7 @@ namespace GameSaves.Infrastructure.Transfers
                 new XAttribute("version", "1.2"),
                 new XElement(TaskXml + "RegistrationInfo",
                     new XElement(TaskXml + "Description",
-                        $"Game Save Manager scheduled backup of {definition.GameName}. Change or remove it in the app's Scheduled backups panel.")),
+                        $"Game Save Manager {definition.Subject}. Change or remove it in the app.")),
                 new XElement(TaskXml + "Triggers",
                     new XElement(TaskXml + "CalendarTrigger",
                         new XElement(TaskXml + "StartBoundary",

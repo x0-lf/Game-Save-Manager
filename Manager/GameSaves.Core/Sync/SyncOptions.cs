@@ -39,5 +39,17 @@ namespace GameSaves.Core.Sync
         /// Compression preset when exporting runs for archive sync. Defaults to Optimal.
         /// </summary>
         public BackupCompressionPreset CompressionPreset { get; init; } = BackupCompressionPreset.Optimal;
+
+        /// <summary>
+        /// The History row kind an executed sync records. A scheduled run
+        /// records <see cref="TransferRunKind.ScheduledSync"/>.
+        /// </summary>
+        public TransferRunKind HistoryKind { get; init; } = TransferRunKind.Sync;
+
+        /// <summary>
+        /// What the History row names. Null records "(backup sync)"; a
+        /// scheduled run names its profile, so the row identifies it.
+        /// </summary>
+        public string? HistoryLabel { get; init; }
     }
 }

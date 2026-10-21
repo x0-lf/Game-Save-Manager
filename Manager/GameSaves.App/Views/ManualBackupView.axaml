@@ -616,12 +616,12 @@
                                           ColumnSpacing="10">
 
                                         <StackPanel Spacing="2">
-                                            <TextBlock Text="{Binding GameName}"
+                                            <TextBlock Text="{Binding Title}"
                                                        Foreground="{DynamicResource PrimaryTextBrush}"
                                                        FontSize="{DynamicResource FontSizeBody}"
                                                        FontWeight="SemiBold" />
 
-                                            <TextBlock Text="{Binding ProfileAndDestinationDisplay}"
+                                            <TextBlock Text="{Binding Subtitle}"
                                                        Foreground="{DynamicResource SecondaryTextBrush}"
                                                        FontSize="{DynamicResource FontSizeBody}"
                                                        TextWrapping="Wrap" />
@@ -686,7 +686,7 @@
                                 <Grid ColumnDefinitions="*,Auto"
                                       ColumnSpacing="10"
                                       Margin="0,2">
-                                    <TextBlock Text="{Binding JobId, StringFormat='Task {0} belongs to a removed job. Each run is refused and recorded.'}"
+                                    <TextBlock Text="{Binding JobId, StringFormat='Task {0} belongs to a removed backup or sync job. Each run is refused and recorded.'}"
                                                Foreground="{DynamicResource SecondaryTextBrush}"
                                                FontSize="{DynamicResource FontSizeBody}"
                                                TextWrapping="Wrap"

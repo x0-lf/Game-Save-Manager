@@ -20,7 +20,7 @@ The navigation rail contains nine tabs:
 | Transfer profiles | Preview and execute local profile-to-profile copies |
 | Manual backup | Create a new timestamped backup run, or save one as a scheduled backup |
 | Backups | Inspect, verify, restore, archive, import, and clean up backup runs |
-| Sync | Configure a provider and synchronize completed backup runs |
+| Sync | Configure a provider and synchronize completed backup runs, or schedule a saved profile |
 | History | Inspect executed transfer, restore, backup, cleanup, and sync results |
 | Settings | Appearance, accessibility, behavior, layout, providers, data, and diagnostics |
 
@@ -164,13 +164,17 @@ without it. Backups the job already made and its History rows are kept.
 
 A task without a job, left by an older copy of the app or a restored database,
 is listed under **Windows tasks without a saved job** with **Remove task**.
+Scheduled backups and [scheduled syncs](#scheduled-syncs) share the same task
+folder, so this list covers both kinds: a task that belongs to a scheduled sync
+is never offered here as a leftover, and a sync task whose job is gone is.
 Until it is removed, each of its runs is refused and recorded in History.
 
 The app manages only the tasks it registered in its `Game Save Manager` folder.
 A task you created by hand for a job is not shown or removed by the app. Delete
 it in Task Scheduler, then use Apply schedule on the job.
 
-The exit code of `GameSaves.App.exe --run-job <id>` reports the outcome:
+The exit code of `GameSaves.App.exe --run-job <id>` (and of `--run-sync <id>`,
+see [Scheduled syncs](#scheduled-syncs)) reports the outcome:
 
 | Code | Meaning |
 | --- | --- |
@@ -305,6 +309,67 @@ Provider-specific authentication, controls, and limitations belong to the
 [sync provider guide](sync-providers.md).
 
 ![Cloud synchronization plan](images/06-sync-plan.png)
+
+### Scheduled syncs
+
+A scheduled sync runs one saved profile's sync on a schedule, without opening
+the window. Nothing is scheduled by default. To schedule one:
+
+1. Select a saved profile on the Sync page and build a preview (upload,
+   download, or both, with or without compressed archives). The preview must
+   be clean, and the profile must be saved: unsaved changes have to be saved
+   first, because a run uses the saved profile, not the fields on screen.
+2. In the Scheduled syncs panel, pick **Daily** or **Weekly** (with a day) and
+   a time.
+3. Select **Schedule this profile**. The button stays disabled until the
+   current preview is clean, and changing the profile, the direction, or the
+   archive setting discards the preview.
+
+The schedule stores the profile's identity, the direction, and the archive
+setting, not a list of runs: each run copies whichever backup runs are missing
+on one side at that time, including runs made after the schedule was saved.
+One schedule exists per profile. The app registers a Windows task for it in
+Task Scheduler's `Game Save Manager` folder, next to the scheduled backups,
+that runs `GameSaves.App.exe --run-sync <id>` under the same rules: as you,
+without administrator rights, only while you are signed in, with no stored
+password, starting a missed run when it can and never starting a second
+instance.
+
+SFTP profiles cannot be scheduled, because their passwords and key passphrases
+are never stored and a run with nobody at the keyboard could not sign in. The
+panel says so. Local folder profiles need no sign-in; Google Drive, OneDrive,
+and WebDAV profiles use the sign-in or password stored for the profile, which
+refreshes silently and is never requested in a browser by a scheduled run.
+
+Each run reads the saved profile again and checks, in this order, that the
+schedule still exists, no other run for the same profile is in progress, the
+profile still exists, the local backup folder exists, the provider can run
+unattended, the stored sign-in exists, the provider reports healthy (rate
+limited, storage full, and unavailable all refuse, with the provider's
+reason), and a fresh preview has no errors. It refuses on the first failure
+and copies nothing. A run with nothing to copy, including one where only
+conflicts remain, completes with nothing copied and says so. Otherwise it runs
+the ordinary sync: upload and download stay create-only, conflicts are skipped,
+and nothing on either side is replaced or deleted. A run that stops part way
+is recorded as failed, never as success.
+
+Every outcome appears in History as a **Scheduled sync** row named after the
+profile, and on the schedule as its last outcome. An executed sync is recorded
+once, by the sync engine; refusals are recorded by the runner. Each row in the
+panel shows the profile, provider, and direction, the schedule and task state,
+the last and next run, the last outcome, and the same mismatch warnings as
+scheduled backups, which **Apply schedule** fixes. **Refresh** reads the
+schedules and tasks again; the page also reads them each time it is shown.
+Reading never changes a task.
+
+**Remove** deletes the schedule's Windows task first and then the schedule;
+if Windows refuses, the schedule is kept. Backup runs on both sides and
+History are never touched. A profile with a schedule cannot be deleted until
+its schedule is removed, so no task is left firing for a missing profile.
+Renaming or editing a profile needs no change to its schedule: the next run
+reads the saved profile as it is then. A manual sync of the same profile from
+the window is not blocked by a scheduled run and does not block one; both are
+create-only, so the second to reach a run skips it as already present.
 
 ## UI state conventions
 

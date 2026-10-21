@@ -27,10 +27,14 @@ namespace GameSaves.Core.Transfers
         }
     }
 
-    /// <summary>The Windows task the app registers for one scheduled backup job.</summary>
+    /// <summary>
+    /// The Windows task the app registers for one scheduled job: a backup or a
+    /// sync. <see cref="Subject"/> is what the task's description says it does,
+    /// for example "scheduled backup of Elden Ring".
+    /// </summary>
     public sealed record BackupTaskDefinition(
         Guid JobId,
-        string GameName,
+        string Subject,
         string ProgramPath,
         string Arguments,
         BackupSchedule Schedule);

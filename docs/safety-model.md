@@ -55,21 +55,30 @@ belong to the [security policy](../SECURITY.md).
     container extracts it into a private staging copy under the import bounds
     and verifies every file before any live file is replaced.
 15. **Unattended runs are opt-in and refuse rather than guess.** Nothing runs
-    unattended until the user saves a scheduled backup from a clean preview.
-    The app registers, updates, or removes a job's Windows task only when the
-    user saves, applies a schedule, or removes the job; reading task status
-    never changes a task. A task runs as the user who saved it, only while
-    that user is signed in, with least privilege and no stored password.
-    Removing a job removes its task first, keeps the job if Windows refuses,
-    and never deletes backups or History. Every run repeats the preview's checks
-    (destination present, game installed, profile present, a clean manual
-    backup preview) and refuses without writing when one fails; it never
-    creates a missing destination. The run is a manual backup, so it only adds
-    a new run. One run per job holds an OS file lock that a crash releases.
-    The headless host replaces the interactive Google Drive and OneDrive
-    sign-ins with refusals, so an unattended run never opens a browser or
-    prompts; stored tokens stay in the DPAPI secret store and only refresh
-    silently. Every outcome, refusals included, is recorded in History.
+    unattended until the user saves a scheduled backup, or schedules a saved
+    sync profile, from a clean preview. The app registers, updates, or removes
+    a job's Windows task only when the user saves, applies a schedule, or
+    removes the job; reading task status never changes a task, and loading the
+    app, importing a profile, or migrating the database never creates or
+    repairs one. A task runs as the user who saved it, only while that user is
+    signed in, with least privilege and no stored password. Removing a job
+    removes its task first, keeps the job if Windows refuses, and never
+    deletes backups, remote runs, or History. Every run repeats the preview's
+    checks and refuses without writing when one fails. A scheduled backup
+    checks the destination (never created), the game, the profile, and a clean
+    manual backup preview; it is a manual backup, so it only adds a new run. A
+    scheduled sync reads its saved profile again and checks that the profile
+    still exists, the local backup base exists, the provider can run
+    unattended (SFTP never can: its credentials are session-only), the stored
+    sign-in exists, the provider reports healthy, and a fresh preview has no
+    errors; it is the ordinary sync engine, so upload and download stay
+    create-only and conflicts are reported and skipped. One run per backup job,
+    and one run per sync profile whatever job started it, holds an OS file lock
+    that a crash releases. The headless host replaces the interactive Google
+    Drive and OneDrive sign-ins with refusals, so an unattended run never opens
+    a browser or prompts; stored tokens stay in the DPAPI secret store and only
+    refresh silently. Every outcome, refusals included, is recorded in History;
+    an executed sync is recorded once, by the engine, under the profile's name.
 
 ## What can be deleted
 

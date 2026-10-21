@@ -125,6 +125,12 @@ password is never stored). The rules (SYNC-004):
 | WebDAV / Nextcloud | Free, used, and total when the server reports them | RFC 4331 `quota-available-bytes` and `quota-used-bytes` on the backup folder, or on the server URL until the folder exists; Nextcloud's "unlimited" marker is not a size |
 | OneDrive | Free, used, and total | The drive's quota facet (`GET /me/drive`); a drive without one is "not reported", not "full" |
 
+A scheduled sync runs this same check first and refuses to copy anything when
+the state is not Healthy; see
+[Scheduled syncs](desktop-app.md#scheduled-syncs). Local folder, Google Drive,
+WebDAV, and OneDrive profiles can be scheduled; SFTP profiles cannot, because
+their credentials are session-only.
+
 The contract lives in Core (`ISyncProvider.CheckHealthAsync`, returning a
 `ProviderHealthReport` with a state, a reason, and an optional
 `RemoteCapacity`). The catalog's `SupportsRemoteQuota` is true exactly for the

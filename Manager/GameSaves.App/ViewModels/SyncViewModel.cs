@@ -27,6 +27,10 @@ namespace GameSaves.App.ViewModels
         private readonly ISyncRemoteProfileService _profileService;
         private readonly IGoogleDriveOAuthService _googleDriveOAuthService;
         private readonly IOneDriveOAuthService? _oneDriveOAuthService;
+        // Null only in tests that build the view model directly; the panel
+        // then says scheduling is unavailable.
+        private readonly IScheduledSyncJobRepository? _scheduledSyncJobs;
+        private readonly IBackupTaskScheduler? _taskScheduler;
         private readonly IGoogleDriveRootFolderService _googleDriveRootFolderService;
         private readonly IBackupHistoryService? _backupHistoryService;
         private readonly IUtcClock _clock;
@@ -1300,8 +1304,12 @@ namespace GameSaves.App.ViewModels
             IBackupHistoryService? backupHistoryService = null,
             IRetryBackoffNotifier? retryBackoffNotifier = null,
             IGoogleDriveDesktopDetector? googleDriveDesktopDetector = null,
-            IOneDriveOAuthService? oneDriveOAuthService = null)
+            IOneDriveOAuthService? oneDriveOAuthService = null,
+            IScheduledSyncJobRepository? scheduledSyncJobs = null,
+            IBackupTaskScheduler? taskScheduler = null)
         {
+            _scheduledSyncJobs = scheduledSyncJobs;
+            _taskScheduler = taskScheduler;
             Workspace = workspaceLayout.Page(
                 GameSaves.App.Services.UiRailLayoutSettings.TabSync);
 
@@ -2035,6 +2043,13 @@ namespace GameSaves.App.ViewModels
             if (!ConfirmDeleteRemoteProfile)
             {
                 StatusMessage = "Confirm profile deletion first. Backup and remote data will not be deleted.";
+                return;
+            }
+
+            // A scheduled sync would otherwise keep firing and being refused.
+            if (await HasScheduledSyncAsync(SelectedRemoteProfile.Id))
+            {
+                StatusMessage = "This profile has a scheduled sync. Remove it in the Scheduled syncs panel first, then delete the profile.";
                 return;
             }
 
@@ -4788,6 +4803,262 @@ namespace GameSaves.App.ViewModels
             ProviderHealthStatusMessage =
                 $"Checked {rows.Count} profile(s) at {_clock.UtcNow.ToLocalTime():t}.";
         }
+
+        // ---------------------------------------------------------------
+        // Scheduled syncs (BACKUP-008)
+        //
+        // Scheduling is opt-in and starts from a clean preview of a saved
+        // profile. A job stores the profile's identity, the direction and the
+        // archive switch; each run reads the profile again and copies whatever
+        // runs are missing on either side then. The Windows task goes through
+        // the same seam as scheduled backups. Reading never registers, repairs
+        // or removes a task; only the commands below do.
+        // ---------------------------------------------------------------
+
+        public ObservableCollection<ScheduledJobRowViewModel> ScheduledSyncJobs { get; } = new();
+
+        public bool IsSchedulingAvailable => _scheduledSyncJobs is not null && _taskScheduler is not null;
+
+        /// <summary>What a Windows task runs; each job adds its own arguments.</summary>
+        public string ScheduledRunProgram { get; } = Environment.ProcessPath ?? "GameSaves.App.exe";
+
+        public IReadOnlyList<BackupScheduleFrequency> ScheduleFrequencies { get; } =
+            [BackupScheduleFrequency.Daily, BackupScheduleFrequency.Weekly];
+
+        public IReadOnlyList<DayOfWeek> ScheduleDays { get; } =
+        [
+            DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday,
+            DayOfWeek.Friday, DayOfWeek.Saturday, DayOfWeek.Sunday
+        ];
+
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(IsWeeklySchedule))]
+        private BackupScheduleFrequency scheduleFrequency = BackupScheduleFrequency.Daily;
+
+        [ObservableProperty]
+        private DayOfWeek scheduleDay = DayOfWeek.Monday;
+
+        [ObservableProperty]
+        private TimeSpan? scheduleTime = new TimeSpan(21, 0, 0);
+
+        public bool IsWeeklySchedule => ScheduleFrequency == BackupScheduleFrequency.Weekly;
+
+        private BackupSchedule? SelectedSchedule => ScheduleTime is { } time
+            ? new BackupSchedule(ScheduleFrequency, TimeOnly.FromTimeSpan(time), ScheduleDay)
+            : null;
+
+        /// <summary>
+        /// Why the selected profile cannot be scheduled right now, or null.
+        /// The preview must be clean and built from the saved profile, and the
+        /// provider must be able to run with nobody at the keyboard.
+        /// </summary>
+        private string? ScheduleRefusal(SyncRemoteProfile? profile)
+        {
+            if (!IsSchedulingAvailable)
+                return "Scheduling is not available in this host.";
+
+            if (_lastPlan is not { CanExecute: true })
+                return "Preview the sync first. Only a sync that previews cleanly can be scheduled.";
+
+            if (profile is null)
+                return "Save the remote profile first. Only a saved profile can be scheduled.";
+
+            // The run reads the saved profile, not the fields on screen.
+            if (RemoteProfileState == "Unsaved changes")
+                return "Save the profile's changes first. A scheduled run uses the saved profile, not the fields on screen.";
+
+            if (ScheduledSyncJob.UnattendedRefusal(profile.ProviderKind) is { } unattended)
+                return unattended;
+
+            if (profile.SettingsError is not null)
+                return $"The profile's saved settings cannot be used: {profile.SettingsError}";
+
+            return null;
+        }
+
+        [RelayCommand]
+        private async Task ScheduleSyncAsync()
+        {
+            if (IsLoading)
+                return;
+
+            SyncRemoteProfile? profile = SelectedRemoteProfile;
+
+            if (ScheduleRefusal(profile) is { } refusal)
+            {
+                StatusMessage = refusal;
+                return;
+            }
+
+            if (SelectedSchedule is not { } schedule)
+            {
+                StatusMessage = "Pick a time for the schedule first.";
+                return;
+            }
+
+            var job = new ScheduledSyncJob(
+                Id: Guid.NewGuid(),
+                ProfileId: profile!.Id,
+                ProfileName: profile.DisplayName,
+                Upload: UploadEnabled,
+                Download: DownloadEnabled,
+                ArchiveSync: ArchiveSync,
+                CreatedUtc: _clock.UtcNow);
+
+            try
+            {
+                if (await HasScheduledSyncAsync(profile.Id))
+                {
+                    StatusMessage = $"'{profile.DisplayName}' already has a scheduled sync. Use Apply schedule or Remove on its row.";
+                    return;
+                }
+
+                await Task.Run(() => _scheduledSyncJobs!.Add(job));
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Failed to save the scheduled sync: {ex.Message}";
+                return;
+            }
+
+            // The job is kept even if Windows refuses the task: it does nothing
+            // on its own, and its row offers Apply schedule to try again.
+            string? refused = await TryRegisterSyncTaskAsync(job.Id, profile.DisplayName, schedule);
+            await ReloadScheduledSyncJobsAsync();
+
+            StatusMessage = refused is null
+                ? $"Scheduled sync with '{profile.DisplayName}' saved ({DirectionText(job)}). Windows runs it while you are signed in: {schedule}. Each run copies the backup runs missing on either side at that time, including runs made later."
+                : $"Scheduled sync with '{profile.DisplayName}' saved, but Windows did not register its task: {refused} Nothing runs until a schedule is applied.";
+        }
+
+        [RelayCommand]
+        private async Task ApplySyncScheduleAsync(ScheduledJobRowViewModel? row)
+        {
+            if (row is null || !IsSchedulingAvailable)
+                return;
+
+            if (SelectedSchedule is not { } schedule)
+            {
+                StatusMessage = "Pick a time for the schedule first.";
+                return;
+            }
+
+            string? refused = await TryRegisterSyncTaskAsync(row.JobId, row.Title, schedule);
+            await ReloadScheduledSyncJobsAsync();
+
+            StatusMessage = refused is null
+                ? $"Sync with '{row.Title}' now runs while you are signed in: {schedule}."
+                : $"Windows did not update the task for '{row.Title}': {refused} Its task, if it has one, was left as it was.";
+        }
+
+        // The task goes first: a job is never removed while its task could
+        // still run. Backup runs on both sides and History are not touched.
+        [RelayCommand]
+        private async Task RemoveScheduledSyncAsync(ScheduledJobRowViewModel? row)
+        {
+            if (row is null || !IsSchedulingAvailable)
+                return;
+
+            try
+            {
+                await Task.Run(() => _taskScheduler!.Remove(row.JobId));
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Windows did not remove the task for '{row.Title}': {ex.Message} The scheduled sync was kept so you can try again.";
+                return;
+            }
+
+            try
+            {
+                await Task.Run(() => _scheduledSyncJobs!.Delete(row.JobId));
+                StatusMessage = $"Scheduled sync with '{row.Title}' and its Windows task removed. Backup runs on both sides are kept.";
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"The Windows task for '{row.Title}' was removed, but the scheduled sync could not be: {ex.Message}";
+            }
+
+            await ReloadScheduledSyncJobsAsync();
+        }
+
+        /// <summary>Reads the jobs and their tasks again; the view calls it when the page is shown.</summary>
+        [RelayCommand]
+        private Task RefreshScheduledSyncsAsync() => ReloadScheduledSyncJobsAsync();
+
+        private async Task<bool> HasScheduledSyncAsync(Guid profileId) =>
+            _scheduledSyncJobs is not null &&
+            await Task.Run(() => _scheduledSyncJobs.GetAll().Any(job => job.ProfileId == profileId));
+
+        private async Task<string?> TryRegisterSyncTaskAsync(Guid jobId, string profileName, BackupSchedule schedule)
+        {
+            try
+            {
+                await Task.Run(() => _taskScheduler!.Register(new BackupTaskDefinition(
+                    jobId,
+                    $"scheduled sync with {profileName}",
+                    ScheduledRunProgram,
+                    Program.RunSyncArguments(jobId),
+                    schedule)));
+
+                return null;
+            }
+            catch (Exception ex)
+            {
+                return ex.Message;
+            }
+        }
+
+        private async Task ReloadScheduledSyncJobsAsync()
+        {
+            if (!IsSchedulingAvailable)
+                return;
+
+            try
+            {
+                var jobs = await Task.Run(() => _scheduledSyncJobs!.GetAll());
+                IReadOnlyList<BackupTaskStatus> tasks = [];
+                string? taskError = null;
+
+                try
+                {
+                    tasks = await Task.Run(() => _taskScheduler!.GetTasks());
+                }
+                catch (Exception ex)
+                {
+                    taskError = ex.Message;
+                }
+
+                ScheduledSyncJobs.Clear();
+
+                foreach (ScheduledSyncJob job in jobs)
+                {
+                    SyncRemoteProfile? profile = _profileRepository.GetById(job.ProfileId);
+
+                    ScheduledSyncJobs.Add(new ScheduledJobRowViewModel(
+                        job.Id,
+                        profile?.DisplayName ?? job.ProfileName,
+                        profile is null
+                            ? "The remote profile no longer exists; each run is refused. Remove this scheduled sync."
+                            : $"{_providerCatalog.GetDescriptor(profile.ProviderKind).DisplayName} · {DirectionText(job)}",
+                        job.LastOutcome,
+                        tasks.FirstOrDefault(task => task.JobId == job.Id),
+                        taskError,
+                        ScheduledRunProgram,
+                        Program.RunSyncArguments(job.Id)));
+                }
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"The scheduled syncs could not be read: {ex.Message}";
+            }
+        }
+
+        private static string DirectionText(ScheduledSyncJob job) =>
+            (job.Upload && job.Download ? "Upload and download"
+                : job.Upload ? "Upload only"
+                : "Download only") +
+            (job.ArchiveSync ? " as compressed archives" : "");
 
         private sealed class UnavailableGoogleDriveRootFolderService
             : IGoogleDriveRootFolderService

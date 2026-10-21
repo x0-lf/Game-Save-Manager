@@ -5,18 +5,25 @@ using System;
 namespace GameSaves.App.Models
 {
     /// <summary>
-    /// One scheduled backup job beside its Windows task: the schedule, the
-    /// task's state and runs, and any drift between the two.
+    /// One scheduled job (a backup or a sync) beside its Windows task: the
+    /// schedule, the task's state and runs, and any drift between the two.
     /// </summary>
     public sealed class ScheduledJobRowViewModel
     {
         public ScheduledJobRowViewModel(
-            ScheduledBackupJob job,
+            Guid jobId,
+            string title,
+            string subtitle,
+            string? lastOutcome,
             BackupTaskStatus? task,
             string? taskError,
-            string expectedProgram)
+            string expectedProgram,
+            string expectedArguments)
         {
-            Job = job;
+            JobId = jobId;
+            Title = title;
+            Subtitle = subtitle;
+            LastOutcome = lastOutcome;
             WindowsTask = task;
 
             if (taskError is not null)
@@ -42,18 +49,20 @@ namespace GameSaves.App.Models
 
             if (!string.Equals(task.ProgramPath, expectedProgram, StringComparison.OrdinalIgnoreCase))
                 Problem = $"The Windows task starts {task.ProgramPath ?? "another program"}, not this app. Apply a schedule to update it.";
-            else if (!string.Equals(task.Arguments, Program.RunJobArguments(job.Id), StringComparison.OrdinalIgnoreCase))
+            else if (!string.Equals(task.Arguments, expectedArguments, StringComparison.OrdinalIgnoreCase))
                 Problem = "The Windows task's arguments no longer match this job. Apply a schedule to update it.";
         }
 
-        public ScheduledBackupJob Job { get; }
+        public Guid JobId { get; }
+
+        /// <summary>The game of a backup job, or the profile of a sync job.</summary>
+        public string Title { get; }
+
+        public string Subtitle { get; }
+
+        public string? LastOutcome { get; }
 
         public BackupTaskStatus? WindowsTask { get; }
-
-        public string GameName => Job.GameName;
-
-        public string ProfileAndDestinationDisplay =>
-            $"Steam account {Job.SteamAccountId} · To {Job.DestinationRoot}";
 
         public string ScheduleDisplay { get; }
 
@@ -64,9 +73,9 @@ namespace GameSaves.App.Models
         /// <summary>Drift between the job and its task, or null when they agree.</summary>
         public string? Problem { get; }
 
-        public string LastOutcomeDisplay => Job.LastOutcome is null
+        public string LastOutcomeDisplay => LastOutcome is null
             ? "No result recorded yet."
-            : $"Last result: {Job.LastOutcome}";
+            : $"Last result: {LastOutcome}";
 
         private static string StateText(BackupTaskState state) => state switch
         {

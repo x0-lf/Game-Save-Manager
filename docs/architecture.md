@@ -10,7 +10,7 @@ is documented in the audience-specific guides linked from the
 | --- | --- | --- |
 | `GameSaves.Core` | Domain models, enums, contracts, and provider-neutral policy | None |
 | `GameSaves.Infrastructure` | Filesystem, SQLite, registry, Steam, transfers, secret storage, SFTP, Google Drive, and Windows Task Scheduler integrations | Core |
-| `GameSaves.App` | Main Avalonia UI and composition root; `--run-job <id>` runs one scheduled backup through the same composition without a window | Core, Infrastructure |
+| `GameSaves.App` | Main Avalonia UI and composition root; `--run-job <id>` runs one scheduled backup and `--run-sync <id>` one scheduled sync through the same composition without a window | Core, Infrastructure |
 | `GameSaves` | Developer CLI, catalog management, verification, backup checks, and PCGamingWiki harvesting | Core, Infrastructure |
 | `GameSaves.Reviewer` | Independent mapping curation application and its SQLite access | None |
 | `GameSaves.Tests` | Shared regression coverage across Core, Infrastructure, CLI, and App behavior | App, Core, CLI, Infrastructure |
