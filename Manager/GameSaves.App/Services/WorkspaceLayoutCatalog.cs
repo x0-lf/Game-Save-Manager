@@ -296,6 +296,7 @@ namespace GameSaves.App.Services
                 ("runs", "Backup runs", L, 1.0, false),
                 ("restore", "Restore", C, 1.0, true),
                 ("files", "Files in this backup run", C, 1.0, true),
+                ("compare", "Compare with another run", C, 1.0, true),
                 ("restoreResults", "Restore results", C, 1.0, true),
                 ("archive", "Archive (ZIP)", C, 1.0, true),
                 ("cleanup", "Cleanup", C, 1.0, true));

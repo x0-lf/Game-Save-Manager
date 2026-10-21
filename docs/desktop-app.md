@@ -202,6 +202,20 @@ and shows Payload verified, Payload mismatch, or Payload missing; selecting
 another run cancels a check in progress and leaves the badge unchanged. The
 file tree starts at each file's original location.
 
+**Compare with another run** shows what the selected run adds, removes, or
+changes against a baseline run picked from the same list. Added means the
+file is in the selected run but not in the baseline; removed, in the baseline
+but not in the selected run; changed, in both with a different SHA-256. The
+table lists each file with its class in words, both sizes, and both hashes,
+with filters per class (identical files are hidden until asked for) and a
+summary of counts and bytes per class. Only the two manifests are read: no
+payload is opened, extracted, downloaded, restored, or verified, so a hash
+that matches says the recorded hashes agree, not that the files were checked.
+A manifest that cannot be trusted (missing, incomplete, an unsupported schema,
+an unsafe or duplicated path, or one hash with two sizes) is refused with that
+reason and no table. Selecting another run clears the comparison; Cancel stops
+a long one and shows nothing partial.
+
 ZIP export creates a self-contained archive; a run that is already compressed
 is copied as it is. Import validates extraction, rewrites manifest paths to the
 imported location, and never overwrites an existing run. Cleanup is the only

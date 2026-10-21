@@ -603,6 +603,10 @@ namespace GameSaves.App.ViewModels
             VerifySelectedRunCommand.Cancel();
             _fileResults = null;
 
+            // A comparison belongs to the run it was made for.
+            CompareRunsCommand.Cancel();
+            ClearComparison();
+
             RunItems.ReplaceAll(value is null
                 ? []
                 : value.Run.Manifest.Items.Select(item => new BackupItemRowViewModel(item)));
@@ -681,6 +685,8 @@ namespace GameSaves.App.ViewModels
             finally
             {
                 Pagination.SetSource(Runs);
+                // The old rows are gone, so a baseline picked among them is too.
+                ComparisonBaseline = null;
                 IsLoading = false;
             }
         }
@@ -787,6 +793,161 @@ namespace GameSaves.App.ViewModels
             {
                 IsLoading = false;
             }
+        }
+
+        // ---------------------------------------------------------------
+        // Compare with another run (DIFF-001)
+        //
+        // Reads the two manifests the page already holds and nothing else:
+        // no payload, no extraction, no restore. The selected run is the one
+        // compared; the baseline is the run picked here. Added means in the
+        // selected run only, removed in the baseline only. A refused or
+        // cancelled comparison shows no rows at all, never a partial table.
+        // ---------------------------------------------------------------
+
+        private const string ComparisonIdleMessage =
+            "Pick a baseline run and press Compare. Only the two manifests are read; nothing is extracted, restored, or changed.";
+
+        private IReadOnlyList<BackupManifestFileDifference>? _comparison;
+
+        [ObservableProperty]
+        private BackupRunRowViewModel? comparisonBaseline;
+
+        [ObservableProperty]
+        private string comparisonStatusMessage = ComparisonIdleMessage;
+
+        [ObservableProperty]
+        private string comparisonSummary = "";
+
+        [ObservableProperty]
+        private bool showAdded = true;
+
+        [ObservableProperty]
+        private bool showRemoved = true;
+
+        [ObservableProperty]
+        private bool showChanged = true;
+
+        // Identical files are the bulk of most comparisons; off by default so
+        // the differences are what the table opens on.
+        [ObservableProperty]
+        private bool showIdentical;
+
+        public BulkObservableCollection<BackupDifferenceRowViewModel> ComparisonRows { get; } = new();
+
+        partial void OnShowAddedChanged(bool value) => ApplyComparisonFilters();
+
+        partial void OnShowRemovedChanged(bool value) => ApplyComparisonFilters();
+
+        partial void OnShowChangedChanged(bool value) => ApplyComparisonFilters();
+
+        partial void OnShowIdenticalChanged(bool value) => ApplyComparisonFilters();
+
+        [RelayCommand(IncludeCancelCommand = true)]
+        private async Task CompareRunsAsync(CancellationToken cancellationToken)
+        {
+            if (IsLoading)
+                return;
+
+            if (SelectedRun is not { } selected)
+            {
+                ComparisonStatusMessage = "Select a backup run first; it is the run the baseline is compared with.";
+                return;
+            }
+
+            if (ComparisonBaseline is not { } baseline)
+            {
+                ComparisonStatusMessage = "Pick a baseline run to compare the selected run with.";
+                return;
+            }
+
+            if (ReferenceEquals(baseline, selected))
+            {
+                ComparisonStatusMessage = "Pick a different run as the baseline; a run compared with itself has no differences.";
+                return;
+            }
+
+            ClearComparison();
+            bool comparing = false;
+
+            try
+            {
+                IsLoading = true;
+                ComparisonStatusMessage = "Comparing the two manifests...";
+
+                // Progress<T> marshals reports back to the UI thread; a report
+                // that lands after the result must not overwrite it.
+                comparing = true;
+                var progress = new Progress<int>(count =>
+                {
+                    if (comparing)
+                        ComparisonStatusMessage = $"Comparing the two manifests... {count} file(s) so far.";
+                });
+
+                BackupManifestComparisonResult result = await Task.Run(
+                    () => BackupManifestComparer.Compare(
+                        baseline.Run.Manifest,
+                        selected.Run.Manifest,
+                        progress,
+                        cancellationToken),
+                    cancellationToken);
+
+                comparing = false;
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (result.IsRefused)
+                {
+                    ComparisonStatusMessage = $"Comparison refused: {result.Refusal}";
+                    return;
+                }
+
+                _comparison = result.Files;
+                ApplyComparisonFilters();
+
+                ComparisonSummary =
+                    $"Added {result.AddedCount} ({ByteSize.Format(result.AddedBytes)}), " +
+                    $"removed {result.RemovedCount} ({ByteSize.Format(result.RemovedBytes)}), " +
+                    $"changed {result.ChangedCount} ({ByteSize.Format(result.ChangedBytes)}), " +
+                    $"identical {result.IdenticalCount} ({ByteSize.Format(result.IdenticalBytes)}).";
+                ComparisonStatusMessage =
+                    $"Compared {result.Files.Count} file(s): baseline {baseline.StartedDisplay}, selected run {selected.StartedDisplay}. Recorded hashes were compared; no file was read or verified.";
+            }
+            catch (OperationCanceledException)
+            {
+                ClearComparison();
+                ComparisonStatusMessage = "Comparison cancelled. Nothing was changed.";
+            }
+            catch (Exception ex)
+            {
+                ClearComparison();
+                ComparisonStatusMessage = $"Comparison failed: {ex.Message}";
+            }
+            finally
+            {
+                comparing = false;
+                IsLoading = false;
+            }
+        }
+
+        private void ApplyComparisonFilters()
+        {
+            ComparisonRows.ReplaceAll((_comparison ?? [])
+                .Where(file => file.Kind switch
+                {
+                    BackupManifestDifferenceKind.Added => ShowAdded,
+                    BackupManifestDifferenceKind.Removed => ShowRemoved,
+                    BackupManifestDifferenceKind.Changed => ShowChanged,
+                    _ => ShowIdentical
+                })
+                .Select(file => new BackupDifferenceRowViewModel(file)));
+        }
+
+        private void ClearComparison()
+        {
+            _comparison = null;
+            ComparisonRows.Clear();
+            ComparisonSummary = "";
+            ComparisonStatusMessage = ComparisonIdleMessage;
         }
 
         private bool CanVerifySelectedRun() => SelectedRun is not null && !IsLoading;

@@ -525,7 +525,7 @@ public sealed class ViewModelStartupTests
                 Error: null);
     }
 
-    private sealed class FakeSteamProfileDetector : ISteamProfileDetector
+    internal sealed class FakeSteamProfileDetector : ISteamProfileDetector
     {
         public int CallCount { get; private set; }
 
@@ -647,7 +647,7 @@ public sealed class ViewModelStartupTests
             throw new InvalidOperationException("MarkUsed must not run during startup.");
     }
 
-    private sealed class RecordingBackupRestoreService : IBackupRestoreService
+    internal sealed class RecordingBackupRestoreService : IBackupRestoreService
     {
         public bool RestoreWasCalled { get; private set; }
 
@@ -667,7 +667,7 @@ public sealed class ViewModelStartupTests
                 Array.Empty<RestoreMappingTargetOption>());
     }
 
-    private sealed class RecordingBackupCleanupService : IBackupCleanupService
+    internal sealed class RecordingBackupCleanupService : IBackupCleanupService
     {
         public bool CleanupWasCalled { get; private set; }
 
@@ -689,7 +689,7 @@ public sealed class ViewModelStartupTests
         }
     }
 
-    private sealed class RecordingBackupArchiveService : IBackupArchiveService
+    internal sealed class RecordingBackupArchiveService : IBackupArchiveService
     {
         public bool ExportWasCalled { get; private set; }
 
@@ -719,7 +719,7 @@ public sealed class ViewModelStartupTests
             throw new InvalidOperationException("Import must not run during startup.");
     }
 
-    private sealed class NullFolderPicker : IFolderPickerService
+    internal sealed class NullFolderPicker : IFolderPickerService
     {
         public Task<string?> PickFolderAsync(string title, string? startLocation = null) =>
             Task.FromResult<string?>(null);

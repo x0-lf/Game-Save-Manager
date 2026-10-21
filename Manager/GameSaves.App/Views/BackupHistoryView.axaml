@@ -492,6 +492,177 @@
                 </Grid>
             </wsp:WorkspacePanel>
 
+            <!-- Compare with another run: reads the two manifests the page
+                 already holds and nothing else. The selected run is the one
+                 compared; the baseline is picked here. Added means in the
+                 selected run only, removed in the baseline only. Every class
+                 is text first; the glyph only repeats it. -->
+            <wsp:WorkspacePanel PanelKey="backups.compare"
+                                Classes="table"
+                                IsVisible="{Binding !!Runs.Count}"
+                                Title="Compare with another run"
+                                Subtitle="Which files the selected run adds, removes, or changes against a baseline run, from the two manifests only."
+                                MinPanelHeight="160">
+                <wsp:WorkspacePanel.HeaderActions>
+                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                        <ComboBox ItemsSource="{Binding Runs}"
+                                  SelectedItem="{Binding ComparisonBaseline}"
+                                  MinWidth="260"
+                                  MaxWidth="420"
+                                  PlaceholderText="Baseline run"
+                                  AutomationProperties.Name="Baseline run to compare with"
+                                  ToolTip.Tip="The run the selected run is compared with.">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="models:BackupRunRowViewModel">
+                                    <TextBlock Text="{Binding ListDisplay}" TextTrimming="CharacterEllipsis" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+
+                        <Button Content="Compare"
+                                Command="{Binding CompareRunsCommand}"
+                                VerticalAlignment="Center"
+                                ToolTip.Tip="Compares the two manifests by path and SHA-256. Reads no file, verifies nothing, changes nothing." />
+
+                        <Button Content="Cancel"
+                                Command="{Binding CompareRunsCancelCommand}"
+                                IsVisible="{Binding CompareRunsCommand.IsRunning}"
+                                VerticalAlignment="Center" />
+                    </StackPanel>
+                </wsp:WorkspacePanel.HeaderActions>
+                <Grid RowDefinitions="Auto,Auto,Auto,*">
+
+                    <TextBlock Grid.Row="0"
+                               Text="{Binding ComparisonStatusMessage}"
+                               Foreground="{DynamicResource SecondaryTextBrush}"
+                               FontSize="{DynamicResource FontSizeBody}"
+                               Margin="10,4,10,2"
+                               TextWrapping="Wrap" />
+
+                    <TextBlock Grid.Row="1"
+                               Text="{Binding ComparisonSummary}"
+                               IsVisible="{Binding !!ComparisonSummary.Length}"
+                               Foreground="{DynamicResource PrimaryTextBrush}"
+                               FontSize="{DynamicResource FontSizeBody}"
+                               FontWeight="SemiBold"
+                               Margin="10,2,10,4"
+                               TextWrapping="Wrap" />
+
+                    <WrapPanel Grid.Row="2"
+                               ItemSpacing="12"
+                               LineSpacing="4"
+                               Margin="10,0,10,6">
+                        <TextBlock Text="Show:"
+                                   VerticalAlignment="Center"
+                                   Foreground="{DynamicResource SecondaryTextBrush}"
+                                   FontSize="{DynamicResource FontSizeBody}" />
+                        <CheckBox Content="Added" IsChecked="{Binding ShowAdded}" ToolTip.Tip="In the selected run but not in the baseline." />
+                        <CheckBox Content="Removed" IsChecked="{Binding ShowRemoved}" ToolTip.Tip="In the baseline but not in the selected run." />
+                        <CheckBox Content="Changed" IsChecked="{Binding ShowChanged}" ToolTip.Tip="In both runs with different content." />
+                        <CheckBox Content="Identical" IsChecked="{Binding ShowIdentical}" ToolTip.Tip="In both runs with the same content." />
+                    </WrapPanel>
+
+                    <views:EmptyState Grid.Row="3"
+                                      Glyph="&#xE8A5;"
+                                      Title="No comparison to show"
+                                      Message="Select a run, pick a baseline run above, then press Compare. Files hidden by the filters do not appear here."
+                                      IsVisible="{Binding !ComparisonRows.Count}" />
+
+                    <DataGrid x:Name="BackupCompareGrid"
+                              Grid.Row="3"
+                              ItemsSource="{Binding ComparisonRows}"
+                              IsVisible="{Binding !!ComparisonRows.Count}"
+                              AutoGenerateColumns="False"
+                              IsReadOnly="True"
+                              CanUserSortColumns="True"
+                              CanUserResizeColumns="True"
+                              GridLinesVisibility="Horizontal"
+                              HorizontalScrollBarVisibility="Auto"
+                              VerticalScrollBarVisibility="Auto"
+                              RowHeight="38"
+                              Background="Transparent"
+                              BorderThickness="0"
+                              AutomationProperties.Name="Run comparison table">
+                        <DataGrid.Columns>
+                            <DataGridTemplateColumn Header="Difference" Width="120" SortMemberPath="KindText">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="models:BackupDifferenceRowViewModel">
+                                        <StackPanel Orientation="Horizontal"
+                                                    Spacing="6"
+                                                    VerticalAlignment="Center"
+                                                    Margin="8,0"
+                                                    AutomationProperties.Name="{Binding AccessibleName}"
+                                                    ToolTip.Tip="{Binding KindDetail}">
+                                            <TextBlock Text="{Binding KindGlyph}"
+                                                       FontWeight="Bold"
+                                                       FontFamily="Consolas,monospace"
+                                                       Foreground="{DynamicResource PrimaryTextBrush}" />
+                                            <TextBlock Text="{Binding KindText}"
+                                                       Foreground="{DynamicResource SecondaryTextBrush}" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <DataGridTemplateColumn Header="File" Width="2*" SortMemberPath="RelativePath">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="models:BackupDifferenceRowViewModel">
+                                        <TextBlock Text="{Binding RelativePath}"
+                                                   VerticalAlignment="Center"
+                                                   ToolTip.Tip="{Binding RelativePath}"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Margin="8,0" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <DataGridTemplateColumn Header="Baseline size" Width="110" SortMemberPath="Difference.BaselineBytes">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="models:BackupDifferenceRowViewModel">
+                                        <TextBlock Text="{Binding BaselineSizeDisplay}"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource MutedTextBrush}"
+                                                   ToolTip.Tip="{Binding BaselineSha256}"
+                                                   Margin="8,0" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <DataGridTemplateColumn Header="Selected run size" Width="130" SortMemberPath="Difference.TargetBytes">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="models:BackupDifferenceRowViewModel">
+                                        <TextBlock Text="{Binding SelectedSizeDisplay}"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource MutedTextBrush}"
+                                                   ToolTip.Tip="{Binding SelectedSha256}"
+                                                   Margin="8,0" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+
+                            <DataGridTemplateColumn Header="SHA-256 (baseline → selected)" Width="220">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate x:DataType="models:BackupDifferenceRowViewModel">
+                                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="8,0">
+                                            <TextBlock Text="{Binding BaselineSha256Short}"
+                                                       Foreground="{DynamicResource MutedTextBrush}"
+                                                       ToolTip.Tip="{Binding BaselineSha256}"
+                                                       FontFamily="Consolas,monospace" />
+                                            <TextBlock Text="→"
+                                                       Foreground="{DynamicResource MutedTextBrush}" />
+                                            <TextBlock Text="{Binding SelectedSha256Short}"
+                                                       Foreground="{DynamicResource MutedTextBrush}"
+                                                       ToolTip.Tip="{Binding SelectedSha256}"
+                                                       FontFamily="Consolas,monospace" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </wsp:WorkspacePanel>
+
             <wsp:WorkspacePanel PanelKey="backups.restoreResults"
                                 Classes="table"
                                 IsVisible="{Binding !!Runs.Count}"
