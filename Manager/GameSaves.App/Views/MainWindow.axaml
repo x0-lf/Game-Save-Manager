@@ -425,10 +425,36 @@
 									        VerticalAlignment="Center" />
 								</Panel>
 							</wsp:WorkspacePanel.HeaderActions>
-							<TextBlock Text="{Binding StatusMessage}"
-							           Foreground="{DynamicResource MutedTextBrush}"
-							           FontSize="{DynamicResource FontSizeBody}"
-							           TextWrapping="Wrap" />
+							<StackPanel Spacing="8">
+								<TextBlock Text="{Binding StatusMessage}"
+								           Foreground="{DynamicResource MutedTextBrush}"
+								           FontSize="{DynamicResource FontSizeBody}"
+								           TextWrapping="Wrap" />
+								<!-- RELEASE-002: the only place outside Settings that a newer
+								     release is announced, and only while one exists. Downloading
+								     and installing stay in Settings > Diagnostics, next to the
+								     version being replaced. -->
+								<Border IsVisible="{Binding Settings.Updates.IsUpdateAvailable}"
+								        BorderBrush="{DynamicResource AccentBrush}"
+								        BorderThickness="1"
+								        CornerRadius="10"
+								        Padding="12,8">
+									<WrapPanel>
+										<TextBlock VerticalAlignment="Center"
+										           Margin="0,0,12,0"
+										           Foreground="{DynamicResource PrimaryTextBrush}"
+										           FontSize="{DynamicResource FontSizeBody}"
+										           TextWrapping="Wrap">
+											<Run Text="Game Save Manager" />
+											<Run Text="{Binding Settings.Updates.AvailableVersion}" />
+											<Run Text="is available. Download and install it from Settings &gt; Diagnostics; your backups and settings stay where they are." />
+										</TextBlock>
+										<Button Content="Release notes"
+										        Command="{Binding Settings.Updates.OpenReleaseNotesCommand}"
+										        VerticalAlignment="Center" />
+									</WrapPanel>
+								</Border>
+							</StackPanel>
 						</wsp:WorkspacePanel>
 
 						<!-- The one condition that makes the whole app inert

@@ -224,7 +224,8 @@ namespace GameSaves.App.ViewModels
             ManualBackupViewModel manualBackup,
             TransferHistoryViewModel transferHistory,
             SyncViewModel sync,
-            GameSaves.App.Services.WorkspaceLayoutService workspaceLayout)
+            GameSaves.App.Services.WorkspaceLayoutService workspaceLayout,
+            ApplicationUpdateViewModel updates)
         {
             _workspaceLayout = workspaceLayout;
             _steamDiscoveryService = steamDiscoveryService;
@@ -259,7 +260,8 @@ namespace GameSaves.App.ViewModels
                 providerCatalog,
                 Platform,
                 DatabasePath,
-                workspaceLayout);
+                workspaceLayout,
+                updates);
 
             // The rail action can also be switched off entirely in Settings,
             // so its visibility depends on that setting as well as the page.

@@ -7,6 +7,7 @@ using GameSaves.Core.Secrets;
 using GameSaves.Core.Steam;
 using GameSaves.Core.Transfers;
 using GameSaves.Core.Sync;
+using GameSaves.Core.Updates;
 using GameSaves.Infrastructure.Catalog;
 using GameSaves.Infrastructure.Data;
 using GameSaves.Infrastructure.Platform;
@@ -19,6 +20,7 @@ using GameSaves.Infrastructure.Secrets;
 using GameSaves.Infrastructure.Steam;
 using GameSaves.Infrastructure.Transfers;
 using GameSaves.Infrastructure.Sync;
+using GameSaves.Infrastructure.Updates;
 using GameSaves.Infrastructure.WebDav;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -82,6 +84,14 @@ namespace GameSaves.Infrastructure.DependencyInjection
             // Registered beside the clock and for the same reason: so a test
             // can substitute time rather than spend it. See Milestone X.
             services.AddSingleton<IDelayProvider, SystemDelayProvider>();
+
+            // RELEASE-002: the release feed and the verifying downloader. Only
+            // the desktop shell's update view model resolves them; the
+            // headless host never does.
+            services.AddSingleton<IUpdateFeed>(_ => new GitHubReleaseFeed());
+            services.AddSingleton<IUpdateDownloader>(provider => new VerifiedInstallerDownloader(
+                provider.GetRequiredService<IAppDatabasePathProvider>(),
+                provider.GetRequiredService<IUtcClock>()));
             services.AddSingleton<IRetryBackoffNotifier, RetryBackoffNotifier>();
             services.AddSingleton<IGoogleDriveDesktopDetector, GoogleDriveDesktopDetector>();
             services.AddSingleton<SyncRemoteProfileSettingsSerializer>();

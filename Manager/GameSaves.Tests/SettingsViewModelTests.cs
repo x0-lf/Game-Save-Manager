@@ -3,6 +3,7 @@ using GameSaves.App.Services;
 using GameSaves.App.ViewModels;
 using GameSaves.Core.Save;
 using GameSaves.Infrastructure.Sync;
+using System.Reflection;
 using Xunit;
 
 namespace GameSaves.Tests
@@ -37,7 +38,13 @@ namespace GameSaves.Tests
                 new SyncProviderCatalog(),
                 "windows",
                 @"C:\data\games.db",
-                new WorkspaceLayoutService(store));
+                new WorkspaceLayoutService(store),
+                new ApplicationUpdateViewModel(
+                    new FakeUpdateFeed(),
+                    new FakeUpdateDownloader(),
+                    store,
+                    new SystemUtcClock(),
+                    new Version(0, 1, 0)));
             viewModel.WorkspaceHost = workspaceHost;
             return viewModel;
         }
@@ -1219,7 +1226,8 @@ namespace GameSaves.Tests
                 _temp.GetPath("diagnostics.json"));
 
             Assert.Equal(
-                typeof(SettingsViewModel).Assembly.GetName().Version?.ToString(3),
+                typeof(SettingsViewModel).Assembly
+                    .GetCustomAttribute<AssemblyInformationalVersionAttribute>()!.InformationalVersion,
                 viewModel.ApplicationVersion);
             Assert.Equal("windows", viewModel.Platform);
             Assert.Equal(

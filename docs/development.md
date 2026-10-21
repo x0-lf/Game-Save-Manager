@@ -205,4 +205,73 @@ git status --short
 
 Also run affected UI and provider scenarios on the required platform. Record
 warnings, failures, skipped checks, credential/network needs, and any unverified
-claim. Release packaging is roadmap work; a source build is not a production artifact.
+claim. A source build is not a production artifact; the release package is
+built by the command below.
+
+## Release packaging
+
+One command publishes `GameSaves.App` and builds the Windows installer:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File build/publish-release.ps1
+```
+
+It needs the .NET 10 SDK and, for the installer, Inno Setup 6.3 or newer
+(`winget install JRSoftware.InnoSetup`). `signtool` from the Windows SDK is
+needed only when signing. The script:
+
+1. reads the version from `<Version>` in
+   `Manager/GameSaves.App/GameSaves.App.csproj`, the single source for the
+   executable's file properties, the installer, and Settings > Diagnostics;
+   bump it before a release. The Win32 `app.manifest` identity stays
+   `1.0.0.0`, because Windows uses it only for side-by-side activation and
+   never shows it;
+2. publishes `GameSaves.App` self-contained for `win-x64` in Release as a
+   single folder (no single-file bundle, no trimming, no ReadyToRun), through
+   the isolated artifacts path, into `artifacts/release/publish/win-x64/`,
+   and fails if that folder contains anything from the CLI, Reviewer, tests,
+   or capture harnesses;
+3. signs `GameSaves.App.exe` only when a certificate is supplied
+   (`-CertificatePath` and `-CertificatePassword`, or the
+   `GSM_SIGNING_CERTIFICATE` and `GSM_SIGNING_PASSWORD` variables); otherwise
+   it prints that the package is unsigned. No certificate is in the repository;
+4. compiles `build/GameSaveManager.iss` into
+   `artifacts/release/GameSaveManager-Setup-<version>.exe`: a per-user install
+   under `%LOCALAPPDATA%\Programs\Game Save Manager` without elevation, with
+   `LICENSE` and `THIRD-PARTY-NOTICES.md` beside the program, upgraded in
+   place; the installer is signed under the same condition. Without Inno
+   Setup the script stops after the publish with exit code 2 and says so;
+5. writes `GameSaveManager-Setup-<version>.exe.sha256` beside the installer,
+   after signing: the lowercase SHA-256 hex, two spaces and the file name, as
+   `sha256sum` writes it. The in-app update check (RELEASE-002) downloads this
+   file from the release and refuses an installer whose hash differs, so the
+   installer and its digest must be published together and unchanged.
+
+Nothing under `bin/` or `obj/` is read or written, the application is never
+started, and `%LOCALAPPDATA%\GameSave\` is never touched. The output folder is
+git-ignored. `ReleasePackagingTests` pins what the scripts may publish and
+install; no test runs them.
+
+A package counts as released only after the pre-release checks above, this
+command run end to end, and an install test on a machine without a .NET
+runtime, each recorded as run or as unverified.
+
+### Cutting a release
+
+1. Bump `<Version>` in `Manager/GameSaves.App/GameSaves.App.csproj` and run
+   the pre-release checks.
+2. Run `build/publish-release.ps1` (with the certificate parameters when a
+   certificate exists) and keep its output.
+3. Tag the commit `v<version>`: exactly `v` plus the project version, because
+   the in-app update check parses the tag and refuses any other shape. Create
+   a GitHub release from that tag and attach
+   `GameSaveManager-Setup-<version>.exe` and
+   `GameSaveManager-Setup-<version>.exe.sha256` under exactly those names; the
+   app refuses a release that lacks either. The release page is what
+   **Release notes** opens. A draft or pre-release is never offered: the app
+   reads `releases/latest`, which GitHub resolves to the newest published full
+   release.
+4. From an older installed version, press Check now in Settings > Diagnostics
+   and record whether the release was offered, downloaded, verified and
+   installed. That is the only proof of the update path; until it is done the
+   path is recorded as unverified.

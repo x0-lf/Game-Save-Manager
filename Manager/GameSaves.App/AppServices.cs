@@ -1,6 +1,8 @@
 ﻿using GameSaves.App.Services;
 using GameSaves.App.ViewModels;
+using GameSaves.Core.Sync;
 using GameSaves.Core.Transfers;
+using GameSaves.Core.Updates;
 using GameSaves.Infrastructure.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection;
 using System;
@@ -38,6 +40,16 @@ namespace GameSaves.App
             services.AddSingleton<ISyncSettingsStore, SyncSettingsStore>();
             services.AddSingleton<ISyncRemoteProfileMigrationService, SyncRemoteProfileMigrationService>();
 
+            // RELEASE-002: the opt-in update check. Resolved by the shell only;
+            // the headless host resolves nothing but the scheduled runners, so
+            // it is never constructed there.
+            services.AddSingleton(provider => new ApplicationUpdateViewModel(
+                provider.GetRequiredService<IUpdateFeed>(),
+                provider.GetRequiredService<IUpdateDownloader>(),
+                provider.GetRequiredService<IUiSettingsStore>(),
+                provider.GetRequiredService<IUtcClock>(),
+                ApplicationUpdateViewModel.RunningVersionOfThisAssembly()));
+
             services.AddSingleton<MainWindowViewModel>();
 
             services.AddSingleton<InstalledGamesViewModel>();
@@ -61,6 +73,10 @@ namespace GameSaves.App
                     provider.GetRequiredService<ManualBackupViewModel>(),
                     provider.GetRequiredService<BackupHistoryViewModel>(),
                     provider.GetRequiredService<TransferHistoryViewModel>(),
+                    // Last, once every tab has its data and the window has
+                    // been up for a while: the opt-in update check, which
+                    // asks nothing unless the Settings switch is on.
+                    provider.GetRequiredService<ApplicationUpdateViewModel>(),
                 }));
 
             overrides?.Invoke(services);

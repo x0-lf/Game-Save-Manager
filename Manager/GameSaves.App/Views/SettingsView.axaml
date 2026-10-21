@@ -509,6 +509,36 @@
                                 </StackPanel>
                             </StackPanel>
                         </Border>
+
+                        <!-- RELEASE-002. Off by default: the app contacts the release
+                             feed only with this on, or from Check now in Diagnostics. -->
+                        <Border Background="{DynamicResource CardBackgroundBrush}"
+                                BorderBrush="{DynamicResource CardBorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="14"
+                                Padding="14"
+                                HorizontalAlignment="Left"
+                                MinWidth="360"
+                                MaxWidth="640">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Updates"
+                                           Foreground="{DynamicResource PrimaryTextBrush}"
+                                           FontSize="{DynamicResource FontSizeBodyLarge}"
+                                           FontWeight="SemiBold" />
+                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                                    <ToggleSwitch Grid.Column="0"
+                                                  IsChecked="{Binding Updates.CheckOnStartup, Mode=TwoWay}"
+                                                  Content="Check for updates on start"
+                                                  AutomationProperties.Name="Check for updates on start" />
+                                    <TextBlock Grid.Column="1"
+                                               Text="Off by default. When on, the app asks this project's GitHub release feed once per start, at most once a day, whether a newer version exists. The request is one plain HTTPS GET with no account, token or identifier. Nothing is downloaded or installed until you choose to in Diagnostics."
+                                               Foreground="{DynamicResource MutedTextBrush}"
+                                               FontSize="{DynamicResource FontSizeBody}"
+                                               TextWrapping="Wrap"
+                                               VerticalAlignment="Center" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
                 </TabItem>
 
@@ -966,6 +996,8 @@
                                     <TextBlock Grid.Column="1"
                                                Text="{Binding ApplicationVersion}"
                                                Classes="diagnosticValue"
+                                               TextTrimming="CharacterEllipsis"
+                                               ToolTip.Tip="{Binding ApplicationVersion}"
                                                AutomationProperties.Name="App version" />
                                 </Grid>
                                 <Grid ColumnDefinitions="140,*" ColumnSpacing="10">
@@ -1000,6 +1032,55 @@
                                                TextTrimming="CharacterEllipsis"
                                                ToolTip.Tip="{Binding RuntimeDescription}"
                                                AutomationProperties.Name="Runtime" />
+                                </Grid>
+                                <!-- RELEASE-002: the opt-in update check sits beside the
+                                     version it would replace. Nothing is sent until Check now
+                                     or the Behaviour switch; a download is offered for
+                                     installation only after its SHA-256 matched the digest
+                                     published with the release, and Install now hands that
+                                     file to the installer and closes the app. -->
+                                <Grid ColumnDefinitions="140,*" ColumnSpacing="10">
+                                    <TextBlock Grid.Column="0"
+                                               Text="Updates"
+                                               Classes="diagnosticLabel"
+                                               VerticalAlignment="Top" />
+                                    <StackPanel Grid.Column="1" Spacing="8">
+                                        <TextBlock Text="{Binding Updates.StatusMessage}"
+                                                   Classes="diagnosticValue"
+                                                   TextWrapping="Wrap"
+                                                   AutomationProperties.Name="Update status" />
+                                        <ProgressBar IsVisible="{Binding Updates.IsDownloading}"
+                                                     Minimum="0"
+                                                     Maximum="{Binding Updates.TotalBytes, Mode=OneWay}"
+                                                     Value="{Binding Updates.DownloadedBytes, Mode=OneWay}"
+                                                     AutomationProperties.Name="Download progress" />
+                                        <WrapPanel>
+                                            <Button Content="Check now"
+                                                    Command="{Binding Updates.CheckNowCommand}"
+                                                    Margin="0,0,8,8"
+                                                    AutomationProperties.Name="Check for updates now" />
+                                            <Button Content="Release notes"
+                                                    Command="{Binding Updates.OpenReleaseNotesCommand}"
+                                                    IsVisible="{Binding Updates.IsUpdateAvailable}"
+                                                    Margin="0,0,8,8" />
+                                            <Button Content="Download and verify"
+                                                    Command="{Binding Updates.DownloadCommand}"
+                                                    IsVisible="{Binding Updates.IsUpdateAvailable}"
+                                                    Margin="0,0,8,8"
+                                                    AutomationProperties.Name="Download and verify the update" />
+                                            <Button Content="Cancel"
+                                                    Command="{Binding Updates.CancelDownloadCommand}"
+                                                    IsVisible="{Binding Updates.IsDownloading}"
+                                                    Margin="0,0,8,8"
+                                                    AutomationProperties.Name="Cancel the download" />
+                                            <Button Content="Install now"
+                                                    Classes="primary"
+                                                    Command="{Binding Updates.InstallNowCommand}"
+                                                    IsVisible="{Binding Updates.IsVerified}"
+                                                    Margin="0,0,8,8"
+                                                    AutomationProperties.Name="Install the verified update now" />
+                                        </WrapPanel>
+                                    </StackPanel>
                                 </Grid>
                             </StackPanel>
                         </Border>

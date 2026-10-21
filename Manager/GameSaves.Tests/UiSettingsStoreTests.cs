@@ -542,9 +542,14 @@ namespace GameSaves.Tests
             AppUiSettings loaded = new UiSettingsStore(path).Load();
 
             Assert.Equal(AppUiSettings.CurrentSchemaVersion, loaded.SchemaVersion);
-            Assert.Equal(10, AppUiSettings.CurrentSchemaVersion);
+            Assert.Equal(11, AppUiSettings.CurrentSchemaVersion);
             Assert.Equal(AppUiSettings.ThemeDark, loaded.ThemeChoice);
             Assert.Equal(UiRailLayoutSettings.TabDashboard, loaded.StartupTabKey);
+
+            // v11 (RELEASE-002): a file from before the update check loads
+            // with the check off and no check time, so nothing is sent.
+            Assert.False(loaded.CheckForUpdatesOnStartup);
+            Assert.Null(loaded.LastUpdateCheckUtc);
             Assert.Equal("Desk", Assert.Single(loaded.WorkspaceLayouts).Name);
 
             // A layout saved before panels existed carries no pages, so every

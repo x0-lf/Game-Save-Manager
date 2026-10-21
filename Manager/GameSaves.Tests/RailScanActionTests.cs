@@ -316,7 +316,13 @@ public sealed class RailScanActionTests
                 new FixedUtcClock(DateTimeOffset.Parse("2026-08-31T12:00:00Z")),
                 new StubGoogleDriveOAuthService(),
                 layout),
-            layout);
+            layout,
+            new ApplicationUpdateViewModel(
+                new FakeUpdateFeed(),
+                new FakeUpdateDownloader(),
+                uiSettings,
+                new FixedUtcClock(DateTimeOffset.Parse("2026-08-31T12:00:00Z")),
+                new Version(0, 1, 0)));
     }
 
     private sealed class InMemoryUiSettingsStore : IUiSettingsStore

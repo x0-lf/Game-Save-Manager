@@ -22,7 +22,10 @@ There is no packaged end-user release workflow yet.
 
 ## Quick start from source
 
-Install the .NET 10 SDK, then run from the repository root:
+A per-user Windows installer that needs no .NET runtime is built by
+`build/publish-release.ps1`; see [Getting started](docs/getting-started.md)
+for install, upgrade, and uninstall. To run from source instead, install the
+.NET 10 SDK, then run from the repository root:
 
 ```powershell
 dotnet restore Manager/Manager.sln
@@ -60,6 +63,10 @@ Manager/
 |-- GameSaves.UiCapture/      Development-only headless UI capture harness
 `-- GameSaves.UiMaterialCapture/ Development-only Windows material capture harness
 ```
+
+`build/` at the repository root holds the release packaging script and the
+installer script; they publish `GameSaves.App` alone (see the
+[development guide](docs/development.md)).
 
 ## Documentation
 

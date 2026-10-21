@@ -26,6 +26,20 @@ Avalonia is limited to App, Reviewer, and the two capture harnesses. Google API
 packages and Google SDK types are limited to Infrastructure. Neither capture
 harness is shipped and no other project references them.
 
+The release package is built outside the solution by `build/publish-release.ps1`
+and `build/GameSaveManager.iss` at the repository root. It publishes
+`GameSaves.App` alone, self-contained, and installs it per user; the CLI,
+Reviewer, tests, and capture harnesses never ship. The version comes from the
+App project file only. See [development](development.md) for the command and
+the [safety model](safety-model.md) for what the installer may never touch.
+
+The in-app update check (RELEASE-002) is the one place the App reads about
+itself from the internet. `GameSaves.Core.Updates` holds the feed and
+downloader contracts, `GameSaves.Infrastructure.Updates` the GitHub Releases
+feed and the digest-verifying downloader, and `ApplicationUpdateViewModel` in
+the App ties them to Settings and the Dashboard. The headless scheduled-run
+host never resolves any of them.
+
 ## Dependency direction
 
 ```text

@@ -79,6 +79,30 @@ belong to the [security policy](../SECURITY.md).
     a browser or prompts; stored tokens stay in the DPAPI secret store and only
     refresh silently. Every outcome, refusals included, is recorded in History;
     an executed sync is recorded once, by the engine, under the profile's name.
+16. **Installing and uninstalling never touch user data.** The release
+    package installs the program files for the current user only, under
+    `%LOCALAPPDATA%\Programs\Game Save Manager`, without elevation, and the
+    packaging script never starts the application. Neither the installer nor
+    the uninstaller reads, writes, or deletes anything under
+    `%LOCALAPPDATA%\GameSave\` (database, backups, settings, DPAPI secrets,
+    scheduled-run lock files). An upgrade replaces program files in place at
+    the same path, so scheduled tasks keep pointing at the installed program;
+    the uninstaller removes only what it installed and tells the user where
+    the data still is.
+17. **Updates are opt-in, verified before anything runs, and never applied
+    in place by the app.** The app contacts the release feed only when the
+    user switched the startup check on or pressed Check now, and then with one
+    anonymous HTTPS GET that carries no account, token or identifier; the
+    headless `--run-job`/`--run-sync` host never checks. Only a strictly newer
+    version is offered. A downloaded installer is written to
+    `%LOCALAPPDATA%\GameSave\updates\` as a `.partial` file, hashed while
+    written, and kept only when its SHA-256 matches the digest published with
+    the release; a mismatched, truncated or cancelled file is deleted and the
+    reason shown. Install now exists only for a verified file, starts the
+    installer's own wizard and closes the app; the app never copies,
+    overwrites or deletes anything in its own install folder, and the
+    `updates\` directory is the only place in the data folder it touches,
+    where it may delete only its own `*.partial` files older than a day.
 
 ## What can be deleted
 
@@ -104,7 +128,11 @@ backup runs:
   Orphaned working folders (`.staging_<32 hex>`, `.download_<32 hex>`,
   `.export_<32 hex>` and `.export_<32 hex>.tmp`) are purged once per process,
   only when nothing inside them has been written for over an hour; any other
-  name, including a real run that starts with a dot, is never touched.
+  name, including a real run that starts with a dot, is never touched;
+- the update check may remove only `*.partial` files in
+  `%LOCALAPPDATA%\GameSave\updates\` that have not been written to for a day,
+  plus the one partial file of a download that failed or was cancelled; the
+  verified installer it keeps there is never deleted by the app.
 
 ## Integrity and confidentiality
 

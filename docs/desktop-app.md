@@ -138,7 +138,10 @@ The app reports these mismatches and never repairs them on its own:
 - **No Windows task.** Registration failed, or the task was deleted in Task
   Scheduler. Nothing runs.
 - **A different program.** The task starts another copy of the app, for
-  example after the app moved to a new folder.
+  example after the app moved to a new folder. The installed package keeps
+  its path (`%LOCALAPPDATA%\Programs\Game Save Manager`) across upgrades, so
+  an upgrade never causes this; running from source or from a copied folder
+  does.
 - **Changed arguments.** The task's arguments no longer name the job.
 
 **Apply schedule** on a job registers its task again with the schedule picked
@@ -384,6 +387,34 @@ Renaming or editing a profile needs no change to its schedule: the next run
 reads the saved profile as it is then. A manual sync of the same profile from
 the window is not blocked by a scheduled run and does not block one; both are
 create-only, so the second to reach a run skips it as already present.
+
+## Updates
+
+Update checking is opt-in (RELEASE-002). Settings > Behaviour holds the
+**Check for updates on start** switch, off by default; Settings > Diagnostics
+> About this build holds the **Updates** row with **Check now**, the result,
+**Release notes**, **Download and verify** with progress and **Cancel**, and
+**Install now**. While a newer version is known, the Dashboard header shows a
+notice with the version and a Release notes button; downloading and installing
+stay in Settings, beside the version being replaced.
+
+The startup check runs last in the startup sequence, after every page has its
+data, once per process and only when no check finished within the last day
+(the time of the last check is kept in the UI settings). The headless
+`--run-job`/`--run-sync` host never constructs the checker. A check that fails
+shows its message in the Updates row and nowhere else; a newer version is only
+ever a notice, never a prompt.
+
+The download goes to `%LOCALAPPDATA%\GameSave\updates\<name>.partial`, hashed
+while written; it is renamed to its final name only when the SHA-256 matches
+the digest published with the release, and deleted otherwise. **Install now**
+is offered only for such a file: it starts the installer (the wizard, not a
+silent install) and closes the app, and the installer replaces the program
+files in place. The app never writes into its own install folder and never
+touches the data folder beyond that `updates\` directory, where it may delete
+only its own `*.partial` files older than a day. See
+[getting-started](getting-started.md) for the user-facing walk-through and the
+[safety model](safety-model.md) (invariant 17).
 
 ## UI state conventions
 

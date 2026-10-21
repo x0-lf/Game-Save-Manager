@@ -300,7 +300,7 @@ public sealed class DocumentationIntegrityTests
         return true;
     }
 
-    private static string FindRepoRoot()
+    internal static string FindRepoRoot()
     {
         DirectoryInfo? directory = new(AppContext.BaseDirectory);
 

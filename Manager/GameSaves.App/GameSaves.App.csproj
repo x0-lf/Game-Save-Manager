@@ -5,6 +5,12 @@
     <Nullable>enable</Nullable>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <!-- Release version source of truth. FileVersion, InformationalVersion,
+         the installer (build/publish-release.ps1 reads this element) and the
+         Settings > Diagnostics "App version" row all derive from it. -->
+    <Version>0.1.0</Version>
+    <Product>Game Save Manager</Product>
+    <AssemblyTitle>Game Save Manager</AssemblyTitle>
   </PropertyGroup>
 
   <ItemGroup>

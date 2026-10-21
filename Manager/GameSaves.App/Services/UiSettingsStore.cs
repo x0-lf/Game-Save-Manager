@@ -51,7 +51,7 @@ namespace GameSaves.App.Services
         string StartupTabKey,
         IReadOnlyList<UiWorkspaceLayoutSettings> WorkspaceLayouts)
     {
-        public const int CurrentSchemaVersion = 10;
+        public const int CurrentSchemaVersion = 11;
 
         /// <summary>
         /// The live per-page panel arrangement (schema v9). An init property
@@ -81,6 +81,22 @@ namespace GameSaves.App.Services
         public const string BackupFormatZip = "zip";
         public const string BackupFormatSevenZip = "7z";
         public const string BackupFormatFolder = "folder";
+
+        /// <summary>
+        /// Whether the app asks the release feed for a newer version once
+        /// after startup, at most once a day (schema v11, RELEASE-002). Off by
+        /// default: nothing contacts the network until the user switches this
+        /// on or presses Check now. A file written before v11 has no value and
+        /// loads as off.
+        /// </summary>
+        public bool CheckForUpdatesOnStartup { get; init; }
+
+        /// <summary>
+        /// When the last update check finished, successful or not; the
+        /// startup check skips itself for a day after it. Null until the
+        /// first check.
+        /// </summary>
+        public DateTimeOffset? LastUpdateCheckUtc { get; init; }
 
         public static bool IsBackupFormat(string? value) => value is
             BackupFormatZip or
@@ -660,6 +676,12 @@ namespace GameSaves.App.Services
                     WorkspacePages = ReadWorkspacePages(document.RootElement),
                     ScanAction = ReadScanAction(document.RootElement),
                     NewBackupFormat = ReadNewBackupFormat(document.RootElement),
+                    CheckForUpdatesOnStartup = ReadBoolean(
+                        document.RootElement,
+                        nameof(AppUiSettings.CheckForUpdatesOnStartup)),
+                    LastUpdateCheckUtc = ReadTimestamp(
+                        document.RootElement,
+                        nameof(AppUiSettings.LastUpdateCheckUtc)),
                 };
             }
             catch (Exception exception) when (
@@ -1046,6 +1068,15 @@ namespace GameSaves.App.Services
 
             return normalize(double.NaN);
         }
+
+        // Null when absent or malformed, which simply lets the next enabled
+        // startup check run.
+        private static DateTimeOffset? ReadTimestamp(JsonElement container, string propertyName) =>
+            container.TryGetProperty(propertyName, out JsonElement value) &&
+            value.ValueKind == JsonValueKind.String &&
+            value.TryGetDateTimeOffset(out DateTimeOffset timestamp)
+                ? timestamp
+                : null;
 
         private static bool ReadBoolean(JsonElement container, string propertyName)
         {

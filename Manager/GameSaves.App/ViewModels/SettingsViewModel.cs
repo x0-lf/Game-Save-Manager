@@ -10,6 +10,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 
@@ -160,9 +161,11 @@ namespace GameSaves.App.ViewModels
             ISyncProviderCatalog providerCatalog,
             string platform,
             string databasePath,
-            WorkspaceLayoutService workspaceLayout)
+            WorkspaceLayoutService workspaceLayout,
+            ApplicationUpdateViewModel updates)
         {
             _uiSettingsStore = uiSettingsStore;
+            Updates = updates;
             _workspaceLayout = workspaceLayout;
             _themeService = themeService;
             _windowMaterialService = windowMaterialService;
@@ -351,6 +354,12 @@ namespace GameSaves.App.ViewModels
 
         public string DatabasePath { get; }
 
+        // Settings > Behaviour (the switch) and Settings > Diagnostics (Check
+        // now, download, verification, Install now): the opt-in update check
+        // (RELEASE-002). Built by the shell's DI so the startup initializer can
+        // run it last; the Dashboard binds its notice to the same instance.
+        public ApplicationUpdateViewModel Updates { get; }
+
         // Read-only surfaces added by the Settings categories work. Every
         // value comes from the component that owns it: paths from the stores
         // and the database path provider input, provider rows from the
@@ -366,10 +375,15 @@ namespace GameSaves.App.ViewModels
         // state, one row per configurable provider.
         public IReadOnlyList<ProviderStatusOption> ProviderStatuses { get; }
 
-        // Settings > Diagnostics: the application's own assembly version,
-        // the running OS, and the .NET runtime description.
+        // Settings > Diagnostics: the application's own version, the running
+        // OS, and the .NET runtime description. The version is the assembly's
+        // informational version, which the SDK derives from the <Version> in
+        // GameSaves.App.csproj (the same value the installer carries); the
+        // numeric assembly version is only a fallback.
         public string ApplicationVersion =>
-            typeof(SettingsViewModel).Assembly.GetName().Version?.ToString(3)
+            typeof(SettingsViewModel).Assembly
+                .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
+                ?? typeof(SettingsViewModel).Assembly.GetName().Version?.ToString(3)
                 ?? string.Empty;
 
         public string OperatingSystemVersion => Environment.OSVersion.VersionString;
