@@ -40,7 +40,13 @@ belong to the [security policy](../SECURITY.md).
     every step and leaves the previous version recorded. Before migrating, an
     online SQLite snapshot is written to `%LOCALAPPDATA%\GameSave\backups\` as a
     manual recovery point; it excludes `protected_sync_secrets`. Corrupted or
-    locked databases (`SQLITE_BUSY`) refuse migration before any mutation.
+    locked databases (`SQLITE_BUSY`) refuse migration before any mutation. A
+    database that records a migration newer than the running build knows is
+    refused in words before the integrity check and the snapshot, from the
+    window and from the headless host alike; an older build never reads or
+    rewrites a newer database. Every released version's database and settings
+    files are checked-in fixtures that the test suite replays through the
+    real migrator and stores, so an upgrade is a tested path.
 13. **Untrusted mappings stay untrusted.** Harvested, AI-assisted, heuristic,
     and unapproved JSON-import candidates are stored `Pending` and disabled, and
     a re-import from those sources may update only rows that are still

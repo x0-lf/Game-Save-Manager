@@ -260,9 +260,12 @@ runtime, each recorded as run or as unverified.
 
 1. Bump `<Version>` in `Manager/GameSaves.App/GameSaves.App.csproj` and run
    the pre-release checks.
-2. Run `build/publish-release.ps1` (with the certificate parameters when a
+2. Regenerate the migration fixture set for the new version (see "Migration
+   fixtures" below) and check it in; `MigrationFixtureTests` fails until the
+   database fixture for the bumped version exists.
+3. Run `build/publish-release.ps1` (with the certificate parameters when a
    certificate exists) and keep its output.
-3. Tag the commit `v<version>`: exactly `v` plus the project version, because
+4. Tag the commit `v<version>`: exactly `v` plus the project version, because
    the in-app update check parses the tag and refuses any other shape. Create
    a GitHub release from that tag and attach
    `GameSaveManager-Setup-<version>.exe` and
@@ -271,7 +274,49 @@ runtime, each recorded as run or as unverified.
    **Release notes** opens. A draft or pre-release is never offered: the app
    reads `releases/latest`, which GitHub resolves to the newest published full
    release.
-4. From an older installed version, press Check now in Settings > Diagnostics
+5. From an older installed version, press Check now in Settings > Diagnostics
    and record whether the release was offered, downloaded, verified and
    installed. That is the only proof of the update path; until it is done the
    path is recorded as unverified.
+
+### Migration fixtures and the newer-schema refusal
+
+Every released version leaves a fixture set under
+`Manager/GameSaves.Tests/Fixtures/`: `database/v<version>.sql`, a plain-SQL
+dump (schema objects, then one `INSERT` per row) of the database as that
+version's migrator, curated-mapping seeder and repositories write it after
+representative use, with a header naming the app version and the schema
+version; and `settings/ui-settings-v<schema>.json` and
+`settings/sync-settings-v<schema>.json` as the two stores save them. Older
+settings versions (UI v2 to v10, sync v0 and v1) are small hand-written
+documents shaped after the schema notes in the stores. The database fixture
+carries a placeholder row in `protected_sync_secrets` that the secret store
+reports as unreadable; no fixture holds a readable secret or real user data.
+
+`MigrationFixtureTests` replays every database fixture into a temporary file,
+runs the real migrator, and asserts that the schema equals a freshly created
+database's and that every row reads back unchanged in every column the fixture
+had; loads every settings fixture to the current record with the documented
+defaults; and fails when no database fixture exists for the current
+`<Version>`, or when a fixture claims a schema the migrator does not know. To
+regenerate the current version's set (never from real data; everything is built
+in a temporary folder):
+
+```powershell
+dotnet build Manager/Manager.sln -c Release --artifacts-path Manager/.artifacts -v q --nologo
+Manager/.artifacts/bin/GameSaves.Tests/release/GameSaves.Tests.exe -explicit only -method "GameSaves.Tests.MigrationFixtureTests.RegenerateFixturesForTheCurrentVersion"
+```
+
+Fixtures of released versions are immutable: a migration added during
+development leaves them as they are and is proven by the replay; the next
+release adds the next set.
+
+A database that records a migration newer than the running build knows
+(`schema_migrations` holds an id above `SchemaMigrator.LatestKnownVersion`) is
+refused before anything is written: the app opens a small window saying that
+the database was written by a newer version of Game Save Manager and that
+nothing was changed, the headless `--run-job`/`--run-sync` host returns the
+failed outcome code, and `migrate-dry-run` prints the same sentence and exits
+1. `MigrationFixtureTests` proves the first two against a database with a
+fabricated future migration row and checks that the file's bytes are identical
+afterwards.

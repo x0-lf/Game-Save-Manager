@@ -323,6 +323,13 @@ namespace GameSaves
             Console.WriteLine($"Current version: {plan.CurrentVersion}");
             Console.WriteLine($"Target version: {plan.TargetVersion}");
 
+            if (plan.Refusal is not null)
+            {
+                Console.Error.WriteLine(plan.Refusal);
+                Environment.ExitCode = 1;
+                return;
+            }
+
             if (plan.PendingMigrations.Count == 0)
             {
                 Console.WriteLine("Database is already at target version. No migrations to apply.");

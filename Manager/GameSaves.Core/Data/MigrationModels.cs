@@ -17,7 +17,16 @@ namespace GameSaves.Core.Data
         IReadOnlyList<SchemaMigrationInfo> PendingMigrations,
         bool IntegrityCheckPassed,
         string? IntegrityMessage,
-        string? PlannedBackupDirectory);
+        string? PlannedBackupDirectory)
+    {
+        /// <summary>
+        /// Set when the database records a migration newer than this build
+        /// knows: the words a window or command shows, and the reason
+        /// <see cref="ISchemaMigrator.Migrate"/> will refuse without writing.
+        /// Null for every database this build can open.
+        /// </summary>
+        public string? Refusal { get; init; }
+    }
 
     public sealed record MigrationExecutionResult(
         bool Success,

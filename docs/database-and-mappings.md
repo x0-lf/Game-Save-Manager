@@ -114,6 +114,26 @@ When migrations are executed (automatically on application startup via
    running against a half-known schema.
 5. **Backup retention:** Backup snapshots exceeding the default retention limit (10) are
    pruned to avoid unbounded disk consumption.
+6. **Newer schema refusal (RELEASE-003):** A database whose `schema_migrations` records an
+   id above `SchemaMigrator.LatestKnownVersion` was written by a newer version. It is
+   refused before the integrity check, the snapshot and the transaction, so nothing is
+   written: `Migrate` returns a failed result and `Plan` carries the sentence in
+   `Refusal`. The desktop app shows it in a small window instead of its main window, the
+   headless `--run-job`/`--run-sync` host returns the failed outcome code, and
+   `migrate-dry-run` prints it and exits 1. An older build never rewrites a newer
+   database; the fix is to install the newer version.
+
+### Migration fixtures
+
+`Manager/GameSaves.Tests/Fixtures/database/v<version>.sql` is the database as that
+released version writes it (schema and representative rows for every table, a
+placeholder in `protected_sync_secrets` that reads as unreadable), and
+`Fixtures/settings/` holds the UI and sync settings files of every schema version the
+stores still read. `MigrationFixtureTests` replays each fixture through the real
+migrator and the real stores and fails on any lost row, column or setting, on a
+missing fixture for the current `<Version>`, or on a fixture claiming an unknown
+schema. The set is regenerated once per release; see "Migration fixtures and the
+newer-schema refusal" in [development](development.md).
 
 ### CLI migration commands
 

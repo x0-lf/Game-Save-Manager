@@ -36,6 +36,17 @@ namespace GameSaves.Infrastructure.Data
             new V007__ScheduledSyncJobs()
         ];
 
+        /// <summary>The newest migration this build knows; a database recording a higher one is refused.</summary>
+        public int LatestKnownVersion => _migrations.Count > 0 ? _migrations.Max(m => m.Version) : 0;
+
+        // A database from a newer build is never opened, read or written by
+        // an older one: its tables may hold columns and rows this code does
+        // not understand, and "pending" would be empty, so without this check
+        // the app would run on it as if nothing were wrong (RELEASE-003).
+        private string NewerSchemaRefusal(int recordedVersion) =>
+            $"This database was written by a newer version of Game Save Manager (schema version {recordedVersion}; " +
+            $"this version knows up to {LatestKnownVersion}). Install the newer version to open it. Nothing was changed.";
+
         public MigrationPlan Plan(string databasePath)
         {
             if (string.IsNullOrWhiteSpace(databasePath))
@@ -68,7 +79,10 @@ namespace GameSaves.Infrastructure.Data
                 IntegrityMessage: integrityMessage,
                 PlannedBackupDirectory: pending.Count > 0 && File.Exists(databasePath)
                     ? GetBackupDirectory(databasePath)
-                    : null);
+                    : null)
+            {
+                Refusal = currentVersion > LatestKnownVersion ? NewerSchemaRefusal(currentVersion) : null,
+            };
         }
 
         public MigrationExecutionResult Migrate(string databasePath)
@@ -93,6 +107,9 @@ namespace GameSaves.Infrastructure.Data
                 {
                     IReadOnlyList<SchemaMigrationRecord> applied = GetAppliedMigrations(databasePath);
                     previousVersion = applied.Count > 0 ? applied.Max(m => m.Id) : 0;
+
+                    if (previousVersion > LatestKnownVersion)
+                        return Failed(previousVersion, null, rolledBack: false, NewerSchemaRefusal(previousVersion));
 
                     if (GetPending(applied.Select(a => a.Id).ToHashSet()).Count == 0)
                     {
@@ -170,6 +187,14 @@ namespace GameSaves.Infrastructure.Data
                 HashSet<int> appliedIds = ReadAppliedIds(connection, transaction);
                 previousVersion = appliedIds.Count > 0 ? appliedIds.Max() : 0;
                 int currentVersion = previousVersion;
+
+                // Re-checked under the write lock: another process may have
+                // upgraded the file between the read above and this point.
+                if (previousVersion > LatestKnownVersion)
+                {
+                    transaction.Rollback();
+                    return Failed(previousVersion, backupPath, rolledBack: false, NewerSchemaRefusal(previousVersion));
+                }
 
                 foreach (ISchemaMigration migration in GetPending(appliedIds))
                 {

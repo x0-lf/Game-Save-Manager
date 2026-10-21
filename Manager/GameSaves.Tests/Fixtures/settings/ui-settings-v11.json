@@ -1,0 +1,55 @@
+{
+  "SchemaVersion": 11,
+  "ThemeChoice": "dark",
+  "AccentTheme": "teal",
+  "Transparency": {
+    "Window": 1,
+    "Card": 1,
+    "Inset": 1
+  },
+  "WindowMaterial": "none",
+  "Accessibility": {
+    "TextScale": 1,
+    "ReduceMotion": false,
+    "HighContrast": false
+  },
+  "InstalledGameColumnOrder": [
+    "game",
+    "appId",
+    "installPath",
+    "library",
+    "approved",
+    "pending",
+    "needsFix",
+    "exists",
+    "files",
+    "status"
+  ],
+  "HiddenInstalledGameColumns": [],
+  "RailLayout": {
+    "Position": "left",
+    "Collapsed": false,
+    "TabOrder": [
+      "dashboard",
+      "installedGames",
+      "profiles",
+      "transferPreview",
+      "manualBackup",
+      "backups",
+      "sync",
+      "history",
+      "settings"
+    ],
+    "HiddenTabs": []
+  },
+  "StartupTabKey": "dashboard",
+  "WorkspaceLayouts": [],
+  "WorkspacePages": [],
+  "ScanAction": {
+    "ShowInNavigationRail": true,
+    "HiddenPages": []
+  },
+  "NewBackupFormat": "zip",
+  "CheckForUpdatesOnStartup": true,
+  "LastUpdateCheckUtc": "2026-10-21T20:00:00+00:00"
+}

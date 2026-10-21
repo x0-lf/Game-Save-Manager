@@ -1,0 +1,1 @@
+{"UseSftp":true,"LocalFolderPath":"","SftpHost":"nas.example.invalid","SftpPort":"22","SftpUsername":"fixture","SftpUsePrivateKey":false,"SftpKeyFilePath":"","SftpRemotePath":"/gamesave-sync"}

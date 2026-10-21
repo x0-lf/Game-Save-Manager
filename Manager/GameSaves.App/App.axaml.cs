@@ -1,6 +1,8 @@
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Avalonia.Media;
 using GameSaves.App.Services;
 using GameSaves.App.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
@@ -67,9 +69,27 @@ namespace GameSaves.App
                     .GetRequiredService<WindowMaterialService>();
                 _windowMaterial.Apply(_uiSettings);
 
+                MainWindowViewModel shell;
+
+                try
+                {
+                    shell = _serviceProvider.GetRequiredService<MainWindowViewModel>();
+                }
+                catch (Exception exception)
+                {
+                    // Composition failed before any window existed: a database
+                    // written by a newer version (the migrator's refusal), an
+                    // unreadable or locked database file. Say so in words
+                    // instead of crashing; nothing has been written.
+                    desktop.Exit += (_, _) => _serviceProvider?.Dispose();
+                    desktop.MainWindow = CreateStartupFailureWindow(exception.Message);
+                    base.OnFrameworkInitializationCompleted();
+                    return;
+                }
+
                 desktop.MainWindow = new Views.MainWindow
                 {
-                    DataContext = _serviceProvider.GetRequiredService<MainWindowViewModel>()
+                    DataContext = shell
                 };
 
                 // The material hint is given to the window itself (rather
@@ -100,5 +120,37 @@ namespace GameSaves.App
 
                 base.OnFrameworkInitializationCompleted();
         }
+
+        // Built in code so it needs nothing from the DI graph that just
+        // failed. Read-only: the only action is closing it.
+        internal static Window CreateStartupFailureWindow(string message) => new()
+        {
+            Title = "Game Save Manager cannot start",
+            Width = 600,
+            SizeToContent = SizeToContent.Height,
+            CanResize = false,
+            WindowStartupLocation = WindowStartupLocation.CenterScreen,
+            Content = new StackPanel
+            {
+                Margin = new Thickness(24),
+                Spacing = 12,
+                Children =
+                {
+                    new TextBlock
+                    {
+                        Text = "Game Save Manager cannot start",
+                        FontSize = 18,
+                        FontWeight = FontWeight.SemiBold,
+                    },
+                    new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap },
+                    new TextBlock
+                    {
+                        Text = "Nothing was changed. Your database, backups, settings and scheduled jobs stay where they are.",
+                        TextWrapping = TextWrapping.Wrap,
+                        Opacity = 0.8,
+                    },
+                },
+            },
+        };
     }
 }

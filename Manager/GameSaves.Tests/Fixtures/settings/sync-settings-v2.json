@@ -1,0 +1,13 @@
+{
+  "SchemaVersion": 2,
+  "SelectedProviderKind": 0,
+  "LocalFolderPath": "D:\\GameSaveSync",
+  "SftpHost": "",
+  "SftpPort": "22",
+  "SftpUsername": "",
+  "SftpUsePrivateKey": false,
+  "SftpKeyFilePath": "",
+  "SftpRemotePath": "/gamesave-sync",
+  "SelectedRemoteProfileId": "7d2f8f0e-5c3a-4b61-9a7e-0f1c2d3e4a5b",
+  "LegacyProfileMigrationCompleted": true
+}
