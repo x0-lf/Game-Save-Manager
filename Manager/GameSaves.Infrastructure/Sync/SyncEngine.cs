@@ -1201,25 +1201,8 @@ namespace GameSaves.Infrastructure.Sync
         /// remote, or from a local file written by an older or interrupted run,
         /// can arrive with null members.
         /// </summary>
-        private static bool IsUsableManifest(TransferBackupManifest? manifest)
-        {
-            if (manifest is null ||
-                manifest.Kind is null ||
-                manifest.Game is null ||
-                manifest.SteamAppId is null ||
-                manifest.Items is null)
-            {
-                return false;
-            }
-
-            foreach (TransferOverwriteBackupItem item in manifest.Items)
-            {
-                if (item is null || item.OriginalFile is null || item.Sha256 is null)
-                    return false;
-            }
-
-            return true;
-        }
+        private static bool IsUsableManifest(TransferBackupManifest? manifest) =>
+            BackupManifestComparer.IsUsable(manifest);
 
         private static bool ManifestsEquivalent(
             TransferBackupManifest left,

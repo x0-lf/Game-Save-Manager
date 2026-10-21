@@ -8,7 +8,7 @@ is documented in the audience-specific guides linked from the
 
 | Project | Responsibility | Project references |
 | --- | --- | --- |
-| `GameSaves.Core` | Domain models, enums, contracts, and provider-neutral policy | None |
+| `GameSaves.Core` | Domain models, enums, contracts, and provider-neutral policy, including the manifest comparison that reports how two backup runs differ | None |
 | `GameSaves.Infrastructure` | Filesystem, SQLite, registry, Steam, transfers, secret storage, SFTP, Google Drive, and Windows Task Scheduler integrations | Core |
 | `GameSaves.App` | Main Avalonia UI and composition root; `--run-job <id>` runs one scheduled backup and `--run-sync <id>` one scheduled sync through the same composition without a window | Core, Infrastructure |
 | `GameSaves` | Developer CLI, catalog management, verification, backup checks, and PCGamingWiki harvesting | Core, Infrastructure |
