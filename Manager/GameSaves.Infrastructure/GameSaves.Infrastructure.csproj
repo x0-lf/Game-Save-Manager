@@ -34,4 +34,14 @@
     <EmbeddedResource Include="Resources\curated-mappings.json" />
   </ItemGroup>
 
+  <!-- OBS-027: the public Google Desktop OAuth client id baked into release
+       builds, so users connect Google Drive without GAMESAVES_GOOGLE_CLIENT_ID.
+       Empty in development and test builds; build/publish-release.ps1 passes
+       -p:GoogleDesktopClientId=... from GSM_GOOGLE_DESKTOP_CLIENT_ID. A client
+       id is public by Google's definition; the repository holds none, and the
+       client secret never enters a build. -->
+  <ItemGroup>
+    <AssemblyMetadata Include="GoogleDesktopClientId" Value="$(GoogleDesktopClientId)" />
+  </ItemGroup>
+
 </Project>

@@ -322,7 +322,11 @@ jobs:
    of the packaging step, handed to the script through the variables it
    already reads, and deleted even when the script fails; GitHub masks both
    values in the log. Without the secret the step prints a notice that the
-   package is unsigned, and the script prints its own warning.
+   package is unsigned, and the script prints its own warning. The repository
+   variable `GSM_GOOGLE_DESKTOP_CLIENT_ID` (a variable, never a secret)
+   supplies the public Google desktop client id the package bakes in
+   (OBS-027); when it is empty the package has no Google client and the
+   script warns.
 2. **Recovery gates** (a second `windows-latest` runner with no
    `setup-dotnet` step): downloads the artifact and runs
    `build/recovery-gates.ps1`. Gate 1 installs silently

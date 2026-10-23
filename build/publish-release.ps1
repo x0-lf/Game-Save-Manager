@@ -32,6 +32,13 @@ Password of the PFX. Default: $env:GSM_SIGNING_PASSWORD.
 .PARAMETER TimestampUrl
 RFC 3161 timestamp server used when signing.
 
+.PARAMETER GoogleDesktopClientId
+The project's public Google OAuth desktop client id, baked into the package so
+users connect Google Drive without setting GAMESAVES_GOOGLE_CLIENT_ID (OBS-027).
+Default: $env:GSM_GOOGLE_DESKTOP_CLIENT_ID. Empty builds a package without a
+Google client, which then behaves like a development build. A client id is
+public by Google's definition; the client secret is never taken by this script.
+
 .PARAMETER OutputRoot
 Where the publish folder and the installer land. Default: artifacts\release under the repository root.
 
@@ -43,6 +50,7 @@ param(
     [string]$CertificatePath = $env:GSM_SIGNING_CERTIFICATE,
     [string]$CertificatePassword = $env:GSM_SIGNING_PASSWORD,
     [string]$TimestampUrl = 'http://timestamp.digicert.com',
+    [string]$GoogleDesktopClientId = $env:GSM_GOOGLE_DESKTOP_CLIENT_ID,
     [string]$OutputRoot
 )
 
@@ -99,13 +107,27 @@ if ($version -notmatch '^\d+\.\d+\.\d+$') {
 }
 Write-Host "Game Save Manager $version"
 
+# 1b. Google Drive client (OBS-027): the public desktop client id baked into
+#     the package, so users connect without GAMESAVES_GOOGLE_CLIENT_ID. The
+#     client secret belongs to a developer's environment and never enters a
+#     build; a developer's own GAMESAVES_GOOGLE_CLIENT_ID still overrides this.
+if ($GoogleDesktopClientId -and $GoogleDesktopClientId -notmatch '^[A-Za-z0-9._-]+\.apps\.googleusercontent\.com$') {
+    throw "GoogleDesktopClientId must be a Google OAuth desktop client id ending in .apps.googleusercontent.com; found '$GoogleDesktopClientId'."
+}
+if ($GoogleDesktopClientId) {
+    Write-Host "Google Drive client: $GoogleDesktopClientId (built in)"
+}
+else {
+    Write-Warning 'Google Drive client: none (GSM_GOOGLE_DESKTOP_CLIENT_ID is empty). Users of this package must set GAMESAVES_GOOGLE_CLIENT_ID before connecting Google Drive.'
+}
+
 # 2. Publish: self-contained, single folder, win-x64, Release, through the
 #    isolated artifacts path so a running app that locks bin\ cannot interfere.
 if (Test-Path -LiteralPath $publishDir) { Remove-Item -LiteralPath $publishDir -Recurse -Force }
 New-Item -ItemType Directory -Path $publishDir -Force | Out-Null
 Push-Location $repoRoot
 try {
-    & dotnet publish $project -c Release -r win-x64 --self-contained true --artifacts-path Manager/.artifacts -o $publishDir -v q --nologo
+    & dotnet publish $project -c Release -r win-x64 --self-contained true --artifacts-path Manager/.artifacts -o $publishDir -v q --nologo "-p:GoogleDesktopClientId=$GoogleDesktopClientId"
     if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed with exit code $LASTEXITCODE." }
 }
 finally {

@@ -121,6 +121,35 @@ The optional value is passed only to installed-app authorization. Neither value
 is copied into profile JSON, ordinary SQLite fields, logs, result formatting,
 or the UI. Access and refresh tokens use the protected secret store.
 
+### Release builds: the built-in public client id
+
+Release packages carry the project's public desktop client id, so users do not
+set anything: `build/publish-release.ps1` passes
+`-p:GoogleDesktopClientId=...` to the publish, from its `-GoogleDesktopClientId`
+parameter or the `GSM_GOOGLE_DESKTOP_CLIENT_ID` variable (in the release
+workflow the repository variable of the same name, a variable and never a
+secret), and the value lands in the `GameSaves.Infrastructure` assembly as the
+metadata entry `GoogleDesktopClientId`. The repository holds no id: development
+and test builds have the entry empty and behave as before, and a test fails if
+a real client id or a client secret (`GOCSPX-...`) appears in any tracked text
+file.
+
+Precedence: `GAMESAVES_GOOGLE_CLIENT_ID` from the process, then from the
+Windows user environment, then the built-in id; a set but empty variable does
+not hide the built-in id. `GAMESAVES_GOOGLE_CLIENT_SECRET` is read only
+together with an environment client id, because it belongs to that developer
+client; the built-in client is used without a secret, and a developer's secret
+is never paired with the project's id.
+
+Google requires the client secret at the token endpoint for clients of the
+"Desktop app" type and documents that, for installed applications, it is not
+treated as confidential. This project does not ship it. If the production
+client turns out to require it, the packaged sign-in ends with the
+token-exchange failure that names `GAMESAVES_GOOGLE_CLIENT_SECRET`; the choice
+between embedding that Google-declared public value through a build variable,
+another client type, or a token-exchange service is recorded in the OBS-027
+report and belongs to the maintainer.
+
 ## Ignored-file and review rules
 
 Store downloaded or local configuration outside the repository. The following

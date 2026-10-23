@@ -1,3 +1,4 @@
+using System.Reflection;
 using GameSaves.Core.Sync;
 
 namespace GameSaves.Infrastructure.GoogleDrive
@@ -25,18 +26,29 @@ namespace GameSaves.Infrastructure.GoogleDrive
         GoogleOAuthClientConfigurationReadResult Read();
     }
 
+    // Reads the client from the environment first (a developer's own client:
+    // the process value, then the Windows user value) and otherwise from the
+    // public desktop client id baked into release builds (OBS-027): the
+    // assembly metadata "GoogleDesktopClientId" that build/publish-release.ps1
+    // sets through the MSBuild property of the same name, empty in development
+    // and test builds. The optional client secret is read only together with
+    // an environment client id, because it belongs to that developer client;
+    // the built-in public client is used without one.
     internal sealed class EnvironmentGoogleOAuthClientConfigurationProvider
         : IGoogleOAuthClientConfigurationProvider
     {
         internal const string ClientIdVariable = "GAMESAVES_GOOGLE_CLIENT_ID";
         internal const string ClientSecretVariable = "GAMESAVES_GOOGLE_CLIENT_SECRET";
+        internal const string BuiltInClientIdMetadataKey = "GoogleDesktopClientId";
         private readonly Func<string, string?> _readProcessEnvironmentVariable;
         private readonly Func<string, string?> _readUserEnvironmentVariable;
+        private readonly Func<string?> _readBuiltInClientId;
 
         public EnvironmentGoogleOAuthClientConfigurationProvider()
             : this(
                 Environment.GetEnvironmentVariable,
-                ReadWindowsUserEnvironmentVariable)
+                ReadWindowsUserEnvironmentVariable,
+                ReadBuiltInClientId)
         {
         }
 
@@ -48,15 +60,18 @@ namespace GameSaves.Infrastructure.GoogleDrive
 
         internal EnvironmentGoogleOAuthClientConfigurationProvider(
             Func<string, string?> readProcessEnvironmentVariable,
-            Func<string, string?> readUserEnvironmentVariable)
+            Func<string, string?> readUserEnvironmentVariable,
+            Func<string?>? readBuiltInClientId = null)
         {
             _readProcessEnvironmentVariable = readProcessEnvironmentVariable;
             _readUserEnvironmentVariable = readUserEnvironmentVariable;
+            _readBuiltInClientId = readBuiltInClientId ?? (() => null);
         }
 
         public GoogleOAuthClientConfigurationReadResult Read()
         {
-            string? clientId = ReadValue(ClientIdVariable);
+            string? environmentClientId = ReadValue(ClientIdVariable);
+            string? clientId = environmentClientId ?? Normalize(_readBuiltInClientId());
 
             if (string.IsNullOrWhiteSpace(clientId))
             {
@@ -70,7 +85,7 @@ namespace GameSaves.Infrastructure.GoogleDrive
                     "The configured Google OAuth desktop Client ID is invalid.");
             }
 
-            string? clientSecret = ReadValue(ClientSecretVariable);
+            string? clientSecret = environmentClientId is null ? null : ReadValue(ClientSecretVariable);
 
             if (clientSecret is not null && LooksLikePlaceholder(clientSecret))
             {
@@ -83,6 +98,12 @@ namespace GameSaves.Infrastructure.GoogleDrive
                     GoogleDriveOAuthClientConfigurationStatus.Available),
                 new GoogleOAuthClientConfiguration(clientId, clientSecret));
         }
+
+        /// <summary>The client id this build carries, raw: empty in development and test builds.</summary>
+        internal static string? ReadBuiltInClientId() =>
+            typeof(EnvironmentGoogleOAuthClientConfigurationProvider).Assembly
+                .GetCustomAttributes<AssemblyMetadataAttribute>()
+                .FirstOrDefault(attribute => attribute.Key == BuiltInClientIdMetadataKey)?.Value;
 
         private string? ReadValue(string name)
         {

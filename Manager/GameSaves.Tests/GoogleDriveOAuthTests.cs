@@ -8,6 +8,8 @@ using Google.Apis.Auth.OAuth2.Flows;
 using Google.Apis.Auth.OAuth2.Responses;
 using Google.Apis.Util.Store;
 using Microsoft.Extensions.DependencyInjection;
+using System.Reflection;
+using System.Text.RegularExpressions;
 
 namespace GameSaves.Tests;
 
@@ -507,6 +509,113 @@ public sealed class GoogleDriveOAuthTests
             descriptor => descriptor.ServiceType == typeof(IGoogleDriveOAuthService));
         Assert.Equal(ServiceLifetime.Singleton, oauth.Lifetime);
         Assert.NotNull(oauth.ImplementationFactory);
+    }
+
+    // OBS-027: release builds carry the public desktop client id as assembly
+    // metadata. The environment still wins, a set-but-empty variable does not
+    // hide the built-in id, and the developer secret belongs to the
+    // environment client only.
+    [Fact]
+    public void BuiltInClientId_IsUsed_WhenTheEnvironmentHasNone_AndCarriesNoSecret()
+    {
+        const string builtIn = "1234567890-builtin.apps.googleusercontent.com";
+        var provider = new EnvironmentGoogleOAuthClientConfigurationProvider(
+            name => name == EnvironmentGoogleOAuthClientConfigurationProvider.ClientSecretVariable
+                ? "developer-secret-marker"
+                : "   ",
+            _ => null,
+            () => builtIn);
+
+        GoogleOAuthClientConfigurationReadResult result = provider.Read();
+
+        Assert.True(result.State.IsAvailable);
+        Assert.Equal(builtIn, result.Configuration!.ClientId);
+        Assert.Null(result.Configuration.ClientSecret);
+    }
+
+    [Fact]
+    public void EnvironmentClientId_Wins_OverTheBuiltInOne_AndKeepsItsSecret()
+    {
+        const string environmentClientId = "1234567890-developer.apps.googleusercontent.com";
+        var provider = new EnvironmentGoogleOAuthClientConfigurationProvider(
+            name => name switch
+            {
+                EnvironmentGoogleOAuthClientConfigurationProvider.ClientIdVariable => environmentClientId,
+                EnvironmentGoogleOAuthClientConfigurationProvider.ClientSecretVariable => "developer-secret-marker",
+                _ => null
+            },
+            _ => null,
+            () => "1234567890-builtin.apps.googleusercontent.com");
+
+        GoogleOAuthClientConfigurationReadResult result = provider.Read();
+
+        Assert.True(result.State.IsAvailable);
+        Assert.Equal(environmentClientId, result.Configuration!.ClientId);
+        Assert.Equal("developer-secret-marker", result.Configuration.ClientSecret);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void AnEmptyBuiltInClientId_LeavesTheBuildWithoutAClient_AsBefore(string? builtIn)
+    {
+        var provider = new EnvironmentGoogleOAuthClientConfigurationProvider(_ => null, _ => null, () => builtIn);
+
+        GoogleOAuthClientConfigurationReadResult result = provider.Read();
+
+        Assert.Equal(GoogleDriveOAuthClientConfigurationStatus.Missing, result.State.Status);
+        Assert.Equal(GoogleDriveOAuthErrorCodes.ClientIdMissing, result.State.ErrorCode);
+    }
+
+    [Fact]
+    public void ABuiltInClientId_IsValidatedLikeAnyOther()
+    {
+        var provider = new EnvironmentGoogleOAuthClientConfigurationProvider(
+            _ => null, _ => null, () => "YOUR_DESKTOP_CLIENT_ID.apps.googleusercontent.com");
+
+        Assert.Equal(GoogleDriveOAuthClientConfigurationStatus.Invalid, provider.Read().State.Status);
+    }
+
+    // The repository holds no id: the metadata entry exists, so the publish
+    // property has somewhere to land, and it is empty in a test build.
+    [Fact]
+    public void ThisBuild_CarriesTheMetadataEntry_WithNoClientIdInIt()
+    {
+        AssemblyMetadataAttribute metadata = Assert.Single(
+            typeof(EnvironmentGoogleOAuthClientConfigurationProvider).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>(),
+            attribute => attribute.Key == EnvironmentGoogleOAuthClientConfigurationProvider.BuiltInClientIdMetadataKey);
+        Assert.True(string.IsNullOrEmpty(metadata.Value), "test builds carry no Google client id");
+        Assert.True(string.IsNullOrEmpty(EnvironmentGoogleOAuthClientConfigurationProvider.ReadBuiltInClientId()));
+    }
+
+    // No Google client secret (GOCSPX-...) and no real client id (a numeric
+    // project prefix before .apps.googleusercontent.com) may sit in the
+    // repository: the id reaches release builds through a build property and
+    // the secret stays in a developer's environment.
+    [Fact]
+    public void TheRepository_CarriesNoGoogleClientSecret_AndNoRealClientId()
+    {
+        string root = DocumentationIntegrityTests.FindRepoRoot();
+        string[] skippedFolders = [".git", ".artifacts", "artifacts", "bin", "obj", "TestResults", "node_modules", ".claude", "ss", ".vs"];
+        string[] textExtensions = [".cs", ".md", ".ps1", ".yml", ".yaml", ".json", ".iss", ".csproj", ".props", ".targets", ".axaml", ".xaml", ".sql", ".tsv"];
+        var clientSecret = new Regex(@"GOCSPX-[A-Za-z0-9_\-]{10,}");
+        var realClientId = new Regex(@"\b\d{6,}-[a-z0-9]{12,}\.apps\.googleusercontent\.com");
+
+        List<string> hits = [];
+        foreach (string file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+        {
+            string relative = Path.GetRelativePath(root, file);
+            if (relative.Split(Path.DirectorySeparatorChar).Any(segment => skippedFolders.Contains(segment, StringComparer.OrdinalIgnoreCase)) ||
+                !textExtensions.Contains(Path.GetExtension(file), StringComparer.OrdinalIgnoreCase))
+                continue;
+
+            string text = File.ReadAllText(file);
+            if (clientSecret.IsMatch(text) || realClientId.IsMatch(text))
+                hits.Add(relative);
+        }
+
+        Assert.Empty(hits);
     }
 
     private static EnvironmentGoogleOAuthClientConfigurationProvider CreateEnvironmentConfiguration(

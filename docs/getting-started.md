@@ -118,7 +118,13 @@ The guarantees and deletion boundaries are in the [safety model](safety-model.md
 
 ## Google Drive
 
-Packaged end-user OAuth configuration does not yet have a release process.
-Developers testing Google Drive must follow the
-[developer-only setup guide](google-drive-developer-setup.md) and must never
+A release package built with the project's public Google client needs no
+setup: open Sync, choose Google Drive, press Connect, and approve in the
+browser. The sign-in returns to the application on the local loopback address
+and the tokens stay in the Windows secret store; no client secret is in the
+package. Until the project's Google Cloud app verification is complete, Google
+may show an "unverified app" screen before the consent page; the roadmap
+records the verification status. A package built without the client, or a
+source build, still needs the
+[developer-only setup guide](google-drive-developer-setup.md), and nobody may
 commit credentials, tokens, account values, or Drive IDs.

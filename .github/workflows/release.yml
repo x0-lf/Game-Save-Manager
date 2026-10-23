@@ -69,10 +69,14 @@ jobs:
       # The PFX exists in RUNNER_TEMP for this step only and is removed even
       # when the script fails. Without the secret the package is unsigned
       # and both this step and the script say so.
+      # GSM_GOOGLE_DESKTOP_CLIENT_ID is a repository variable, not a secret:
+      # the public Google desktop client id the package bakes in (OBS-027).
+      # Empty means the package has no Google client and the script says so.
       - name: Package (build/publish-release.ps1)
         env:
           SIGNING_CERTIFICATE_BASE64: ${{ secrets.GSM_SIGNING_CERTIFICATE }}
           GSM_SIGNING_PASSWORD: ${{ secrets.GSM_SIGNING_PASSWORD }}
+          GSM_GOOGLE_DESKTOP_CLIENT_ID: ${{ vars.GSM_GOOGLE_DESKTOP_CLIENT_ID }}
         run: |
           New-Item -ItemType Directory -Force -Path artifacts/release | Out-Null
           $pfx = Join-Path $env:RUNNER_TEMP 'gsm-signing.pfx'

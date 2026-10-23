@@ -58,6 +58,12 @@ public sealed class ReleasePackagingTests
         Assert.DoesNotMatch(@"dotnet\s+run", script);
         Assert.DoesNotContain(@"\GameSave\", script, StringComparison.OrdinalIgnoreCase);
 
+        // OBS-027: the public Google client id is a build property fed from a
+        // variable; the script never takes the client secret.
+        Assert.Contains("\"-p:GoogleDesktopClientId=$GoogleDesktopClientId\"", script, StringComparison.Ordinal);
+        Assert.Contains("[string]$GoogleDesktopClientId = $env:GSM_GOOGLE_DESKTOP_CLIENT_ID", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("CLIENT_SECRET", script, StringComparison.OrdinalIgnoreCase);
+
         // Signing is gated on a supplied certificate and silence is not an option.
         Assert.Contains("signtool", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("CertificatePath", script, StringComparison.Ordinal);
@@ -155,6 +161,10 @@ public sealed class ReleasePackagingTests
         Assert.Contains("Join-Path $env:RUNNER_TEMP 'gsm-signing.pfx'", workflow, StringComparison.Ordinal);
         Assert.Contains("Remove-Item -LiteralPath $pfx -Force", workflow, StringComparison.Ordinal);
         Assert.Contains("so this package is unsigned", workflow, StringComparison.Ordinal);
+
+        // The Google client id comes from a repository variable; the secrets
+        // list above proves no Google secret is referenced.
+        Assert.Contains("GSM_GOOGLE_DESKTOP_CLIENT_ID: ${{ vars.GSM_GOOGLE_DESKTOP_CLIENT_ID }}", workflow, StringComparison.Ordinal);
     }
 
     // The gates job has no setup-dotnet step and only runs the gate script;
