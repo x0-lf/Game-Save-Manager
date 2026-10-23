@@ -1,0 +1,13 @@
+filename	tab	title	description	width	height	theme	sanitized
+00-dashboard.png	Dashboard	Dashboard	Steam discovery summary and system readiness status	1400	900	Dark	true
+01-installed-games.png	Installed Games	Installed Games	Installed game library with mapping statuses, save sizes, and pagination controls	1400	900	Dark	true
+02-profiles.png	Steam Profiles	Steam Profiles	Detected Steam user profiles and source/target transfer selection	1400	900	Dark	true
+03-transfer-preview.png	Transfer Preview	Transfer Preview	Profile-to-profile transfer preview with safety overwrite checks	1400	900	Dark	true
+04-manual-backup.png	Manual Backup	Manual Backup	Timestamped manual backup creation with source choices and destination preset	1400	900	Dark	true
+05-backups-tree.png	Backups (Hierarchical Tree)	Backups (Hierarchical Tree)	Discovered backup runs with virtualized file tree, folder expanders, aggregate sizes, and verification indicators	1400	900	Dark	true
+05-backups-table.png	Backups (Flat Table)	Backups (Flat Table)	Backup runs with virtualized flat file DataGrid, column sorting, and archive format badges	1400	900	Dark	true
+06-sync-plan.png	Cloud Sync Plan	Cloud Sync Plan	Cloud backup synchronization plan showing local and remote presence indicators and direction toggles	1400	900	Dark	true
+07-history.png	Executed History	Executed History	Executed transfer, backup, restore, and sync runs with status badges and pagination	1400	900	Dark	true
+08-settings-appearance.png	Settings Appearance	Settings Appearance	Appearance preferences showing theme modes, WCAG AA custom hex accent color system, and window materials	1400	900	Dark	true
+09-custom-accent.png	Custom Accent Theme	Custom Accent Theme	Application UI adapting dynamically to custom emerald accent (#10B981) while preserving WCAG AA contrast	1400	900	Dark	true
+10-workspace-layout.png	Workspace Customization	Workspace Customization	Flexible multi-region workspace with user-customized panel docking	1400	900	Dark	true
