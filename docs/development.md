@@ -254,7 +254,8 @@ install; no test runs them.
 
 A package counts as released only after the pre-release checks above, this
 command run end to end, and an install test on a machine without a .NET
-runtime, each recorded as run or as unverified.
+runtime, each recorded as run or as unverified. The release workflow below
+runs all three on a clean GitHub runner for every push and every tag.
 
 ### Cutting a release
 
@@ -263,21 +264,95 @@ runtime, each recorded as run or as unverified.
 2. Regenerate the migration fixture set for the new version (see "Migration
    fixtures" below) and check it in; `MigrationFixtureTests` fails until the
    database fixture for the bumped version exists.
-3. Run `build/publish-release.ps1` (with the certificate parameters when a
-   certificate exists) and keep its output.
-4. Tag the commit `v<version>`: exactly `v` plus the project version, because
-   the in-app update check parses the tag and refuses any other shape. Create
-   a GitHub release from that tag and attach
-   `GameSaveManager-Setup-<version>.exe` and
-   `GameSaveManager-Setup-<version>.exe.sha256` under exactly those names; the
-   app refuses a release that lacks either. The release page is what
-   **Release notes** opens. A draft or pre-release is never offered: the app
-   reads `releases/latest`, which GitHub resolves to the newest published full
-   release.
+3. Push the commit to `main` and wait for the **Release** workflow to pass:
+   it builds, tests, packages with `build/publish-release.ps1` and runs the
+   recovery gates on a clean runner (see below). The installer, its digest
+   and the script output can be downloaded from the run as the
+   `GameSaveManager-Setup-<version>` artifact.
+4. Tag that commit `v<version>` and push the tag: exactly `v` plus the
+   project version, because the in-app update check parses the tag and
+   refuses any other shape, and the workflow fails the tag before building
+   when it does not equal `<Version>`. The workflow then repeats the build,
+   the tests, the packaging and the gates on the tag and creates the GitHub
+   release with `GameSaveManager-Setup-<version>.exe` and
+   `GameSaveManager-Setup-<version>.exe.sha256` attached under exactly those
+   names; the app refuses a release that lacks either. The release page is
+   what **Release notes** opens. A draft or pre-release is never offered:
+   the app reads `releases/latest`, which GitHub resolves to the newest
+   published full release, and the workflow never creates one.
 5. From an older installed version, press Check now in Settings > Diagnostics
    and record whether the release was offered, downloaded, verified and
    installed. That is the only proof of the update path; until it is done the
    path is recorded as unverified.
+
+### The release workflow and its recovery gates
+
+`.github/workflows/release.yml` runs on every push to `main`, every pull
+request to `main`, every `v*` tag, and by hand (**Run workflow**). It needs
+no secret: without one the package is unsigned and the run says so. Three
+jobs:
+
+1. **Build, test and package** (`windows-latest`): reads `<Version>` and, on
+   a tag, fails unless the tag is `v<Version>` (the error names both values
+   and says no release was created); `dotnet build` in Release with
+   `--no-incremental` and `-warnaserror`, so one warning fails the run;
+   `dotnet test` for the whole solution; Inno Setup from the runner image
+   (Chocolatey installs it if an image drops it);
+   `powershell -ExecutionPolicy Bypass -File build/publish-release.ps1`, the
+   same command as above, with its console output saved; and the upload of
+   `GameSaveManager-Setup-<version>.exe`, `.exe.sha256` and
+   `publish-release.log` as one artifact named
+   `GameSaveManager-Setup-<version>`. When the repository secrets
+   `GSM_SIGNING_CERTIFICATE` (the PFX as base64) and `GSM_SIGNING_PASSWORD`
+   exist, the PFX is written to the runner's temporary folder for the length
+   of the packaging step, handed to the script through the variables it
+   already reads, and deleted even when the script fails; GitHub masks both
+   values in the log. Without the secret the step prints a notice that the
+   package is unsigned, and the script prints its own warning.
+2. **Recovery gates** (a second `windows-latest` runner with no
+   `setup-dotnet` step): downloads the artifact and runs
+   `build/recovery-gates.ps1`. Gate 1 installs silently
+   (`/VERYSILENT /SUPPRESSMSGBOXES /NORESTART`) and asserts that the program
+   is under `%LOCALAPPDATA%\Programs\Game Save Manager` with the packaged
+   version and that `%LOCALAPPDATA%\GameSave` does not exist. Gate 2 proves
+   the start without a .NET SDK or runtime: `hostfxr.dll`, `hostpolicy.dll`
+   and `coreclr.dll` sit beside the program, its `runtimeconfig.json` has
+   `includedFrameworks`, and `GameSaves.App.exe --run-job <random id>`
+   returns the refused outcome (2) with `PATH` cut down to `System32` and
+   `DOTNET_ROOT` pointing at an empty folder, where a framework-dependent
+   program stops with "hostfxr.dll could not be found". That exit code means
+   the program composed every service, created and migrated its database,
+   and declined an unknown job. Gate 3 runs the same installer again (an
+   upgrade in place), asserts that the data folder's listing (every file
+   with its size and SHA-256) is unchanged, and starts the upgraded program
+   the same way. Gate 4 writes a future row into `schema_migrations` (the
+   fabrication `MigrationFixtureTests` uses, through the runner's Python),
+   starts the program again and expects the failed outcome (4) with the
+   listing unchanged: the RELEASE-003 refusal. Gate 5 uninstalls silently
+   and asserts that the install folder is gone and that the data folder's
+   listing still equals gate 4's. The data-folder assertion is therefore
+   "install, upgrade and uninstall change nothing there; only the program's
+   own starts do", because the headless start itself creates the database.
+   Install, upgrade and uninstall logs are uploaded as `recovery-gate-logs`.
+3. **Publish the GitHub release** (tag only, after both jobs passed):
+   `gh release create` with the two assets, `--verify-tag`, `--latest` and
+   generated notes, never `--draft` or `--prerelease`.
+
+Reading a failed gate: the step log shows `gate N pass: ...` for every gate
+that passed and `gate N FAIL: ...` with the expected and actual values for
+the one that did not (two listings are printed in full when they differ),
+and `recovery-gate-logs` holds Inno Setup's own logs. A failure in gate 2 or
+3 means the package does not start on a clean machine; in gate 4 that an
+older program wrote to or accepted a newer database (a RELEASE-003
+regression); in gate 5 that the uninstaller left files behind or touched
+user data. The script refuses to run unless `GITHUB_ACTIONS` is `true` and
+neither folder exists, because it writes a future migration row into the
+data folder it finds; to run it on a throwaway machine, set
+`GITHUB_ACTIONS=true` and `RUNNER_TEMP` in that session. It never deletes
+anything under `%LOCALAPPDATA%\GameSave`. `ReleasePackagingTests` pins the
+workflow and the gate script: the script call, the asset names, the tag
+check, the secret handling, the gate job without an SDK, the real exit codes
+and the no-delete rule.
 
 ### Migration fixtures and the newer-schema refusal
 

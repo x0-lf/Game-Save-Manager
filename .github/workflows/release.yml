@@ -1,0 +1,158 @@
+# OBS-028. One workflow: build and test the solution on a clean Windows
+# runner, package the installer with the same script a developer runs
+# (build/publish-release.ps1), prove the package on that runner with
+# build/recovery-gates.ps1, and publish a GitHub release only from a tag
+# that names the project version. It passes with no secret configured;
+# the package is then unsigned and the run says so.
+name: Release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  build:
+    name: Build, test and package
+    runs-on: windows-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # The in-app update check parses the tag as v<Version>, so a tag that
+      # names another version is refused before anything is built.
+      - name: Read the project version and check the tag
+        id: version
+        run: |
+          $version = (Select-Xml -Path Manager/GameSaves.App/GameSaves.App.csproj -XPath '/Project/PropertyGroup/Version').Node.InnerText
+          "version=$version" >> $env:GITHUB_OUTPUT
+          Write-Host "Game Save Manager $version"
+          if ('${{ github.ref_type }}' -eq 'tag' -and '${{ github.ref_name }}' -ne "v$version") {
+            Write-Host "::error::Tag ${{ github.ref_name }} does not match <Version> $version in Manager/GameSaves.App/GameSaves.App.csproj. The in-app update check parses the tag as v<Version>: bump <Version> (and regenerate the migration fixtures) or retag. No release was created."
+            exit 1
+          }
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Build (Release, no incremental, warnings are errors)
+        run: dotnet build Manager/Manager.sln -c Release --no-incremental -warnaserror --artifacts-path Manager/.artifacts -v q --nologo
+
+      - name: Test
+        run: dotnet test Manager/Manager.sln -c Release --no-build --artifacts-path Manager/.artifacts
+
+      # windows-latest ships Inno Setup 6; Chocolatey fills in if an image
+      # ever drops it. The script itself exits 2 when ISCC is still missing.
+      - name: Inno Setup
+        run: |
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path -LiteralPath $iscc)) {
+            choco install innosetup --no-progress -y
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          Write-Host "Inno Setup $((Get-Item -LiteralPath $iscc).VersionInfo.ProductVersion)"
+
+      # Signing runs only when the repository holds the certificate secrets
+      # (GSM_SIGNING_CERTIFICATE: the PFX as base64; GSM_SIGNING_PASSWORD).
+      # The PFX exists in RUNNER_TEMP for this step only and is removed even
+      # when the script fails. Without the secret the package is unsigned
+      # and both this step and the script say so.
+      - name: Package (build/publish-release.ps1)
+        env:
+          SIGNING_CERTIFICATE_BASE64: ${{ secrets.GSM_SIGNING_CERTIFICATE }}
+          GSM_SIGNING_PASSWORD: ${{ secrets.GSM_SIGNING_PASSWORD }}
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts/release | Out-Null
+          $pfx = Join-Path $env:RUNNER_TEMP 'gsm-signing.pfx'
+          if ($env:SIGNING_CERTIFICATE_BASE64) {
+            [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:SIGNING_CERTIFICATE_BASE64))
+            $env:GSM_SIGNING_CERTIFICATE = $pfx
+          }
+          else {
+            Write-Host '::notice::No signing certificate is configured (repository secret GSM_SIGNING_CERTIFICATE is empty), so this package is unsigned.'
+          }
+          $code = 1
+          try {
+            powershell -NoProfile -ExecutionPolicy Bypass -File build/publish-release.ps1 *>&1 | Tee-Object -FilePath artifacts/release/publish-release.log
+            $code = $LASTEXITCODE
+          }
+          finally {
+            if (Test-Path -LiteralPath $pfx) { Remove-Item -LiteralPath $pfx -Force }
+          }
+          if ($code -ne 0) { exit $code }
+
+      - name: Upload the installer, its digest and the script output
+        uses: actions/upload-artifact@v4
+        with:
+          name: GameSaveManager-Setup-${{ steps.version.outputs.version }}
+          path: |
+            artifacts/release/GameSaveManager-Setup-${{ steps.version.outputs.version }}.exe
+            artifacts/release/GameSaveManager-Setup-${{ steps.version.outputs.version }}.exe.sha256
+            artifacts/release/publish-release.log
+          if-no-files-found: error
+
+  # A second, fresh runner with no setup-dotnet step: the installed program
+  # must bring its own runtime. The gates install, start, upgrade, refuse a
+  # newer database and uninstall; see build/recovery-gates.ps1.
+  gates:
+    name: Recovery gates
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: GameSaveManager-Setup-${{ needs.build.outputs.version }}
+          path: package
+
+      - name: Install, start headless, upgrade, refuse a newer database, uninstall
+        run: ./build/recovery-gates.ps1 -Installer "package/GameSaveManager-Setup-${{ needs.build.outputs.version }}.exe" -Version "${{ needs.build.outputs.version }}"
+
+      - name: Upload the install and uninstall logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: recovery-gate-logs
+          path: ${{ runner.temp }}/recovery-gates/*.log
+          if-no-files-found: ignore
+
+  # Only a v<Version> tag, only after the gates passed, and never a draft or
+  # pre-release: the app reads releases/latest and accepts exactly these two
+  # asset names.
+  release:
+    name: Publish the GitHub release
+    needs: [build, gates]
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: GameSaveManager-Setup-${{ needs.build.outputs.version }}
+          path: package
+
+      - name: Create the release with the installer and its digest
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            "package/GameSaveManager-Setup-$VERSION.exe" \
+            "package/GameSaveManager-Setup-$VERSION.exe.sha256" \
+            --repo "$GITHUB_REPOSITORY" --verify-tag --latest \
+            --title "Game Save Manager $VERSION" --generate-notes

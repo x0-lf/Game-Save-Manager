@@ -94,7 +94,9 @@ belong to the [security policy](../SECURITY.md).
     scheduled-run lock files). An upgrade replaces program files in place at
     the same path, so scheduled tasks keep pointing at the installed program;
     the uninstaller removes only what it installed and tells the user where
-    the data still is.
+    the data still is. The release workflow's recovery gates prove this on a
+    clean runner for every package: install, upgrade and uninstall leave the
+    data folder's file listing (sizes and SHA-256) unchanged.
 17. **Updates are opt-in, verified before anything runs, and never applied
     in place by the app.** The app contacts the release feed only when the
     user switched the startup check on or pressed Check now, and then with one
