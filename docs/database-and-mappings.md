@@ -83,6 +83,45 @@ dotnet run --project Manager/GameSaves/GameSaves.csproj -- seed-curated
 dotnet run --project Manager/GameSaves/GameSaves.csproj -- import path/to/mappings.json --approve
 ```
 
+### Seed database
+
+The release package ships a seed database, `seed/gamesave.db` beside the
+program, so a first install starts with the project's whole catalog (game
+titles and save-path mappings) instead of an empty database plus the bundled
+curated mappings. On its first start on a machine without
+`%LOCALAPPDATA%\GameSave\gamesave.db`, `SchemaInitializingAppDatabasePathProvider`
+copies the seed there (under a temporary name, renamed into place), then
+migrates and seeds it like any other database. An existing database is never
+replaced: the seed reaches only machines that never had one.
+
+The seed is exported from a developer's real database by `SeedDatabaseExporter`
+through the CLI, from the repository root:
+
+```powershell
+# Reads %LOCALAPPDATA%\GameSave\gamesave.db read-only and writes build/seed/gamesave.db
+dotnet run --project Manager/GameSaves/GameSaves.csproj -- seed-export
+# Or to another file
+dotnet run --project Manager/GameSaves/GameSaves.csproj -- seed-export path/to/seed.db
+```
+
+The exporter takes a consistent copy (`VACUUM INTO`), keeps only the catalog
+tables `schema_migrations`, `save_path_mappings` and `game_titles`, empties
+every other table (secrets, remote profiles, scheduled jobs, transfer history,
+manual backup presets, backup runs, verification results, harvest caches, and
+any table a future version adds), and rewrites the file (`VACUUM`) so no byte
+of the removed rows survives in freed pages. Before writing it scans every
+column of the kept tables and refuses, writing nothing, when a value contains
+the exporting user's Windows user name, which is what a profile path from the
+exporting machine always carries (`\Users\*\`, `C:\Users\Public\` and
+`{GameInstallPath}\users\` are legitimate templates and pass); the CLI prints
+the offending rows so they can be fixed or deleted in the app first. The
+output lands in `build/seed/`, is committed by the developer after reviewing
+the printed counts, and `build/publish-release.ps1` copies it into the publish
+folder; `ReleasePackagingTests` allows no other `.db` file under `build/`.
+`SeedDatabaseExportTests` runs the exporter against the 0.1.0 fixture, and
+`FirstRunSchemaBootstrapTests` proves the first-start copy and that an
+existing database is left alone.
+
 ## Schema migration, backup, and rollback engine (DATA-003)
 
 The database schema evolves through versioned, deterministic migrations defined in

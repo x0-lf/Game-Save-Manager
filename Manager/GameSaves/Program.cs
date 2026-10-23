@@ -91,6 +91,19 @@ namespace GameSaves
                         RunMigrateDryRun(targetDb);
                     break;
 
+                case "seed-export":
+                    // The sanitized catalog the release package ships; see
+                    // SeedDatabaseExporter for what is kept and what is refused.
+                    if (args.Length >= 2 && args[1].StartsWith('-'))
+                    {
+                        UsageError(
+                            "Usage: seed-export [outputPath]",
+                            "Default output: build/seed/gamesave.db under the current directory.");
+                        return;
+                    }
+                    RunSeedExport(args.Length >= 2 ? args[1] : Path.Combine("build", "seed", "gamesave.db"), dbPath);
+                    break;
+
                 case "seed-curated":
                     if (args.Length >= 2)
                     {
@@ -241,6 +254,28 @@ namespace GameSaves
 
             Console.WriteLine($"Database initialized: {dbPath}");
             Console.WriteLine($"Curated mappings seeded: {result.Inserted} inserted, {result.Updated} updated, {result.Unchanged} unchanged, {result.SkippedUserOverrides} user overrides preserved.");
+        }
+
+        private static void RunSeedExport(string outputPath, string dbPath)
+        {
+            Console.WriteLine($"Exporting the catalog of {dbPath}");
+            SeedDatabaseExportResult result = SeedDatabaseExporter.Export(dbPath, outputPath);
+
+            foreach ((string table, long rows) in result.KeptRows)
+                Console.WriteLine($"  kept    {table}: {rows} rows");
+            Console.WriteLine($"  emptied {string.Join(", ", result.EmptiedTables)}");
+
+            if (!result.Written)
+            {
+                Console.Error.WriteLine("Nothing was written: these rows look personal. Fix or delete them and run seed-export again.");
+                foreach (string finding in result.Findings)
+                    Console.Error.WriteLine($"  {finding}");
+                Environment.ExitCode = 1;
+                return;
+            }
+
+            Console.WriteLine($"Seed database: {Path.GetFullPath(outputPath)} ({result.OutputBytes / 1024 / 1024} MB)");
+            Console.WriteLine("Review the counts, then commit the file; build/publish-release.ps1 ships it beside the program.");
         }
 
         private static void RunMigrate(string dbPath)
@@ -1475,6 +1510,7 @@ namespace GameSaves
             Console.WriteLine("  migrate-status [dbPath]");
             Console.WriteLine("  migrate-dry-run [dbPath]");
             Console.WriteLine("  seed-curated");
+            Console.WriteLine("  seed-export [outputPath]");
             Console.WriteLine("  import <savepaths.json> [--approve]");
             Console.WriteLine("  approve-mapping <id> [notes]");
             Console.WriteLine("  approve-app <steamAppId> [notes]");

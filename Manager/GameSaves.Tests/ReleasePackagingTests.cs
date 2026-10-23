@@ -64,6 +64,16 @@ public sealed class ReleasePackagingTests
         Assert.Contains("unsigned", script, StringComparison.OrdinalIgnoreCase);
         Assert.Empty(Directory.GetFiles(Path.Combine(RepoRoot, "build"), "*.pfx"));
         Assert.Empty(Directory.GetFiles(Path.Combine(RepoRoot, "build"), "*.p12"));
+
+        // The sanitized seed database (`GameSaves seed-export`) ships beside the
+        // program when it exists; the app copies it on its first start only. No
+        // other database may sit under build/.
+        Assert.Contains(@"Join-Path $PSScriptRoot 'seed\gamesave.db'", script, StringComparison.Ordinal);
+        Assert.Contains(@"Join-Path $publishDir 'seed\gamesave.db'", script, StringComparison.Ordinal);
+        Assert.Contains("No seed database", script, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            Directory.GetFiles(Path.Combine(RepoRoot, "build"), "*.db", SearchOption.AllDirectories),
+            file => !file.EndsWith(Path.Combine("build", "seed", "gamesave.db"), StringComparison.OrdinalIgnoreCase));
     }
 
     // RELEASE-002 reads this file to verify a downloaded installer: lowercase
@@ -196,6 +206,8 @@ public sealed class ReleasePackagingTests
         Assert.Contains("includedFrameworks", gates, StringComparison.Ordinal);
         Assert.Contains("$env:DOTNET_ROOT = $emptyRoot", gates, StringComparison.Ordinal);
         Assert.Contains("INSERT INTO schema_migrations (id, name, applied_utc) VALUES (?, ?, ?)", gates, StringComparison.Ordinal);
+        Assert.Contains("SELECT count(*) FROM game_titles", gates, StringComparison.Ordinal);
+        Assert.Contains(@"Join-Path $appDir 'seed\gamesave.db'", gates, StringComparison.Ordinal);
         Assert.Contains("unins000.exe", gates, StringComparison.Ordinal);
         Assert.DoesNotMatch(@"Remove-Item[^\r\n]*(dataDir|GameSave\\|database)", gates);
         Assert.DoesNotContain(".Delete(", gates, StringComparison.Ordinal);

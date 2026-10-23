@@ -70,6 +70,16 @@ if (-not (Test-Path -LiteralPath $Installer)) { throw "Installer not found: $Ins
 $Installer = (Resolve-Path -LiteralPath $Installer).Path
 $logDir = Join-Path $env:RUNNER_TEMP 'recovery-gates'
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+$python = (Get-Command python -ErrorAction Stop).Source   # the image's Python: the only SQLite client the gates need
+
+# Prints one count from a database opened read-only.
+$catalogCount = Join-Path $logDir 'catalog-count.py'
+[IO.File]::WriteAllText($catalogCount, @'
+import sqlite3, sys
+connection = sqlite3.connect("file:" + sys.argv[1].replace("\\", "/") + "?mode=ro", uri=True)
+print(connection.execute("SELECT count(*) FROM game_titles").fetchone()[0])
+connection.close()
+'@)
 
 $script:gate = 0
 
@@ -155,6 +165,13 @@ $code = Start-Headless 'fresh install'
 Assert-Same $Refused $code 'headless --run-job <unknown id> exit code (2 = refused: the program composed its services and declined an unknown job)'
 if (-not (Test-Path -LiteralPath (Join-Path $dataDir 'gamesave.db'))) { Fail 'the headless start did not create gamesave.db' }
 $afterFirstStart = Get-DataListing
+$shippedSeed = Join-Path $appDir 'seed\gamesave.db'
+if (Test-Path -LiteralPath $shippedSeed) {
+    $seedTitles = [long](& $python -I $catalogCount $shippedSeed)
+    $dataTitles = [long](& $python -I $catalogCount (Join-Path $dataDir 'gamesave.db'))
+    if ($dataTitles -lt $seedTitles) { Fail "the shipped seed database holds $seedTitles game titles but the user's database holds ${dataTitles}: the first start did not copy the seed" }
+    Pass "the first start created the user's database from the shipped seed ($seedTitles game titles)"
+}
 Pass "the self-contained program started with no .NET runtime reachable and created $dataDir"
 
 # gate 3: upgrade in place
@@ -177,7 +194,7 @@ connection.execute("INSERT INTO schema_migrations (id, name, applied_utc) VALUES
 connection.commit()
 connection.close()
 '@)
-& (Get-Command python -ErrorAction Stop).Source -I $futureRow $database
+& $python -I $futureRow $database
 if ($LASTEXITCODE -ne 0) { Fail 'the future migration row could not be written' }
 $newerDatabase = Get-DataListing
 Assert-Same $false ($newerDatabase -eq $afterFirstStart) 'the database changed after the future row was written'

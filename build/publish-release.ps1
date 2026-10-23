@@ -121,6 +121,20 @@ if ($strays) { throw "The publish folder contains files that must never ship: $(
 $publishBytes = (Get-ChildItem -LiteralPath $publishDir -Recurse -File | Measure-Object Length -Sum).Sum
 Write-Host ('Publish: {0} ({1} MB)' -f $publishDir, [math]::Round($publishBytes / 1MB))
 
+# 2b. Seed database: the sanitized catalog exported by `GameSaves seed-export`
+#     and committed under build\seed. It ships beside the program; the app
+#     copies it to the user's data folder on its first start only when no
+#     database exists there yet, and never replaces an existing one.
+$seed = Join-Path $PSScriptRoot 'seed\gamesave.db'
+if (Test-Path -LiteralPath $seed) {
+    New-Item -ItemType Directory -Path (Join-Path $publishDir 'seed') -Force | Out-Null
+    Copy-Item -LiteralPath $seed -Destination (Join-Path $publishDir 'seed\gamesave.db')
+    Write-Host ('Seed database: {0} ({1} MB)' -f $seed, [math]::Round((Get-Item -LiteralPath $seed).Length / 1MB, 1))
+}
+else {
+    Write-Warning 'No seed database (build\seed\gamesave.db is absent): a first start gets only the bundled curated mappings.'
+}
+
 # 3. Signing, only with a supplied certificate. Never silent about the alternative.
 if ($signing) {
     Invoke-Sign $appExe

@@ -19,23 +19,35 @@ namespace GameSaves.Infrastructure.Platform
     // a seeder, the project-curated mappings (DATA-002). A path counts as
     // initialized only after both succeed, so a failure is retried by the next
     // caller instead of leaving the application on an un-migrated database.
+    //
+    // When given a seed database (the sanitized catalog the package ships
+    // beside the program, see SeedDatabaseExporter) and the path does not
+    // exist yet, the seed is copied there first and then migrated and seeded
+    // like any other database. An existing database is never replaced.
     public sealed class SchemaInitializingAppDatabasePathProvider
         : IAppDatabasePathProvider
     {
+        /// <summary>Where build/publish-release.ps1 puts the seed database relative to the program.</summary>
+        public static string ShippedSeedDatabasePath =>
+            Path.Combine(AppContext.BaseDirectory, "seed", "gamesave.db");
+
         private readonly IAppDatabasePathProvider _inner;
         private readonly ICuratedMappingSeeder? _seeder;
         private readonly ISchemaMigrator _migrator;
+        private readonly string? _seedDatabasePath;
         private readonly object _gate = new();
         private readonly HashSet<string> _initializedPaths = new();
 
         public SchemaInitializingAppDatabasePathProvider(
             IAppDatabasePathProvider inner,
             ICuratedMappingSeeder? seeder = null,
-            ISchemaMigrator? migrator = null)
+            ISchemaMigrator? migrator = null,
+            string? seedDatabasePath = null)
         {
             _inner = inner;
             _seeder = seeder;
             _migrator = migrator ?? new SchemaMigrator();
+            _seedDatabasePath = seedDatabasePath;
         }
 
         public string GetDatabasePath()
@@ -46,6 +58,9 @@ namespace GameSaves.Infrastructure.Platform
             {
                 if (!_initializedPaths.Contains(path))
                 {
+                    if (_seedDatabasePath is not null && !File.Exists(path) && File.Exists(_seedDatabasePath))
+                        CopySeed(_seedDatabasePath, path);
+
                     MigrationExecutionResult result = _migrator.Migrate(path);
                     if (!result.Success)
                         throw new SqliteException(result.ErrorMessage, 1);
@@ -56,6 +71,20 @@ namespace GameSaves.Infrastructure.Platform
             }
 
             return path;
+        }
+
+        // Copied under a temporary name and renamed into place, so a crash
+        // mid-copy never leaves a truncated file that the next start would
+        // take for the database.
+        private static void CopySeed(string seedPath, string databasePath)
+        {
+            string? directory = Path.GetDirectoryName(databasePath);
+            if (!string.IsNullOrWhiteSpace(directory))
+                Directory.CreateDirectory(directory);
+
+            string temporary = databasePath + ".seed-copy";
+            File.Copy(seedPath, temporary, overwrite: true);
+            File.Move(temporary, databasePath);
         }
     }
 }

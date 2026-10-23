@@ -3,6 +3,7 @@ using GameSaves.Infrastructure.Data;
 using GameSaves.Infrastructure.Platform;
 using GameSaves.Infrastructure.Save;
 using Microsoft.Data.Sqlite;
+using System.Security.Cryptography;
 using Xunit;
 
 namespace GameSaves.Tests
@@ -61,6 +62,55 @@ namespace GameSaves.Tests
             Assert.Equal(first, second);
             var repository = new SqliteSavePathMappingRepository(second);
             Assert.Equal(0, repository.CountNeedsFixMappings("windows"));
+        }
+
+        private static readonly string FixtureV010 = Path.Combine(
+            DocumentationIntegrityTests.FindRepoRoot(), "Manager", "GameSaves.Tests", "Fixtures", "database", "v0.1.0.sql");
+
+        // The package ships a seed database beside the program; the first start
+        // on a machine without a database copies it, then migrates and seeds it
+        // like any other database.
+        [Fact]
+        public void AShippedSeedDatabase_IsCopiedOnTheFirstStart_ThenMigratedAndSeeded()
+        {
+            string seed = _temp.GetPath("seed.db");
+            SqliteScript.Restore(File.ReadAllText(FixtureV010), seed);
+            string databasePath = Path.Combine(_temp.GetPath("data"), "gamesave.db");
+            var provider = new SchemaInitializingAppDatabasePathProvider(
+                new TestDatabasePathProvider(databasePath),
+                new CuratedMappingSeeder(),
+                seedDatabasePath: seed);
+
+            Assert.Equal(databasePath, provider.GetDatabasePath());
+
+            Assert.True(File.Exists(databasePath));
+            Assert.False(File.Exists(databasePath + ".seed-copy"));
+            Assert.Equal(21L, MigratedDatabase.Scalar(databasePath, "SELECT count(*) FROM game_titles"));
+            Assert.Equal((long)new SchemaMigrator().LatestKnownVersion, MigratedDatabase.Scalar(databasePath, "SELECT max(id) FROM schema_migrations"));
+            Assert.True(new SqliteSavePathMappingRepository(databasePath).CountApprovedMappings("windows") >= 20);
+        }
+
+        [Fact]
+        public void AnExistingDatabase_IsNeverReplacedByTheShippedSeed()
+        {
+            string seed = _temp.GetPath("seed-existing.db");
+            SqliteScript.Restore(File.ReadAllText(FixtureV010), seed);
+            string databasePath = MigratedDatabase.Create(_temp, "existing.db");
+            string before = Hash(databasePath);
+
+            new SchemaInitializingAppDatabasePathProvider(
+                new TestDatabasePathProvider(databasePath),
+                seedDatabasePath: seed).GetDatabasePath();
+
+            Assert.Equal(before, Hash(databasePath));
+            Assert.Equal(0L, MigratedDatabase.Scalar(databasePath, "SELECT count(*) FROM game_titles"));
+        }
+
+        private static string Hash(string path)
+        {
+            SqliteConnection.ClearAllPools();
+            using FileStream stream = new(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            return Convert.ToHexString(SHA256.HashData(stream));
         }
 
         [Fact]

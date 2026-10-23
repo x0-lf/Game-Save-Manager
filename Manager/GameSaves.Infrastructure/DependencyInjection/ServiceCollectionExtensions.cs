@@ -33,10 +33,12 @@ namespace GameSaves.Infrastructure.DependencyInjection
         // against a temporary database path.
         internal static IAppDatabasePathProvider CreateDatabasePathProvider(
             IServiceProvider provider,
-            IAppDatabasePathProvider inner) =>
+            IAppDatabasePathProvider inner,
+            string? seedDatabasePath = null) =>
             new SchemaInitializingAppDatabasePathProvider(
                 inner,
-                provider.GetRequiredService<ICuratedMappingSeeder>());
+                provider.GetRequiredService<ICuratedMappingSeeder>(),
+                seedDatabasePath: seedDatabasePath);
 
         public static IServiceCollection AddGameSavesInfrastructure(
             this IServiceCollection services)
@@ -46,7 +48,10 @@ namespace GameSaves.Infrastructure.DependencyInjection
             // Wrapped so the schema is guaranteed before the first connection;
             // the desktop app has no other bootstrap path. See the decorator.
             services.AddSingleton<IAppDatabasePathProvider>(provider =>
-                CreateDatabasePathProvider(provider, new DefaultAppDatabasePathProvider()));
+                CreateDatabasePathProvider(
+                    provider,
+                    new DefaultAppDatabasePathProvider(),
+                    SchemaInitializingAppDatabasePathProvider.ShippedSeedDatabasePath));
             services.AddSingleton<ICurrentPlatformProvider, CurrentPlatformProvider>();
 
             services.AddSingleton<ISteamRootLocator, RegistrySteamLocator>();

@@ -96,7 +96,13 @@ belong to the [security policy](../SECURITY.md).
     the uninstaller removes only what it installed and tells the user where
     the data still is. The release workflow's recovery gates prove this on a
     clean runner for every package: install, upgrade and uninstall leave the
-    data folder's file listing (sizes and SHA-256) unchanged.
+    data folder's file listing (sizes and SHA-256) unchanged. On its first
+    start on a machine without a database, the program copies the catalog
+    shipped beside it (game titles, save-path mappings and the schema record,
+    exported with every other table emptied and rewritten, so it carries no
+    secret, profile, job or history, and the export refuses any row that
+    names the exporting user) into the data folder; an existing database is
+    never replaced.
 17. **Updates are opt-in, verified before anything runs, and never applied
     in place by the app.** The app contacts the release feed only when the
     user switched the startup check on or pressed Check now, and then with one

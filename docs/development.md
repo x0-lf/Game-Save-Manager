@@ -230,7 +230,10 @@ needed only when signing. The script:
    single folder (no single-file bundle, no trimming, no ReadyToRun), through
    the isolated artifacts path, into `artifacts/release/publish/win-x64/`,
    and fails if that folder contains anything from the CLI, Reviewer, tests,
-   or capture harnesses;
+   or capture harnesses; then copies `build/seed/gamesave.db`, the sanitized
+   catalog exported by `GameSaves seed-export` (see "Seed database" in the
+   [database guide](database-and-mappings.md)), to `seed/` beside the program
+   when it exists, and warns when it does not;
 3. signs `GameSaves.App.exe` only when a certificate is supplied
    (`-CertificatePath` and `-CertificatePassword`, or the
    `GSM_SIGNING_CERTIFICATE` and `GSM_SIGNING_PASSWORD` variables); otherwise
@@ -264,12 +267,23 @@ runs all three on a clean GitHub runner for every push and every tag.
 2. Regenerate the migration fixture set for the new version (see "Migration
    fixtures" below) and check it in; `MigrationFixtureTests` fails until the
    database fixture for the bumped version exists.
-3. Push the commit to `main` and wait for the **Release** workflow to pass:
+3. Export the seed database the package ships, from the repository root:
+
+   ```powershell
+   dotnet run --project Manager/GameSaves/GameSaves.csproj -- seed-export
+   ```
+
+   It reads `%LOCALAPPDATA%\GameSave\gamesave.db` read-only, keeps only the
+   catalog tables, empties and rewrites everything else, refuses to write
+   when a kept row carries your Windows user name, and prints the row
+   counts. Review them and commit `build/seed/gamesave.db` (see
+   "Seed database" in the [database guide](database-and-mappings.md)).
+4. Push the commit to `main` and wait for the **Release** workflow to pass:
    it builds, tests, packages with `build/publish-release.ps1` and runs the
    recovery gates on a clean runner (see below). The installer, its digest
    and the script output can be downloaded from the run as the
    `GameSaveManager-Setup-<version>` artifact.
-4. Tag that commit `v<version>` and push the tag: exactly `v` plus the
+5. Tag that commit `v<version>` and push the tag: exactly `v` plus the
    project version, because the in-app update check parses the tag and
    refuses any other shape, and the workflow fails the tag before building
    when it does not equal `<Version>`. The workflow then repeats the build,
@@ -280,7 +294,7 @@ runs all three on a clean GitHub runner for every push and every tag.
    what **Release notes** opens. A draft or pre-release is never offered:
    the app reads `releases/latest`, which GitHub resolves to the newest
    published full release, and the workflow never creates one.
-5. From an older installed version, press Check now in Settings > Diagnostics
+6. From an older installed version, press Check now in Settings > Diagnostics
    and record whether the release was offered, downloaded, verified and
    installed. That is the only proof of the update path; until it is done the
    path is recorded as unverified.
@@ -322,7 +336,10 @@ jobs:
    `DOTNET_ROOT` pointing at an empty folder, where a framework-dependent
    program stops with "hostfxr.dll could not be found". That exit code means
    the program composed every service, created and migrated its database,
-   and declined an unknown job. Gate 3 runs the same installer again (an
+   and declined an unknown job; when the package ships `seed/gamesave.db`,
+   gate 2 also asserts that the user's new database holds at least as many
+   game titles as the seed, so the first-start copy is proven on the
+   installed program. Gate 3 runs the same installer again (an
    upgrade in place), asserts that the data folder's listing (every file
    with its size and SHA-256) is unchanged, and starts the upgraded program
    the same way. Gate 4 writes a future row into `schema_migrations` (the

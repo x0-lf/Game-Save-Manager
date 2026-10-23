@@ -102,6 +102,11 @@ JSON files in the same directory. Google tokens are not stored in those JSON fil
 
 ## First run
 
+The first start creates `%LOCALAPPDATA%\GameSave\gamesave.db` from the
+catalog shipped with the package (game titles and save-path mappings; nothing
+personal is in it), or empty with the bundled curated mappings when the
+package carries no catalog. A database that already exists is never replaced.
+
 1. Let the startup scan finish. If Steam is not found, use the Dashboard scan action.
 2. Review Installed games and Profiles before attempting a transfer.
 3. Create a Manual backup with disposable or copied data first.
